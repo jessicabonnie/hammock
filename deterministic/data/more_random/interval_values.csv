@@ -1,0 +1,8 @@
+start_pos,interval_count,size,distance,output_file,chrom,random_seed,note,how
+10,15000,2000,1500,01_base_bigO.bed,10,0,basic bed that will be purposefully be heavily overlapped,distance < size
+10,30000,2000,1500,02_2A.bed,10,0,first half of bed is same as 01,count = 2 *count(01) otw same
+10,30000,1000,1500,03_halfB.bed,10,0,each interval is about 1/2 long as in 02,same everything from 02 except size is 1/2
+10,15000,2000,3000,04_base_smallO.bed,10,13,basic bed with less overlap from 01,distance 1.5x size & different seed from 01
+10,30000,2000,3000,05_2A.bed,10,13,first half of bed is same as 04,count = 2 *count(04) otw same
+10,30000,4000,3000,06_2B.bed,10,13,each interval 2x 05,same everything from 05 except size is x2
+10,15000,2000,2000,07_noO.bed,22,0,no overlap with anything,change chr but same as 01 otw

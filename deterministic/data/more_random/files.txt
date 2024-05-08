@@ -1,0 +1,7 @@
+/home/jbonnie1/interval_sketch/experiments/deterministic/data/more_random/01_base_bigO.bed
+/home/jbonnie1/interval_sketch/experiments/deterministic/data/more_random/02_2A.bed
+/home/jbonnie1/interval_sketch/experiments/deterministic/data/more_random/03_halfB.bed
+/home/jbonnie1/interval_sketch/experiments/deterministic/data/more_random/04_base_smallO.bed
+/home/jbonnie1/interval_sketch/experiments/deterministic/data/more_random/05_2A.bed
+/home/jbonnie1/interval_sketch/experiments/deterministic/data/more_random/06_2B.bed
+/home/jbonnie1/interval_sketch/experiments/deterministic/data/more_random/07_noO.bed
