@@ -27,3 +27,57 @@ def basic_bedline(line):
     if columns[0].startswith('chr'):
         columns[0] = columns[0][3:]
     return int(columns[0]), int(columns[1]), int(columns[2])
+
+def matrix_compare(mat1,mat2):
+    """
+    Compare two matrices, print their difference matrix and compute their euclidean distance.
+
+    Args:
+        mat1 (np.ndarray): The first matrix to compare.
+        mat2 (np.ndarray): The second matrix to compare.
+
+    Returns:
+        the distance Matrix
+        euclidean distances.
+    """
+    mat1 = mat1[:, 1:]
+    mat2 = mat2[:, 1:]
+    diff = mat1 - mat2
+    dist = np.linalg.norm(diff)
+    return diff, dist
+
+def read_csv_matrix(file):
+    """
+    Read a matrix from a CSV file.
+
+    Args:
+        file (str): The path to the CSV file containing the matrix.
+
+    Returns:
+        np.ndarray: The matrix read from the CSV file.
+    """
+    with open (file, mode="r") as fh:
+        data = np.genfromtxt(fh, delimiter=',', skip_header=1)
+        row_names = np.genfromtxt(fh, delimiter=',', dtype=str, usecols=0, skip_header=1)
+        col_names = np.genfromtxt(fh, delimiter=',', dtype=str, usecols=range(1, data.shape[1]+1), skip_header=1)
+   
+    return data, row_names, col_names
+
+
+if __name__ == "__main__":
+    # Example usage of the functions
+    # matrix = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+    # row_names = ["Row 1", "Row 2", "Row 3"]
+    
+    # Write the matrix to a file
+    mat1, row1, col1 = read_csv_matrix( sys.argv[1])
+    mat2, row2, col2 = read_csv_matrix( sys.argv[2])
+    
+    # Read the matrix from the file
+    # data, row_names, col_names = read_csv_matrix("matrix.csv")
+    
+    # Compare two matrices
+    diff, dist = matrix_compare(mat1, mat2)
+    print("Difference Matrix:")
+    print(diff)
+    print("Euclidean Distance:", dist)
