@@ -183,16 +183,16 @@ class MinHash(object):
         Estimate the Jaccard similarity between A and B.
         Calculate: |sketch(A).insertection(sketch(B))| / |sketch(A).union(sketch(B))|
         '''
-        print(list(sorted(list(self._heapq)))[:10])
-        print(list(sorted(list(b._heapq)))[:10])
+        # print(list(sorted(list(self._heapq)))[:10])
+        # print(list(sorted(list(b._heapq)))[:10])
         # print(list(sorted(self._heapq))[:10])
         # print(list(sorted(b._heapq))[:10])
     #     union_sketch_intervals = self.size_union(b)
     #     print_output(self, b, "blah")
         set_self = set(self._heapq)
         set_other = set(b._heapq)
-        print(list(sorted(set(self._heapq)))[:10])
-        print(list(sorted(set(b._heapq)))[:10])
+        # print(list(sorted(set(self._heapq)))[:10])
+        # print(list(sorted(set(b._heapq)))[:10])
         # return len(set_self.intersection(set_other))/len(set_self.union(set_other))
         return len(set_self.intersection(set_other))/len(self._heapq) 
         # return self.size_intersection(b)/self.size_union(b)
@@ -253,8 +253,8 @@ if __name__ == '__main__':
     args_list = [(i, j, bed_keys, bed_hashes, mode) for i in range(len(bed_keys)) for j in range(i, len(bed_keys))]
     results = []
     for args in args_list:
-        if bed_keys[args[0]] != bed_keys[args[1]]:
-            print(bed_keys[args[0]], bed_keys[args[1]])
+        # if bed_keys[args[0]] != bed_keys[args[1]]:
+        #     print(bed_keys[args[0]], bed_keys[args[1]])
         results.append(calculate_jaccard_similarity(args))
 
     # with Pool() as pool:
@@ -279,9 +279,9 @@ if __name__ == '__main__':
                                 f"{unionA:>5f}",
                                 f"{unionB:>5f}"]))
 
-    with open(f"{outprefix}minhash_matrix{mode}.csv", mode="w") as matout:
+    with open(f"{outprefix}minhash_h{num_hash}_matrix{mode}.csv", mode="w") as matout:
         write_pretty_matrix(matrix=matrix, row_names=bed_keys, outhandle=matout)
-    with open(f"{outprefix}minhash_card{mode}.csv", mode="w") as outfile:
+    with open(f"{outprefix}minhash_h{num_hash}_card{mode}.csv", mode="w") as outfile:
         for line in outlines:
             outfile.write(line + "\n")
 
