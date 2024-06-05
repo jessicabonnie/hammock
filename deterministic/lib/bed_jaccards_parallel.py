@@ -51,7 +51,7 @@ def basic_bedline(line):
         raise ValueError("bedline: one of the lines in malformed")
     if columns[0].startswith('chr'):
         columns[0] = columns[0][3:]
-    return int(columns[0]), int(columns[1]), int(columns[2])
+    return str(columns[0]), int(columns[1]), int(columns[2])
 
 
 def bedline(line, mode, sep):
@@ -66,7 +66,7 @@ def bedline(line, mode, sep):
     # if columns[0].startswith('chr'):
     #     columns[0] = columns[0][3:]
     if mode in ["A","C"]:
-        interval = sep.join([chrval, start, end, "A"])
+        interval = sep.join([chrval, str(start), str(end), "A"])
     if mode in ["B","C"]:
         for val in range(start, end):
             # chrval=sep.join([columns[0], str(val), str(val+1)])

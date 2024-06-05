@@ -26,7 +26,7 @@ def basic_bedline(line):
         raise ValueError("bedline: one of the lines in malformed")
     if columns[0].startswith('chr'):
         columns[0] = columns[0][3:]
-    return int(columns[0]), int(columns[1]), int(columns[2])
+    return columns[0], int(columns[1]), int(columns[2])
 
 
 def read_csv_matrix(file):
