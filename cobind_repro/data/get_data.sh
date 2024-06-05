@@ -54,8 +54,12 @@ find $PWD/subbeds/*hg38.bed -maxdepth 1 -type f > TFbeds.txt
 find $PWD/subbeds/*hg38_c3.bed -maxdepth 1 -type f > TFbeds_c3.txt
 
 # cd ../results
-# grep -E "RAD21|SMC1A|SMC3|STAG1|STAG2|CTCF|YY1|ZEB1|STAT3|KMT2A|CREB1|GTF2F1|ESR1|REPIN1.ZNF157|TRIM22" ../data/TFbeds_c3.txt > ../data/TFbeds_c3_sub.txt
-#  python3 ../../deterministic/lib/bed_minhash.py ../data/TFbeds_c3.txt 600 C
+grep -E "RAD21|SMC1A|SMC3|STAG1|STAG2|CTCF|YY1|ZEB1|STAT3|KMT2A|CREB1|GTF2F1|ESR1|REPIN1.ZNF157|TRIM22" ../data/TFbeds_c3.txt > ../data/TFbeds_c3_sub.txt
+
+grep -E -f ../data/TFs_CTCF_BRCA.txt ../data/TFbeds_c3.txt | sort -u | uniq > ../data/TFbeds_CTCF_BRCA.txt
+
+#  python3 ../../deterministic/lib/bed_minhash.py ../data/TFbeds_c3.txt 1000 C
+#  python3 ../../deterministic/lib/bed_minhash.py ../data/TFbeds_CTCF_BRCA.txt 2000 C ctcf_brca
 #  python3 ../../deterministic/lib/bed_jaccards_parallel.py ../data/TFbeds_c3_sub.txt C actual
 #  head -n1 minhash_h600_matrixC.csv | sed 's/,/\n/g' | grep -E -n "RAD21|SMC1A|SMC3|STAG1|STAG2|CTCF|YY1|ZEB1|STAT3|KMT2A|CREB1|GTF2F1|ESR1|REPIN1.ZNF157|TRIM22"
 # 111:CREB1_hg38_c3.bed
@@ -86,4 +90,10 @@ awk -v FS="," 'NR==1{print $0}' minhash_h600_matrixC.csv | sed 's/,/\n/g'> heade
 awk -v FS="," 'NR==125{print $0}' minhash_h600_matrixC.csv | sed 's/,/\n/g' > CTCF.tmp 
 paste header_minhash_jaccard.txt CTCF.tmp > CTCF_minhash_jaccard.txt
 sort -k2 -n -r CTCF_minhash_jaccard.txt > CTCF_minhash_jaccard_sorted.txt
+
+
+python3 ../../deterministic/lib/bed_minhash.py ../data/TFbeds_CTCF_BRCA.txt 2000 C ctcf_brca
+grep CTCF_ ctcf_brcaminhash_h2000_jaccC.csv | sort -k4 -n -r -t, > ctcf_minhash_h2000_jaccC_sorted.csv
+
+grep ^BRCA ctcf_brcaminhash_h2000_jaccC.csv | sort -k4 -n -r -t, > brca_minhash_h2000_jaccC_sorted.csv
 
