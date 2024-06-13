@@ -4,9 +4,56 @@ import sys
 import numpy as np
 import os
 from multiprocessing import Pool
+from datasketch import MinHash
 
 
-def bed_to_sets(filename, mode="A", sep="-", verbose=False):
+class ExtendMinHash(MinHash):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def cardinality(self):
+        return self.count()
+    
+    def union(self, b):
+        """
+        Merges this sketch with one or more other sketches.
+        """
+        
+        return( MinHash.union(self,b))
+        # for other in others:
+        #     if not isinstance(other, HyperLogLog):
+        #         raise TypeError(f"Cannot merge ExtendedHyperLogLog with {type(other)}")
+            # self.merge(other)
+        # return self
+    
+    def size_union(self, others):
+        """
+        Returns the cardinality of the union of this HyperLogLog sketch
+        with one or more other HyperLogLog sketches.
+        """
+        
+        return self.union(others).count()
+    
+    def size_intersection(self, b):
+        '''Return the estimated size of the intersection
+            intersection(a,b)=cardinality(a)+cardinality(b)-union(a,b) '''
+        # return self.intersection(b).count()
+        return abs(self.count() + b.count() - self.size_union(b))
+
+    def add(self,values):
+        '''
+        Add a value to the sketch.
+        '''
+        self.update(values)
+    # def jaccard(self, b):
+    #     '''
+    #     Estimate the Jaccard similarity between A and B.
+    #     Calculate: |sketch(A).insertection(sketch(B))| / |sketch(A).union(sketch(B))|
+    #     '''
+    #     return( MinHash.jaccard(self,b))
+        # return self.size_intersection(b)/self.size_union(b)
+
+def bed_to_sets(filename, mode, parts, sep="-", verbose=False):
     """
     Convert a BED file to sets of intervals and points.
 
@@ -19,8 +66,8 @@ def bed_to_sets(filename, mode="A", sep="-", verbose=False):
     Returns:
         list: A list containing two sets - Aset (intervals) and Bset (points).
     """
-    Aset = set()
-    Bset = set()
+    Aset = ExtendMinHash(num_perm=int(parts)) #set()
+    Bset = ExtendMinHash(num_perm=int(parts))#set()
     with open(filename, "r") as file:
         for line in file:
             if not line.startswith('#'):
@@ -30,9 +77,9 @@ def bed_to_sets(filename, mode="A", sep="-", verbose=False):
                     if len(points) > 100:
                         print(points[:10])
                 if interval != '':
-                    Aset.add(interval)
+                    Aset.update(interval)
                 if mode in ["C", "B"]:
-                    Bset.update(points)
+                    Bset.batch_update(points)
     return [Aset, Bset]
 
 
@@ -51,17 +98,18 @@ def bedline(line, mode, sep):
     points = []
     chrval, start, end = basic_bedline(line)
     if mode in ["A","C"]:
-        interval = sep.join([chrval, str(start), str(end), "A"])
+        interval = sep.join([chrval, str(start), str(end), "A"]).encode('utf-8')
     if mode in ["B","C"]:
         for val in range(start, end):
-            points.append(sep.join([str(chrval), str(val), str(val+1), "B"]))
+            points.append(sep.join([str(chrval), str(val), str(val+1), "B"]).encode('utf-8'))
     return interval, points
 
 
 def jaccard_similarity(set1, set2):
-    union = float(len(set1.union(set2)))
-    intersect = float(len(set1.intersection(set2)))
-    return union, intersect, intersect/union
+    # union = set1.size_union(set2)
+    # intersect = float(len(set1.intersection(set2)))
+    # return union, intersect, intersect/union
+    return set1.size_union(set2), set1.size_intersection(set2), set1.jaccard(set2)
 
 
 def write_pretty_matrix(matrix, row_names, outhandle=sys.stdout):
@@ -86,10 +134,10 @@ def process_file(args):
     '''
     Process a file to calculate the Jaccard similarity between the primary sets and the comparator sets.
     '''
-    filepath, primary_sets, primary_keys, mode = args
+    filepath, primary_sets, primary_keys, mode, parts = args
     basename = os.path.basename(filepath)
-    comparator = bed_to_sets(filename=filepath, mode=mode)
-    print(basename)
+    comparator = bed_to_sets(filename=filepath, mode=mode, parts=parts)
+    # print(basename)
     output = {}
     for i in range(len(primary_keys)):
         # args = (primary_sets[i], comparator, mode)
@@ -111,19 +159,20 @@ def calculate_jaccard_similarity(set1, set2, mode):
     return unionA, unionB, jaccA, jaccB
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python bed_jaccards.py <filepaths file> <mode> <prefix>")
+    if len(sys.argv) < 4:
+        print("Usage: python bed_jaccards.py <filepaths file> <mode> <parts> <prefix>")
         sys.exit(1)
     outprefix = ""#os.getcwd()
-    if len(sys.argv) == 4:
-        if os.path.exists(os.path.dirname(sys.argv[3])):
-            outprefix = sys.argv[3]
+    if len(sys.argv) == 5:
+        if os.path.exists(os.path.dirname(sys.argv[4])):
+            outprefix = sys.argv[4]
         else: 
             print("The directory given in the output prefix does not exist. Output files will be written to the current working directory using the basename.")
             outprefix=os.path.basename(sys.argv[3])
     bed_sets = {}
     mode = sys.argv[2]
     filepaths_file = sys.argv[1]
+    parts = sys.argv[3]
     with open(filepaths_file, "r") as filein:
         filepaths = [f.strip() for f in filein.readlines()]
     
@@ -134,7 +183,7 @@ if __name__ == "__main__":
         for line in filein.readlines():
             filepath = line.strip()
             basename = os.path.basename(filepath)
-            prime_sets[basename] = bed_to_sets(filename=filepath, mode=mode)
+            prime_sets[basename] = bed_to_sets(filename=filepath, mode=mode, parts=parts)
     prime_keys = list(prime_sets.keys())
     prime_keys.sort()
 
@@ -144,7 +193,7 @@ if __name__ == "__main__":
 
     with Pool() as pool:
         # Create a list of arguments for each worker
-        args_list = [(f, prime_sets, prime_keys, mode) for f in filepaths]
+        args_list = [(f, prime_sets, prime_keys, mode, parts) for f in filepaths]
         # Map the worker function to the arguments list and get the results
         results = pool.map(process_file, args_list)
 
@@ -172,10 +221,10 @@ if __name__ == "__main__":
                                     f"{jaccA:>5f}",
                                     f"{jaccB:>5f}"]))
    
-    with open(f"{outprefix}_card{mode}.csv", mode="w") as outfile:
+    with open(f"{outprefix}_p{parts}_card{mode}.csv", mode="w") as outfile:
         for line in outlines:
             outfile.write(line + "\n")
-    with open(f"{outprefix}_jacc{mode}.csv", mode="w") as outfile:
+    with open(f"{outprefix}_p{parts}_jacc{mode}.csv", mode="w") as outfile:
         for line in jacc_long:
             outfile.write(line + "\n")
     # matrix = np.zeros((len(bed_keys), len(bed_keys)))
