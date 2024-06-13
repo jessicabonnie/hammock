@@ -79,7 +79,7 @@ def bed_to_sets(filename, mode, parts, sep="-", verbose=False):
                 if interval != '':
                     Aset.update(interval)
                 if mode in ["C", "B"]:
-                    Bset.batch_update(points)
+                    Bset.update_batch(points)
     return [Aset, Bset]
 
 
