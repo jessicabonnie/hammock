@@ -129,7 +129,9 @@ if __name__ == "__main__":
     if len(sys.argv) == 4:
         if os.path.exists(os.path.dirname(sys.argv[3])):
             outprefix = sys.argv[3]
-        else: print("The directory given in the output prefix does not exist. Output files will be written to the current working directory using default names.")
+        else: 
+            print("The directory given in the output prefix does not exist. Output files will be written to the current working directory using the basename.")
+            outprefix=os.path.basename(sys.argv[3])
     bed_sets = {}
     mode = sys.argv[2]
     filepaths_file = sys.argv[1]
@@ -187,10 +189,17 @@ if __name__ == "__main__":
                                 set2,
                                 f"{unionA:>5f}",
                                 f"{unionB:>5f}"]))
+        jacc_long.append(",".join([set1,
+                                set2,
+                                f"{jaccA:>5f}",
+                                f"{jaccB:>5f}"]))
             # print(bed_keys[i], bed_keys[j], jaccA, jaccB)
     # pretty_print_matrix(matrix,bed_keys)
-    with open(f"{outprefix}matrix_out{mode}.csv", mode="w") as matout:
+    with open(f"{outprefix}_matrix{mode}.csv", mode="w") as matout:
         write_pretty_matrix(matrix=matrix, row_names=bed_keys, outhandle=matout)
-    with open(f"card_out{mode}.csv", mode="w") as outfile:
+    with open(f"{outprefix}_card{mode}.csv", mode="w") as outfile:
         for line in outlines:
+            outfile.write(line + "\n")
+    with open(f"{outprefix}_jacc{mode}.csv", mode="w") as outfile:
+        for line in jacc_long:
             outfile.write(line + "\n")
