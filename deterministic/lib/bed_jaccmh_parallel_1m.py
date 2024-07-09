@@ -3,10 +3,17 @@
 import sys
 import numpy as np
 import os
+import xxhash
 from multiprocessing import Pool
 from datasketch import MinHash
 
 
+
+def _hash_64(b):
+    return xxhash.xxh64(b).intdigest() % sys.maxsize
+
+def _hash_32(b):
+    return xxhash.xxh32(b).intdigest() % sys.maxsize
 class ExtendMinHash(MinHash):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -66,20 +73,24 @@ def bed_to_sets(filename, mode, parts, sep="-", verbose=False):
     Returns:
         list: A list containing two sets - Aset (intervals) and Bset (points).
     """
-    Aset = ExtendMinHash(num_perm=int(parts)) #set()
-    Bset = ExtendMinHash(num_perm=int(parts))#set()
+    Aset = ExtendMinHash(num_perm=int(parts), hashfunc=_hash_64) #set()
+    Bset = ExtendMinHash(num_perm=int(parts), hashfunc=_hash_64)#set()
     with open(filename, "r") as file:
         for line in file:
             if not line.startswith('#'):
                 interval, points = bedline(line, mode=mode, sep=sep)
-                if verbose:
-                    print(line)
-                    if len(points) > 100:
-                        print(points[:10])
+                
+                # if verbose:
+                #     print(line)
+                #     if len(points) > 100:
+                #         print(points[:10])
                 if interval != '':
                     Aset.update(interval)
                 if mode in ["C", "B"]:
+                    # for b in points:
+                    #     Bset.update(b)
                     Bset.update_batch(points)
+    print(f"finished bed_to_sets for {filename}")
     return [Aset, Bset]
 
 
@@ -134,10 +145,12 @@ def process_file(args):
     '''
     Process a file to calculate the Jaccard similarity between the primary sets and the comparator sets.
     '''
+    print("inside processfile")
     filepath, primary_sets, primary_keys, mode, parts = args
     basename = os.path.basename(filepath)
+    print(basename)
     comparator = bed_to_sets(filename=filepath, mode=mode, parts=parts)
-    # print(basename)
+    
     output = {}
     for i in range(len(primary_keys)):
         # args = (primary_sets[i], comparator, mode)
@@ -159,24 +172,25 @@ def calculate_jaccard_similarity(set1, set2, mode):
     return unionA, unionB, jaccA, jaccB
 
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
-        print("Usage: python bed_jaccards.py <filepaths file> <mode> <parts> <prefix>")
+    if len(sys.argv) < 5:
+        print("Usage: python bed_jaccards.py <filepaths file> <file of paths of primary comparitor files> <mode> <parts> <prefix>")
         sys.exit(1)
     outprefix = ""#os.getcwd()
-    if len(sys.argv) == 5:
-        if os.path.exists(os.path.dirname(sys.argv[4])):
-            outprefix = sys.argv[4]
+    if len(sys.argv) == 6:
+        if os.path.exists(os.path.dirname(sys.argv[5])):
+            outprefix = sys.argv[5]
         else: 
             print("The directory given in the output prefix does not exist. Output files will be written to the current working directory using the basename.")
-            outprefix=os.path.basename(sys.argv[3])
+            outprefix=os.path.basename(sys.argv[5])
     bed_sets = {}
-    mode = sys.argv[2]
+    mode = sys.argv[3]
     filepaths_file = sys.argv[1]
-    parts = sys.argv[3]
+    pfile = sys.argv[2]
+    # pfile = "/home/jbonnie1/interval_sketch/hammock/cobind_repro/data/TFbeds_primary.txt"
+    parts = sys.argv[4]
     with open(filepaths_file, "r") as filein:
         filepaths = [f.strip() for f in filein.readlines()]
     
-    pfile = "/home/jbonnie1/interval_sketch/hammock/cobind_repro/data/TFbeds_primary.txt"
     prime_sets = {}
     with open(pfile, "r") as filein:
         # primepaths = [f.strip() for f in filein.readlines()]

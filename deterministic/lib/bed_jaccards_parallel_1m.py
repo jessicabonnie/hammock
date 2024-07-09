@@ -111,23 +111,26 @@ def calculate_jaccard_similarity(set1, set2, mode):
     return unionA, unionB, jaccA, jaccB
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python bed_jaccards.py <filepaths file> <mode> <prefix>")
+    if len(sys.argv) < 4:
+        print("Usage: python bed_jaccards.py <filepaths file> <file of paths of primary comparitor files> <mode> <prefix>")
         sys.exit(1)
     outprefix = ""#os.getcwd()
-    if len(sys.argv) == 4:
-        if os.path.exists(os.path.dirname(sys.argv[3])):
-            outprefix = sys.argv[3]
+    if len(sys.argv) == 5:
+        if os.path.exists(os.path.dirname(sys.argv[4])):
+            outprefix = sys.argv[4]
         else: 
             print("The directory given in the output prefix does not exist. Output files will be written to the current working directory using the basename.")
             outprefix=os.path.basename(sys.argv[3])
     bed_sets = {}
-    mode = sys.argv[2]
+    mode = sys.argv[3]
     filepaths_file = sys.argv[1]
+    pfile = sys.argv[2]
+    # "/home/jbonnie1/interval_sketch/hammock/cobind_repro/data/TFbeds_primary.txt"
+    pfile = "/home/jbonnie1/interval_sketch/hammock/cobind_repro/data/TFbeds_primary.txt"
     with open(filepaths_file, "r") as filein:
         filepaths = [f.strip() for f in filein.readlines()]
     
-    pfile = "/home/jbonnie1/interval_sketch/hammock/cobind_repro/data/TFbeds_primary.txt"
+    # pfile = "/home/jbonnie1/interval_sketch/hammock/cobind_repro/data/TFbeds_primary.txt"
     prime_sets = {}
     with open(pfile, "r") as filein:
         # primepaths = [f.strip() for f in filein.readlines()]
