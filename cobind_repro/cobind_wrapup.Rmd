@@ -1,0 +1,86 @@
+## Cobind Reproduction Summary
+
+```{r setup,echo=FALSE,eval=FALSE}
+
+.libPaths(c("~/rlibs/4.0.4/",.libPaths()))
+
+```
+
+### General Idea
+
+In the cobind paper, XXXAUTHORSXXX, the authors measure collocation between bedfiles delineating binding sites output by REMAP2 and a single bedfile taken from ENCODE containing the binding sites for CTCF. The idea is to demonstrate that the CBF regions from REMAP2 with the most "similarity" with the bedfile from ENCODE would be those with the greatest shared biological function.
+
+### Data
+
+
+```{bash data, eval=FALSE, echo=TRUE}
+outdir=~/interval_sketch/hammock/cobind_repro/data
+datadir=/data/blangme2/jessica/remap2022
+mkdir $datadir
+results=~/interval_sketch/hammock/cobind_repro
+cd $datadir
+mkdir subbeds
+wget https://remap.univ-amu.fr/storage/remap2022/hg38/MACS2/remap2022_crm_macs2_hg38_v1_0.bed.gz
+gunzip remap2022_crm_macs2_hg38_v1_0.bed.gz 
+bedfile1="remap2022_crm_macs2_hg38_v1_0.bed"
+# get the fourth column from the bedfile and remove duplicates
+proteins1=$(sed 's/\t/|/g' $bedfile1 | cut -d'|' -f4 | sort -u)
+# Split lines around any other delimiters; dedup; get rid of commas at ends of lines.
+proteins=$(echo $proteins1 | tr ',' '\n' | tr ' ' '\n'| sort -u | tr '\n' ',' | sed 's/,$//')
+# write out with each protein/gene name on a new line 
+echo $proteins | tr ',' '\n' > proteins.txt
+
+# Split the bedfile into 2 sub-bedfiles for each unique protein name: all columns,only first 3 columns
+for name in $(echo $proteins| tr ',' ' '); do
+  grep $name $bedfile1 > subbeds/${name}_hg38.bed
+  awk -v name=$name -v OFS="\t" '{print $1,$2,$3}' subbeds/${name}_hg38.bed > subbeds/${name}_hg38_c3.bed
+done
+
+# make files holding global paths to each of the sub-bed files ... also remove any empty ones jic
+find subbeds -type f -empty -delete
+
+find $PWD/subbeds/*hg38.bed -maxdepth 1 -type f > TFbeds.txt
+find $PWD/subbeds/*hg38_c3.bed -maxdepth 1 -type f > TFbeds_c3.txt
+
+cd $outdir
+ln -s ${datadir}/* .
+
+# obtain ENCODE bedfile for comparison
+wget https://www.encodeproject.org/files/ENCFF660GHM/@@download/ENCFF660GHM.bed.gz
+gunzip ENCFF660GHM.bed.gz 
+
+# create primary comparison file path list (the "ones" in 1-to-many comparison)
+find $outdir/ENCFF660GHM.bed -type f > TFbeds_primary.txt
+grep CTCF_ ${datadir}/TFbeds_c3.txt >> TFbeds_primary.txt
+
+```
+
+```{bash jaccards, echo=TRUE, eval=FALSE, cache=TRUE}
+datadir=~/interval_sketch/hammock/cobind_repro/data
+resultsdir=~/interval_sketch/hammock/cobind_repro/results
+codedir=~/interval_sketch/hammock/lib
+cd $resultsdir
+#python3 ${codedir}/bed_jaccards_parallel_1m.py ${datadir}/TFbeds.txt ${datadir}/TFbeds_primary.txt C remap_encode
+
+grep CTCF_ remap_encode_jaccC.csv | sort -k4 -t, -n -r | grep -n -f ${datadir}/TFs_CTCF.txt 
+grep ENCFF660GHM remap_encode_jaccC.csv | sort -k4 -t, -n -r | grep -n -f ${datadir}/TFs_CTCF.txt 
+grep ENCFF660GHM remap_encode_jaccC.csv | sort -k4 -t, -n -r | grep -n ,CTCF_
+```
+
+```{bash cobind, eval=FALSE, echo=TRUE, cache=TRUE}
+datadir=~/interval_sketch/hammock/cobind_repro/data
+resultsdir=~/interval_sketch/hammock/cobind_repro/results
+cd $resultsdir
+#pip install git+https://github.com/liguowang/cobind.git
+
+for tfbed in $(grep -f ${datadir}/TFs_CTCF.txt ${datadir}/TFbeds_c3.txt) ; do 
+  cobind.py jaccard ${datadir}/ENCFF660GHM.bed ${tfbed}  > cobind_CTCF.txt
+  cobind.py jaccard ${datadir}/subbeds/CTCF_hg38_c3.bed ${tfbed} >> cobind_CTCF.txt
+done
+cobind.py jaccard ${datadir}/ENCFF660GHM.bed ${datadir}/subbeds/CTCF_hg38_c3.bed >> cobind_CTCF.txt
+cat cobind_CTCF.txt
+
+```
+### Commands
+
+### Results
