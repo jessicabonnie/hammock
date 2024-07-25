@@ -29,6 +29,8 @@ ln -s /data/blangme2/jessica/remap2022/remap2022_crm_macs2_hg19_v1_0.bed
 mkdir /data/blangme2/jessica/remap2022/subbeds
 ln -s /data/blangme2/jessica/remap2022/subbeds
 
+wget https://www.encodeproject.org/files/ENCFF660GHM/@@download/ENCFF660GHM.bed.gz
+
 bedfile1="remap2022_crm_macs2_hg38_v1_0.bed"
 # bedfile2="remap2022_crm_macs2_hg19_v1_0.bed"
 proteins1=$(sed 's/\t/|/g' $bedfile1 | cut -d'|' -f4 | sort -u)
@@ -54,7 +56,7 @@ find $PWD/subbeds/*hg38.bed -maxdepth 1 -type f > TFbeds.txt
 find $PWD/subbeds/*hg38_c3.bed -maxdepth 1 -type f > TFbeds_c3.txt
 
 # cd ../results
-grep -E "RAD21|SMC1A|SMC3|STAG1|STAG2|CTCF|YY1|ZEB1|STAT3|KMT2A|CREB1|GTF2F1|ESR1|REPIN1.ZNF157|TRIM22" ../data/TFbeds_c3.txt > ../data/TFbeds_c3_sub.txt
+# grep -E "RAD21|SMC1A|SMC3|STAG1|STAG2|CTCF|YY1|ZEB1|STAT3|KMT2A|CREB1|GTF2F1|ESR1|REPIN1.ZNF157|TRIM22" ../data/TFbeds_c3.txt > ../data/TFbeds_c3_sub.txt
 
 grep -E -f ../data/TFs_CTCF_BRCA.txt ../data/TFbeds_c3.txt | sort -u | uniq > ../data/TFbeds_CTCF_BRCA.txt
 
@@ -81,15 +83,15 @@ grep -E -f ../data/TFs_CTCF_BRCA.txt ../data/TFbeds_c3.txt | sort -u | uniq > ..
 # 840:ZEB1_hg38_c3.bed
 
 
- awk -v FS="," 'NR==1{print $1,$125,$575,$663,$665,$708,$776};NR==125{print $1,$125,$575,$663,$665,$708,$776};NR==575{print $1,$125,$575,$663,$665,$708,$776};NR==663{print $1,$125,$575,$663,$665,$708,$776};NR==665{print $1,$125,$575,$663,$665,$708,$776};NR==708{print $1,$125,$575,$663,$665,$708,$776};NR==776{print $1,$125,$575,$663,$665,$708,$776}' minhash_h600_matrixC.csv > CTCF_minhash_jaccardB.csv
+#  awk -v FS="," 'NR==1{print $1,$125,$575,$663,$665,$708,$776};NR==125{print $1,$125,$575,$663,$665,$708,$776};NR==575{print $1,$125,$575,$663,$665,$708,$776};NR==663{print $1,$125,$575,$663,$665,$708,$776};NR==665{print $1,$125,$575,$663,$665,$708,$776};NR==708{print $1,$125,$575,$663,$665,$708,$776};NR==776{print $1,$125,$575,$663,$665,$708,$776}' minhash_h600_matrixC.csv > CTCF_minhash_jaccardB.csv
 
-awk -v FS="," 'NR==1{print $0};NR==125{print $0}' minhash_h600_matrixC.csv > CTCF_minhash_jaccard.csv
+# awk -v FS="," 'NR==1{print $0};NR==125{print $0}' minhash_h600_matrixC.csv > CTCF_minhash_jaccard.csv
 
-awk -v FS="," 'NR==1{print $0}' minhash_h600_matrixC.csv | sed 's/,/\n/g'> header_minhash_jaccard.txt
+# awk -v FS="," 'NR==1{print $0}' minhash_h600_matrixC.csv | sed 's/,/\n/g'> header_minhash_jaccard.txt
 
-awk -v FS="," 'NR==125{print $0}' minhash_h600_matrixC.csv | sed 's/,/\n/g' > CTCF.tmp 
-paste header_minhash_jaccard.txt CTCF.tmp > CTCF_minhash_jaccard.txt
-sort -k2 -n -r CTCF_minhash_jaccard.txt > CTCF_minhash_jaccard_sorted.txt
+# awk -v FS="," 'NR==125{print $0}' minhash_h600_matrixC.csv | sed 's/,/\n/g' > CTCF.tmp 
+# paste header_minhash_jaccard.txt CTCF.tmp > CTCF_minhash_jaccard.txt
+# sort -k2 -n -r CTCF_minhash_jaccard.txt > CTCF_minhash_jaccard_sorted.txt
 
 
 python3 ../../deterministic/lib/bed_minhash.py ../data/TFbeds_CTCF_BRCA.txt 2000 C ctcf_brca
@@ -97,3 +99,17 @@ grep CTCF_ ctcf_brcaminhash_h2000_jaccC.csv | sort -k4 -n -r -t, > ctcf_minhash_
 
 grep ^BRCA ctcf_brcaminhash_h2000_jaccC.csv | sort -k4 -n -r -t, > brca_minhash_h2000_jaccC_sorted.csv
 
+python ../../deterministic/lib/bed_jaccards_parallel.py ../data/TFbeds_CTCF_BRCA.txt A ctcf_brca 
+grep ^CTCF_ ctcf_brca_jaccA.csv | sort -k3 -t, -n -r | head  
+
+python3 ../../deterministic/lib/bed_jaccmh_parallel_1m.py ../data/TFbeds_c3.txt ../data/TFbeds_primary.txt C 10000 PMHTEST 
+
+python3 ../../deterministic/lib/bed_jaccards_parallel_1m.py
+../data/TFbeds_c3.txt ../data/TFbeds_primary.txt C actual
+
+grep ^CTCF_ ctcf_brca_m1_mh_p10000_jaccA.csv | sort -k3 -t, -n -r | grep -n -f ../data/TFs_CTCF.txt 
+
+
+python3 ../../deterministic/lib/bed_jaccmh_parallel_1m.py ../data/TFbeds.txt ../data/TFbeds_primary.txt C 10000 remap_encode 
+
+python3 ../../deterministic/lib/bed_jaccards_parallel_1m.py ../data/TFbeds.txt ../data/TFbeds_primary.txt C remap_encode
