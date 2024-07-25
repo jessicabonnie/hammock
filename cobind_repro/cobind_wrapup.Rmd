@@ -67,20 +67,77 @@ grep ENCFF660GHM remap_encode_jaccC.csv | sort -k4 -t, -n -r | grep -n -f ${data
 grep ENCFF660GHM remap_encode_jaccC.csv | sort -k4 -t, -n -r | grep -n ,CTCF_
 ```
 
-```{bash cobind, eval=FALSE, echo=TRUE, cache=TRUE}
+```{bash cobind,echo=TRUE, cache=TRUE}
 datadir=~/interval_sketch/hammock/cobind_repro/data
 resultsdir=~/interval_sketch/hammock/cobind_repro/results
 cd $resultsdir
 #pip install git+https://github.com/liguowang/cobind.git
-
-for tfbed in $(grep -f ${datadir}/TFs_CTCF.txt ${datadir}/TFbeds_c3.txt) ; do 
-  cobind.py jaccard ${datadir}/ENCFF660GHM.bed ${tfbed}  > cobind_CTCF.txt
-  cobind.py jaccard ${datadir}/subbeds/CTCF_hg38_c3.bed ${tfbed} >> cobind_CTCF.txt
+item=0
+rm cobind_CTCF1.txt
+for tfbed in $(grep -f ${datadir}/TFs_CTCF.txt ${datadir}/TFbeds.txt) ; do 
+  cobind.py jaccard ${datadir}/ENCFF660GHM.bed ${tfbed} | awk -v val=$item '{print(val,$0)}' >> cobind_CTCF1.txt
+  item=$(($item + 1))
+  cobind.py jaccard ${datadir}/subbeds/CTCF_hg38_c3.bed ${tfbed}| awk -v val=$item '{print(val,$0)}' >> cobind_CTCF1.txt
+  item=$(($item + 1))
 done
-cobind.py jaccard ${datadir}/ENCFF660GHM.bed ${datadir}/subbeds/CTCF_hg38_c3.bed >> cobind_CTCF.txt
-cat cobind_CTCF.txt
+cobind.py jaccard ${datadir}/ENCFF660GHM.bed ${datadir}/subbeds/CTCF_hg38_c3.bed | awk -v val=$item '{print(val,$0)}' > cobind_CTCF2.txt
+cat cobind_CTCF?.txt | sed 's/\% /\%/g' > cobind_CTCF.txt
+
+item=0
+for tfbed in $(cat ${datadir}/TFbeds.txt) ; do 
+  cobind.py jaccard ${datadir}/ENCFF660GHM.bed ${tfbed} | awk -v val=$item '{print(val,$0)}' >> cobind_ALL1.txt
+  item=$(($item + 1))
+  cobind.py jaccard ${datadir}/subbeds/CTCF_hg38_c3.bed ${tfbed}| awk -v val=$item '{print(val,$0)}' >> cobind_ALL1.txt
+  item=$(($item + 1))
+done
+cobind.py jaccard ${datadir}/ENCFF660GHM.bed ${datadir}/subbeds/CTCF_hg38_c3.bed | awk -v val=$item '{print(val,$0)}' > cobind_ALL2.txt
+cat cobind_ALL?.txt | sed 's/\% /\%/g' > cobind_ALL.txt
+
+
+#cat cobind_CTCF.txt | sed -i 's/\% /\%/g' cobind_CTCF.txt 
 
 ```
-### Commands
+
+### Sketch Commands
+```{bash sketch}
+
+
+datadir=~/interval_sketch/hammock/cobind_repro/data
+resultsdir=~/interval_sketch/hammock/cobind_repro/results
+codedir=~/interval_sketch/hammock/lib
+cd $resultsdir
+
+python3 ${codedir}/bed_jaccmh_parallel_1m.py ../data/TFbeds.txt ../data/TFbeds_primary.txt C 10000 remap_encode 
+
+grep ^CTCF_ ctcf_brca_m1_mh_p10000_jaccA.csv | sort -k3 -t, -n -r | grep -n -f ../data/TFs_CTCF.txt 
+
+
+```
+
+
 
 ### Results
+
+
+```{r dataprep}
+cobindo <- fread("./results/cobind_CTCF.txt",fill=TRUE,sep=" ") %>%
+  rename(id=V1, name=V2, value=V3) %>% 
+  pivot_wider(id_cols = id, names_from = name,values_from = value ) #%>% select(A.name,B.name,starts_with("Coef"))
+cobindo$B.name <- gsub(".bed", "", gsub("_hg38","", x=gsub("_c3","",x=cobindo$B.name)))
+cobindo$A.name <- gsub(".bed", "", gsub("_hg38","", x=gsub("_c3","",x=cobindo$A.name)))
+
+sketch <- fread("./results/10000_p10000_jaccA.csv") %>% rename(A.name=bed1, B.name=bed2, sketchA=jaccA)
+sketch$B.name <- gsub(".bed", "", gsub("_hg38","", x=gsub("_c3","",x=sketch$B.name)))
+sketch$A.name <- gsub(".bed", "", gsub("_hg38","", x=gsub("_c3","",x=sketch$A.name)))
+
+tfs <- fread("./results/remap_encode_jaccC.csv") %>% rename(A.name=bed1, B.name=bed2)
+tfs$B.name <- gsub(".bed", "", gsub("_hg38","", x=gsub("_c3","",x=tfs$B.name)))
+tfs$A.name <- gsub(".bed", "", gsub("_hg38","", x=gsub("_c3","",x=tfs$A.name)))
+
+papero <- fread("./data/SupplementaryTables_S1.csv",skip =1) %>% rename(B.name=TF_name) %>%
+  select(B.name,J)
+
+comparison <- full_join(cobindo %>% select(A.name,B.name,starts_with("Coef")),tfs) %>% full_join(papero)
+
+```
+
