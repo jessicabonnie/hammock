@@ -7,6 +7,7 @@ import xxhash
 from multiprocessing import Pool
 from datasketch import MinHash
 from bedprocessing import basic_bedline
+import argparse
 
 def _hash_64(b):
     return xxhash.xxh64(b).intdigest() % sys.maxsize
@@ -163,10 +164,8 @@ def process_file(args):
     '''
     Process a file to calculate the Jaccard similarity between the primary sets and the comparator sets.
     '''
-    print("inside processfile")
     filepath, primary_sets, primary_keys, mode, parts, subsample = args
     basename = os.path.basename(filepath)
-    print(basename)
     comparator = bed_to_sets(filename=filepath, mode=mode, parts=parts, subsample=subsample)
     
     output = {}
@@ -189,24 +188,31 @@ def calculate_jaccard_similarity(set1, set2):
     outunion, outintersect, outjacc1, outjacc2 = jaccard_similarity(set1, set2)
     return outunion, outjacc1, outjacc2
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Calculate Jaccard similarity between BED files.")
+    parser.add_argument("filepaths_file", type=str, help="File containing paths of BED files to compare.")
+    parser.add_argument("primary_file", type=str, help="File containing paths of primary comparator BED files.")
+    parser.add_argument('--output', '-o', type=str, default=sys.stdout, help='The output file path')
+    parser.add_argument("--mode", type=str, required=True, help="Mode to indicate what kind of similarity comparison is desired.")
+    parser.add_argument("--perm", "-p", type=int, help="Number of permutations for MinHash.")
+    parser.add_argument("--subsample", type=int, default=1, help="Subsampling rate for points.")
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    subsample = 1
-    if len(sys.argv) < 5:
-        print("Usage: python bed_jaccards.py <filepaths file> <file of paths of primary comparitor files> <mode> <parts> <prefix>")
-        sys.exit(1)
-    outprefix = ""#os.getcwd()
-    if len(sys.argv) == 6:
-        if os.path.exists(os.path.dirname(sys.argv[5])):
-            outprefix = sys.argv[5]
-        else: 
-            print("The directory given in the output prefix does not exist. Output files will be written to the current working directory using the basename.")
-            outprefix=os.path.basename(sys.argv[5])
+    args = parse_arguments()
+    subsample = args.subsample
+    mode = args.mode
+    # outprefix = args.output
+    # if len(sys.argv) < 5:
+    #     print("Usage: python bed_jaccards.py <filepaths file> <file of paths of primary comparitor files> <mode> <parts> <prefix>")
+    #     sys.exit(1)
+
     bed_sets = {}
-    mode = sys.argv[3]
-    filepaths_file = sys.argv[1]
-    pfile = sys.argv[2]
+    filepaths_file = args.filepaths_file
+    pfile = args.primary_file
     # pfile = "/home/jbonnie1/interval_sketch/hammock/cobind_repro/data/TFbeds_primary.txt"
-    parts = sys.argv[4]
+    parts = args.perm
     with open(filepaths_file, "r") as filein:
         filepaths = [f.strip() for f in filein.readlines()]
     
