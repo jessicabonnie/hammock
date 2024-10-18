@@ -18,10 +18,10 @@ def bed_to_intervals(bedfile):
     return intervals
 
 def no_overlap(intervals):
-    print(len(intervals))
+    # print(len(intervals))
     new_intervals = []
     for interval in intervals:
-        new_intervals.append([str(int(interval[0])+20), interval[1], interval[2]])
+        new_intervals.append(["88", interval[1], interval[2]])
     return new_intervals
 
 def shrink_intervals(intervals, denominator=2, padding=True):
@@ -31,7 +31,8 @@ def shrink_intervals(intervals, denominator=2, padding=True):
         chrom = interval[0]
         start = int(interval[1])
         end = int(interval[2])
-        partial = (start + end) // denominator
+        increment = (end-start) // denominator
+        partial = start + increment
         shrunk_intervals.append([chrom, str(start), str(partial)])
         if padding:
             shrunk_intervals.append(["55", str(partial), str(end)])
@@ -48,9 +49,11 @@ def subselect_intervals(intervals, n, padding=True):
     subselected_intervals = []
     for i in range(len(intervals)):
         if i % n == 0:
+            # Add the interval to the subselected list if its index is a multiple of n
             subselected_intervals.append(intervals[i])
         else:
             if padding:
+                # Add a modified interval with a 20 base pair shift if padding is enabled
                 new_interval = (str(int(intervals[i][0])+20), intervals[i][1], intervals[i][2])
                 subselected_intervals.append(new_interval)
     return subselected_intervals
@@ -58,7 +61,7 @@ def subselect_intervals(intervals, n, padding=True):
 #     return lst[(n-1)::n]
 
 def write_bedfile(intervals, output_file):
-    print(f" {len(intervals)}")
+    # print(f" {len(intervals)}")
     with open(output_file, 'w') as file:
         for interval in intervals:
             file.write(f"{interval[0]}\t{interval[1]}\t{interval[2]}\n")
