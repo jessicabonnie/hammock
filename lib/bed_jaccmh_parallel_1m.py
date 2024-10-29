@@ -8,7 +8,14 @@ from multiprocessing import Pool
 from datasketch import MinHash, LeanMinHash
 from bedprocessing import basic_bedline
 import argparse
+import resource
+from itertools import islice
+import gc
 
+# Set memory limit to 28GB (adjust as needed)
+def limit_memory():
+    soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+    resource.setrlimit(resource.RLIMIT_AS, (28 * 1024 * 1024 * 1024, hard))
 
 # class HashXX32(object):
 #     def __init__(self, seed):
@@ -25,104 +32,36 @@ def _hash_32(b, seed=0):
     return xxhash.xxh32_intdigest(b, seed=0) % sys.maxsize
 
 def hashfunc(x):
-    return xxhash.xxh32(x.encode('utf-8')).intdigest()
+    if isinstance(x, list):
+        # If x is a list, hash each element separately and combine the results
+        return xxhash.xxh32(b''.join(str(item).encode('utf-8') for item in x)).intdigest()
+    else:
+        # If x is not a list, proceed as before
+        return xxhash.xxh32(str(x).encode('utf-8')).intdigest()
 
-# def subsample_points(points, subsample=1, seed=0):
-#     '''
-#     Subsample a list of points.
-#     '''
-#     if subsample == 1:
-#         return points
-#     else:
-# #         return [ b for b in points if _hash_64(b,seed=seed) % 10 <= subsample*10]
-# class ExtendMinHash(LeanMinHash):
-#     def __init__(self, *args, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         # self.hashfunc = _hash_32
-#     # def cardinality(self):
-#     #     return self.count()
-#     # def union(self, b):
-#     #     """
-#     #     Merges this sketch with one or more other sketches.
-#     #     """
-#     #     return( MinHash.union(self,b))
-#         # for other in others:
-#         #     if not isinstance(other, HyperLogLog):
-#         #         raise TypeError(f"Cannot merge ExtendedHyperLogLog with {type(other)}")
-#             # self.merge(other)
-#         # return self
-#     # def update_batch(self, new_vals):
-#     #     newMH = 
-    
-#     def size_union(self, others):
-#         """
-#         Returns the cardinality of the union of this MinHash sketch
-#         with one or more other MinHash sketches.
-#         """
-#         return MinHash.union(self,others).count()
-    
-#     def size_intersection(self, b):
-#         '''Return the estimated size of the intersection
-#             intersection(a,b)=cardinality(a)+cardinality(b)-union(a,b) '''
-#         # return self.intersect(b).count()
-#         return abs(self.count() + b.count() - self.size_union(b))
-
-#     # # def add(self,values):
-#     #     '''
-#     #     Add a value to the sketch.
-#     #     '''
-#     #     self.update(values)
-#     # def jaccard(self, b):
-#     #     '''
-#     #     Estimate the Jaccard similarity between A and B.
-#     #     Calculate: |sketch(A).insertection(sketch(B))| / |sketch(A).union(sketch(B))|
-#     #     '''
-#     #     return( MinHash.jaccard(self,b))
-#         # return self.size_intersection(b)/self.size_union(b)
-
-def bed_to_sets(filename, mode, parts, sep="-", subsample=1, verbose=False):
-    """
-    Convert a BED file to sets of intervals and points.
-
-    Args:
-        filename (str): The path to the BED file.
-        mode (str, optional): The mode to determine how to parse the BED file. Defaults to "A".
-        sep (str, optional): The separator used to split the BED file line. Defaults to "-".
-        verbose (bool, optional): Whether to print additional information during conversion. Defaults to False.
-
-    Returns:
-        list: A list containing two sets - Aset (intervals) and Bset (points).
-    """
-    
+def bed_to_sets(filename, mode, parts, sep="-", subsample=1, verbose=False, chunk_size=1000):
     outset = MinHash(num_perm=int(parts), seed=0, hashfunc=hashfunc)
-    #, hashfunc=xxhash.xxh32) #, hashfunc=_hash_32)
-    listA = []
-    listB = []
-    bedline_args = []
-    with open(filename, "r") as file:
-        for line in file:
-            # print(line)
-            if not line.startswith('#'):
-                bedline_args.append((line, mode, sep, subsample))
-                # interval, points = bedline(line, mode=mode, sep=sep, subsample=subsample)
-                # print(len(points))
-                # if interval == '':
-                #     break
-                # listA.append(interval)
-                # listB.append(points)
-    with Pool() as pool:
-        bedline_results = pool.starmap(bedline, bedline_args)
-    if mode in ["B", "C"]:
-        # outset.update_batch(listB)
-        outset.update_batch([b for (_,b) in bedline_results if b != []])
-    if mode in ["A", "C"]:
-        # outset.update_batch(listA)
-        outset.update_batch([a for (a,_) in bedline_results if a != ''])
+    
+    def process_chunk(chunk):
+        bedline_results = [bedline(line, mode=mode, sep=sep, subsample=subsample) for line in chunk if not line.startswith('#')]
+        if mode in ["B", "C"]:
+            outset.update_batch( [b for (_, b) in bedline_results if b is not None] )
+        if mode in ["A", "C"]:
+            outset.update_batch([a for (a, _) in bedline_results if a != ''])
+        # del bedline_results
+        gc.collect()
 
-    print(f"finished bed_to_sets for {filename}")
-    # print(outset.count())
+    with open(filename, "r") as file:
+        while True:
+            chunk = list(islice(file, chunk_size))
+            if not chunk:
+                break
+            process_chunk(chunk)
+            if verbose:
+                print(f"Processed {chunk_size} lines from {filename}")
+            gc.collect()
+
     return LeanMinHash(outset)
-    # return ExtendMinHash(outset)
 
 def bed_to_sets_parallel(args):
     basename, filepath, mode, parts, subsample = args
@@ -144,14 +83,13 @@ def bedline(line, mode, sep, subsample=1):
         #     points.append(sep.join([str(chrval), str(val), str(val+1), "B"]).encode('utf-8'))
     return interval, points #[g for g in points]
 
-# def subsample_max(subsample):
-#     return subsample*sys.maxsize
 def parallel_criterion(args):
     chrval, start, sep, maximum, seed = args
     outstr = sep.join([str(chrval), str(start), str(start+1)])
     hashv = _hash_32(outstr.encode('utf-8'), seed=seed)
     if hashv <= maximum:
         return outstr.encode('utf-8')
+    
 def generate_points_parallel(chrval, start, end, sep="-", subsample=1, seed=23):
     args = ((chrval, val, sep, subsample*sys.maxsize, seed) for val in range(start, end+1))
     with Pool() as pool:
@@ -181,55 +119,56 @@ def generate_points(chrval, start, end, sep="-", subsample=1,seed=23):
 
 
 def similarity_values(set1, set2):
-    union = LeanMinHash.union(set1,set2)
+    union = LeanMinHash.union(set1, set2)
     unionc = union.count()
-    intersect = set1.count() + set2.count() - unionc
-    print(unionc, intersect)
-    # intersect = float(len(set1.intersection(set2)))
-    # return union, intersect, intersect/union
-    return (unionc, intersect, set1.jaccard(set2), intersect/unionc)
+    intersect = abs(set1.count() + set2.count() - unionc)
+    jaccard = set1.jaccard(set2)
+    
+    # Handle potential division by zero
+    jacc_calc = intersect / unionc if unionc != 0 else 0
+    
+    return unionc, intersect, jaccard, jacc_calc
+
 
 def process_file(args):
-    '''
-    Process a file to calculate the Jaccard similarity between the primary sets and the comparator sets.
-    '''
     filepath, primary_sets, primary_keys, mode, parts, subsample = args
     basename = os.path.basename(filepath)
+    if not filepath or not os.path.exists(filepath):
+        print(f"Error: Invalid or non-existent file path: '{filepath}'", file=sys.stderr)
+        return None, None
+
+    basename = os.path.basename(filepath)
     comparator = bed_to_sets(filename=filepath, mode=mode, parts=parts, subsample=subsample)
+    if comparator is None:
+        return None, None
+
     output = {}
 
     for i in range(len(primary_keys)):
         primary = primary_sets[primary_keys[i]]
-        # union = MinHash.union(primary, comparator)
-        output[primary_keys[i]] = similarity_values(primary, comparator)
+        if not isinstance(primary, LeanMinHash):
+            print(f"Error: Invalid type for primary set {primary_keys[i]}: {type(primary)}")
+            continue
+        sim_values = similarity_values(primary, comparator)
+        if sim_values is not None:
+            output[primary_keys[i]] = sim_values
     
     return basename, output
 
-# def calculate_jaccard_similarity(set1, set2):
-#     '''
-#     Calculate the Jaccard similarity between two sets.
-#     '''
-#     # unionA, unionB = 0, 0
-#     outunion = 0
-#     outintersect = 0
-#     outjacc = 0
-#     # intersectA, intersectB = 0, 0
-#     # jaccA, jaccB = 0, 0
-#     outunion, outintersect, outjacc1, outjacc2 = jaccard_similarity(set1, set2)
-#     return outunion, outjacc1, outjacc2
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Calculate Jaccard similarity between BED files.")
     parser.add_argument("filepaths_file", type=str, help="File containing paths of BED files to compare.")
     parser.add_argument("primary_file", type=str, help="File containing paths of primary comparator BED files.")
-    parser.add_argument('--output', '-o', type=str, default=sys.stdout, help='The output file path')
+    parser.add_argument('--output', '-o', type=str, default="hammock", help='The output file prefix')
     parser.add_argument("--mode", type=str, required=True, help="Mode to indicate what kind of similarity comparison is desired.")
-    parser.add_argument("--perm", "-p", type=int, help="Number of permutations for MinHash.")
+    parser.add_argument("--perm", "-p", type=int, help="Number of permutations for MinHash.", required=True)
     parser.add_argument("--subsample", type=float, default=1, help="Subsampling rate for points: provide decimal ratio.")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
+    limit_memory()
     args = parse_arguments()
     subsample = args.subsample
     mode = args.mode
@@ -244,22 +183,17 @@ if __name__ == "__main__":
         filepaths = [f.strip() for f in filein.readlines()]
     
     prime_sets = {}
-    # readargs = []
     with open(pfile, "r") as filein:
-        # primepaths = [f.strip() for f in filein.readlines()]
-        for line in filein.readlines():
+        for line in filein:
             filepath = line.strip()
             basename = os.path.basename(filepath)
-            # readargs.append( (basename, filepath, mode, parts, subsample))
             prime_sets[basename] = bed_to_sets(filename=filepath, mode=mode, parts=parts, subsample=subsample)
-    # with Pool() as xpool:
-    #     linesets = xpool.map(bed_to_sets_parallel, readargs)
-    # prime_sets = {b:out for b, out in linesets}
+    
     prime_keys = list(prime_sets.keys())
     prime_keys.sort()
 
-    outlines = [",".join(["bed1", "bed2", "union", "intersect_inex"])]
-    jacc_long = [",".join(["bed1", "bed2", "jaccardfunc", "jaccardcalc"])]
+    # outlines = [",".join(["bed1", "bed2", "mode", "permutations", "subsample", "union", "intersect_inexact"])]
+    jacc_long = [",".join(["bed1", "bed2", "mode", "permutations", "subsample", "jaccardfunc", "jaccardcalc","intersect_inexact", "union" ])]
     # Create a list of arguments for each worker
     args_list = [(f, prime_sets, prime_keys, mode, parts, subsample) for f in filepaths]
     results = []
@@ -269,32 +203,46 @@ if __name__ == "__main__":
     for argy in args_list:
         results.append(process_file(argy))
 
-    result_dict = {b:out for (b, out) in results}
+    result_dict = {b:out for (b, out) in results if b is not None and out is not None}
     result_keys = list(result_dict.keys())
     result_keys.sort()
     for j in range(len(result_keys)):
-            for i in range(len(prime_keys)):
-                primeset = prime_keys[i]
-                secset = result_keys[j]
-                union, intersect, jaccard, jacc_calc = result_dict[secset][primeset]
-                # calc_jacc = intersect/union
-                if primeset == secset:
-                    secset = "-"
+        secset = result_keys[j]
+        for i in range(len(prime_keys)):
+            # primename = prime_keys[i]
+            primeset = prime_keys[i]
+            
+            union, intersect, jaccard, jacc_calc = result_dict[secset][primeset]
+            # calc_jacc = intersect/union
+            if primeset == secset:
+                secset = "-"
 
-                outlines.append(",".join([primeset,
-                                        secset,
-                                        f"{intersect:>5f}",
-                                        f"{union:>5f}"]))
-                jacc_long.append(",".join([primeset,
-                                        secset,
-                                        f"{jaccard:>5f}",
-                                        f"{jacc_calc:>5f}"]))
+            # outlines.append(",".join(
+            #     [primeset,
+            #      secset,
+            #      mode,
+            #      str(parts),
+            #      str(subsample),
+            #      f"{intersect:>5f}",
+            #      f"{union:>5f}"]))
+            jacc_long.append(",".join(
+                [primeset,
+                 secset,
+                 mode,
+                 str(parts),
+                 str(subsample),
+                 f"{jaccard:>5f}",
+                 f"{jacc_calc:>5f}",
+                 f"{intersect:>5f}",
+                 f"{union:>5f}"]))
     new_prefix = f"{outprefix}_p{parts}"
-    if mode == "C" and subsample != 1:
+    if mode == "C":
         new_prefix = f"{new_prefix}_sub{subsample}"
-    with open(f"{new_prefix}_card{mode}.csv", mode="w") as outfile:
-        for line in outlines:
-            outfile.write(line + "\n")
+    # with open(f"{new_prefix}_card{mode}.csv", mode="w") as outfile:
+    #     for line in outlines:
+    #         outfile.write(line + "\n")
     with open(f"{new_prefix}_jacc{mode}.csv", mode="w") as outfile:
         for line in jacc_long:
             outfile.write(line + "\n")
+
+    limit_memory()
