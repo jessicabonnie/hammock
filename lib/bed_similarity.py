@@ -176,7 +176,6 @@ def process_file(args):
             continue
         sim_values = similarity_values(primary, comparator)
         if sim_values is not None:
-            print(sim_values)
             output[primary_keys[i]] = sim_values
     
     return basename, output
@@ -292,7 +291,6 @@ if __name__ == "__main__":
         for i in range(len(prime_keys)):
             # primename = prime_keys[i]
             primeset = prime_keys[i]
-            print(result_dict[secset][primeset])
             union, intersect, jaccard, jacc_calc = result_dict[secset][primeset]
             # calc_jacc = intersect/union
             if primeset == secset:
