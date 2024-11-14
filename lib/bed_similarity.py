@@ -10,8 +10,8 @@ import argparse
 import resource
 from itertools import islice
 import gc
-from hammock.lib.alt_dashing2.python.sketchclass import Sketch
-from hammock.lib.alt_dashing2.python.hyperloglog import HyperLogLog
+from hammock.lib.sketchclass import Sketch
+from hammock.lib.hyperloglog import HyperLogLog
 
 # Set memory limit to 28GB (adjust as needed)
 def limit_memory():
