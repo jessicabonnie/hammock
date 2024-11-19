@@ -230,12 +230,23 @@ def get_parser():
 
 
 def get_new_prefix(outprefix, sketch_type, num_hashes=None, precision=None):
-    suffix = ""
+    """Get output prefix with appropriate suffix based on sketch type.
+    
+    Args:
+        outprefix: Base output prefix
+        sketch_type: Type of sketch (hyperloglog/minhash/exact)
+        num_hashes: Number of hashes for MinHash
+        precision: Precision for HyperLogLog
+        
+    Returns:
+        String with appropriate suffix for sketch type
+    """
     if sketch_type == "minhash":
-        suffix = f"_n{num_hashes}"
+        suffix = f"_n{num_hashes}_mh"
     elif sketch_type == "hyperloglog":
-        suffix = f"_p{precision}"
-    # exact sketch type has no suffix
+        suffix = f"_p{precision}_hll"
+    elif sketch_type == "exact":
+        suffix = "_exact"
     return f"{outprefix}{suffix}"
 
 
@@ -295,12 +306,14 @@ if __name__ == "__main__":
             # calc_jacc = intersect/union
             if primeset == secset:
                 secset = "-"
+            prec_str = "-" if args.sketch_type in ["exact", "minhash"] else str(precision)
+            hash_str = "-" if args.sketch_type == "exact" else str(num_hashes)
             jacc_long.append(",".join(
                 [primeset,
                  secset,
                  mode,
-                 str(num_hashes),
-                 str(precision),
+                 hash_str,
+                 prec_str,
                  str(subsample),
                  f"{jaccard:>5f}",
                  f"{jacc_calc:>5f}",
