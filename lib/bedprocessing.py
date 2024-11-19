@@ -22,8 +22,10 @@ def write_pretty_matrix(matrix:np.ndarray, row_names, outhandle=sys.stdout):
 
 def basic_bedline(line):
     columns = line.strip().split('\t')
-    if 0 < len(columns) <= 2:
-        raise ValueError("bedline: one of the lines in malformed")
+    if len(columns) < 2:
+        columns = line.strip().split(" ")
+        if len(columns) < 2:
+            raise ValueError("bedline: one of the lines in malformed")
     if columns[0].startswith('chr'):
         columns[0] = columns[0][3:]
     return columns[0], int(columns[1]), int(columns[2])
