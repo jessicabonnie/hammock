@@ -25,8 +25,11 @@ class Sketch:
             self.sketch = HyperLogLog(precision, kmer_size, window_size, seed)
         elif sketch_type == "minhash":
             self.sketch = MinHash(num_hashes, kmer_size, window_size, seed)
+            precision = None  # Set precision to None for MinHash
         elif sketch_type == "exact":
-            self.sketch = ExactCounter(precision, kmer_size, window_size, seed)
+            self.sketch = ExactCounter(None, kmer_size, window_size, seed)
+            precision = None
+            num_hashes = None
         else:
             raise ValueError("Invalid sketch type. Use 'hyperloglog', 'minhash', or 'exact'")
         
