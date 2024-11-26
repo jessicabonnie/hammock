@@ -19,6 +19,7 @@ outname=$2 #remap1M
 CODEDIR=/home/jbonnie1/interval_sketch/hammock/lib
 SLURM_CPUS_ON_NODE=${SLURM_CPUS_ON_NODE:-1}
 
+# Generate a list of BED files of different ratio of overlap with the original
 python3 $CODEDIR/generate_beds.py $inbed 2,3,4,5 $outname > ${outname}.list
 
 grep -v modeB $outname.list > ${outname}A.list
@@ -27,15 +28,8 @@ realpath $inbed > ${outname}_primary.list
 
 
 parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE python3 $CODEDIR/bed_similarity.py ${outname}.list  ${outname}_primary.list --mode C --{1} -o ${outname} --subsample {2} ::: hyperloglog minhash exact :::  .1 .25 .5 .75 1
-# for subsample in .1 .25 .5 .75 1; do
-# echo "Subsample: $subsample"
-#     for perm in 50 100 200 500 ; do
-#         echo "Permutation number: $perm"
-#         srun -n $SLURM_CPUS_ON_NODE python3 $CODEDIR/bed_jaccmh_parallel_1m.py ${outname}.list  ${outname}_primary.list --mode C --perm $perm -o ${outname} --subsample $subsample
-# echo "Complete: Permutation number: $perm "
-#     done
-# done
 
+parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE python3 $CODEDIR/bed_similarity.py ${outname}.list  ${outname}_primary.list --mode {1} --{2} -o ${outname} :::  A B ::: hyperloglog minhash exact 
 
 
 # parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE python3 $CODEDIR/bed_jaccmh_parallel_1m.py ${outname}{1}.list  ${outname}_primary.list --mode {1} --perm {2} -o ${outname} ::: A B ::: 50 100 200 500
