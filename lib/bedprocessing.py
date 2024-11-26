@@ -2,25 +2,21 @@
 import sys
 import numpy as np
 
-def write_pretty_matrix(matrix:np.ndarray, row_names, outhandle=sys.stdout):
-    """
-    Prints a matrix in a pretty format with row names.
-
-    Args:
-        matrix (np.ndarray): The matrix to be printed.
-        row_names (list): A list of row names, one for each row in the matrix.
-        outhandle (file-like object, optional): The output handle to write the matrix to. Defaults to sys.stdout.
-    """
-    # Get the number of rows and columns in the matrix
-    num_rows, num_cols = matrix.shape
-    with outhandle as matout:
-        # Print the header row with column names
-        matout.write(",".join([""] + row_names)+"\n")
-        for i in range(num_rows):
-            outrow = [row_names[i]] + [f"{matrix[i, j]:>5.4f}" for j in range(num_cols)]
-            matout.write(",".join(outrow)+"\n")
-
 def basic_bedline(line):
+    """Parse a single line from a BED file into chromosome, start, and end coordinates.
+    
+    Args:
+        line: A string containing a single line from a BED file
+        
+    Returns:
+        Tuple of (chrom, start, end) where:
+            chrom: Chromosome name with 'chr' prefix removed if present 
+            start: Integer start coordinate
+            end: Integer end coordinate
+            
+    Raises:
+        ValueError: If line has fewer than 3 tab or space-separated columns
+    """
     columns = line.strip().split('\t')
     if len(columns) < 2:
         columns = line.strip().split(" ")
@@ -29,7 +25,6 @@ def basic_bedline(line):
     if columns[0].startswith('chr'):
         columns[0] = columns[0][3:]
     return columns[0], int(columns[1]), int(columns[2])
-
 
 def read_csv_matrix(file):
     """
@@ -48,3 +43,20 @@ def read_csv_matrix(file):
    
     return data, row_names, col_names
 
+def write_pretty_matrix(matrix:np.ndarray, row_names, outhandle=sys.stdout):
+    """
+    Prints a matrix in a pretty format with row names.
+
+    Args:
+        matrix (np.ndarray): The matrix to be printed.
+        row_names (list): A list of row names, one for each row in the matrix.
+        outhandle (file-like object, optional): The output handle to write the matrix to. Defaults to sys.stdout.
+    """
+    # Get the number of rows and columns in the matrix
+    num_rows, num_cols = matrix.shape
+    with outhandle as matout:
+        # Print the header row with column names
+        matout.write(",".join([""] + row_names)+"\n")
+        for i in range(num_rows):
+            outrow = [row_names[i]] + [f"{matrix[i, j]:>5.4f}" for j in range(num_cols)]
+            matout.write(",".join(outrow)+"\n")

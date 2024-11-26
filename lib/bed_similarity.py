@@ -12,30 +12,44 @@ from itertools import islice
 import gc
 from hammock.lib.sketchclass import Sketch
 from hammock.lib.hyperloglog import HyperLogLog
+from typing import Optional
 
 # Set memory limit to 28GB (adjust as needed)
 def limit_memory():
     soft, hard = resource.getrlimit(resource.RLIMIT_AS)
     resource.setrlimit(resource.RLIMIT_AS, (28 * 1024 * 1024 * 1024, hard))
 
-def bed_to_sets(filename, mode, num_hashes, precision, sep="-", subsample=1, verbose=False, chunk_size=1000, sketch_type="hyperloglog"):
-    """Process bed file into a sketch.
+def bed_to_sets(filename: str, 
+                mode: str, 
+                num_hashes: int, 
+                precision: int, 
+                sep: str = "-", 
+                subsample: float = 1, 
+                verbose: bool = False, 
+                chunk_size: int = 1000, 
+                sketch_type: str = "hyperloglog") -> Sketch:
+    """Process bed file into a sketch of points or intervals or both. Default sketch type is HyperLogLog.
+    
     Args:
-        filename (str): Path to the BED file to process
-        mode (str): A/B/C for interval/point/both comparison types
+        filename: Path to the BED file to process
+        mode: A/B/C for interval/point/both comparison types
             A: Compare intervals only
             B: Compare points only 
             C: Compare both intervals and points
-        num_hashes (int): Number of hash functions for MinHash sketching
-        precision (int): Precision parameter for HyperLogLog sketching
-        sep (str, optional): Separator for combining fields. Defaults to "-"
-        subsample (float, optional): Fraction of points (type B) to sample. Defaults to 1. If negative, interval (type A) values will be subsampled by (1-subsample)
-        verbose (bool, optional): Whether to print progress. Defaults to False
-        chunk_size (int, optional): Number of lines to process at once. Defaults to 1000
-        sketch_type (str): Type of sketch to use:
+        num_hashes: Number of hash functions for MinHash sketching
+        precision: Precision parameter for HyperLogLog sketching
+        sep: Separator for combining fields. Defaults to "-"
+        subsample: Fraction of points (type B) to sample. Defaults to 1. 
+                  If negative, interval (type A) values will be subsampled by (1-subsample)
+        verbose: Whether to print progress. Defaults to False
+        chunk_size: Number of lines to process at once. Defaults to 1000
+        sketch_type: Type of sketch to use:
             hyperloglog: HyperLogLog sketch for cardinality estimation
             minhash: MinHash sketch for Jaccard similarity
             exact: Exact set representation
+            
+    Returns:
+        Sketch object containing the processed data
     """
     outset = Sketch(
         sketch_type=sketch_type,
@@ -75,7 +89,23 @@ def bed_to_sets_parallel(args):
     basename, filepath, mode, num_hashes, precision, subsample, sketch_type = args
     return (basename, bed_to_sets(filename=filepath, mode=mode, num_hashes=num_hashes, precision=precision, subsample=subsample, sketch_type=sketch_type))
 
-def bedline(line, mode, sep, subsample=1):
+def bedline(line: str, 
+            mode: str, 
+            sep: str, 
+            subsample: float = 1) -> tuple[Optional[bytes], list[Optional[bytes]]]:
+    """Process a single line describing an interval from a BED file. If subsample is provided points will be sampled from the interval.
+    
+    Args:
+        line: Single line from BED file
+        mode: A/B/C for interval/point/both comparison types
+        sep: Separator for combining fields
+        subsample: Subsampling rate. If negative, interval values are subsampled
+        
+    Returns:
+        Tuple of (interval, points) where:
+            interval: Encoded interval string or None
+            points: List of encoded point strings or empty list
+    """
     # NOTE: right now we are counting i:i+1 to be the position of the ith bp, meaning chrx 2:4 contains bp 2,3 only. see here https://bedtools.readthedocs.io/en/latest/content/general-usage.html
     interval = ''
     points = []
@@ -85,7 +115,6 @@ def bedline(line, mode, sep, subsample=1):
     
     if mode in ["A","C"]:
         interval = sep.join([chrval, str(start), str(end), "A"]).encode('utf-8')
-        interval = interval.encode('utf-8')
         if subsample < 0:
             hashv = HyperLogLog._hash_str(interval, seed=777)
             if hashv % (2**32) > int((1+subsample) * (2**32)): # Modulo to ensure we're in 32-bit space
@@ -97,22 +126,39 @@ def bedline(line, mode, sep, subsample=1):
         #     points.append(sep.join([str(chrval), str(val), str(val+1), "B"]).encode('utf-8'))
     return interval, points #[g for g in points]
 
-def parallel_criterion(args):
-    chrval, start, sep, maximum, seed = args
-    outstr = sep.join([str(chrval), str(start), str(start+1)])
-    hashv = HyperLogLog._hash_str(outstr.encode('utf-8'), seed)
-    if hashv <= maximum:
-        return outstr.encode('utf-8')
+# def parallel_criterion(args):
+#     chrval, start, sep, maximum, seed = args
+#     outstr = sep.join([str(chrval), str(start), str(start+1)])
+#     hashv = HyperLogLog._hash_str(outstr.encode('utf-8'), seed)
+#     if hashv <= maximum:
+#         return outstr.encode('utf-8')
     
-def generate_points_parallel(chrval, start, end, sep="-", subsample=1, seed=23):
-    args = ((chrval, val, sep, abs(subsample)*sys.maxsize, seed) for val in range(start, end+1))
-    with Pool() as pool:
-        points = pool.map_async(parallel_criterion, args, chunksize=1000)
-    return points
+# def generate_points_parallel(chrval, start, end, sep="-", subsample=1, seed=23):
+#     args = ((chrval, val, sep, abs(subsample)*sys.maxsize, seed) for val in range(start, end+1))
+#     with Pool() as pool:
+#         points = pool.map_async(parallel_criterion, args, chunksize=1000)
+#     return points
 
 
-def generate_points(chrval, start, end, sep="-", subsample=1, seed=23):
-    '''Generate points from a BED interval.'''
+def generate_points(chrval: str, 
+                   start: int, 
+                   end: int, 
+                   sep: str = "-", 
+                   subsample: float = 1, 
+                   seed: int = 23) -> list[Optional[bytes]]:
+    """Generate points from a BED interval. If subsample is provided, points will be sampled from the interval.
+    
+    Args:
+        chrval: Chromosome value
+        start: Start position
+        end: End position
+        sep: Separator for combining fields
+        subsample: Fraction of points to sample (0-1)
+        seed: Random seed for sampling
+        
+    Returns:
+        List of encoded point strings that passed sampling
+    """
     # Convert subsample ratio to the correct threshold
     maximum = int(subsample * (2**32))  # Using 32-bit space for better distribution
     def gp(x):
@@ -121,10 +167,9 @@ def generate_points(chrval, start, end, sep="-", subsample=1, seed=23):
         if hashv % (2**32) <= maximum:  # Modulo to ensure we're in 32-bit space
             return outstr.encode('utf-8')
     return [gp(x) for x in range(start, end+1)]
-    
 
-
-def similarity_values(sketch1: Sketch, sketch2: Sketch):
+def similarity_values(sketch1: Sketch, 
+                     sketch2: Sketch) -> tuple[float, float, float, float]:
     """Calculate similarity values between two sketches.
     
     Args:
@@ -132,7 +177,11 @@ def similarity_values(sketch1: Sketch, sketch2: Sketch):
         sketch2: Second sketch
         
     Returns:
-        Tuple of (union_size, intersection_size, jaccard, jaccard_calc)
+        Tuple of (union_size, intersection_size, jaccard, jaccard_calc) where:
+            union_size: Estimated size of union
+            intersection_size: Estimated size of intersection  
+            jaccard: Jaccard similarity from sketch's estimate
+            jaccard_calc: Jaccard calculated from union/intersection
     """
     union_size = sketch1.estimate_union(sketch2)
     intersect = sketch1.estimate_intersection(sketch2)
@@ -144,7 +193,26 @@ def similarity_values(sketch1: Sketch, sketch2: Sketch):
     return union_size, intersect, jaccard, jacc_calc
 
 
-def process_file(args):
+def process_file(args: tuple[str, dict, list, str, int, int, float, str]) -> tuple[Optional[str], Optional[dict]]:
+    """Process a single BED file and calculate similarity values against primary sets.
+    
+    Args:
+        args: Tuple containing:
+            filepath: Path to BED file to process
+            primary_sets: Dictionary of primary Sketch objects to compare against
+            primary_keys: List of keys for primary_sets
+            mode: Mode for bed_to_sets ('A', 'B', or 'C')
+            num_hashes: Number of hashes for MinHash sketching
+            precision: Precision for HyperLogLog sketching
+            subsample: Subsampling rate for points
+            sketch_type: Type of sketching to use
+            
+    Returns:
+        Tuple of (basename, output_dict) where:
+            basename: Base filename of processed file
+            output_dict: Dictionary mapping primary keys to similarity values
+            Returns (None, None) if processing fails
+    """
     filepath, primary_sets, primary_keys, mode, num_hashes, precision, subsample, sketch_type = args
     basename = os.path.basename(filepath)
     if not filepath or not os.path.exists(filepath):
@@ -175,7 +243,6 @@ def process_file(args):
             output[primary_keys[i]] = sim_values
     
     return basename, output
-
 
 def get_parser():
     parser = argparse.ArgumentParser(
@@ -225,7 +292,10 @@ def get_parser():
     
     return parser
 
-def get_new_prefix(outprefix, sketch_type, num_hashes=None, precision=None):
+def get_new_prefix(outprefix: str, 
+                   sketch_type: str, 
+                   num_hashes: Optional[int] = None, 
+                   precision: Optional[int] = None) -> str:
     """Get output prefix with appropriate suffix based on sketch type.
     
     Args:
@@ -323,6 +393,7 @@ if __name__ == "__main__":
                  f"{union:>5f}"]))
     new_prefix = get_new_prefix(outprefix, args.sketch_type, num_hashes, precision)
     if mode == "C":
+        # Recall that subsample is negative if balance is set
         new_prefix = f"{new_prefix}_sub{subsample}"
     # with open(f"{new_prefix}_card{mode}.csv", mode="w") as outfile:
     #     for line in outlines:
