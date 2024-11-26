@@ -18,34 +18,24 @@ def limit_memory():
     soft, hard = resource.getrlimit(resource.RLIMIT_AS)
     resource.setrlimit(resource.RLIMIT_AS, (28 * 1024 * 1024 * 1024, hard))
 
-# class HashXX32(object):
-#     def __init__(self, seed):
-#         self.h = xxhash.xxh32(seed=seed)
-
-#     def hash(self, o):
-#         self.h.reset()
-#         self.h.update(o)
-#         return self.h.intdigest() % sys.maxsize
-# def _hash_64(b, seed=0):
-#     return xxhash.xxh64(b, seed=seed).intdigest() % sys.maxsize
-
-# def _hash_32(b, seed=0):
-#     return xxhash.xxh32_intdigest(b, seed=0) % sys.maxsize
-
-# def hashfunc(x):
-#     if isinstance(x, list):
-#         # If x is a list, hash each element separately and combine the results
-#         return xxhash.xxh32(b''.join(str(item).encode('utf-8') for item in x)).intdigest()
-#     else:
-#         # If x is not a list, proceed as before
-#         return xxhash.xxh32(str(x).encode('utf-8')).intdigest()
-
 def bed_to_sets(filename, mode, num_hashes, precision, sep="-", subsample=1, verbose=False, chunk_size=1000, sketch_type="hyperloglog"):
     """Process bed file into a sketch.
-    
     Args:
-        mode: A/B/C for interval/point/both comparison types
-        sketch_type: hyperloglog/minhash/exact for counting method
+        filename (str): Path to the BED file to process
+        mode (str): A/B/C for interval/point/both comparison types
+            A: Compare intervals only
+            B: Compare points only 
+            C: Compare both intervals and points
+        num_hashes (int): Number of hash functions for MinHash sketching
+        precision (int): Precision parameter for HyperLogLog sketching
+        sep (str, optional): Separator for combining fields. Defaults to "-"
+        subsample (float, optional): Fraction of points (type B) to sample. Defaults to 1. If negative, interval (type A) values will be subsampled by (1-subsample)
+        verbose (bool, optional): Whether to print progress. Defaults to False
+        chunk_size (int, optional): Number of lines to process at once. Defaults to 1000
+        sketch_type (str): Type of sketch to use:
+            hyperloglog: HyperLogLog sketch for cardinality estimation
+            minhash: MinHash sketch for Jaccard similarity
+            exact: Exact set representation
     """
     outset = Sketch(
         sketch_type=sketch_type,
@@ -65,7 +55,7 @@ def bed_to_sets(filename, mode, num_hashes, precision, sep="-", subsample=1, ver
                             outset.add_string(point.decode())
         if mode in ["A", "C"]:
             for a, _ in bedline_results:
-                if a != '':
+                if a is not None:
                     outset.add_string(a.decode())
         gc.collect()
 
@@ -92,10 +82,16 @@ def bedline(line, mode, sep, subsample=1):
     chrval, startx, endx = basic_bedline(line)
     start = min(startx, endx)
     end = max(startx, endx)
+    
     if mode in ["A","C"]:
         interval = sep.join([chrval, str(start), str(end), "A"]).encode('utf-8')
+        interval = interval.encode('utf-8')
+        if subsample < 0:
+            hashv = HyperLogLog._hash_str(interval, seed=777)
+            if hashv % (2**32) > int((1+subsample) * (2**32)): # Modulo to ensure we're in 32-bit space
+                interval = None
     if mode in ["B","C"]:
-        points = generate_points(chrval, start, end, sep=sep, subsample=subsample)
+        points = generate_points(chrval, start, end, sep=sep, subsample=abs(subsample))
         
         # for val in range(start, end):
         #     points.append(sep.join([str(chrval), str(val), str(val+1), "B"]).encode('utf-8'))
@@ -109,7 +105,7 @@ def parallel_criterion(args):
         return outstr.encode('utf-8')
     
 def generate_points_parallel(chrval, start, end, sep="-", subsample=1, seed=23):
-    args = ((chrval, val, sep, subsample*sys.maxsize, seed) for val in range(start, end+1))
+    args = ((chrval, val, sep, abs(subsample)*sys.maxsize, seed) for val in range(start, end+1))
     with Pool() as pool:
         points = pool.map_async(parallel_criterion, args, chunksize=1000)
     return points
@@ -198,6 +194,7 @@ def get_parser():
     parser.add_argument("--precision", "-p", type=int, help="Precision for HyperLogLog sketching", default=14)
     parser.add_argument("--num_hashes", "-n", type=int, help="Number of hashes for MinHash sketching", default=128)
     parser.add_argument("--subsample", type=float, default=1, help="Subsampling rate for points: provide decimal ratio.")
+    parser.add_argument("--balance", action="store_true", help="When set, type A values will be subsampled by (1-subsample)")
     
     # Add mutually exclusive sketch type flags
     sketch_group = parser.add_mutually_exclusive_group()
@@ -228,7 +225,6 @@ def get_parser():
     
     return parser
 
-
 def get_new_prefix(outprefix, sketch_type, num_hashes=None, precision=None):
     """Get output prefix with appropriate suffix based on sketch type.
     
@@ -257,6 +253,10 @@ if __name__ == "__main__":
     mode = args.mode
     outprefix = args.output
 
+    # If balance is set, make subsample negative to indicate that type A values should be subsampled by (1-subsample)
+    if args.balance:
+        subsample = - subsample
+
     bed_sets = {}
     filepaths_file = args.filepaths_file
     pfile = args.primary_file
@@ -283,10 +283,10 @@ if __name__ == "__main__":
     prime_keys = list(prime_sets.keys())
     prime_keys.sort()
 
-    jacc_long = [",".join(["bed1", "bed2", "mode", "num_hashes", "precision", "subsample", "jaccardfunc", "jaccardcalc","intersect_inexact", "union" ])]
+    jacc_long = [",".join(["bed1", "bed2", "sketch_type", "mode", "num_hashes", "precision", "subsample","balance", "jaccardfunc", "jaccardcalc","intersect", "union" ])]
     # Create a list of arguments for each worker
     args_list = [(f, prime_sets, prime_keys, args.mode, args.num_hashes, 
-                  args.precision, args.subsample, args.sketch_type) for f in filepaths]
+                  args.precision, subsample, args.sketch_type) for f in filepaths]
     results = []
     # with Pool() as pool:
         # Map the worker function to the arguments list and get the results
@@ -311,10 +311,12 @@ if __name__ == "__main__":
             jacc_long.append(",".join(
                 [primeset,
                  secset,
+                 args.sketch_type,
                  mode,
                  hash_str,
                  prec_str,
-                 str(subsample),
+                 str(args.subsample),
+                 str(args.balance),
                  f"{jaccard:>5f}",
                  f"{jacc_calc:>5f}",
                  f"{intersect:>5f}",
