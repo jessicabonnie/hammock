@@ -19,6 +19,20 @@ outname=$2 #remap1M
 CODEDIR=/home/jbonnie1/interval_sketch/hammock/lib
 SLURM_CPUS_ON_NODE=${SLURM_CPUS_ON_NODE:-1}
 
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <input_bed> <output_prefix> [--balance]"
+    exit 1
+fi
+
+if [ $# -eq 3 ]; then
+    if [ $3 == "--balance" ]; then
+        balance_string="--balance"
+    else
+        echo "Invalid option: $3"
+        exit 1
+    fi
+fi
+
 # Generate a list of BED files of different ratio of overlap with the original
 python3 $CODEDIR/generate_beds.py $inbed 2,3,4,5 $outname > ${outname}.list
 
@@ -27,21 +41,12 @@ grep -v modeA $outname.list > ${outname}B.list
 realpath $inbed > ${outname}_primary.list
 
 
-parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE python3 $CODEDIR/bed_similarity.py ${outname}.list  ${outname}_primary.list --mode C --{1} -o ${outname} --subsample {2} ::: hyperloglog minhash exact :::  .1 .25 .5 .75 1
+parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE python3 $CODEDIR/bed_similarity.py ${outname}.list  ${outname}_primary.list --mode C --{1} -o ${outname} --subsample {2} $balance_string ::: hyperloglog minhash exact :::  .1 .25 .5 .75 1
 
-parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE python3 $CODEDIR/bed_similarity.py ${outname}.list  ${outname}_primary.list --mode {1} --{2} -o ${outname} :::  A B ::: hyperloglog minhash exact 
+parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE python3 $CODEDIR/bed_similarity.py ${outname}.list  ${outname}_primary.list --mode {1} --{2} -o ${outname} $balance_string :::  A B ::: hyperloglog minhash exact 
 
-
-# parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE python3 $CODEDIR/bed_jaccmh_parallel_1m.py ${outname}{1}.list  ${outname}_primary.list --mode {1} --perm {2} -o ${outname} ::: A B ::: 50 100 200 500
 
 # srun python3 $CODEDIR/bed_jaccards_parallel_1m.py ${outname}.list  ${outname}_primary.list C ${outname}_real 
 
 # parallel python3 $CODEDIR/bed_jaccards_parallel_1m.py ${outname}{1}.list  ${outname}_primary.list {1} real_${outname} ${outname} ::: A B 
 
-
-# for perm in 50 100 200 500 ; do
-# for mode in "A" "B"; do
-#  echo "Processing mode: $mode"
-#     python3 $CODEDIR/bed_jaccmh_parallel_1m.py ${outname}${mode}.list  ${outname}_primary.list --mode $mode --perm $perm -o ${outname}
-#     done
-# done
