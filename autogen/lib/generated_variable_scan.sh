@@ -18,28 +18,38 @@ inbed=$1 #../../remap2022_hg38_1M.bed
 outname=$2 #remap1M
 CODEDIR=/home/jbonnie1/interval_sketch/hammock/lib
 SLURM_CPUS_ON_NODE=${SLURM_CPUS_ON_NODE:-1}
+SCRIPT_DIR=$(dirname "$0")
 
 if [ $# -eq 0 ]; then
     echo "Usage: $0 <input_bed> <output_prefix> [--balance]"
     exit 1
 fi
 
-if [ $# -eq 3 ]; then
+if [ $# -gt 2 ]; then
     if [ $3 == "--balance" ]; then
         balance_string="--balance"
     else
         echo "Invalid option: $3"
         exit 1
     fi
+    if [ $4 == "--reuse" ]; then
+        reuse=true
+    else
+        echo "Invalid option: $4"
+        exit 1
+    fi
 fi
 
+# Check if reuse flag is not set (empty string)
+# If reuse=true was not passed as an argument, execute the code below
+if [ -z "$reuse" ]; then
 # Generate a list of BED files of different ratio of overlap with the original
-python3 $CODEDIR/generate_beds.py $inbed 2,3,4,5 $outname > ${outname}.list
+python3 $SCRIPT_DIR/generate_beds.py $inbed 2,3,4,5 $outname > ${outname}.list
 
 grep -v modeB $outname.list > ${outname}A.list
 grep -v modeA $outname.list > ${outname}B.list
 realpath $inbed > ${outname}_primary.list
-
+fi
 
 parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE python3 $CODEDIR/bed_similarity.py ${outname}.list  ${outname}_primary.list --mode C --{1} -o ${outname} --subsample {2} $balance_string ::: hyperloglog minhash exact :::  .1 .25 .5 .75 1
 

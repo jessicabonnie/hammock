@@ -2,8 +2,6 @@
 import sys
 import os
 
-
-
 def basic_bedline(line):
     """Parse a single line from a BED file into chromosome, start, and end coordinates.
     
