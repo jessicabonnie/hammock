@@ -3,7 +3,7 @@
 import sys
 import numpy as np
 import os
-import xxhash
+# import xxhash
 from multiprocessing import Pool
 from hammock.lib.bedprocessing import basic_bedline
 import argparse
@@ -16,6 +16,14 @@ from typing import Optional
 
 # Set memory limit to 28GB (adjust as needed)
 def limit_memory():
+    """Set memory usage limit for the process.
+    
+    Sets a soft memory limit of 28GB while preserving the existing hard limit.
+    This helps prevent out-of-memory errors by limiting memory allocation.
+    
+    Uses resource.RLIMIT_AS to set the maximum area (in bytes) of address space 
+    that may be taken by the process.
+    """
     soft, hard = resource.getrlimit(resource.RLIMIT_AS)
     resource.setrlimit(resource.RLIMIT_AS, (28 * 1024 * 1024 * 1024, hard))
 
@@ -59,7 +67,7 @@ def bed_to_sets(filename: str,
         seed=0
     )
     
-    def process_chunk(chunk):
+    def process_chunk(chunk: list[str]) -> None:
         bedline_results = [bedline(line, mode=mode, sep=sep, subsample=subsample) for line in chunk if not line.startswith('#')]
         if mode in ["B", "C"]:
             for _, b in bedline_results:
@@ -86,9 +94,24 @@ def bed_to_sets(filename: str,
     return outset
 
 def bed_to_sets_parallel(args):
+    """Helper function for parallel processing of bed files into sketches.
+    
+    Args:
+        args: Tuple containing:
+            basename: Base name for the output file
+            filepath: Path to the input BED file
+            mode: A/B/C for interval/point/both comparison types 
+            num_hashes: Number of hash functions for MinHash sketching
+            precision: Precision parameter for HyperLogLog sketching
+            subsample: Fraction of points to sample
+            sketch_type: Type of sketch to use (hyperloglog/minhash/exact)
+            
+    Returns:
+        Tuple of (basename, sketch) where sketch is the processed Sketch object
+    """
     basename, filepath, mode, num_hashes, precision, subsample, sketch_type = args
-    return (basename, bed_to_sets(filename=filepath, mode=mode, num_hashes=num_hashes, precision=precision, subsample=subsample, sketch_type=sketch_type))
-
+    return (basename, bed_to_sets(filename=filepath, mode=mode, num_hashes=num_hashes, 
+                                precision=precision, subsample=subsample, sketch_type=sketch_type))
 def bedline(line: str, 
             mode: str, 
             sep: str, 
@@ -106,7 +129,7 @@ def bedline(line: str,
             interval: Encoded interval string or None
             points: List of encoded point strings or empty list
     """
-    # NOTE: right now we are counting i:i+1 to be the position of the ith bp, meaning chrx 2:4 contains bp 2,3 only. see here https://bedtools.readthedocs.io/en/latest/content/general-usage.html
+    # NOTE: CHECK THIS: right now we are counting i:i+1 to be the position of the ith bp, meaning chrx 2:4 contains bp 2,3 only. see here https://bedtools.readthedocs.io/en/latest/content/general-usage.html
     interval = ''
     points = []
     chrval, startx, endx = basic_bedline(line)

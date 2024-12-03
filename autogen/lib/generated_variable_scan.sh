@@ -25,17 +25,28 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
+balance_string=""
+reuse=false
+
 if [ $# -gt 2 ]; then
-    if [ $3 == "--balance" ]; then
-        balance_string="--balance"
+    if [ "$3" == "--balance" ] || [ "$3" == "--reuse" ]; then
+        if [ "$3" == "--balance" ]; then
+            balance_string="--balance"
+        fi
+        if [ "$3" == "--reuse" ]; then
+            reuse=true
+        fi
+        
+        if [ $# -gt 3 ]; then
+            if [ "$4" == "--reuse" ]; then
+                reuse=true
+            else
+                echo "Invalid option: $4"
+                exit 1
+            fi
+        fi
     else
         echo "Invalid option: $3"
-        exit 1
-    fi
-    if [ $4 == "--reuse" ]; then
-        reuse=true
-    else
-        echo "Invalid option: $4"
         exit 1
     fi
 fi
@@ -51,9 +62,10 @@ grep -v modeA $outname.list > ${outname}B.list
 realpath $inbed > ${outname}_primary.list
 fi
 
+parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE python3 $CODEDIR/bed_similarity.py ${outname}.list  ${outname}_primary.list --mode {1} --{2} -o ${outname} $balance_string :::  A B ::: hyperloglog minhash exact 
+
 parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE python3 $CODEDIR/bed_similarity.py ${outname}.list  ${outname}_primary.list --mode C --{1} -o ${outname} --subsample {2} $balance_string ::: hyperloglog minhash exact :::  .1 .25 .5 .75 1
 
-parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE python3 $CODEDIR/bed_similarity.py ${outname}.list  ${outname}_primary.list --mode {1} --{2} -o ${outname} $balance_string :::  A B ::: hyperloglog minhash exact 
 
 
 # srun python3 $CODEDIR/bed_jaccards_parallel_1m.py ${outname}.list  ${outname}_primary.list C ${outname}_real 
