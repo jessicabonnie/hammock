@@ -119,23 +119,51 @@ class HyperLogLog:
         self.registers[idx] = max(self.registers[idx], rank)
 
     def estimate_cardinality(self) -> float:
-        """Estimate cardinality of the set."""
-        sum_inv = np.sum(2.0 ** -self.registers)
-        num_zeros = np.sum(self.registers == 0)
+        """Estimate the cardinality of the set using HyperLogLog algorithm.
         
-        # Initial estimate in 64-bit space
-        estimate = self.alpha_mm * (2**64) * self.num_registers ** 2 / sum_inv
+        Returns:
+            Estimated number of unique elements in the set
+        """
+        # Calculate raw estimate
+        estimate = self.raw_estimate()
+        
+        # Apply correction for large cardinalities using 64-bit math
+        try:
+            # Use log1p for better numerical stability
+            # log1p(x) = log(1 + x) but is more accurate for small x
+            estimate = -(2.0**64) * math.log1p(-estimate / (2.0**64))
+        except (ValueError, OverflowError):
+            # If we hit numerical issues, fall back to the raw estimate
+            # This can happen with very large cardinalities
+            return estimate
+        
+        return estimate
 
-        # Small range correction
-        if estimate <= 2.5 * self.num_registers:
-            if num_zeros > 0:
-                estimate = self.num_registers * math.log(self.num_registers / num_zeros)
-                # Scale small range correction to 64-bit space
-                estimate = estimate * (2**64) / self.num_registers
-        # Large range correction
-        elif estimate > 2**64 / 2:
-            estimate = -2**64 * math.log(1 - estimate / 2**64)
-
+    def raw_estimate(self) -> float:
+        """Calculate the raw cardinality estimate before corrections.
+        
+        Returns:
+            Raw estimated cardinality
+        """
+        sum_inv = 0.0
+        for x in self.registers:
+            if x <= 0:
+                sum_inv += 1.0  # 2^0 = 1
+            else:
+                # Use ldexp for better numerical stability with negative powers
+                # ldexp(1.0, -x) is equivalent to 2.0^(-x) but more stable
+                if x < 1024:  # typical max for float64
+                    sum_inv += math.ldexp(1.0, -int(x))
+                # else: contribution is effectively 0
+        
+        # Avoid division by zero
+        if sum_inv == 0:
+            sum_inv = 1e-308  # Smallest positive normalized float64
+        
+        # Calculate alpha_m * m^2 / sum
+        alpha_m = self.get_alpha()
+        estimate = alpha_m * (self.num_registers * self.num_registers) / sum_inv
+        
         return estimate
 
     def merge(self, other: 'HyperLogLog') -> None:
@@ -170,26 +198,6 @@ class HyperLogLog:
         
         return intersection / union if union > 0 else 0.0
 
-    def estimate_cardinality(self) -> float:
-        """Estimate cardinality of the set."""
-        sum_inv = np.sum(2.0 ** -self.registers)
-        num_zeros = np.sum(self.registers == 0)
-        
-        # Initial estimate in 64-bit space
-        estimate = self.alpha_mm * (2**64) * self.num_registers ** 2 / sum_inv
-
-        # Small range correction
-        if estimate <= 2.5 * self.num_registers:
-            if num_zeros > 0:
-                estimate = self.num_registers * math.log(self.num_registers / num_zeros)
-                # Scale small range correction to 64-bit space
-                estimate = estimate * (2**64) / self.num_registers
-        # Large range correction
-        elif estimate > 2**64 / 2:
-            estimate = -2**64 * math.log(1 - estimate / 2**64)
-
-        return estimate
-
     def estimate_union(self, other: 'HyperLogLog') -> float:
         """Estimate union cardinality with another HyperLogLog sketch."""
         if self.precision != other.precision:
@@ -223,3 +231,15 @@ class HyperLogLog:
         c = self.estimate_union(other)
 
         return max(0.0, a + b - c)
+
+    def get_alpha(self) -> float:
+        """Get alpha correction factor based on number of registers.
+        
+        The alpha factor corrects for bias in the HyperLogLog algorithm.
+        Values are based on the original HyperLogLog paper.
+        
+        Returns:
+            Alpha correction factor as a float
+        """
+        # This is redundant since alpha_mm is already calculated in __init__
+        return self.alpha_mm
