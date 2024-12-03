@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # import random
 import sys
-import numpy as np
+import numpy as np # type: ignore
 import os
 # import xxhash
 from multiprocessing import Pool

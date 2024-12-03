@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import sys
-import numpy as np
+import numpy as np # type: ignore
 
 def basic_bedline(line):
     """Parse a single line from a BED file into chromosome, start, and end coordinates.
