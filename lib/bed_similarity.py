@@ -273,7 +273,7 @@ def get_parser():
     )
     parser.add_argument("filepaths_file", type=str, help="File containing paths of BED files to compare.")
     parser.add_argument("primary_file", type=str, help="File containing paths of primary comparator BED files.")
-    parser.add_argument('--output', '-o', type=str, default="hammock", help='The output file prefix')
+    parser.add_argument('--outprefix', '-o', type=str, default="hammock", help='The output file prefix')
     parser.add_argument(
         "--mode",
         type=str,
@@ -344,7 +344,9 @@ if __name__ == "__main__":
     args = get_parser().parse_args()
     subsample = args.subsample
     mode = args.mode
-    outprefix = args.output
+    outprefix = args.outprefix
+    if os.path.isdir(outprefix):
+        outprefix = os.path.join(os.path.dirname(outprefix), os.path.basename(outprefix))
 
     # If balance is set, make subsample negative to indicate that type A values should be subsampled by (1-subsample)
     if args.balance:
