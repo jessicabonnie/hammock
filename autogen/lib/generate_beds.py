@@ -52,11 +52,11 @@ def no_overlap(intervals):
         new_intervals.append(["88", interval[1], interval[2]])
     return new_intervals
 
-def shrink_intervals(intervals, denominator=2, padding=True):
+def shrink_intervals(intervals, denominator=2, numerator=0, padding=True):
     """Shrink intervals by dividing their length by a denominator.
     
     For each interval, creates a new interval with the same start position but
-    an end position that is (end-start)/denominator distance from the start.
+    an end position that is numerator*(end-start)/denominator distance from the start.
     Optionally adds padding intervals to maintain the original number of points.
     
     Args:
@@ -76,10 +76,13 @@ def shrink_intervals(intervals, denominator=2, padding=True):
         start = int(interval[1])
         end = int(interval[2])
         increment = (end-start) // denominator
-        partial = start + increment
+        # NOTE: theoretically the start of the new interval could be varied from the original start
+        # but this is not implemented
+        new_length = numerator*increment
+        partial = start + new_length
         shrunk_intervals.append([chrom, str(start), str(partial)])
         if padding:
-            shrunk_intervals.append(["55", str(partial), str(end)])
+            shrunk_intervals.append([str(int(chrom)+37), str(partial), str(end)])
     return shrunk_intervals
 def is_int(s):
     try:
@@ -88,16 +91,16 @@ def is_int(s):
     except ValueError:
         return False
 
-def subselect_intervals(intervals, n, padding=True):
+def subselect_intervals(intervals, numerator=1, denominator=2, padding=True):
     subselected_intervals = []
     for i in range(len(intervals)):
-        if i % n == 0:
+        if i % denominator <= numerator-1:
             # Add the interval to the subselected list if its index is a multiple of n
             subselected_intervals.append(intervals[i])
         else:
             if padding:
                 # Add a modified interval with a 20 base pair shift if padding is enabled
-                new_interval = (str(int(intervals[i][0])+30), intervals[i][1], intervals[i][2])
+                new_interval = (str(int(intervals[i][0])+23), intervals[i][1], intervals[i][2])
                 subselected_intervals.append(new_interval)
     return subselected_intervals
 # def every_nth(lst):
@@ -113,13 +116,14 @@ def print_filenames(filenames):
     for filename in filenames:
         sys.stdout.write(os.path.abspath(filename) + "\n")
         sys.stdout.flush()
+
 def generate_variant_bed_files(bedfile, output_prefix, ratio_denominators, output_dir='.'):
     """Generate multiple variant BED files from an input BED file.
     
     This function creates several modified versions of the input BED file:
     - Mode B files: Intervals are shrunk by dividing their length by each ratio denominator
       - With and without padding intervals to maintain the original number of points
-    - Mode A files: Every nth interval is selected, where n is each ratio denominator
+    - Mode A files: Every fraction of n intervals is selected, where n is each ratio denominator
       - With and without padding with nonesense intervals to maintain the original number of intervals
     - No overlap file: All intervals are modified to ensure no overlaps
     
@@ -132,18 +136,34 @@ def generate_variant_bed_files(bedfile, output_prefix, ratio_denominators, outpu
     Returns:
         None. Prints absolute paths of all generated files.
     """
+    ratios_computed = []
+    pad_dict = {True: "pad", False: "nopad"}
     intervals = bed_to_intervals(bedfile)
     output_files = []
     for i in ratio_denominators:
-        output_files.append(write_bedfile(shrink_intervals(intervals, i), 
-                                          os.path.join(output_dir, f"{output_prefix}_modeB_{i}.bed")))
-        output_files.append(write_bedfile(shrink_intervals(intervals, i, padding=False), os.path.join(output_dir, f"{output_prefix}_nopad_modeB_{i}.bed")))
-        output_files.append(write_bedfile(subselect_intervals(intervals, i), 
-                                          os.path.join(output_dir, f"{output_prefix}_modeA_{i}.bed")))
-        output_files.append(
-            write_bedfile(subselect_intervals(intervals, i, padding=False),
-                          os.path.join(output_dir, 
-                                       f"{output_prefix}_nopad_modeA_{i}.bed")))
+        for j in range(i):
+            j_over_i = f"{j/i:.2}".rstrip('0').rstrip('.')
+            if j_over_i in ratios_computed:
+                continue
+            ratios_computed.append(j_over_i)
+            for pad in [True, False]:
+                output_files.append(
+                    write_bedfile(
+                        shrink_intervals(intervals, numerator=j, denominator=i, padding=pad), 
+                        os.path.join(output_dir, f"{output_prefix}_{pad_dict[pad]}_modeB_{j_over_i}.bed")))
+                # output_files.append(
+                #     write_bedfile(
+                #         shrink_intervals(intervals, numerator=j, denominator=i, padding=False), 
+                #         os.path.join(output_dir, f"{output_prefix}_{pad_dict[pad]}_modeB_{j_over_i}.bed")))
+                output_files.append(
+                    write_bedfile(
+                        subselect_intervals(intervals, numerator=j, denominator=i, padding=pad), 
+                        os.path.join(output_dir, f"{output_prefix}_{pad_dict[pad]}_modeA_{j_over_i}.bed")))
+            # output_files.append(
+            #     write_bedfile(
+            #         subselect_intervals(intervals, numerator=j, denominator=i, padding=False),
+            #               os.path.join(output_dir, 
+            #                            f"{output_prefix}_nopad_modeA_{j_over_i}.bed")))
 
     output_files.append(write_bedfile(no_overlap(intervals), 
                                       os.path.join(output_dir, f"{output_prefix}_no_overlap.bed")))
@@ -153,15 +173,42 @@ if __name__ == "__main__":
         print("Usage: python script.py <input_bedfile> <ratio_denominators> [output_directory]")
         print("Example: python script.py input.bed 2,3,4,5 /path/to/output")
         sys.exit(1)
-    
-    input_bed = sys.argv[1]
+
+    # Convert string representation of list back to actual arguments if needed
+    if isinstance(sys.argv, str):
+        import ast
+        try:
+            args = ast.literal_eval(sys.argv)
+            input_bed = args[1]
+            ratio_denominators = [int(x) for x in args[2].split(',')]
+            output_dir = args[3] if len(args) == 4 else '.'
+        except:
+            print(f"Error parsing arguments: {sys.argv}")
+            sys.exit(1)
+    else:
+        input_bed = sys.argv[1]
+        ratio_denominators = [int(x) for x in sys.argv[2].split(',')]
+        output_dir = sys.argv[3] if len(sys.argv) == 4 else '.'
+
+    # Resolve relative paths
+    input_bed = os.path.abspath(os.path.expanduser(input_bed))
+    output_dir = os.path.abspath(os.path.expanduser(output_dir))
+
+    if not os.path.exists(input_bed):
+        print(f"Error: Input bed file not found: {input_bed}")
+        sys.exit(1)
+
     output_prefix = os.path.basename(os.path.splitext(input_bed)[0])
-    ratio_denominators = [int(x) for x in sys.argv[2].split(',')]
     
-    output_dir = '.'  # Default to current working directory
-    if len(sys.argv) == 4:
-        output_dir = sys.argv[3]
-        if not os.path.exists(output_dir):
+    if not os.path.exists(output_dir):
+        try:
             os.makedirs(output_dir)
+        except OSError as e:
+            print(f"Error creating output directory: {e}")
+            sys.exit(1)
     
-    generate_variant_bed_files(input_bed, output_prefix, ratio_denominators, output_dir)
+    try:
+        generate_variant_bed_files(input_bed, output_prefix, ratio_denominators, output_dir)
+    except Exception as e:
+        print(f"Error generating variant bed files: {e}")
+        sys.exit(1)
