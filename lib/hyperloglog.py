@@ -145,20 +145,10 @@ class HyperLogLog:
         Returns:
             Raw estimated cardinality
         """
-        sum_inv = 0.0
-        for x in self.registers:
-            if x <= 0:
-                sum_inv += 1.0  # 2^0 = 1
-            else:
-                # Use ldexp for better numerical stability with negative powers
-                # ldexp(1.0, -x) is equivalent to 2.0^(-x) but more stable
-                if x < 1024:  # typical max for float64
-                    sum_inv += math.ldexp(1.0, -int(x))
-                # else: contribution is effectively 0
-        
-        # Avoid division by zero
-        if sum_inv == 0:
-            sum_inv = 1e-308  # Smallest positive normalized float64
+        # Sum 2^(-max(register)) for each register
+        # sum_inv = sum(math.pow(2.0, -max(0, x)) for x in self.registers)
+        registers = np.array(self.registers, dtype=np.float64)
+        sum_inv = np.sum(np.exp2(-registers))
         
         # Calculate alpha_m * m^2 / sum
         alpha_m = self.get_alpha()
@@ -206,8 +196,9 @@ class HyperLogLog:
         merged = HyperLogLog(self.precision, self.kmer_size, self.window_size, self.seed)
         merged.registers = np.maximum(self.registers, other.registers)
         
-        # Use the same scaling as cardinality estimation
-        sum_inv = np.sum(2.0 ** -merged.registers)
+        mregisters = np.array(merged.registers, dtype=np.float64)
+        sum_inv = np.sum(np.exp2(-mregisters))
+        # sum_inv = np.sum(2.0 ** -merged.registers)
         num_zeros = np.sum(merged.registers == 0)
         
         estimate = merged.alpha_mm * (2**64) * merged.num_registers ** 2 / sum_inv
@@ -216,8 +207,10 @@ class HyperLogLog:
             if num_zeros > 0:
                 estimate = merged.num_registers * math.log(merged.num_registers / num_zeros)
                 estimate = estimate * (2**64) / merged.num_registers
-        elif estimate > 2**64 / 2:
+        elif estimate > 2**64 / 2 and estimate < 2**64:
             estimate = -2**64 * math.log(1 - estimate / 2**64)
+        elif estimate >= 2**64:
+            estimate = 2**64  # Cap at maximum possible value
 
         return estimate
 
