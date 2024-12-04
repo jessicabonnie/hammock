@@ -270,7 +270,8 @@ def process_file(args: tuple[str, dict, list, str, int, int, float, str]) -> tup
 
 def get_parser():
     parser = argparse.ArgumentParser(
-        description="Calculate similarity between BED files using sketching"
+        description="Calculate similarity between BED files using sketching",
+        epilog="\n\n"
     )
     parser.add_argument("filepaths_file", type=str, help="File containing paths of BED files to compare.")
     parser.add_argument("primary_file", type=str, help="File containing paths of primary comparator BED files.")
@@ -313,6 +314,12 @@ def get_parser():
     
     # Set default sketch type
     parser.set_defaults(sketch_type="hyperloglog")
+    
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Output debug information including sparsity comparisons"
+    )
     
     return parser
 
@@ -395,10 +402,15 @@ def main():
     for j in range(len(result_keys)):
         secset = result_keys[j]
         for i in range(len(prime_keys)):
-            # primename = prime_keys[i]
             primeset = prime_keys[i]
             union, intersect, jaccard, jacc_calc = result_dict[secset][primeset]
-            # calc_jacc = intersect/union
+            if args.debug:
+                print(f"\nComparing {primeset} with {secset}:")
+                print(f"Set 1 size: {prime_sets[primeset].get_size()}")
+                print(f"Set 2 size: {result_dict[secset][primeset][0]}")  # union size
+                print(f"Sparsity ratio: {min(prime_sets[primeset].get_size(), result_dict[secset][primeset][0]) / max(prime_sets[primeset].get_size(), result_dict[secset][primeset][0]):.3f}")
+                print(f"Jaccard similarity: {jaccard:.3f}")
+            
             if primeset == secset:
                 secset = "-"
             prec_str = "-" if args.sketch_type in ["exact", "minhash"] else str(precision)
