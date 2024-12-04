@@ -45,17 +45,16 @@ def test_hll_estimates():
         print(f"Number of registers: {2**precision}")
         print('='*60)
         
-        # Test 1: Similar sized sets with high overlap
+        # Test 1: Very sparse with perfect overlap
         results.append(run_test_case(
             precision=precision,
-            name="Similar counts with overlap",
-            desc="Sketch 1: 1000 integers (0-999)\n"
-                 "Sketch 2: 1000 integers (100-1099)\n"
-                 "900 integers overlap",
-            expected=0.82,  # 900/1100
-            set1_size=1000,
-            set2_size=1000,
-            set2_offset=100
+            name="Very sparse with perfect overlap",
+            desc="Sketch 1: 10 integers (0-9)\n"
+                 "Sketch 2: 10 integers (0-9)\n"
+                 "Perfect overlap",
+            expected=1.0,
+            set1_size=10,
+            set2_size=10
         ))
         
         # Test 2: Sparse vs Dense
@@ -70,16 +69,56 @@ def test_hll_estimates():
             set2_size=1000
         ))
         
-        # Test 3: Very sparse with perfect overlap
+        # Test 3: Medium density with overlap
         results.append(run_test_case(
             precision=precision,
-            name="Very sparse with perfect overlap",
-            desc="Sketch 1: 10 integers (0-9)\n"
-                 "Sketch 2: 10 integers (0-9)\n"
-                 "Perfect overlap",
-            expected=1.0,
-            set1_size=10,
-            set2_size=10
+            name="Medium density with overlap",
+            desc="Sketch 1: 1000 integers (0-999)\n"
+                 "Sketch 2: 1000 integers (100-1099)\n"
+                 "900 integers overlap",
+            expected=0.82,  # 900/1100
+            set1_size=1000,
+            set2_size=1000,
+            set2_offset=100
+        ))
+        
+        # Test 4: Dense with high overlap
+        results.append(run_test_case(
+            precision=precision,
+            name="Dense with high overlap",
+            desc="Sketch 1: 10000 integers (0-9999)\n"
+                 "Sketch 2: 10000 integers (1000-10999)\n"
+                 "9000 integers overlap",
+            expected=0.82,  # 9000/11000
+            set1_size=10000,
+            set2_size=10000,
+            set2_offset=1000
+        ))
+        
+        # Test 5: Very dense with partial overlap
+        results.append(run_test_case(
+            precision=precision,
+            name="Very dense with partial overlap",
+            desc="Sketch 1: 100000 integers (0-99999)\n"
+                 "Sketch 2: 100000 integers (50000-149999)\n"
+                 "50000 integers overlap",
+            expected=0.33,  # 50000/150000
+            set1_size=100000,
+            set2_size=100000,
+            set2_offset=50000
+        ))
+        
+        # Test 6: Extremely dense with minimal overlap
+        results.append(run_test_case(
+            precision=precision,
+            name="Extremely dense with minimal overlap",
+            desc="Sketch 1: 1000000 integers (0-999999)\n"
+                 "Sketch 2: 1000000 integers (900000-1899999)\n"
+                 "100000 integers overlap",
+            expected=0.053,  # 100000/1900000
+            set1_size=1000000,
+            set2_size=1000000,
+            set2_offset=900000
         ))
     
     # Create results directory if it doesn't exist
