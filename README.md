@@ -47,3 +47,34 @@ hammock files.txt primary.txt --mode A --precision 12
 # Compare points using MinHash with subsampling
 hammock files.txt primary.txt --mode B --minhash --num_hashes 256 --subsample 0.1
 ```
+
+## Testing
+
+Run all tests:
+```bash
+python3 -m pytest hammock/tests
+```
+
+### Test Files
+- `test_hyperloglog.py`: Tests HyperLogLog sketching with various precisions and set sizes
+- `test_minhash.py`: Tests MinHash sketching with different numbers of hash functions
+- `benchmark_sketches.py`: Performance benchmarks comparing different sketching methods
+
+### Test Cases
+Tests include:
+- Perfect overlap scenarios
+- No overlap scenarios
+- Partial overlap with different set sizes
+- Sparse vs dense comparisons
+- Edge cases with very different sparsity levels
+
+### Running Specific Tests
+
+```bash
+# Run HyperLogLog tests
+python -m pytest hammock/tests/test_hyperloglog.py
+# Run MinHash tests
+python -m pytest hammock/tests/test_minhash.py
+# Run benchmarks
+python -m pytest hammock/tests/benchmark_sketches.py
+```
