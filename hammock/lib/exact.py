@@ -6,7 +6,8 @@ class ExactCounter:
                  precision: int = 14,  # Unused but kept for interface compatibility
                  kmer_size: int = 0,
                  window_size: int = 0,
-                 seed: int = 0):
+                 seed: int = 0,
+                 debug: bool = False):
         """Initialize exact counter.
         
         Args match HyperLogLog for compatibility, but only kmer_size,
@@ -16,7 +17,7 @@ class ExactCounter:
         self.window_size = window_size if window_size else kmer_size
         self.seed = seed
         self.elements: Set[str] = set()
-        
+        self.debug = debug
     def add_string(self, s: str) -> None:
         """Add a string to the counter."""
         if len(s) < self.kmer_size:

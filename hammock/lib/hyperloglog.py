@@ -5,7 +5,8 @@ class HyperLogLog:
                  precision: int = 8, 
                  kmer_size: int = 0, 
                  window_size: int = 0, 
-                 seed: int = 0):
+                 seed: int = 0,
+                 debug: bool = False):
         """Initialize HyperLogLog sketch.
         
         Args:
@@ -15,6 +16,7 @@ class HyperLogLog:
             kmer_size: Size of k-mers (0 for whole string mode)
             window_size: Size of sliding window (0 or == kmer_size for no windowing)
             seed: Random seed for hashing
+            debug: Whether to print debug information
         """
         if not 4 <= precision <= 16:
             raise ValueError("Precision must be between 4 and 16")
@@ -28,8 +30,9 @@ class HyperLogLog:
         self.registers = np.zeros(self.num_registers, dtype=np.uint8)
         self.kmer_size = kmer_size
         self.window_size = window_size if window_size else kmer_size
+        self.debug = debug
 
-        self.item_count = 0  # Add counter
+        self.item_count = 0
         
         # Calculate alpha_mm (bias correction factor)
         if self.num_registers == 16:
@@ -80,7 +83,16 @@ class HyperLogLog:
         self.registers[idx] = max(self.registers[idx], rank)
 
     def add_string(self, s: str) -> None:
-        """Add a string to the sketch."""
+        """Add a string to the sketch.
+        
+        Processes the string according to kmer_size and window_size settings.
+        If kmer_size is 0, processes whole string.
+        If window_size equals kmer_size, processes all k-mers.
+        Otherwise uses minimizer scheme within windows.
+        
+        Args:
+            s: String to add to sketch
+        """
         if len(s) < self.kmer_size:
             return
         
@@ -127,7 +139,8 @@ class HyperLogLog:
         registers = np.array(self.registers, dtype=np.float64)
         sum_inv = np.sum(np.exp2(-registers))
         estimate = self.alpha_mm * (self.num_registers ** 2) / sum_inv
-        print(f"DEBUG cardinality: estimate={estimate:.1f}, items={self.item_count}")
+        if self.debug:
+            print(f"DEBUG cardinality: estimate={estimate:.1f}, items={self.item_count}")
         return estimate
 
     def raw_estimate(self) -> float:
@@ -166,7 +179,20 @@ class HyperLogLog:
         np.maximum(self.registers, other.registers, out=self.registers)
 
     def estimate_intersection(self, other: 'HyperLogLog') -> float:
-        """Estimate intersection cardinality with another HLL."""
+        """Estimate intersection cardinality with another HLL.
+        
+        Uses inclusion-exclusion principle with union estimate.
+        
+        Args:
+            other: Another HyperLogLog sketch
+            
+        Returns:
+            Estimated size of intersection between sketches
+            
+        Raises:
+            ValueError: If sketches have different precision values
+        """
+
         if self.precision != other.precision:
             raise ValueError("Cannot compute intersection of HLLs with different precision")
         
@@ -176,7 +202,8 @@ class HyperLogLog:
         union = self.estimate_union(other)
         intersection = max(0.0, a + b - union)
         
-        print(f"DEBUG: items={self.item_count}/{other.item_count}, a={a:.1f}, b={b:.1f}, union={union:.1f}, intersection={intersection:.1f}")
+        if self.debug:
+            print(f"DEBUG: items={self.item_count}/{other.item_count}, a={a:.1f}, b={b:.1f}, union={union:.1f}, intersection={intersection:.1f}")
         return intersection
 
     def estimate_jaccard(self, other: 'HyperLogLog') -> float:
@@ -191,7 +218,8 @@ class HyperLogLog:
             return 0.0
         
         jaccard = intersection / union
-        print(f"DEBUG: jaccard={jaccard:.3f}")
+        if self.debug:
+            print(f"DEBUG: jaccard={jaccard:.3f}")
         return jaccard
 
     def estimate_union(self, other: 'HyperLogLog') -> float:
@@ -200,7 +228,7 @@ class HyperLogLog:
             raise ValueError("Cannot compute union of HLLs with different precision")
         
         # Simply take max of registers and estimate
-        merged = HyperLogLog(self.precision, self.kmer_size, self.window_size, self.seed)
+        merged = HyperLogLog(self.precision, self.kmer_size, self.window_size, self.seed, self.debug)
         merged.registers = np.maximum(self.registers, other.registers)
         return merged.estimate_cardinality()
 

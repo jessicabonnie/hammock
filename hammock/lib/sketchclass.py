@@ -10,7 +10,8 @@ class Sketch:
                  num_hashes: int = 128,
                  kmer_size: int = 0,
                  window_size: int = 0,
-                 seed: int = 0):
+                 seed: int = 0,
+                 debug: bool = False):
         """Initialize sketch with specified type.
         
         Args:
@@ -20,14 +21,15 @@ class Sketch:
             kmer_size: Size of k-mers
             window_size: Size of sliding window
             seed: Random seed
+            debug: Whether to print debug information
         """
         if sketch_type == "hyperloglog":
-            self.sketch = HyperLogLog(precision, kmer_size, window_size, seed)
+            self.sketch = HyperLogLog(precision, kmer_size, window_size, seed, debug)
         elif sketch_type == "minhash":
-            self.sketch = MinHash(num_hashes, kmer_size, window_size, seed)
+            self.sketch = MinHash(num_hashes, kmer_size, window_size, seed, debug)
             precision = None  # Set precision to None for MinHash
         elif sketch_type == "exact":
-            self.sketch = ExactCounter(None, kmer_size, window_size, seed)
+            self.sketch = ExactCounter(None, kmer_size, window_size, seed, debug)
             precision = None
             num_hashes = None
         else:

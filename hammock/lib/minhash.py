@@ -7,7 +7,8 @@ class MinHash:
                  num_hashes: int = 128,
                  kmer_size: int = 0,
                  window_size: int = 0,
-                 seed: int = 0):
+                 seed: int = 0,
+                 debug: bool = False):
         """Initialize MinHash sketch.
         
         Args:
@@ -15,6 +16,7 @@ class MinHash:
             kmer_size: Size of k-mers (0 for whole string mode)
             window_size: Size of sliding window (0 or == kmer_size for no windowing)
             seed: Random seed for hashing
+            debug: Whether to print debug information
         """
         self.num_hashes = num_hashes
         self.kmer_size = kmer_size
