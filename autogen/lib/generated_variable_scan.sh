@@ -21,7 +21,7 @@ SLURM_CPUS_ON_NODE=${SLURM_CPUS_ON_NODE:-1}
 SCRIPT_DIR=$(dirname "$0")
 
 if [ $# -eq 0 ]; then
-    echo "Usage: $0 <input_bed> <output_prefix> [--balance]"
+    echo "Usage: $0 <input_bed> <output_prefix> [--balance] [--reuse]"
     exit 1
 fi
 
@@ -53,9 +53,9 @@ fi
 
 # Check if reuse flag is not set (empty string)
 # If reuse=true was not passed as an argument, execute the code below
-if [ -z "$reuse" ]; then
+if [ "$reuse" = false ]; then
 # Generate a list of BED files of different ratio of overlap with the original
-python3 $SCRIPT_DIR/generate_beds.py $inbed 2,3,4,5 $outname > ${outname}.list
+python3 $SCRIPT_DIR/generate_beds.py $inbed 2,3,10 $outname > ${outname}.list
 
 grep -v modeB $outname.list > ${outname}A.list
 grep -v modeA $outname.list > ${outname}B.list
