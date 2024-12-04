@@ -120,6 +120,30 @@ def test_hll_estimates():
             set2_size=1000000,
             set2_offset=900000
         ))
+        
+        # Test 7: Drastically different sparsity
+        results.append(run_test_case(
+            precision=precision,
+            name="Drastically different sparsity",
+            desc="Sketch 1: 10 integers (0-9)\n"
+                 "Sketch 2: 10000 integers (0-9999)\n"
+                 "10 integers overlap",
+            expected=0.001,  # 10/10000
+            set1_size=10,
+            set2_size=10000
+        ))
+        
+        # Test 8: Sparse vs Very Dense
+        results.append(run_test_case(
+            precision=precision,
+            name="Sparse vs Very Dense",
+            desc="Sketch 1: 100 integers (0-99)\n"
+                 "Sketch 2: 100000 integers (0-99999)\n"
+                 "100 integers overlap",
+            expected=0.001,  # 100/100000
+            set1_size=100,
+            set2_size=100000
+        ))
     
     # Create results directory if it doesn't exist
     os.makedirs('test_results', exist_ok=True)
