@@ -13,10 +13,12 @@ ml parallel
 ml anaconda
 conda activate minhash
 export PYTHONPATH=$PYTHONPATH:/home/jbonnie1/interval_sketch/
+export PYTHONPATH=$PYTHONPATH:/home/jbonnie1/interval_sketch/hammock
 
 inbed=$1 #../../remap2022_hg38_1M.bed
 outname=$2 #remap1M
-CODEDIR=/home/jbonnie1/interval_sketch/hammock/lib
+CODEDIR=/home/jbonnie1/interval_sketch/hammock/
+pip install -e $CODEDIR/hammock
 SLURM_CPUS_ON_NODE=${SLURM_CPUS_ON_NODE:-1}
 SCRIPT_DIR=$(dirname "$0")
 
@@ -62,9 +64,9 @@ grep -v modeA $outname.list > ${outname}B.list
 realpath $inbed > ${outname}_primary.list
 fi
 
-parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE python3 $CODEDIR/bed_similarity.py ${outname}.list  ${outname}_primary.list --mode {1} --{2} -o ${outname} $balance_string :::  A B ::: hyperloglog minhash exact 
+parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE hammock ${outname}.list  ${outname}_primary.list --mode {1} --{2} -o ${outname} $balance_string :::  A B ::: hyperloglog minhash exact 
 
-parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE python3 $CODEDIR/bed_similarity.py ${outname}.list  ${outname}_primary.list --mode C --{1} -o ${outname} --subsample {2} $balance_string ::: hyperloglog minhash exact :::  .1 .25 .5 .75 1
+parallel --jobs 4 srun -n $SLURM_CPUS_ON_NODE hammock ${outname}.list  ${outname}_primary.list --mode C --{1} -o ${outname} --subsample {2} $balance_string ::: hyperloglog minhash exact :::  .1 .25 .5 .75 1
 
 
 

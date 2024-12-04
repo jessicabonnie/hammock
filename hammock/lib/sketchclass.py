@@ -1,6 +1,6 @@
 from typing import Literal, Optional, Union
 from hammock.lib.hyperloglog import HyperLogLog
-from minhash import MinHash
+from hammock.lib.minhash import MinHash
 from hammock.lib.exact import ExactCounter
 
 class Sketch:

@@ -1,8 +1,5 @@
-import math
-from typing import Optional, List, Union
-import numpy as np # type: ignore
-import xxhash # type: ignore
-
+import numpy as np
+import xxhash
 class HyperLogLog:
     def __init__(self, 
                  precision: int = 8, 

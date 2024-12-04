@@ -12,6 +12,7 @@ from itertools import islice
 import gc
 from hammock.lib.sketchclass import Sketch
 from hammock.lib.hyperloglog import HyperLogLog
+# from hammock.lib.exact import ExactCounter
 from typing import Optional
 
 # Set memory limit to 28GB (adjust as needed)
@@ -338,8 +339,7 @@ def get_new_prefix(outprefix: str,
         suffix = "_exact"
     return f"{outprefix}{suffix}"
 
-
-if __name__ == "__main__":
+def main():
     limit_memory()
     args = get_parser().parse_args()
     subsample = args.subsample
@@ -428,3 +428,7 @@ if __name__ == "__main__":
             outfile.write(line + "\n")
 
     limit_memory()
+    return 0
+
+if __name__ == "__main__":
+    main()
