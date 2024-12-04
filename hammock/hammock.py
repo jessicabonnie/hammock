@@ -347,8 +347,15 @@ def get_new_prefix(outprefix: str,
     return f"{outprefix}{suffix}"
 
 def main():
-    limit_memory()
     args = get_parser().parse_args()
+    
+    if args.balance and args.mode != 'C':
+        print(f"\nError: --balance flag is only valid with mode C.")
+        print("This flag controls subsampling between interval (A) and point (B) comparisons.")
+        print(f"It has no effect in mode {args.mode} which only uses {'intervals' if args.mode == 'A' else 'points'}.")
+        sys.exit(1)
+    
+    limit_memory()
     subsample = args.subsample
     mode = args.mode
     outprefix = args.outprefix
