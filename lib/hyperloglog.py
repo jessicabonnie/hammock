@@ -29,6 +29,8 @@ class HyperLogLog:
         self.registers = np.zeros(self.num_registers, dtype=np.uint8)
         self.kmer_size = kmer_size
         self.window_size = window_size if window_size else kmer_size
+
+        self.item_count = 0  # Add counter
         
         # Calculate alpha_mm (bias correction factor)
         if self.num_registers == 16:
@@ -82,6 +84,8 @@ class HyperLogLog:
         """Add a string to the sketch."""
         if len(s) < self.kmer_size:
             return
+        
+        self.item_count += 1
 
         # Whole string mode
         if self.kmer_size == 0:
@@ -113,6 +117,7 @@ class HyperLogLog:
 
     def add_int(self, value: int) -> None:
         """Add an integer to the sketch."""
+        self.item_count += 1
         hash_val = self._hash64(value)
         idx = hash_val & (self.num_registers - 1)
         rank = self._rho(hash_val)
@@ -125,17 +130,11 @@ class HyperLogLog:
             Estimated number of unique elements in the set
         """
         # Calculate raw estimate
-        estimate = self.raw_estimate()
+        registers = np.array(self.registers, dtype=np.float64)
+        sum_inv = np.sum(np.exp2(-registers))
         
-        # Apply correction for large cardinalities using 64-bit math
-        try:
-            # Use log1p for better numerical stability
-            # log1p(x) = log(1 + x) but is more accurate for small x
-            estimate = -(2.0**64) * math.log1p(-estimate / (2.0**64))
-        except (ValueError, OverflowError):
-            # If we hit numerical issues, fall back to the raw estimate
-            # This can happen with very large cardinalities
-            return estimate
+        # Basic HyperLogLog estimate
+        estimate = self.alpha_mm * (self.num_registers ** 2) / sum_inv
         
         return estimate
 
@@ -157,73 +156,69 @@ class HyperLogLog:
         return estimate
 
     def merge(self, other: 'HyperLogLog') -> None:
-        """Merge another HLL sketch into this one."""
+        """Merge another HLL sketch into this one.
+        
+        This modifies the current sketch by taking the element-wise maximum of its registers
+        with the other sketch's registers, effectively combining their cardinality estimates.
+        
+        Args:
+            other: Another HyperLogLog sketch to merge into this one
+            
+        Raises:
+            ValueError: If the sketches have different precision values
+        """
         if self.precision != other.precision:
             raise ValueError("Cannot merge HLLs with different precision")
         
-        self.registers = np.maximum(self.registers, other.registers)
+        # Take element-wise maximum and modify self.registers in-place
+        np.maximum(self.registers, other.registers, out=self.registers)
 
     def estimate_intersection(self, other: 'HyperLogLog') -> float:
         """Estimate intersection cardinality with another HLL."""
         if self.precision != other.precision:
             raise ValueError("Cannot compute intersection of HLLs with different precision")
-
+        
+        # Basic inclusion-exclusion
         a = self.estimate_cardinality()
         b = other.estimate_cardinality()
-        c = self.estimate_union(other)
-
-        return max(0.0, a + b - c)
+        union = self.estimate_union(other)
+        intersection = max(0.0, a + b - union)
+        
+        print(f"DEBUG: items={self.item_count}/{other.item_count}, a={a:.1f}, b={b:.1f}, union={union:.1f}, intersection={intersection:.1f}")
+        return intersection
+        
+        a = self.estimate_cardinality()
+        b = other.estimate_cardinality()
+        union = self.estimate_union(other)
+        intersection = max(0.0, a + b - union)
+        
+        print(f"DEBUG: a={a:.1f}, b={b:.1f}, union={union:.1f}, intersection={intersection:.1f}")
+        return intersection
 
     def estimate_jaccard(self, other: 'HyperLogLog') -> float:
-        """Estimate Jaccard similarity with another HyperLogLog sketch.
-        
-        Returns:
-            Float between 0 and 1 representing Jaccard similarity
-        """
+        """Estimate Jaccard similarity with another HyperLogLog sketch."""
         if self.precision != other.precision:
             raise ValueError("Cannot compare HLLs with different precision")
-            
-        intersection = self.estimate_intersection(other)
-        union = self.estimate_cardinality() + other.estimate_cardinality() - intersection
         
-        return intersection / union if union > 0 else 0.0
+        intersection = self.estimate_intersection(other)
+        union = self.estimate_union(other)
+        
+        if union == 0:
+            return 0.0
+        
+        jaccard = intersection / union
+        print(f"DEBUG: jaccard={jaccard:.3f}")
+        return jaccard
 
     def estimate_union(self, other: 'HyperLogLog') -> float:
         """Estimate union cardinality with another HyperLogLog sketch."""
         if self.precision != other.precision:
             raise ValueError("Cannot compute union of HLLs with different precision")
-            
+        
+        # Simply take max of registers and estimate
         merged = HyperLogLog(self.precision, self.kmer_size, self.window_size, self.seed)
         merged.registers = np.maximum(self.registers, other.registers)
-        
-        mregisters = np.array(merged.registers, dtype=np.float64)
-        sum_inv = np.sum(np.exp2(-mregisters))
-        # sum_inv = np.sum(2.0 ** -merged.registers)
-        num_zeros = np.sum(merged.registers == 0)
-        
-        estimate = merged.alpha_mm * (2**64) * merged.num_registers ** 2 / sum_inv
-
-        if estimate <= 2.5 * merged.num_registers:
-            if num_zeros > 0:
-                estimate = merged.num_registers * math.log(merged.num_registers / num_zeros)
-                estimate = estimate * (2**64) / merged.num_registers
-        elif estimate > 2**64 / 2 and estimate < 2**64:
-            estimate = -2**64 * math.log(1 - estimate / 2**64)
-        elif estimate >= 2**64:
-            estimate = 2**64  # Cap at maximum possible value
-
-        return estimate
-
-    def estimate_intersection(self, other: 'HyperLogLog') -> float:
-        """Estimate intersection cardinality with another HLL."""
-        if self.precision != other.precision:
-            raise ValueError("Cannot compute intersection of HLLs with different precision")
-
-        a = self.estimate_cardinality()
-        b = other.estimate_cardinality()
-        c = self.estimate_union(other)
-
-        return max(0.0, a + b - c)
+        return merged.estimate_cardinality()
 
     def get_alpha(self) -> float:
         """Get alpha correction factor based on number of registers.

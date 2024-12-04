@@ -9,12 +9,19 @@ if (length(args) < 1) {
   stop("Please provide the directory path as an argument")
 }
 
+pattern <- ""
+if (length(args) >= 2) {
+  pattern <- args[2]
+}
+
 # Set working directory to provided path
 setwd(args[1])
 # setwd("interval_sketch//hammock/cmode/cmode_gen/remap_part/part1k/")
 
 # Get list of all csv files
-files <- list.files(path=".", pattern="jacc[ABC]\\.csv$")
+files_all <- list.files(path=".", pattern="jacc[ABC]\\.csv$")
+# When pattern is empty string, grepl() matches everything since empty string is in all strings
+files <- files_all[grepl(pattern, files_all)]
 
 # Split into exact and non-exact lists
 exact_files <- files[grepl("exact", files)]
@@ -96,19 +103,20 @@ add_gen_vals <- function(dtin){
         TRUE ~ "NA"  # default case
     )) %>%
     mutate(genfrac = case_when(
-        # Look for pattern like "_2." or "_3." etc
-        grepl("_\\d\\.", bed2) ~ as.numeric(gsub(".*_(\\d)\\.*.*", "\\1", bed2)),
+        # Look for pattern like "_0.1.bed" or "_0.33.bed" etc
+        grepl("_0\\.[0-9]+\\.bed", bed2) ~ as.numeric(gsub(".*_(0\\.[0-9]+)\\.bed.*", "\\1", bed2)),
         TRUE ~ 0
     )) %>%
     mutate(genpad = if_else(
         condition = grepl("nopad", bed2),
         true = "nopad",
         false = "pad"
-    )) %>%
-    mutate(actfrac = case_when( 
-      genfrac == 0 ~ 0,
-      genpad == "nopad" ~ 1/genfrac,
-      genpad == "pad" ~ 1/((2*genfrac)-1)))
+    )) 
+    # %>%
+    # mutate(actfrac = case_when( 
+    #   genfrac == 0 ~ 0,
+    #   genpad == "nopad" ~ 1/genfrac,
+    #   genpad == "pad" ~ 1/((2*genfrac)-1)))
 }
 
 dt_gen <- add_gen_vals(dt_wider)
