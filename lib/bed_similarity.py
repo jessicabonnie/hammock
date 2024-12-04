@@ -281,7 +281,7 @@ def get_parser():
         choices=["A", "B", "C"],
         help="Mode to indicate comparison type: A=interval, B=point, C=both"
     )
-    parser.add_argument("--precision", "-p", type=int, help="Precision for HyperLogLog sketching", default=14)
+    parser.add_argument("--precision", "-p", type=int, help="Precision for HyperLogLog sketching", default=8)
     parser.add_argument("--num_hashes", "-n", type=int, help="Number of hashes for MinHash sketching", default=128)
     parser.add_argument("--subsample", type=float, default=1, help="Subsampling rate for points: provide decimal ratio.")
     parser.add_argument("--balance", action="store_true", help="When set, type A values will be subsampled by (1-subsample)")

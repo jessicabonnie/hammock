@@ -5,7 +5,7 @@ import xxhash # type: ignore
 
 class HyperLogLog:
     def __init__(self, 
-                 precision: int = 14, 
+                 precision: int = 8, 
                  kmer_size: int = 0, 
                  window_size: int = 0, 
                  seed: int = 0):
@@ -13,6 +13,8 @@ class HyperLogLog:
         
         Args:
             precision: Number of bits for register indexing (4-16)
+                      Lower values (8-10) work better for sparse sets
+                      Higher values (14-16) work better for dense sets
             kmer_size: Size of k-mers (0 for whole string mode)
             window_size: Size of sliding window (0 or == kmer_size for no windowing)
             seed: Random seed for hashing
@@ -124,18 +126,11 @@ class HyperLogLog:
         self.registers[idx] = max(self.registers[idx], rank)
 
     def estimate_cardinality(self) -> float:
-        """Estimate the cardinality of the set using HyperLogLog algorithm.
-        
-        Returns:
-            Estimated number of unique elements in the set
-        """
-        # Calculate raw estimate
+        """Estimate the cardinality of the set using HyperLogLog algorithm."""
         registers = np.array(self.registers, dtype=np.float64)
         sum_inv = np.sum(np.exp2(-registers))
-        
-        # Basic HyperLogLog estimate
         estimate = self.alpha_mm * (self.num_registers ** 2) / sum_inv
-        
+        print(f"DEBUG cardinality: estimate={estimate:.1f}, items={self.item_count}")
         return estimate
 
     def raw_estimate(self) -> float:
@@ -185,14 +180,6 @@ class HyperLogLog:
         intersection = max(0.0, a + b - union)
         
         print(f"DEBUG: items={self.item_count}/{other.item_count}, a={a:.1f}, b={b:.1f}, union={union:.1f}, intersection={intersection:.1f}")
-        return intersection
-        
-        a = self.estimate_cardinality()
-        b = other.estimate_cardinality()
-        union = self.estimate_union(other)
-        intersection = max(0.0, a + b - union)
-        
-        print(f"DEBUG: a={a:.1f}, b={b:.1f}, union={union:.1f}, intersection={intersection:.1f}")
         return intersection
 
     def estimate_jaccard(self, other: 'HyperLogLog') -> float:
