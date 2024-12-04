@@ -11,6 +11,7 @@ setup(
         "memory_profiler",
         "pandas",
         "matplotlib",
+        "pytest",
     ],
     entry_points={
         'console_scripts': [
