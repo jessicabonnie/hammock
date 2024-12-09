@@ -125,3 +125,38 @@ class MinHash:
         kth_min = np.partition(combined[mask], k)[k]
         
         return (k / kth_min) * (2**64) if kth_min > 0 else 0.0
+
+    def write_sketch(self, filepath: str) -> None:
+        """Write sketch to file in binary format.
+        
+        Args:
+            filepath: Path to output file
+        """
+        np.savez_compressed(
+            filepath,
+            signatures=self.signatures,
+            num_hashes=np.array([self.num_hashes]),
+            kmer_size=np.array([self.kmer_size]),
+            window_size=np.array([self.window_size]),
+            seed=np.array([self.seed])
+        )
+
+    @classmethod
+    def read_sketch(cls, filepath: str) -> 'MinHash':
+        """Read sketch from file in binary format.
+        
+        Args:
+            filepath: Path to input file
+            
+        Returns:
+            MinHash object loaded from file
+        """
+        data = np.load(filepath)
+        sketch = cls(
+            num_hashes=int(data['num_hashes'][0]),
+            kmer_size=int(data['kmer_size'][0]),
+            window_size=int(data['window_size'][0]),
+            seed=int(data['seed'][0])
+        )
+        sketch.signatures = data['signatures']
+        return sketch

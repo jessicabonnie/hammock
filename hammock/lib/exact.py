@@ -91,3 +91,42 @@ class ExactCounter:
     def estimate_jaccard(self, other: 'ExactCounter') -> float:
         """Alias for jaccard()."""
         return self.jaccard(other)
+
+    def write_sketch(self, filepath: str) -> None:
+        """Write sketch to file in text format.
+        
+        Args:
+            filepath: Path to output file
+        """
+        with open(filepath, 'w') as f:
+            # Write metadata
+            f.write(f"#kmer_size={self.kmer_size}\n")
+            f.write(f"#window_size={self.window_size}\n")
+            f.write(f"#seed={self.seed}\n")
+            # Write elements one per line
+            for element in sorted(self.elements):
+                f.write(f"{element}\n")
+
+    @classmethod
+    def read_sketch(cls, filepath: str) -> 'ExactCounter':
+        """Read sketch from file in text format.
+        
+        Args:
+            filepath: Path to input file
+            
+        Returns:
+            ExactCounter object loaded from file
+        """
+        sketch = cls()
+        with open(filepath, 'r') as f:
+            # Read metadata
+            for line in f:
+                if not line.startswith('#'):
+                    break
+                key, value = line.strip('#').strip().split('=')
+                setattr(sketch, key, int(value))
+            
+            # Read elements
+            sketch.elements = {line.strip() for line in f if line.strip()}
+        
+        return sketch

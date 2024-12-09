@@ -84,3 +84,42 @@ class Sketch:
             raise ValueError("Cannot compare different sketch types")
             
         return self.sketch.estimate_jaccard(other.sketch)
+
+    def write_sketch(self, filepath: str) -> None:
+        """Write sketch to file.
+        
+        The file format depends on the sketch type:
+        - hyperloglog/minhash: Binary .npz format
+        - exact: Text format
+        
+        Args:
+            filepath: Path to output file
+        """
+        self.sketch.write_sketch(filepath)
+
+    @classmethod
+    def read_sketch(cls, filepath: str, sketch_type: Literal["hyperloglog", "minhash", "exact"]) -> 'Sketch':
+        """Read sketch from file.
+        
+        Args:
+            filepath: Path to input file
+            sketch_type: Type of sketch to read ("hyperloglog", "minhash", or "exact")
+            
+        Returns:
+            Sketch object loaded from file
+            
+        Raises:
+            ValueError: If sketch_type is invalid
+        """
+        if sketch_type == "hyperloglog":
+            inner_sketch = HyperLogLog.read_sketch(filepath)
+        elif sketch_type == "minhash":
+            inner_sketch = MinHash.read_sketch(filepath)
+        elif sketch_type == "exact":
+            inner_sketch = ExactCounter.read_sketch(filepath)
+        else:
+            raise ValueError("Invalid sketch type. Use 'hyperloglog', 'minhash', or 'exact'")
+            
+        sketch = cls(sketch_type=sketch_type)
+        sketch.sketch = inner_sketch
+        return sketch

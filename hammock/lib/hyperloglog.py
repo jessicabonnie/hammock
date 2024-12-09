@@ -243,3 +243,38 @@ class HyperLogLog:
         """
         # This is redundant since alpha_mm is already calculated in __init__
         return self.alpha_mm
+
+    def write_sketch(self, filepath: str) -> None:
+        """Write sketch to file in binary format.
+        
+        Args:
+            filepath: Path to output file
+        """
+        np.savez_compressed(
+            filepath,
+            registers=self.registers,
+            precision=np.array([self.precision]),
+            kmer_size=np.array([self.kmer_size]),
+            window_size=np.array([self.window_size]),
+            seed=np.array([self.seed])
+        )
+
+    @classmethod
+    def read_sketch(cls, filepath: str) -> 'HyperLogLog':
+        """Read sketch from file in binary format.
+        
+        Args:
+            filepath: Path to input file
+            
+        Returns:
+            HyperLogLog object loaded from file
+        """
+        data = np.load(filepath)
+        sketch = cls(
+            precision=int(data['precision'][0]),
+            kmer_size=int(data['kmer_size'][0]),
+            window_size=int(data['window_size'][0]),
+            seed=int(data['seed'][0])
+        )
+        sketch.registers = data['registers']
+        return sketch
