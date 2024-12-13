@@ -36,6 +36,20 @@ class Sketch:
             raise ValueError("Invalid sketch type. Use 'hyperloglog', 'minhash', or 'exact'")
         
         self.type = sketch_type
+        self.total_interval_size = 0
+        self.num_intervals = 0
+        self.avg_interval_size = 0
+
+
+    def add_interval_size(self, size: int) -> None:
+        """Add an interval size to the running statistics.
+        
+        Args:
+            size: Size of the interval being added
+        """
+        self.total_interval_size += size
+        self.num_intervals += 1
+        self.avg_interval_size = self.total_interval_size / self.num_intervals if self.num_intervals > 0 else 0
 
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""

@@ -70,14 +70,17 @@ def bed_to_sets(filename: str,
     
     def process_chunk(chunk: list[str]) -> None:
         bedline_results = [bedline(line, mode=mode, sep=sep, subsample=subsample) for line in chunk if not line.startswith('#')]
+        #NOTE: this would be more efficient if it was in the loop
+        outset.total_interval_size += sum(isize for _, _, isize in bedline_results)
+        outset.num_intervals += len(bedline_results)
         if mode in ["B", "C"]:
-            for _, b in bedline_results:
+            for _, b, _ in bedline_results:
                 if b is not None:
                     for point in b:
                         if point is not None:
                             outset.add_string(point.decode())
         if mode in ["A", "C"]:
-            for a, _ in bedline_results:
+            for a, _, _ in bedline_results:
                 if a is not None:
                     outset.add_string(a.decode())
         gc.collect()
@@ -94,25 +97,26 @@ def bed_to_sets(filename: str,
 
     return outset
 
-def bed_to_sets_parallel(args):
-    """Helper function for parallel processing of bed files into sketches.
+# def bed_to_sets_parallel(args):
+#     """Helper function for parallel processing of bed files into sketches.
     
-    Args:
-        args: Tuple containing:
-            basename: Base name for the output file
-            filepath: Path to the input BED file
-            mode: A/B/C for interval/point/both comparison types 
-            num_hashes: Number of hash functions for MinHash sketching
-            precision: Precision parameter for HyperLogLog sketching
-            subsample: Fraction of points to sample
-            sketch_type: Type of sketch to use (hyperloglog/minhash/exact)
+#     Args:
+#         args: Tuple containing:
+#             basename: Base name for the output file
+#             filepath: Path to the input BED file
+#             mode: A/B/C for interval/point/both comparison types 
+#             num_hashes: Number of hash functions for MinHash sketching
+#             precision: Precision parameter for HyperLogLog sketching
+#             subsample: Fraction of points to sample
+#             sketch_type: Type of sketch to use (hyperloglog/minhash/exact)
             
-    Returns:
-        Tuple of (basename, sketch) where sketch is the processed Sketch object
-    """
-    basename, filepath, mode, num_hashes, precision, subsample, sketch_type = args
-    return (basename, bed_to_sets(filename=filepath, mode=mode, num_hashes=num_hashes, 
-                                precision=precision, subsample=subsample, sketch_type=sketch_type))
+#     Returns:
+#         Tuple of (basename, sketch) where sketch is the processed Sketch object
+#     """
+#     basename, filepath, mode, num_hashes, precision, subsample, sketch_type = args
+#     return (basename, bed_to_sets(filename=filepath, mode=mode, num_hashes=num_hashes, 
+#                                 precision=precision, subsample=subsample, sketch_type=sketch_type))
+
 def bedline(line: str, 
             mode: str, 
             sep: str, 
@@ -136,6 +140,7 @@ def bedline(line: str,
     chrval, startx, endx = basic_bedline(line)
     start = min(startx, endx)
     end = max(startx, endx)
+    interval_size = end - start
     
     if mode in ["A","C"]:
         interval = sep.join([chrval, str(start), str(end), "A"]).encode('utf-8')
@@ -148,7 +153,7 @@ def bedline(line: str,
         
         # for val in range(start, end):
         #     points.append(sep.join([str(chrval), str(val), str(val+1), "B"]).encode('utf-8'))
-    return interval, points #[g for g in points]
+    return interval, points, interval_size #[g for g in points]
 
 # def parallel_criterion(args):
 #     chrval, start, sep, maximum, seed = args
@@ -269,6 +274,11 @@ def process_file(args: tuple[str, dict, list, str, int, int, float, str]) -> tup
     return basename, output
 
 def get_parser():
+    """Create and configure the argument parser for hammock.
+    
+    Returns:
+        argparse.ArgumentParser: Configured parser with all command line arguments
+    """ 
     parser = argparse.ArgumentParser(
         description="Calculate similarity between BED files using sketching",
         epilog="\n\n"
