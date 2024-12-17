@@ -155,3 +155,25 @@ class Sketch:
         # sketch.sketch = inner_sketch
         # return sketch
         raise NotImplementedError("read_sketch() is not yet implemented")
+
+    def add_int(self, value: int) -> None:
+        """Add an integer to the sketch."""
+        if self.type == "hyperloglog":
+            self.sketch.add_int(value)
+        else:
+            # For minhash and exact, convert to string
+            self.add_string(str(value))
+
+    def _hash_str(self, s: Union[str, bytes], seed: int = 0) -> int:
+        """Hash a string or bytes object.
+        
+        Args:
+            s: String or bytes to hash
+            seed: Seed for hash function
+            
+        Returns:
+            32-bit hash value
+        """
+        if isinstance(s, str):
+            s = s.encode('utf-8')
+        return self.sketch._hash_str(s, seed)
