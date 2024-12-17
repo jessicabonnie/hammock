@@ -98,6 +98,18 @@ class Sketch:
             raise ValueError("Cannot compare different sketch types")
             
         return self.sketch.estimate_jaccard(other.sketch)
+    
+    def similarity_values(self, other: 'Sketch') -> tuple[float, float, float, float]:
+        """Calculate similarity values between two sketches.
+        """
+        union_size = self.estimate_union(other)
+        intersect = self.estimate_intersection(other)
+        jaccard = self.estimate_jaccard(other)
+        
+        # Handle potential division by zero
+        jacc_calc = intersect / union_size if union_size != 0 else 0
+        
+        return union_size, intersect, jaccard, jacc_calc
 
     def write_sketch(self, filepath: str) -> None:
         """Write sketch to file.
@@ -108,8 +120,12 @@ class Sketch:
         
         Args:
             filepath: Path to output file
+            
+        Raises:
+            NotImplementedError: This method is not yet implemented
         """
-        self.sketch.write_sketch(filepath)
+        # self.sketch.write_sketch(filepath)
+        raise NotImplementedError("write_sketch() is not yet implemented")
 
     @classmethod
     def read_sketch(cls, filepath: str, sketch_type: Literal["hyperloglog", "minhash", "exact"]) -> 'Sketch':
@@ -123,17 +139,19 @@ class Sketch:
             Sketch object loaded from file
             
         Raises:
+            NotImplementedError: This method is not yet implemented
             ValueError: If sketch_type is invalid
         """
-        if sketch_type == "hyperloglog":
-            inner_sketch = HyperLogLog.read_sketch(filepath)
-        elif sketch_type == "minhash":
-            inner_sketch = MinHash.read_sketch(filepath)
-        elif sketch_type == "exact":
-            inner_sketch = ExactCounter.read_sketch(filepath)
-        else:
+        # if sketch_type == "hyperloglog":
+        #     inner_sketch = HyperLogLog.read_sketch(filepath)
+        # elif sketch_type == "minhash":
+        #     inner_sketch = MinHash.read_sketch(filepath)
+        # elif sketch_type == "exact":
+        #     inner_sketch = ExactCounter.read_sketch(filepath)
+        # else:
+        if sketch_type not in ["hyperloglog", "minhash", "exact"]:
             raise ValueError("Invalid sketch type. Use 'hyperloglog', 'minhash', or 'exact'")
-            
-        sketch = cls(sketch_type=sketch_type)
-        sketch.sketch = inner_sketch
-        return sketch
+        # sketch = cls(sketch_type=sketch_type)
+        # sketch.sketch = inner_sketch
+        # return sketch
+        raise NotImplementedError("read_sketch() is not yet implemented")

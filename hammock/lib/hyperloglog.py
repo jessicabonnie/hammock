@@ -1,5 +1,5 @@
-import numpy as np
-import xxhash
+import numpy as np # type: ignore
+import xxhash # type: ignore
 class HyperLogLog:
     def __init__(self, 
                  precision: int = 8, 
@@ -45,7 +45,14 @@ class HyperLogLog:
             self.alpha_mm = 0.7213 / (1 + 1.079 / self.num_registers)
 
     def _hash64(self, x: int) -> int:
-        """64-bit hash function."""
+        """64-bit hash function.
+        
+        Args:
+            x: Integer value to hash
+            
+        Returns:
+            64-bit hash value as integer
+        """
         hasher = xxhash.xxh64(seed=self.seed)
         hasher.update(x.to_bytes(8, byteorder='little'))
         return hasher.intdigest()

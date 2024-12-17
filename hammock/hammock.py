@@ -14,7 +14,7 @@ from hammock.lib.sketchclass import Sketch
 from hammock.lib.hyperloglog import HyperLogLog
 # from hammock.lib.exact import ExactCounter
 from typing import Optional
-from Bio import SeqIO
+from Bio import SeqIO # type: ignore
 from hammock.lib.intervals import IntervalSketch
 from hammock.lib.minimizer import MinimizerSketch
 
@@ -436,6 +436,9 @@ def main():
         for line in filein:
             filepath = line.strip()
             basename = os.path.basename(filepath)
+            # Create sketch from file using SketchClass.from_file()
+            # which will handle whether the file paths are for 
+            # BED or sequence data
             sketch = SketchClass.from_file(
                 filename=filepath,
                 verbose=args.debug,

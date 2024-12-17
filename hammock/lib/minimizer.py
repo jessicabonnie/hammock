@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-from Bio import SeqIO
-from hammock.lib.Digest import window_minimizer
+from Bio import SeqIO # type: ignore
+from Digest import window_minimizer # type: ignore
 from hammock.lib.sketchclass import Sketch
 from typing import Optional
 
@@ -31,6 +31,19 @@ class MinimizerSketch(Sketch):
         )
         self.window_size = window_size
         self.kmer_size = kmer_size
+    
+    # def _hash64(self, x: int) -> int:
+    #     """64-bit hash function.
+        
+    #     Args:
+    #         x: Integer value to hash
+            
+    #     Returns:
+    #         64-bit hash value as integer
+    #     """
+    #     hasher = xxhash.xxh64(seed=self.seed)
+    #     hasher.update(x.to_bytes(8, byteorder='little'))
+    #     return hasher.intdigest()
         
     def add_sequence(self, sequence: str) -> None:
         """Add a sequence to the sketch using minimizers.
@@ -43,7 +56,10 @@ class MinimizerSketch(Sketch):
                                     k=self.kmer_size, 
                                     include_hash=True)
         for _, hash_val in minimizers:
-            self.add_hash(hash_val)
+            # Add the minimizer hash value to the underlying HyperLogLog sketch
+            self.add_int(hash_val)
+        # add concatenated flanking kmers from start and end of sequence
+        self.add_string(sequence[:self.kmer_size]+sequence[-self.kmer_size:])
             
     @classmethod
     def from_file(cls, 
@@ -55,7 +71,10 @@ class MinimizerSketch(Sketch):
                   seed: int = 0,
                   chunk_size: int = 1000,
                   verbose: bool = False) -> Optional['MinimizerSketch']:
-        """Create a MinimizerSketch from a FASTA/FASTQ file.
+        """Create a MinimizerSketch from a FASTA/FASTQ file. 
+        
+        This function will read in a FASTA/FASTQ file and add the sequences to the sketch.
+        The sequences are processed in chunks of `chunk_size` to avoid memory issues.
         
         Args:
             filename: Path to FASTA/FASTQ file

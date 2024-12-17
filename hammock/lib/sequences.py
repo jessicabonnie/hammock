@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 from typing import Optional, List, Iterator
-from Bio import SeqIO
+from Bio import SeqIO # type: ignore
 from hammock.lib.sketchclass import Sketch
-from hammock.lib.Digest import window_minimizer
+from Digest import window_minimizer # type: ignore  
 from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
 import gc
@@ -111,7 +111,16 @@ class SequenceSketch(Sketch):
             return None
 
 def read_sequences(filename: str, chunk_size: int = 1000) -> Iterator[List[SeqIO.SeqRecord]]:
-    """Read sequences from a FASTA/FASTQ file in chunks."""
+    """Read sequences from a FASTA/FASTQ file in chunks.
+    
+    Args:
+        filename: Path to FASTA/FASTQ file
+        chunk_size: Number of sequences to read at a time
+        
+    Returns:
+        Iterator yielding lists of SeqRecord objects, with each list containing
+        up to chunk_size sequences
+    """
     formatx = "fasta" if filename.endswith((".fa", ".fasta")) else "fastq"
     records = []
     

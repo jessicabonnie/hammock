@@ -9,12 +9,23 @@ git clone https://github.com/jessicabonnie/hammock.git
 cd hammock
 pip install -e .
 ```
+`hammock`'s mode D makes use of `Digest`, a C++ library that supports various sub-sampling schemes for $k$-mers in DNA sequences.
+```bash
+cd ..
+git clone https://github.com/VeryAmazed/digest.git
+cd digest
+
+meson setup --prefix=$(pwd)/build --buildtype=release build
+meson install -C build
+pip install .
+```
 
 ## Usage
 
-Calculate Jaccard similarities between BED files:
+Calculate pairwise Jaccard similarities between lists of BED or sequence files.
+Both input files are text files containing a path per line to the files to be compared. For computational purposes, `<primary_paths_file>` should be the shorter of the two file lists.
 ```bash
-hammock <filepaths_file> <primary_file> --mode {A|B|C} [options]
+hammock <filepaths_file> <primary_file> --mode {A|B|C|D} [options]
 ```
 
 
@@ -22,6 +33,7 @@ Modes:
 - `A`: Compare intervals only
 - `B`: Compare points only
 - `C`: Compare both intervals and points
+- `D`: Compare sequences
 
 Options:
 - `--hyperloglog`: Use HyperLogLog sketching (default)
@@ -36,7 +48,7 @@ Options:
 ### Output
 
 Results are written to CSV files with the following format:
-```bed1,bed2,sketch_type,mode,num_hashes,precision,subsample,balance,jaccardfunc,jaccardcalc,intersect,union```
+```bed1, bed2, sketch_type, mode, num_hashes, precision, subsample, balance, jaccardfunc, jaccardcalc, intersect, union```
 
 
 ## Examples
