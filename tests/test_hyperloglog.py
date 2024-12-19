@@ -1,8 +1,9 @@
-from hammock.lib.sketchclass import Sketch
+import pytest
+from hammock.lib.hyperloglog import HyperLogLog
+from hammock.lib.abstractsketch import AbstractSketch
 import csv
 from datetime import datetime
 import os
-import pytest
 
 def run_test_case(precision: int, name: str, desc: str, expected: float, 
                   set1_size: int, set2_size: int, set2_offset: int = 0):
@@ -11,13 +12,13 @@ def run_test_case(precision: int, name: str, desc: str, expected: float,
     print(desc)
     print(f"Expected Jaccard: {expected:.3f}")
     
-    sketch1 = Sketch(precision=precision, sketch_type="hyperloglog")
-    sketch2 = Sketch(precision=precision, sketch_type="hyperloglog")
+    sketch1 = HyperLogLog(precision=precision)
+    sketch2 = HyperLogLog(precision=precision)
     
     for i in range(set1_size):
-        sketch1.add_int(i)
+        sketch1.add_string(str(i))
     for i in range(set2_size):
-        sketch2.add_int(i + set2_offset)
+        sketch2.add_string(str(i + set2_offset))
         
     jaccard = sketch1.estimate_jaccard(sketch2)
     error = abs(jaccard - expected)
@@ -27,7 +28,6 @@ def run_test_case(precision: int, name: str, desc: str, expected: float,
     
     return {
         'precision': precision,
-        'num_registers': 2**precision,
         'test_name': name,
         'set1_size': set1_size,
         'set2_size': set2_size,
@@ -37,116 +37,139 @@ def run_test_case(precision: int, name: str, desc: str, expected: float,
     }
 
 @pytest.mark.quick
-def test_hll_quick():
-    """Quick tests with small sets and lower precision"""
-    results = []
+class TestHyperLogLogQuick:
+    """Quick tests for HyperLogLog class."""
     
-    for precision in [4, 6, 8]:
-        results.extend([
-            # Basic functionality tests
-            run_test_case(
-                precision=precision,
-                name="Perfect overlap - small",
-                desc="Small sets with perfect overlap",
-                expected=1.0,
-                set1_size=10,
-                set2_size=10
-            ),
-            run_test_case(
-                precision=precision,
-                name="No overlap - small",
-                desc="Small sets with no overlap",
-                expected=0.0,
-                set1_size=10,
-                set2_size=10,
-                set2_offset=10
-            ),
-            run_test_case(
-                precision=precision,
-                name="Partial overlap - small",
-                desc="Small sets with 50% overlap",
-                expected=0.5,
-                set1_size=100,
-                set2_size=100,
-                set2_offset=50
-            ),
-            # Edge cases
-            run_test_case(
-                precision=precision,
-                name="Empty sets",
-                desc="Testing empty set handling",
-                expected=1.0,
-                set1_size=0,
-                set2_size=0
-            ),
-            run_test_case(
-                precision=precision,
-                name="Single element - same",
-                desc="Single element equality",
-                expected=1.0,
-                set1_size=1,
-                set2_size=1
-            )
-        ])
-    
-    save_results(results, "hll_quick_test")
+    def test_init(self):
+        """Test basic initialization."""
+        sketch = HyperLogLog(precision=8)
+        assert sketch.precision == 8
+        assert sketch.num_registers == 256
+        assert sketch.registers.shape == (256,)
+        
+    def test_precision_bounds(self):
+        """Test precision bounds checking."""
+        with pytest.raises(ValueError):
+            HyperLogLog(precision=3)
+        with pytest.raises(ValueError):
+            HyperLogLog(precision=17)
+            
+    def test_add_string(self):
+        """Test adding strings."""
+        sketch = HyperLogLog(precision=8)
+        sketch.add_string("test")
+        assert sketch.estimate_cardinality() > 0
+        
+    def test_add_int(self):
+        """Test adding integers."""
+        sketch = HyperLogLog(precision=8)
+        sketch.add_int(12345)
+        assert sketch.estimate_cardinality() > 0
+        
+    def test_merge(self):
+        """Test merging two sketches."""
+        sketch1 = HyperLogLog(precision=8)
+        sketch2 = HyperLogLog(precision=8)
+        
+        sketch1.add_string("test1")
+        sketch2.add_string("test2")
+        
+        card1 = sketch1.estimate_cardinality()
+        card2 = sketch2.estimate_cardinality()
+        
+        sketch1.merge(sketch2)
+        merged_card = sketch1.estimate_cardinality()
+        
+        assert merged_card >= max(card1, card2)
+        
+    def test_jaccard(self):
+        """Test Jaccard similarity estimation."""
+        sketch1 = HyperLogLog(precision=8)
+        sketch2 = HyperLogLog(precision=8)
+        
+        # Add same strings
+        sketch1.add_string("test")
+        sketch2.add_string("test")
+        
+        # Should be similar
+        assert sketch1.estimate_jaccard(sketch2) > 0.9
+        
+        # Add different strings
+        sketch2.add_string("different")
+        
+        # Should be less similar
+        assert sketch1.estimate_jaccard(sketch2) < 0.9
 
 @pytest.mark.full
-def test_hll_full():
-    """Full test suite with larger sets and higher precision"""
-    results = []
+class TestHyperLogLogFull:
+    """Full tests for HyperLogLog class."""
     
-    for precision in [4, 6, 8, 10, 12, 14]:
-        results.extend([
-            # Large set tests
-            run_test_case(
-                precision=precision,
-                name="Large sets - high overlap",
-                desc="10K elements with 90% overlap",
-                expected=0.90,
-                set1_size=10000,
-                set2_size=10000,
-                set2_offset=1000
-            ),
-            run_test_case(
-                precision=precision,
-                name="Very large sets - small overlap",
-                desc="100K elements with 0.1% overlap",
-                expected=0.001,
-                set1_size=100000,
-                set2_size=100000,
-                set2_offset=99900
-            ),
-            # Different size sets
-            run_test_case(
-                precision=precision,
-                name="Different sizes - medium",
-                desc="1K vs 10K elements",
-                expected=0.1,
-                set1_size=1000,
-                set2_size=10000
-            ),
-            # Precision-sensitive cases
-            run_test_case(
-                precision=precision,
-                name="Dense set test",
-                desc="Testing precision impact on dense sets",
-                expected=0.82,
-                set1_size=10000,
-                set2_size=10000,
-                set2_offset=1000
-            ),
-            run_test_case(
-                precision=precision,
-                name="Sparse set test",
-                desc="Testing precision impact on sparse sets",
-                expected=0.001,
-                set1_size=100,
-                set2_size=10000
-            )
-        ])
+    def test_cardinality_accuracy(self):
+        """Test cardinality estimation accuracy."""
+        sketch = HyperLogLog(precision=14)  # Higher precision for accuracy test
+        
+        # Add known number of unique items
+        n_items = 10000
+        for i in range(n_items):
+            sketch.add_string(f"item{i}")
+            
+        estimate = sketch.estimate_cardinality()
+        error = abs(estimate - n_items) / n_items
+        
+        # Should be within 2% error for this precision
+        assert error < 0.02
+        
+    def test_different_seeds(self):
+        """Test that different seeds give different results."""
+        sketch1 = HyperLogLog(precision=8, seed=1)
+        sketch2 = HyperLogLog(precision=8, seed=2)
+        
+        # Add same strings
+        for i in range(1000):
+            s = f"item{i}"
+            sketch1.add_string(s)
+            sketch2.add_string(s)
+            
+        # Should give different register values
+        assert not (sketch1.registers == sketch2.registers).all() 
     
-    save_results(results, "hll_full_test")
+    def test_hyperloglog_accuracy(self):
+        """Test HyperLogLog accuracy with various set sizes and overlaps."""
+        results = []
+        
+        for precision in [8, 10, 12, 14]:
+            results.extend([
+                run_test_case(
+                    precision=precision,
+                    name="Perfect overlap - small",
+                    desc="Small sets with perfect overlap",
+                    expected=1.0,
+                    set1_size=10,
+                    set2_size=10
+                ),
+                run_test_case(
+                    precision=precision,
+                    name="No overlap - small",
+                    desc="Small sets with no overlap",
+                    expected=0.0,
+                    set1_size=10,
+                    set2_size=10,
+                    set2_offset=10
+                ),
+                run_test_case(
+                    precision=precision,
+                    name="Partial overlap - small",
+                    desc="Small sets with 50% overlap",
+                    expected=0.5,
+                    set1_size=100,
+                    set2_size=100,
+                    set2_offset=50
+                )
+            ])
+        
+        # Verify results
+        for result in results:
+            assert result['absolute_error'] < 0.1, f"Error too large for {result['test_name']}"
 
 def save_results(results: list, test_name: str):
     """Save test results to CSV file"""
@@ -163,4 +186,12 @@ def save_results(results: list, test_name: str):
     print(f"\nResults written to {filename}")
 
 if __name__ == "__main__":
-    test_hll_quick() 
+    # Run quick tests
+    test = TestHyperLogLogQuick()
+    test.test_init()
+    test.test_add_string()
+    test.test_jaccard()
+    
+    # Run accuracy tests
+    test = TestHyperLogLogFull()
+    test.test_hyperloglog_accuracy()

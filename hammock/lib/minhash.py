@@ -1,8 +1,9 @@
 import numpy as np
 import xxhash
 from typing import Optional, List, Union
+from hammock.lib.abstractsketch import AbstractSketch
 
-class MinHash:
+class MinHash(AbstractSketch):
     def __init__(self, 
                  num_hashes: int = 128,
                  kmer_size: int = 0,
@@ -160,3 +161,7 @@ class MinHash:
         )
         sketch.signatures = data['signatures']
         return sketch
+
+    def add_int(self, value: int) -> None:
+        hashes = np.array([h.intdigest() for h in self.hashers])
+        self.signatures = np.minimum(self.signatures, hashes)

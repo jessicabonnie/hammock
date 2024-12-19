@@ -1,8 +1,9 @@
-from hammock.lib.sketchclass import Sketch
+import pytest
+from hammock.lib.minhash import MinHash
+from hammock.lib.abstractsketch import AbstractSketch
 import csv
 from datetime import datetime
 import os
-import pytest
 
 def run_test_case(num_hashes: int, name: str, desc: str, expected: float, 
                   set1_size: int, set2_size: int, set2_offset: int = 0):
@@ -11,8 +12,8 @@ def run_test_case(num_hashes: int, name: str, desc: str, expected: float,
     print(desc)
     print(f"Expected Jaccard: {expected:.3f}")
     
-    sketch1 = Sketch(num_hashes=num_hashes, sketch_type="minhash")
-    sketch2 = Sketch(num_hashes=num_hashes, sketch_type="minhash")
+    sketch1 = MinHash(num_hashes=num_hashes)
+    sketch2 = MinHash(num_hashes=num_hashes)
     
     for i in range(set1_size):
         sketch1.add_string(str(i))
@@ -36,107 +37,116 @@ def run_test_case(num_hashes: int, name: str, desc: str, expected: float,
     }
 
 @pytest.mark.quick
-def test_minhash_quick():
-    """Quick tests with small sets and fewer hash functions"""
-    results = []
+class TestMinHashQuick:
+    """Quick tests for MinHash class."""
     
-    for num_hashes in [16, 32, 64]:
-        # Basic functionality tests
-        results.extend([
-            run_test_case(
-                num_hashes=num_hashes,
-                name="Perfect overlap - small",
-                desc="Small sets with perfect overlap",
-                expected=1.0,
-                set1_size=10,
-                set2_size=10
-            ),
-            run_test_case(
-                num_hashes=num_hashes,
-                name="No overlap - small",
-                desc="Small sets with no overlap",
-                expected=0.0,
-                set1_size=10,
-                set2_size=10,
-                set2_offset=10
-            ),
-            run_test_case(
-                num_hashes=num_hashes,
-                name="Partial overlap - small",
-                desc="Small sets with 50% overlap",
-                expected=0.5,
-                set1_size=100,
-                set2_size=100,
-                set2_offset=50
-            ),
-            # Edge cases
-            run_test_case(
-                num_hashes=num_hashes,
-                name="Empty sets",
-                desc="Testing empty set handling",
-                expected=1.0,
-                set1_size=0,
-                set2_size=0
-            ),
-            run_test_case(
-                num_hashes=num_hashes,
-                name="Single element - same",
-                desc="Single element equality",
-                expected=1.0,
-                set1_size=1,
-                set2_size=1
-            )
-        ])
+    def test_init(self):
+        """Test MinHash initialization."""
+        sketch = MinHash(num_hashes=16)
+        assert sketch.num_hashes == 16
     
-    save_results(results, "minhash_quick_test")
+    def test_add_string(self):
+        """Test adding strings to MinHash."""
+        sketch = MinHash(num_hashes=16)
+        sketch.add_string("test")
+        assert len(sketch.hashes) == 16
+    
+    def test_jaccard(self):
+        """Test MinHash estimate_jaccard method."""
+        sketch1 = MinHash(num_hashes=16)
+        sketch2 = MinHash(num_hashes=16)
+        sketch1.add_string("test")
+        sketch2.add_string("test")
+        assert sketch1.estimate_jaccard(sketch2) == 1.0
 
 @pytest.mark.full
-def test_minhash_full():
-    """Full test suite with larger sets and more hash functions"""
-    results = []
+class TestMinHashFull:
+    """Full tests for MinHash class."""
     
-    for num_hashes in [16, 32, 64, 128, 256, 512, 1024]:
-        results.extend([
-            # Large set tests
-            run_test_case(
-                num_hashes=num_hashes,
-                name="Large sets - high overlap",
-                desc="10K elements with 90% overlap",
-                expected=0.90,
-                set1_size=10000,
-                set2_size=10000,
-                set2_offset=1000
-            ),
-            run_test_case(
-                num_hashes=num_hashes,
-                name="Very large sets - small overlap",
-                desc="100K elements with 0.1% overlap",
-                expected=0.001,
-                set1_size=100000,
-                set2_size=100000,
-                set2_offset=99900
-            ),
-            # Different size sets
-            run_test_case(
-                num_hashes=num_hashes,
-                name="Different sizes - medium",
-                desc="1K vs 10K elements",
-                expected=0.1,
-                set1_size=1000,
-                set2_size=10000
-            ),
-            # Edge cases with large sets
-            run_test_case(
-                num_hashes=num_hashes,
-                name="Large identical sets",
-                desc="50K identical elements",
-                expected=1.0,
-                set1_size=50000,
-                set2_size=50000
-            )
-        ])
+    def test_minhash_accuracy(self):
+        """Test MinHash accuracy with various set sizes and overlaps."""
+        results = []
+        
+        for num_hashes in [16, 32, 64, 128]:
+            results.extend([
+                run_test_case(
+                    num_hashes=num_hashes,
+                    name="Perfect overlap - small",
+                    desc="Small sets with perfect overlap",
+                    expected=1.0,
+                    set1_size=10,
+                    set2_size=10
+                ),
+                run_test_case(
+                    num_hashes=num_hashes,
+                    name="No overlap - small",
+                    desc="Small sets with no overlap",
+                    expected=0.0,
+                    set1_size=10,
+                    set2_size=10,
+                    set2_offset=10
+                ),
+                run_test_case(
+                    num_hashes=num_hashes,
+                    name="Partial overlap - small",
+                    desc="Small sets with 50% overlap",
+                    expected=0.5,
+                    set1_size=100,
+                    set2_size=100,
+                    set2_offset=50
+                )
+            ])
+        
+        # Verify results
+        for result in results:
+            assert result['absolute_error'] < 0.1, f"Error too large for {result['test_name']}"
     
-    save_results(results, "minhash_full_test")
+    def test_minhash_full(self):
+        """Full test suite with larger sets and more hash functions"""
+        results = []
+        
+        for num_hashes in [16, 32, 64, 128, 256, 512, 1024]:
+            results.extend([
+                # Large set tests
+                run_test_case(
+                    num_hashes=num_hashes,
+                    name="Large sets - high overlap",
+                    desc="10K elements with 90% overlap",
+                    expected=0.90,
+                    set1_size=10000,
+                    set2_size=10000,
+                    set2_offset=1000
+                ),
+                run_test_case(
+                    num_hashes=num_hashes,
+                    name="Very large sets - small overlap",
+                    desc="100K elements with 0.1% overlap",
+                    expected=0.001,
+                    set1_size=100000,
+                    set2_size=100000,
+                    set2_offset=99900
+                ),
+                # Different size sets
+                run_test_case(
+                    num_hashes=num_hashes,
+                    name="Different sizes - medium",
+                    desc="1K vs 10K elements",
+                    expected=0.1,
+                    set1_size=1000,
+                    set2_size=10000
+                ),
+                # Edge cases with large sets
+                run_test_case(
+                    num_hashes=num_hashes,
+                    name="Large identical sets",
+                    desc="50K identical elements",
+                    expected=1.0,
+                    set1_size=50000,
+                    set2_size=50000
+                )
+            ])
+        
+        save_results(results, "minhash_full_test")
 
 def save_results(results: list, test_name: str):
     """Save test results to CSV file"""
@@ -153,4 +163,12 @@ def save_results(results: list, test_name: str):
     print(f"\nResults written to {filename}")
 
 if __name__ == "__main__":
-    test_minhash_quick()
+    # Run quick tests
+    test = TestMinHashQuick()
+    test.test_init()
+    test.test_add_string()
+    test.test_jaccard()
+    
+    # Run accuracy tests
+    test = TestMinHashFull()
+    test.test_minhash_accuracy()

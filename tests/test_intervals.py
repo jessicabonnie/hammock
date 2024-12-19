@@ -1,5 +1,6 @@
 import pytest
 from hammock.lib.intervals import IntervalSketch
+from hammock.lib.abstractsketch import AbstractSketch
 import tempfile
 import os
 
@@ -25,15 +26,14 @@ def large_bed_file():
 
 @pytest.mark.quick
 class TestIntervalSketchQuick:
-    """Quick tests for IntervalSketch class"""
+    """Quick tests for IntervalSketch class."""
     
     def test_init(self):
-        """Test basic initialization"""
-        sketch = IntervalSketch(mode="A")
+        """Test basic initialization."""
+        sketch = IntervalSketch(mode="A", sketch_type="hyperloglog")
         assert sketch.mode == "A"
-        assert sketch.total_interval_size == 0
-        assert sketch.num_intervals == 0
-
+        assert sketch.sketch is not None
+    
     def test_bedline_mode_A(self):
         """Test mode A (intervals only) with small input"""
         sketch = IntervalSketch(mode="A")
@@ -80,7 +80,7 @@ class TestIntervalSketchQuick:
 
 @pytest.mark.full
 class TestIntervalSketchFull:
-    """Full test suite for IntervalSketch class"""
+    """Full tests for IntervalSketch class."""
     
     def test_large_file_processing(self, large_bed_file):
         """Test processing of large BED file"""
@@ -122,4 +122,7 @@ class TestIntervalSketchFull:
         assert sketch is not None
         assert sketch.num_intervals == 1000
         assert sketch.total_interval_size == 1000000
-        assert len(sketch.generate_points("chr1", 1000, 2000, subsample=0.5)) < 1001 
+        assert len(sketch.generate_points("chr1", 1000, 2000, subsample=0.5)) < 1001
+
+if __name__ == "__main__":
+    pytest.main([__file__])

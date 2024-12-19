@@ -2,16 +2,11 @@ from abc import ABC, abstractmethod
 from typing import Union, Optional
 
 class AbstractSketch(ABC):
-    """Abstract base class defining the sketch interface."""
+    """Abstract base class defining core sketching operations."""
     
     @abstractmethod
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
-        pass
-    
-    @abstractmethod
-    def add_int(self, value: int) -> None:
-        """Add an integer to the sketch."""
         pass
     
     @abstractmethod
@@ -25,17 +20,20 @@ class AbstractSketch(ABC):
         pass
     
     @abstractmethod
-    def _hash_str(self, s: Union[str, bytes], seed: int = 0) -> int:
-        """Hash a string or bytes object."""
+    def merge(self, other: 'AbstractSketch') -> None:
+        """Merge another sketch into this one."""
         pass
-        
+
+class AbstractDataSketch(ABC):
+    """Abstract base class for data-specific sketch wrappers."""
+    
     @abstractmethod
-    def write_sketch(self, filepath: str) -> None:
-        """Write sketch to file."""
+    def __init__(self, sketch_type: str, **kwargs):
+        """Initialize with specified sketch type."""
         pass
-        
+    
     @classmethod
     @abstractmethod
-    def read_sketch(cls, filepath: str) -> 'AbstractSketch':
-        """Read sketch from file."""
+    def from_file(cls, filename: str, sketch_type: str, **kwargs) -> Optional['AbstractDataSketch']:
+        """Create sketch from file."""
         pass 

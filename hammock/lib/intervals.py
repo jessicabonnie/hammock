@@ -1,103 +1,58 @@
 #!/usr/bin/env python
-from typing import Optional, Tuple, List
-from hammock.lib.sketchclass import Sketch
-from itertools import islice
-import gc
+from typing import Optional, List
+from hammock.lib.abstractsketch import AbstractDataSketch
+from hammock.lib.hyperloglog import HyperLogLog
+from hammock.lib.minhash import MinHash
+from hammock.lib.exact import ExactCounter
 
 
-class IntervalSketch:
-    """Sketch class for BED intervals and points."""
+class IntervalSketch(AbstractDataSketch):
+    """Sketch class for BED intervals."""
     
     def __init__(self, 
                  mode: str,
+                 sketch_type: str = "hyperloglog",
                  precision: int = 8,
                  num_hashes: int = 128,
-                 sketch_type: str = "hyperloglog",
                  seed: int = 0):
-        """Initialize IntervalSketch.
+        """Initialize interval sketch.
         
         Args:
             mode: A/B/C for interval/point/both comparison types
-            precision: Precision for HyperLogLog sketching
-            num_hashes: Number of hash functions for MinHash sketching
-            sketch_type: Type of sketch to use
-            seed: Random seed for hash functions
+            sketch_type: "hyperloglog", "minhash", or "exact"
+            precision: Precision for HyperLogLog
+            num_hashes: Number of hashes for MinHash
+            seed: Random seed
         """
-        self.sketch = Sketch(
-            sketch_type=sketch_type,
-            precision=precision,
-            num_hashes=num_hashes,
-            seed=seed
-        )
+        if sketch_type == "hyperloglog":
+            self.sketch = HyperLogLog(precision=precision, seed=seed)
+        elif sketch_type == "minhash":
+            self.sketch = MinHash(num_hashes=num_hashes, seed=seed)
+        elif sketch_type == "exact":
+            self.sketch = ExactCounter(seed=seed)
+        else:
+            raise ValueError(f"Invalid sketch type for intervals: {sketch_type}")
+            
         self.mode = mode
         self.total_interval_size = 0
         self.num_intervals = 0
-        
+
     @classmethod
-    def from_file(cls,
-                  filename: str,
-                  mode: str,
-                  precision: int = 8,
-                  num_hashes: int = 128,
-                  sketch_type: str = "hyperloglog",
-                  sep: str = "-",
-                  subsample: float = 1,
-                  chunk_size: int = 1000,
-                  verbose: bool = False) -> Optional['IntervalSketch']:
-        """Create an IntervalSketch from a BED file.
-        
-        Args:
-            filename: Path to BED file
-            mode: A/B/C for interval/point/both comparison types
-            precision: Precision for HyperLogLog
-            num_hashes: Number of hash functions for MinHash
-            sketch_type: Type of sketch to use
-            sep: Separator for combining fields
-            subsample: Subsampling rate
-            chunk_size: Number of lines to process at once
-            verbose: Whether to print progress
-            
-        Returns:
-            IntervalSketch object or None if file processing fails
-        """
-        sketch = cls(
-            mode=mode,
-            precision=precision,
-            num_hashes=num_hashes,
-            sketch_type=sketch_type
-        )
-        
+    def from_file(cls, filename: str, mode: str, sketch_type: str, **kwargs) -> Optional['IntervalSketch']:
+        """Create sketch from BED file."""
         try:
-            with open(filename, "r") as file:
-                while True:
-                    chunk = list(islice(file, chunk_size))
-                    if not chunk:
-                        break
-                    
-                    bedline_results = [sketch.bedline(line, mode=mode, sep=sep, subsample=subsample) 
-                                     for line in chunk if not line.startswith('#')]
-                    
-                    sketch.total_interval_size += sum(isize for _, _, isize in bedline_results)
-                    sketch.num_intervals += len(bedline_results)
-                    
-                    if mode in ["B", "C"]:
-                        for _, b, _ in bedline_results:
-                            if b is not None:
-                                for point in b:
-                                    if point is not None:
-                                        sketch.add_string(point.decode())
-                    
-                    if mode in ["A", "C"]:
-                        for a, _, _ in bedline_results:
-                            if a is not None:
-                                sketch.add_string(a.decode())
-                    
-                    if verbose:
-                        print(f"Processed {len(chunk)} lines from {filename}")
-                    gc.collect()
-                    
+            sketch = cls(mode=mode, sketch_type=sketch_type, **kwargs)
+            with open(filename) as f:
+                for line in f:
+                    if line.strip() and not line.startswith('#'):
+                        interval, points, size = sketch.bedline(line)
+                        sketch.add_interval_size(size)
+                        if interval:
+                            sketch.sketch.add_string(interval.decode('utf-8'))
+                        for point in points:
+                            if point:
+                                sketch.sketch.add_string(point.decode('utf-8'))
             return sketch
-            
         except Exception as e:
             print(f"Error processing file {filename}: {str(e)}")
             return None

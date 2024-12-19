@@ -1,15 +1,18 @@
 #!/usr/bin/env python
-from Bio import SeqIO # type: ignore
-from Digest import window_minimizer # type: ignore
-from hammock.lib.sketchclass import Sketch
-from typing import Optional
+from Bio import SeqIO
+from Digest import window_minimizer
+from typing import Optional, Union, Literal
+from hammock.lib.abstractsketch import AbstractSketch
+from hammock.lib.hyperloglog import HyperLogLog
+from hammock.lib.minhash import MinHash
 
-class MinimizerSketch(Sketch):
-    """Sketch class for sequence data using minimizers."""
+class MinimizerSketch(AbstractSketch):
+    """Sketch class for sequence data using minimizers with an underlying sketch type."""
     
     def __init__(self, 
                  window_size: int = 40, 
                  kmer_size: int = 8,
+                 sketch_type: Literal["hyperloglog", "minhash"] = "hyperloglog",
                  precision: int = 8,
                  num_hashes: int = 128,
                  seed: int = 0):
@@ -18,102 +21,50 @@ class MinimizerSketch(Sketch):
         Args:
             window_size: Size of sliding window for minimizer selection
             kmer_size: Size of kmers to use
+            sketch_type: Type of underlying sketch ("hyperloglog" or "minhash")
             precision: Precision for HyperLogLog sketching
             num_hashes: Number of hash functions for MinHash sketching
             seed: Random seed for hash functions
         """
-        super().__init__(
-            sketch_type="hyperloglog",
-            precision=precision,
-            num_hashes=num_hashes,
-            kmer_size=kmer_size,
-            seed=seed
-        )
         self.window_size = window_size
         self.kmer_size = kmer_size
+        self.seed = seed
+        
+        # Initialize underlying sketch
+        if sketch_type == "hyperloglog":
+            self.sketch = HyperLogLog(precision=precision, seed=seed)
+        elif sketch_type == "minhash":
+            self.sketch = MinHash(num_hashes=num_hashes, seed=seed)
+        else:
+            raise ValueError(f"Invalid sketch type: {sketch_type}")
     
-    # def _hash64(self, x: int) -> int:
-    #     """64-bit hash function.
-        
-    #     Args:
-    #         x: Integer value to hash
-            
-    #     Returns:
-    #         64-bit hash value as integer
-    #     """
-    #     hasher = xxhash.xxh64(seed=self.seed)
-    #     hasher.update(x.to_bytes(8, byteorder='little'))
-    #     return hasher.intdigest()
-        
-    def add_sequence(self, sequence: str) -> None:
-        """Add a sequence to the sketch using minimizers.
-        
-        Args:
-            sequence: DNA/RNA sequence string
-        """
-        minimizers = window_minimizer(sequence, 
+    def add_string(self, s: str) -> None:
+        """Add a string to the sketch."""
+        minimizers = window_minimizer(s, 
                                     w=self.window_size, 
                                     k=self.kmer_size, 
                                     include_hash=True)
         for _, hash_val in minimizers:
-            # Add the minimizer hash value to the underlying HyperLogLog sketch
-            self.add_int(hash_val)
-        # add concatenated flanking kmers from start and end of sequence
-        self.add_string(sequence[:self.kmer_size]+sequence[-self.kmer_size:])
+            self.sketch.add_int(hash_val)
             
-    @classmethod
-    def from_file(cls, 
-                  filename: str, 
-                  window_size: int = 40, 
-                  kmer_size: int = 8,
-                  precision: int = 8,
-                  num_hashes: int = 128,
-                  seed: int = 0,
-                  chunk_size: int = 1000,
-                  verbose: bool = False) -> Optional['MinimizerSketch']:
-        """Create a MinimizerSketch from a FASTA/FASTQ file. 
+    def add_sequence(self, sequence: str) -> None:
+        """Add a sequence using the minimizer approach."""
+        self.add_string(sequence)
+        # Add concatenated flanking kmers from start and end of sequence
+        self.sketch.add_string(sequence[:self.kmer_size] + sequence[-self.kmer_size:])
         
-        This function will read in a FASTA/FASTQ file and add the sequences to the sketch.
-        The sequences are processed in chunks of `chunk_size` to avoid memory issues.
+    def estimate_cardinality(self) -> float:
+        """Estimate cardinality using underlying sketch."""
+        return self.sketch.estimate_cardinality()
         
-        Args:
-            filename: Path to FASTA/FASTQ file
-            window_size: Size of sliding window
-            kmer_size: Size of kmers
-            precision: Precision for HyperLogLog
-            num_hashes: Number of hash functions for MinHash
-            seed: Random seed
-            chunk_size: Number of sequences to process at once
-            verbose: Whether to print progress
-            
-        Returns:
-            MinimizerSketch object or None if file processing fails
-        """
-        sketch = cls(
-            window_size=window_size,
-            kmer_size=kmer_size,
-            precision=precision,
-            num_hashes=num_hashes,
-            seed=seed
-        )
+    def estimate_jaccard(self, other: 'AbstractSketch') -> float:
+        """Estimate Jaccard similarity with another sketch."""
+        if not isinstance(other, MinimizerSketch):
+            raise ValueError("Can only compare with another MinimizerSketch")
+        return self.sketch.estimate_jaccard(other.sketch)
         
-        try:
-            formatx = "fasta" if filename.endswith((".fa", ".fasta")) else "fastq"
-            with open(filename, "r") as file:
-                records = []
-                for record in SeqIO.parse(file, formatx):
-                    records.append(record)
-                    if len(records) >= chunk_size:
-                        for rec in records:
-                            sketch.add_sequence(str(rec.seq))
-                        records = []
-                        if verbose:
-                            print(f"Processed {chunk_size} sequences from {filename}")
-                # Process remaining records
-                for rec in records:
-                    sketch.add_sequence(str(rec.seq))
-            return sketch
-            
-        except Exception as e:
-            print(f"Error processing file {filename}: {str(e)}")
-            return None
+    def merge(self, other: 'AbstractSketch') -> None:
+        """Merge another sketch into this one."""
+        if not isinstance(other, MinimizerSketch):
+            raise ValueError("Can only merge with another MinimizerSketch")
+        self.sketch.merge(other.sketch)

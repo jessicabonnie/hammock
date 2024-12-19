@@ -1,6 +1,8 @@
 import numpy as np # type: ignore
 import xxhash # type: ignore
-class HyperLogLog:
+from hammock.lib.abstractsketch import AbstractSketch
+
+class HyperLogLog(AbstractSketch):
     def __init__(self, 
                  precision: int = 8, 
                  kmer_size: int = 0, 

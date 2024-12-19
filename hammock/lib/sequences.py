@@ -1,42 +1,49 @@
 #!/usr/bin/env python
 from typing import Optional, List, Iterator
 from Bio import SeqIO # type: ignore
-from hammock.lib.sketchclass import Sketch
-from Digest import window_minimizer # type: ignore  
+from hammock.lib.abstractsketch import AbstractDataSketch
 from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
+from hammock.lib.minimizer import MinimizerSketch
 import gc
 
-class SequenceSketch(Sketch):
+class SequenceSketch(AbstractDataSketch):
     """Sketch class for sequence data using various sketching methods."""
     
     def __init__(self, 
+                 sketch_type: str = "minimizer",
                  kmer_size: int = 8,
                  window_size: int = 40,
                  precision: int = 8,
                  num_hashes: int = 128,
-                 sketch_type: str = "hyperloglog",
                  seed: int = 0):
-        """Initialize SequenceSketch.
+        """Initialize sequence sketch.
         
         Args:
-            kmer_size: Size of kmers to use
+            sketch_type: Type of sketch to use (minimizer/hyperloglog/minhash)
+            kmer_size: Size of kmers
             window_size: Size of sliding window
             precision: Precision for HyperLogLog sketching
             num_hashes: Number of hash functions for MinHash sketching
-            sketch_type: Type of sketch to use (hyperloglog/minhash/minimizer)
             seed: Random seed for hash functions
         """
-        if sketch_type not in ["hyperloglog", "minhash", "minimizer"]:
-            raise ValueError(f"Invalid sketch type: {sketch_type}")
+        if sketch_type not in ["minimizer", "hyperloglog", "minhash"]:
+            raise ValueError(f"Invalid sketch type for sequences: {sketch_type}")
             
-        super().__init__(
-            sketch_type=sketch_type,
-            precision=precision,
-            num_hashes=num_hashes,
-            kmer_size=kmer_size,
-            seed=seed
-        )
+        if sketch_type == "minimizer":
+            self.sketch = MinimizerSketch(kmer_size=kmer_size, 
+                                        window_size=window_size,
+                                        seed=seed)
+        elif sketch_type == "hyperloglog":
+            self.sketch = HyperLogLog(precision=precision,
+                                    kmer_size=kmer_size,
+                                    seed=seed)
+        elif sketch_type == "minhash":
+            self.sketch = MinHash(num_hashes=num_hashes,
+                                kmer_size=kmer_size,
+                                seed=seed)
+        
+        self.kmer_size = kmer_size
         self.window_size = window_size
         self.total_sequence_length = 0
         self.num_sequences = 0
@@ -50,54 +57,51 @@ class SequenceSketch(Sketch):
         self.total_sequence_length += len(sequence)
         self.num_sequences += 1
         
-        if self.sketch_type == "minimizer":
-            # Use minimizer approach
-            minimizers = window_minimizer(sequence, 
-                                        w=self.window_size, 
-                                        k=self.kmer_size, 
-                                        include_hash=True)
-            for _, hash_val in minimizers:
-                self.add_hash(hash_val)
+        # Process sequence based on sketch type
+        if isinstance(self.sketch, MinimizerSketch):
+            self.sketch.add_sequence(sequence)
         else:
-            # Use regular k-mer approach for hyperloglog/minhash
+            # For HyperLogLog and MinHash, use k-mer approach
             for i in range(len(sequence) - self.kmer_size + 1):
                 kmer = sequence[i:i + self.kmer_size]
-                self.add_string(kmer)
+                self.sketch.add_string(kmer)
     
     @classmethod
     def from_file(cls,
                   filename: str,
+                  sketch_type: str = "minimizer",
                   kmer_size: int = 8,
                   window_size: int = 40,
                   precision: int = 8,
                   num_hashes: int = 128,
-                  sketch_type: str = "minimizer",
                   chunk_size: int = 1000,
-                  verbose: bool = False) -> Optional['SequenceSketch']:
+                  verbose: bool = False,
+                  **kwargs) -> Optional['SequenceSketch']:
         """Create a SequenceSketch from a FASTA/FASTQ file.
         
         Args:
             filename: Path to FASTA/FASTQ file
+            sketch_type: Type of sketch to use
             kmer_size: Size of kmers
             window_size: Size of sliding window
             precision: Precision for HyperLogLog
             num_hashes: Number of hash functions for MinHash
-            sketch_type: Type of sketch to use
             chunk_size: Number of sequences to process at once
             verbose: Whether to print progress
             
         Returns:
             SequenceSketch object or None if file processing fails
         """
-        sketch = cls(
-            kmer_size=kmer_size,
-            window_size=window_size,
-            precision=precision,
-            num_hashes=num_hashes,
-            sketch_type=sketch_type
-        )
-        
         try:
+            sketch = cls(
+                sketch_type=sketch_type,
+                kmer_size=kmer_size,
+                window_size=window_size,
+                precision=precision,
+                num_hashes=num_hashes,
+                **kwargs
+            )
+            
             for records in read_sequences(filename, chunk_size):
                 for record in records:
                     sketch.add_sequence(str(record.seq))
@@ -111,16 +115,7 @@ class SequenceSketch(Sketch):
             return None
 
 def read_sequences(filename: str, chunk_size: int = 1000) -> Iterator[List[SeqIO.SeqRecord]]:
-    """Read sequences from a FASTA/FASTQ file in chunks.
-    
-    Args:
-        filename: Path to FASTA/FASTQ file
-        chunk_size: Number of sequences to read at a time
-        
-    Returns:
-        Iterator yielding lists of SeqRecord objects, with each list containing
-        up to chunk_size sequences
-    """
+    """Read sequences from a FASTA/FASTQ file in chunks."""
     formatx = "fasta" if filename.endswith((".fa", ".fasta")) else "fastq"
     records = []
     

@@ -1,23 +1,23 @@
-from typing import Optional, Set
-import xxhash
+from typing import Optional, Set, Union
+import xxhash # type: ignore
+from hammock.lib.abstractsketch import AbstractSketch
 
-class ExactCounter:
+class ExactCounter(AbstractSketch):
+    """Exact set counter that implements the sketch interface."""
+    
     def __init__(self,
-                 precision: int = 14,  # Unused but kept for interface compatibility
                  kmer_size: int = 0,
-                 window_size: int = 0,
-                 seed: int = 0,
-                 debug: bool = False):
+                 seed: int = 0):
         """Initialize exact counter.
         
-        Args match HyperLogLog for compatibility, but only kmer_size,
-        window_size, and seed are used.
+        Args:
+            kmer_size: Size of kmers (0 for whole string mode)
+            seed: Random seed for hashing
         """
         self.kmer_size = kmer_size
-        self.window_size = window_size if window_size else kmer_size
         self.seed = seed
         self.elements: Set[str] = set()
-        self.debug = debug
+
     def add_string(self, s: str) -> None:
         """Add a string to the counter."""
         if len(s) < self.kmer_size:
@@ -27,106 +27,24 @@ class ExactCounter:
             self.elements.add(s)
             return
 
-        if self.window_size == self.kmer_size:
-            for i in range(len(s) - self.kmer_size + 1):
-                self.elements.add(s[i:i + self.kmer_size])
-            return
+        # Process k-mers
+        for i in range(len(s) - self.kmer_size + 1):
+            self.elements.add(s[i:i + self.kmer_size])
 
-        # Windowing mode
-        for i in range(len(s) - self.window_size + 1):
-            window = s[i:i + self.window_size]
-            min_hash = float('inf')
-            min_kmer = ''
-            
-            for j in range(self.window_size - self.kmer_size + 1):
-                kmer = window[j:j + self.kmer_size]
-                hasher = xxhash.xxh64(seed=self.seed)
-                hasher.update(kmer.encode())
-                h = hasher.intdigest()
-                if h < min_hash:
-                    min_hash = h
-                    min_kmer = kmer
-            
-            self.elements.add(min_kmer)
-
-    def merge(self, other: 'ExactCounter') -> None:
-        """Merge another counter into this one."""
-        self.elements.update(other.elements)
-
-    def cardinality(self) -> float:
+    def estimate_cardinality(self) -> float:
         """Return exact cardinality."""
         return float(len(self.elements))
 
-    def intersection(self, other: 'ExactCounter') -> float:
-        """Return exact intersection cardinality."""
-        return float(len(self.elements & other.elements))
-
-    def union(self, other: 'ExactCounter') -> float:
-        """Return exact union cardinality."""
-        return float(len(self.elements | other.elements))
-
-    def jaccard(self, other: 'ExactCounter') -> float:
-        """Return exact Jaccard similarity.
-        
-        Returns:
-            Float between 0 and 1 representing Jaccard similarity
-        """
+    def estimate_jaccard(self, other: 'AbstractSketch') -> float:
+        """Return exact Jaccard similarity."""
+        if not isinstance(other, ExactCounter):
+            raise ValueError("Can only compare with another ExactCounter")
         intersection = len(self.elements & other.elements)
         union = len(self.elements | other.elements)
-        return float(intersection / union) if union > 0 else 0.0
+        return float(intersection) / union if union > 0 else 0.0
 
-    # Keep estimate_* methods for interface compatibility
-    def estimate_cardinality(self) -> float:
-        """Alias for cardinality()."""
-        return self.cardinality()
-
-    def estimate_intersection(self, other: 'ExactCounter') -> float:
-        """Alias for intersection()."""
-        return self.intersection(other)
-
-    def estimate_union(self, other: 'ExactCounter') -> float:
-        """Alias for union()."""
-        return self.union(other)
-
-    def estimate_jaccard(self, other: 'ExactCounter') -> float:
-        """Alias for jaccard()."""
-        return self.jaccard(other)
-
-    def write_sketch(self, filepath: str) -> None:
-        """Write sketch to file in text format.
-        
-        Args:
-            filepath: Path to output file
-        """
-        with open(filepath, 'w') as f:
-            # Write metadata
-            f.write(f"#kmer_size={self.kmer_size}\n")
-            f.write(f"#window_size={self.window_size}\n")
-            f.write(f"#seed={self.seed}\n")
-            # Write elements one per line
-            for element in sorted(self.elements):
-                f.write(f"{element}\n")
-
-    @classmethod
-    def read_sketch(cls, filepath: str) -> 'ExactCounter':
-        """Read sketch from file in text format.
-        
-        Args:
-            filepath: Path to input file
-            
-        Returns:
-            ExactCounter object loaded from file
-        """
-        sketch = cls()
-        with open(filepath, 'r') as f:
-            # Read metadata
-            for line in f:
-                if not line.startswith('#'):
-                    break
-                key, value = line.strip('#').strip().split('=')
-                setattr(sketch, key, int(value))
-            
-            # Read elements
-            sketch.elements = {line.strip() for line in f if line.strip()}
-        
-        return sketch
+    def merge(self, other: 'AbstractSketch') -> None:
+        """Merge another counter into this one."""
+        if not isinstance(other, ExactCounter):
+            raise ValueError("Can only merge with another ExactCounter")
+        self.elements.update(other.elements)
