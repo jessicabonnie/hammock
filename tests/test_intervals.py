@@ -1,4 +1,4 @@
-import pytest
+import pytest # type: ignore
 from hammock.lib.intervals import IntervalSketch
 from hammock.lib.abstractsketch import AbstractSketch
 import tempfile
@@ -66,7 +66,7 @@ class TestIntervalSketchQuick:
             precision=8,
             sketch_type="hyperloglog"
         )
-        assert sketch is not None
+        assert isinstance(sketch, IntervalSketch)
         assert sketch.num_intervals == 3
         assert sketch.total_interval_size == 1250
 

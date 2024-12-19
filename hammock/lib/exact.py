@@ -1,50 +1,58 @@
-from typing import Optional, Set, Union
-import xxhash # type: ignore
+import json
+from typing import Set, Optional
 from hammock.lib.abstractsketch import AbstractSketch
 
 class ExactCounter(AbstractSketch):
-    """Exact set counter that implements the sketch interface."""
+    """Exact counter for k-mers."""
     
-    def __init__(self,
-                 kmer_size: int = 0,
-                 seed: int = 0):
-        """Initialize exact counter.
-        
-        Args:
-            kmer_size: Size of kmers (0 for whole string mode)
-            seed: Random seed for hashing
-        """
+    def __init__(self, kmer_size: int = 8, seed: int = 42):
+        """Initialize exact counter."""
+        super().__init__()
         self.kmer_size = kmer_size
         self.seed = seed
         self.elements: Set[str] = set()
-
+        
     def add_string(self, s: str) -> None:
         """Add a string to the counter."""
-        if len(s) < self.kmer_size:
-            return
-
-        if self.kmer_size == 0:
-            self.elements.add(s)
-            return
-
-        # Process k-mers
-        for i in range(len(s) - self.kmer_size + 1):
-            self.elements.add(s[i:i + self.kmer_size])
-
+        self.elements.add(s)
+        
     def estimate_cardinality(self) -> float:
         """Return exact cardinality."""
         return float(len(self.elements))
-
-    def estimate_jaccard(self, other: 'AbstractSketch') -> float:
-        """Return exact Jaccard similarity."""
+        
+    def estimate_jaccard(self, other: 'ExactCounter') -> float:
+        """Calculate exact Jaccard similarity."""
         if not isinstance(other, ExactCounter):
-            raise ValueError("Can only compare with another ExactCounter")
+            raise TypeError("Can only compare with another ExactCounter")
         intersection = len(self.elements & other.elements)
         union = len(self.elements | other.elements)
-        return float(intersection) / union if union > 0 else 0.0
-
-    def merge(self, other: 'AbstractSketch') -> None:
+        return intersection / union if union > 0 else 0.0
+        
+    def merge(self, other: 'ExactCounter') -> None:
         """Merge another counter into this one."""
         if not isinstance(other, ExactCounter):
-            raise ValueError("Can only merge with another ExactCounter")
+            raise TypeError("Can only merge with another ExactCounter")
         self.elements.update(other.elements)
+
+    def write(self, filepath: str) -> None:
+        """Write counter to file."""
+        data = {
+            'kmer_size': self.kmer_size,
+            'seed': self.seed,
+            'elements': list(self.elements)
+        }
+        with open(filepath, 'w') as f:
+            json.dump(data, f)
+
+    @classmethod
+    def read(cls, filepath: str) -> 'ExactCounter':
+        """Read counter from file."""
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        
+        counter = cls(
+            kmer_size=data['kmer_size'],
+            seed=data['seed']
+        )
+        counter.elements = set(data['elements'])
+        return counter

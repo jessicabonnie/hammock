@@ -38,23 +38,47 @@ class IntervalSketch(AbstractDataSketch):
         self.num_intervals = 0
 
     @classmethod
-    def from_file(cls, filename: str, mode: str, sketch_type: str, **kwargs) -> Optional['IntervalSketch']:
-        """Create sketch from BED file."""
+    def from_file(cls, filename: str, mode: str, precision: int = 8, 
+                  sketch_type: str = "hyperloglog", sep: str = "-", 
+                  subsample: float = 1.0, **kwargs) -> Optional['IntervalSketch']:
+        """Create sketch from BED file.
+        
+        Args:
+            filename: Path to BED file
+            mode: Mode for interval processing (A/B/C)
+            precision: Precision for HyperLogLog sketching
+            sketch_type: Type of sketch to use
+            sep: Separator for interval string representation
+            subsample: Subsampling rate (-1 to 1). Negative for intervals, positive for points
+            **kwargs: Additional arguments for sketch initialization
+            
+        Returns:
+            New IntervalSketch instance or None if error
+        """
+        sketch = cls(mode=mode, precision=precision, sketch_type=sketch_type)
+        
         try:
-            sketch = cls(mode=mode, sketch_type=sketch_type, **kwargs)
-            with open(filename) as f:
+            with open(filename, 'r') as f:
                 for line in f:
-                    if line.strip() and not line.startswith('#'):
-                        interval, points, size = sketch.bedline(line)
-                        sketch.add_interval_size(size)
-                        if interval:
-                            sketch.sketch.add_string(interval.decode('utf-8'))
+                    interval, points, size = sketch.bedline(line, mode=mode, sep=sep, subsample=subsample)
+                    
+                    # Add interval if present and in mode A or C
+                    if interval and mode in ["A", "C"]:
+                        sketch.sketch.add_string(interval.decode('utf-8'))
+                        sketch.num_intervals += 1
+                        sketch.total_interval_size += size
+                    
+                    # Add points if present and in mode B or C
+                    if points and mode in ["B", "C"]:
                         for point in points:
-                            if point:
+                            if point is not None:  # Some points might be None due to subsampling
                                 sketch.sketch.add_string(point.decode('utf-8'))
+                                # Don't increment num_intervals for points in mode C
+                                if mode == "B":
+                                    sketch.num_intervals += 1
             return sketch
         except Exception as e:
-            print(f"Error processing file {filename}: {str(e)}")
+            print(f"Error processing file {filename}: {e}")
             return None
 
     @staticmethod

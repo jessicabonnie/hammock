@@ -1,6 +1,5 @@
-import pytest
+import pytest # type: ignore
 from hammock.lib.minhash import MinHash
-from hammock.lib.abstractsketch import AbstractSketch
 import csv
 from datetime import datetime
 import os
@@ -49,7 +48,7 @@ class TestMinHashQuick:
         """Test adding strings to MinHash."""
         sketch = MinHash(num_hashes=16)
         sketch.add_string("test")
-        assert len(sketch.hashes) == 16
+        assert len(sketch.signatures) == 16
     
     def test_jaccard(self):
         """Test MinHash estimate_jaccard method."""
