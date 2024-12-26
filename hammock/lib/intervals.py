@@ -130,7 +130,7 @@ class IntervalSketch(AbstractDataSketch):
             # Only apply interval subsampling in mode C
             if mode == "C":
                 hashv = self.sketch._hash_str(interval, seed=777)
-                if hashv % (2**32) > int(subsample[0] * (2**32)):
+                if hashv % (2**32) > int(min(1, subsample[0]) * (2**32)):
                     interval = None
             
         if mode in ["B", "C"]:
@@ -146,7 +146,7 @@ class IntervalSketch(AbstractDataSketch):
                        sep: str = "-", 
                        subsample: float = 1, 
                        seed: int = 23) -> list[Optional[bytes]]:
-        maximum = int(subsample * (2**32))
+        maximum = int(min(1, subsample) * (2**32))
         def gp(x):
             outstr = sep.join([str(chrval), str(x), str(x+1)])
             hashv = self.sketch._hash_str(outstr.encode('utf-8'), seed)
