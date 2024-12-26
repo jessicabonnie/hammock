@@ -46,27 +46,25 @@ class HyperLogLog(AbstractSketch):
         else:
             self.alpha_mm = 0.7213 / (1 + 1.079 / self.num_registers)
 
-    def _hash64(self, x: int) -> int:
-        """64-bit hash function.
+
+    @staticmethod
+    def _hash64_int(x: int, seed: int = 0) -> int:
+        """64-bit hash function for integers.
         
         Args:
             x: Integer value to hash
+            seed: Random seed for hashing
             
         Returns:
             64-bit hash value as integer
         """
-        hasher = xxhash.xxh64(seed=self.seed)
+        hasher = xxhash.xxh64(seed=seed)
         hasher.update(x.to_bytes(8, byteorder='little'))
         return hasher.intdigest()
-    # def _hash64(self, x: int) -> int:
-        # """64-bit hash function."""
-        # x = (x ^ self.seed) & 0xFFFFFFFFFFFFFFFF
-        # x ^= (x >> 33) & 0xFFFFFFFFFFFFFFFF
-        # x = (x * 0xff51afd7ed558ccd) & 0xFFFFFFFFFFFFFFFF
-        # x ^= (x >> 33) & 0xFFFFFFFFFFFFFFFF
-        # x = (x * 0xc4ceb9fe1a85ec53) & 0xFFFFFFFFFFFFFFFF
-        # x ^= (x >> 33) & 0xFFFFFFFFFFFFFFFF
-        # return x
+
+    # def hash64(self, x: int) -> int:
+    #     """Instance method to hash an integer using the instance's seed."""
+    #     return self._hash64_int(x, seed=self.seed)
 
     @staticmethod
     def _hash_str(s: bytes, seed: int = 0) -> int:
@@ -74,6 +72,10 @@ class HyperLogLog(AbstractSketch):
         hasher = xxhash.xxh64(seed=seed)
         hasher.update(s)
         return hasher.intdigest()
+
+    def hash_str(self, s: bytes) -> int:
+        """Instance method to hash a string using the instance's seed."""
+        return self._hash_str(s, seed=self.seed)
 
     def _rho(self, hash_val: int) -> int:
         """Calculate position of leftmost 1-bit."""
@@ -135,10 +137,14 @@ class HyperLogLog(AbstractSketch):
             # Process the minimizer
             self._process_kmer(window[min_pos:min_pos + self.kmer_size])
 
+    def hash64_int(self, x: int) -> int:
+        """Instance method to hash an integer using the instance's seed."""
+        return self._hash64_int(x, seed=self.seed)
+
     def add_int(self, value: int) -> None:
         """Add an integer to the sketch."""
         self.item_count += 1
-        hash_val = self._hash64(value)
+        hash_val = self.hash64_int(value)
         idx = hash_val & (self.num_registers - 1)
         rank = self._rho(hash_val)
         self.registers[idx] = max(self.registers[idx], rank)
@@ -253,7 +259,7 @@ class HyperLogLog(AbstractSketch):
         # This is redundant since alpha_mm is already calculated in __init__
         return self.alpha_mm
 
-    def write_sketch(self, filepath: str) -> None:
+    def write(self, filepath: str) -> None:
         """Write sketch to file in binary format.
         
         Args:
@@ -269,8 +275,8 @@ class HyperLogLog(AbstractSketch):
         )
 
     @classmethod
-    def read_sketch(cls, filepath: str) -> 'HyperLogLog':
-        """Read sketch from file in binary format.
+    def load(cls, filepath: str) -> 'HyperLogLog':
+        """Load sketch from file in binary format.
         
         Args:
             filepath: Path to input file

@@ -78,9 +78,15 @@ class TestSketchesIOFull:
     
     def test_sequence_sketch_io(self, temp_dir):
         """Test SequenceSketch read/write functionality."""
-        # Create and populate a sequence sketch
-        seq = SequenceSketch(kmer_size=8, window_size=12)
-        seq.add_sequence("ACGTACGTACGTACGT")
+        # Create and populate a sequence sketch with explicit parameters
+        seq = SequenceSketch(
+            kmer_size=8,
+            window_size=12,  # Smaller window size
+            sketch_type="hyperloglog"
+        )
+        # Use a longer sequence that's at least a few windows long
+        test_seq = "ACGTACGTACGTACGT" * 4  # 64 bp sequence
+        seq.add_sequence(test_seq)
         
         # Write to file
         filepath = os.path.join(temp_dir, "test_seq.npz")
