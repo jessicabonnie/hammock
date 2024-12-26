@@ -109,7 +109,15 @@ class IntervalSketch(AbstractDataSketch):
     def bedline(self, line: str, 
                 mode: str, 
                 sep: str, 
-                subsample: float = 1) -> tuple[Optional[bytes], list[Optional[bytes]], int]:
+                subsample: tuple[float, float] = (1.0, 1.0)) -> tuple[Optional[bytes], list[Optional[bytes]], int]:
+        """Process a single BED line.
+        
+        Args:
+            line: BED file line
+            mode: Processing mode (A/B/C)
+            sep: Separator for string representation
+            subsample: Tuple of (interval_rate, point_rate) between 0 and 1
+        """
         interval = None
         points = []
         chrval, startx, endx = self.basic_bedline(line)
@@ -117,15 +125,19 @@ class IntervalSketch(AbstractDataSketch):
         end = max(startx, endx)
         interval_size = end - start
         
-        if mode in ["A","C"]:
+        if mode in ["A", "C"]:
             interval = sep.join([chrval, str(start), str(end), "A"]).encode('utf-8')
-            if subsample < 0:
+            # Only apply interval subsampling in mode C
+            if mode == "C":
                 hashv = self.sketch._hash_str(interval, seed=777)
-                if hashv % (2**32) > int((1+subsample) * (2**32)):
+                if hashv % (2**32) > int(subsample[0] * (2**32)):
                     interval = None
-        if mode in ["B","C"]:
-            points = self.generate_points(chrval, start, end, sep=sep, subsample=abs(subsample))
             
+        if mode in ["B", "C"]:
+            # Only apply point subsampling in mode C
+            subsample_rate = subsample[1] if mode == "C" else 1.0
+            points = self.generate_points(chrval, start, end, sep=sep, subsample=subsample_rate)
+        
         return interval, points, interval_size
 
     def generate_points(self, chrval: str, 
@@ -141,7 +153,8 @@ class IntervalSketch(AbstractDataSketch):
             if hashv % (2**32) <= maximum:
                 return outstr.encode('utf-8')
             return None
-        return [gp(x) for x in range(start, end+1)]
+        # Recall that bed files are 0-indexed, so the final point should have it's start coordinate at end-1
+        return [gp(x) for x in range(start, end)]
 
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""

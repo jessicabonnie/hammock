@@ -24,7 +24,7 @@ def limit_memory():
     soft, hard = resource.getrlimit(resource.RLIMIT_AS)
     resource.setrlimit(resource.RLIMIT_AS, (28 * 1024 * 1024 * 1024, hard))
 
-def process_file(args: tuple[str, dict, list, str, int, int, float, str]) -> tuple[Optional[str], Optional[dict]]:
+def process_file(args: tuple[str, dict, list, str, int, int, tuple[float, float], str]) -> tuple[Optional[str], Optional[dict]]:
     """Process a single file and calculate similarity values against primary sets.
     
     Args:
@@ -112,8 +112,8 @@ def get_parser():
     )
     parser.add_argument("--precision", "-p", type=int, help="Precision for HyperLogLog sketching", default=8)
     parser.add_argument("--num_hashes", "-n", type=int, help="Number of hashes for MinHash sketching", default=128)
-    parser.add_argument("--subsample", type=float, default=1, help="Subsampling rate for points: provide decimal ratio.")
-    parser.add_argument("--balance", action="store_true", help="When set, type A values will be subsampled by (1-subsample)")
+    parser.add_argument("--subA", type=float, default=1.0, help="Subsampling rate for intervals (0 to 1)")
+    parser.add_argument("--subB", type=float, default=1.0, help="Subsampling rate for points (0 to 1)")
     
     # Add mutually exclusive sketch type flags
     sketch_group = parser.add_mutually_exclusive_group()
@@ -190,6 +190,8 @@ def main():
     """Main entry point for hammock."""
     parser = get_parser()
     args = parser.parse_args()
+    # Package subA and subB into a tuple for processing
+    subsample = (args.subA, args.subB)
     
     # Set memory limit
     limit_memory()
@@ -230,7 +232,7 @@ def main():
                 'precision': args.precision,
                 'num_hashes': args.num_hashes,
                 'sketch_type': args.sketch_type,
-                'subsample': args.subsample
+                'subsample': subsample # Pass the tuple instead of separate values
             }
             primary_sets[basename] = IntervalSketch.from_file(
                 filename=filepath,
@@ -240,7 +242,7 @@ def main():
     # Process remaining files in parallel
     pool_args = [
         (filepath, primary_sets, primary_keys, args.mode, args.num_hashes, 
-         args.precision, args.subsample, args.sketch_type)
+         args.precision, subsample, args.sketch_type)  # Pass the tuple here
         for filepath in filepaths
     ]
     
