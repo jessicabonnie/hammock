@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-from Bio import SeqIO
-from Digest import window_minimizer
+from Bio import SeqIO # type: ignore
+from Digest import window_minimizer # type: ignore
 from typing import Optional, Union, Literal
 from hammock.lib.abstractsketch import AbstractSketch
 from hammock.lib.hyperloglog import HyperLogLog

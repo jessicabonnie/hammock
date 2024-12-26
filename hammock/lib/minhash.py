@@ -1,5 +1,5 @@
-import numpy as np
-import xxhash
+import numpy as np # type: ignore
+import xxhash # type: ignore
 from typing import Optional, List, Union
 from hammock.lib.abstractsketch import AbstractSketch
 
