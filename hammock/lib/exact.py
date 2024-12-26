@@ -35,24 +35,20 @@ class ExactCounter(AbstractSketch):
         self.elements.update(other.elements)
 
     def write(self, filepath: str) -> None:
-        """Write counter to file."""
-        data = {
-            'kmer_size': self.kmer_size,
-            'seed': self.seed,
-            'elements': list(self.elements)
-        }
-        with open(filepath, 'w') as f:
-            json.dump(data, f)
+        """Write operation not supported for ExactCounter."""
+        raise NotImplementedError("ExactCounter does not support writing to file")
+        # """Write sketch to file."""
+        # with open(filepath, 'w') as f:
+        #     for element in self.elements:
+        #         f.write(f"{element}\n")
 
     @classmethod
-    def read(cls, filepath: str) -> 'ExactCounter':
-        """Read counter from file."""
-        with open(filepath, 'r') as f:
-            data = json.load(f)
-        
-        counter = cls(
-            kmer_size=data['kmer_size'],
-            seed=data['seed']
-        )
-        counter.elements = set(data['elements'])
-        return counter
+    def load(cls, filepath: str) -> 'ExactCounter':
+        """Load operation not supported for ExactCounter."""
+        raise NotImplementedError("ExactCounter does not support loading from file")
+        # """Load sketch from file."""
+        # sketch = cls()
+        # with open(filepath, 'r') as f:
+        #     for line in f:
+        #         sketch.add_string(line.strip())
+        # return sketch

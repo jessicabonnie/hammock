@@ -114,6 +114,40 @@ class SequenceSketch(AbstractDataSketch):
             print(f"Error processing file {filename}: {str(e)}")
             return None
 
+    def write(self, filepath: str) -> None:
+        """Write sketch to file."""
+        self.sketch.write(filepath)
+
+    @classmethod
+    def load(cls, filepath: str) -> 'SequenceSketch':
+        """Load sketch from file."""
+        # First try loading as HyperLogLog
+        try:
+            sketch = HyperLogLog.load(filepath)
+            seq_sketch = cls(sketch_type="hyperloglog")
+            seq_sketch.sketch = sketch
+            return seq_sketch
+        except:
+            pass
+
+        # Then try as MinHash
+        try:
+            sketch = MinHash.load(filepath)
+            seq_sketch = cls(sketch_type="minhash")
+            seq_sketch.sketch = sketch
+            return seq_sketch
+        except:
+            pass
+
+        # Finally try as Minimizer
+        try:
+            sketch = MinimizerSketch.load(filepath)
+            seq_sketch = cls(sketch_type="minimizer")
+            seq_sketch.sketch = sketch
+            return seq_sketch
+        except:
+            raise ValueError("Could not load sketch from file")
+
 def read_sequences(filename: str, chunk_size: int = 1000) -> Iterator[List[SeqIO.SeqRecord]]:
     """Read sequences from a FASTA/FASTQ file in chunks."""
     formatx = "fasta" if filename.endswith((".fa", ".fasta")) else "fastq"

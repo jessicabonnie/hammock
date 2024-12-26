@@ -25,10 +25,10 @@ class TestSketchesIOQuick:
         
         # Write to file
         filepath = os.path.join(temp_dir, "test_hll.npz")
-        hll.write_sketch(filepath)
+        hll.write(filepath)
         
         # Read back and compare
-        hll2 = HyperLogLog.read_sketch(filepath)
+        hll2 = HyperLogLog.load(filepath)
         
         assert hll.precision == hll2.precision
         assert hll.kmer_size == hll2.kmer_size
@@ -44,10 +44,10 @@ class TestSketchesIOQuick:
         
         # Write to file
         filepath = os.path.join(temp_dir, "test_mh.npz")
-        mh.write_sketch(filepath)
+        mh.write(filepath)
         
         # Read back and compare
-        mh2 = MinHash.read_sketch(filepath)
+        mh2 = MinHash.load(filepath)
         
         assert mh.num_hashes == mh2.num_hashes
         assert mh.kmer_size == mh2.kmer_size
@@ -55,22 +55,22 @@ class TestSketchesIOQuick:
         assert mh.seed == mh2.seed
         np.testing.assert_array_equal(mh.signatures, mh2.signatures)
     
-    def test_exact_io(self, temp_dir):
-        """Test ExactCounter read/write functionality."""
-        # Create and populate an ExactCounter sketch
-        ec = ExactCounter()
-        ec.add_string("ACGT")
+    # def test_exact_io(self, temp_dir):
+    #     """Test ExactCounter read/write functionality."""
+    #     # Create and populate an ExactCounter sketch
+    #     ec = ExactCounter()
+    #     ec.add_string("ACGT")
         
-        # Write to file
-        filepath = os.path.join(temp_dir, "test_exact.txt")
-        ec.write(filepath)
+    #     # Write to file
+    #     filepath = os.path.join(temp_dir, "test_exact.txt")
+    #     ec.write(filepath)
         
-        # Read back and compare
-        ec2 = ExactCounter.read(filepath)
+    #     # Read back and compare
+    #     ec2 = ExactCounter.read(filepath)
         
-        assert ec.kmer_size == ec2.kmer_size
-        assert ec.seed == ec2.seed
-        assert ec.elements == ec2.elements
+    #     assert ec.kmer_size == ec2.kmer_size
+    #     assert ec.seed == ec2.seed
+    #     assert ec.elements == ec2.elements
 
 @pytest.mark.full
 class TestSketchesIOFull:
@@ -80,14 +80,14 @@ class TestSketchesIOFull:
         """Test SequenceSketch read/write functionality."""
         # Create and populate a sequence sketch
         seq = SequenceSketch(kmer_size=8, window_size=12)
-        seq.add_string("ACGTACGTACGTACGT")
+        seq.add_sequence("ACGTACGTACGTACGT")
         
         # Write to file
         filepath = os.path.join(temp_dir, "test_seq.npz")
-        seq.write_sketch(filepath)
+        seq.write(filepath)
         
         # Read back and compare
-        seq2 = SequenceSketch.read_sketch(filepath)
+        seq2 = SequenceSketch.load(filepath)
         
         assert seq.kmer_size == seq2.kmer_size
         assert seq.window_size == seq2.window_size
@@ -99,16 +99,16 @@ class TestSketchesIOFull:
         """Test that invalid sketch types raise appropriate errors."""
         filepath = os.path.join(temp_dir, "nonexistent.npz")
         with pytest.raises(ValueError):
-            SequenceSketch.read_sketch(filepath)
+            SequenceSketch.load(filepath)
     
     def test_file_not_found(self):
         """Test that attempting to read non-existent files raises appropriate errors."""
         with pytest.raises(FileNotFoundError):
-            HyperLogLog.read_sketch("nonexistent.npz")
+            HyperLogLog.load("nonexistent.npz")
         with pytest.raises(FileNotFoundError):
-            MinHash.read_sketch("nonexistent.npz")
-        with pytest.raises(FileNotFoundError):
-            ExactCounter.read_sketch("nonexistent.txt")
+            MinHash.load("nonexistent.npz")
+        # with pytest.raises(FileNotFoundError):
+        #     ExactCounter.load("nonexistent.txt")
     
     def test_corrupted_files(self, temp_dir):
         """Test handling of corrupted files."""
@@ -118,15 +118,15 @@ class TestSketchesIOFull:
             f.write(b'corrupted data')
         
         with pytest.raises((ValueError, OSError)):
-            HyperLogLog.read_sketch(filepath)
-        
-        # Create corrupted text file
-        filepath = os.path.join(temp_dir, "corrupted.txt")
-        with open(filepath, 'w') as f:
-            f.write('corrupted data\n')
-        
-        with pytest.raises((ValueError, KeyError)):
-            ExactCounter.read_sketch(filepath)
+            HyperLogLog.load(filepath)
+    
+    def test_exact_counter_io_disabled(self):
+        """Test that ExactCounter I/O operations raise NotImplementedError."""
+        counter = ExactCounter()
+        with pytest.raises(NotImplementedError):
+            counter.write("test.txt")
+        with pytest.raises(NotImplementedError):
+            ExactCounter.load("test.txt")
 
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -5,6 +5,7 @@ from typing import Optional, Union, Literal
 from hammock.lib.abstractsketch import AbstractSketch
 from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
+import numpy as np # type: ignore
 
 class MinimizerSketch(AbstractSketch):
     """Sketch class for sequence data using minimizers with an underlying sketch type."""
@@ -68,3 +69,22 @@ class MinimizerSketch(AbstractSketch):
         if not isinstance(other, MinimizerSketch):
             raise ValueError("Can only merge with another MinimizerSketch")
         self.sketch.merge(other.sketch)
+
+    def write(self, filepath: str) -> None:
+        """Write sketch to file."""
+        self.sketch.write(filepath)
+
+    @classmethod
+    def load(cls, filepath: str) -> 'MinimizerSketch':
+        """Load sketch from file."""
+        # Load parameters from the underlying sketch file
+        data = np.load(filepath)
+        sketch = cls(
+            kmer_size=int(data['kmer_size'][0]),
+            window_size=int(data['window_size'][0]),
+            precision=int(data['precision'][0]) if 'precision' in data else 8,
+            num_hashes=int(data['num_hashes'][0]) if 'num_hashes' in data else 128,
+            seed=int(data['seed'][0])
+        )
+        sketch.sketch = HyperLogLog.load(filepath)
+        return sketch
