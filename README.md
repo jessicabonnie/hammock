@@ -62,6 +62,11 @@ hammock files.txt primary.txt --mode B --minhash --num_hashes 256 --subsample 0.
 
 ## Testing
 
+In order to run the tests requiring BigBed files, you need to have `bedToBigBed` installed and in your PATH.
+```bash
+#conda install -c bioconda ucsc-bedtools
+```
+
 Run all tests:
 ```bash
 python3 -m pytest hammock/tests

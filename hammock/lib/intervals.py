@@ -4,6 +4,7 @@ from hammock.lib.abstractsketch import AbstractDataSketch
 from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
 from hammock.lib.exact import ExactCounter
+import pyBigWig
 
 
 class IntervalSketch(AbstractDataSketch):
@@ -40,16 +41,16 @@ class IntervalSketch(AbstractDataSketch):
     @classmethod
     def from_file(cls, filename: str, mode: str, precision: int = 8, 
                   sketch_type: str = "hyperloglog", sep: str = "-", 
-                  subsample: float = 1.0, **kwargs) -> Optional['IntervalSketch']:
-        """Create sketch from BED file.
+                  subsample: tuple[float, float] = (1.0, 1.0), **kwargs) -> Optional['IntervalSketch']:
+        """Create sketch from BED or BigBed file.
         
         Args:
-            filename: Path to BED file
+            filename: Path to BED/BigBed file
             mode: Mode for interval processing (A/B/C)
             precision: Precision for HyperLogLog sketching
             sketch_type: Type of sketch to use
             sep: Separator for interval string representation
-            subsample: Subsampling rate (-1 to 1). Negative for intervals, positive for points
+            subsample: Tuple of (interval_rate, point_rate) between 0 and 1
             **kwargs: Additional arguments for sketch initialization
             
         Returns:
@@ -57,6 +58,54 @@ class IntervalSketch(AbstractDataSketch):
         """
         sketch = cls(mode=mode, precision=precision, sketch_type=sketch_type)
         
+        try:
+            # Check if file is BigBed format
+            if filename.endswith('.bb'):
+                return cls._from_bigbed(filename, mode, sep, subsample, sketch)
+            else:
+                return cls._from_bed(filename, mode, sep, subsample, sketch)
+        except Exception as e:
+            print(f"Error processing file {filename}: {e}")
+            return None
+
+    @classmethod
+    def _from_bigbed(cls, filename: str, mode: str, sep: str, 
+                     subsample: tuple[float, float], sketch: 'IntervalSketch') -> Optional['IntervalSketch']:
+        """Process BigBed format file."""
+        try:
+            with pyBigWig.open(filename) as bw:
+                # Get chromosomes and their sizes
+                chroms = bw.chroms()
+                for chrom in chroms:
+                    # Fetch all intervals for this chromosome
+                    intervals = bw.entries(chrom, 0, chroms[chrom])
+                    if intervals:
+                        for start, end, _ in intervals:
+                            line = f"{chrom}\t{start}\t{end}"
+                            interval, points, size = sketch.bedline(line, mode=mode, sep=sep, subsample=subsample)
+                            
+                            # Add interval if present and in mode A or C
+                            if interval and mode in ["A", "C"]:
+                                sketch.sketch.add_string(interval.decode('utf-8'))
+                                sketch.num_intervals += 1
+                                sketch.total_interval_size += size
+                            
+                            # Add points if present and in mode B or C
+                            if points and mode in ["B", "C"]:
+                                for point in points:
+                                    if point is not None:
+                                        sketch.sketch.add_string(point.decode('utf-8'))
+                                        if mode == "B":
+                                            sketch.num_intervals += 1
+            return sketch
+        except Exception as e:
+            print(f"Error processing BigBed file {filename}: {e}")
+            return None
+
+    @classmethod
+    def _from_bed(cls, filename: str, mode: str, sep: str, 
+                  subsample: tuple[float, float], sketch: 'IntervalSketch') -> Optional['IntervalSketch']:
+        """Process BED format file."""
         try:
             with open(filename, 'r') as f:
                 for line in f:
@@ -78,7 +127,7 @@ class IntervalSketch(AbstractDataSketch):
                                     sketch.num_intervals += 1
             return sketch
         except Exception as e:
-            print(f"Error processing file {filename}: {e}")
+            print(f"Error processing BED file {filename}: {e}")
             return None
 
     @staticmethod

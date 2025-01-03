@@ -3,6 +3,7 @@ from hammock.lib.intervals import IntervalSketch
 from hammock.lib.abstractsketch import AbstractSketch
 import tempfile
 import os
+import subprocess
 
 @pytest.fixture
 def small_bed_file():
@@ -23,6 +24,52 @@ def large_bed_file():
             f.write(f"chr1\t{i*1000}\t{(i+1)*1000}\n")
     yield f.name
     os.unlink(f.name)
+
+@pytest.fixture
+def small_bigbed_file():
+    """Fixture for small BigBed file used in quick tests"""
+    # Create a temporary BED file
+    with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+        f.write("chr1\t100\t200\n")
+        f.write("chr2\t150\t300\n")
+        f.write("chr3\t1000\t2000\n")
+        bed_file = f.name
+
+    # Convert to BigBed using bedToBigBed
+    bb_file = bed_file + '.bb'
+    try:
+        # Check if bedToBigBed is available
+        result = subprocess.run(['which', 'bedToBigBed'], 
+                              capture_output=True, 
+                              text=True)
+        if result.returncode != 0:
+            pytest.skip("bedToBigBed not found in PATH")
+            
+        # Create chrom.sizes file
+        chrom_sizes = bed_file + '.sizes'
+        with open(chrom_sizes, 'w') as f:
+            f.write("chr1\t1000000\n")
+            f.write("chr2\t1000000\n")
+            f.write("chr3\t1000000\n")
+            
+        # Convert to BigBed
+        subprocess.run(['bedToBigBed', bed_file, chrom_sizes, bb_file], 
+                      check=True,
+                      capture_output=True)
+        os.unlink(chrom_sizes)
+        
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        pytest.skip(f"bedToBigBed conversion failed: {str(e)}")
+        
+    yield bb_file
+    
+    # Cleanup
+    try:
+        os.unlink(bed_file)
+        if os.path.exists(bb_file):
+            os.unlink(bb_file)
+    except OSError:
+        pass  # Ignore cleanup errors
 
 @pytest.mark.quick
 class TestIntervalSketchQuick:
@@ -111,6 +158,19 @@ class TestIntervalSketchQuick:
         )
         assert interval == b"1-100-103-A"
         assert all(p is None for p in points)  # All points should be subsampled out
+
+    def test_bigbed_processing(self, small_bigbed_file):
+        """Test processing of BigBed files"""
+        if small_bigbed_file is None:
+            pytest.skip("BigBed file creation failed")
+        
+        sketch = IntervalSketch.from_file(
+            filename=small_bigbed_file,
+            mode="A",
+            precision=8
+        )
+        assert sketch is not None
+        assert sketch.num_intervals == 3
 
 @pytest.mark.full
 class TestIntervalSketchFull:
