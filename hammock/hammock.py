@@ -191,12 +191,20 @@ def main():
     """Main entry point for hammock."""
     parser = get_parser()
     args = parser.parse_args()
-    # Package subA and subB into a tuple for processing
-    subsample = (args.subA, args.subB)
+    
+    # Read first filepath to check extension
+    with open(args.filepaths_file) as f:
+        first_file = f.readline().strip()
+        if first_file.endswith(('.fa', '.fasta', '.fna', '.ffn', '.faa', '.frn')):
+            args.mode = "D"
+            print(f"Detected sequence file format, switching to mode D")
+    
     # Validate subsample rates
-    if not (0 <= subsample[0] <= 1 and 0 <= subsample[1] <= 1):
+    if not (0 <= args.subA <= 1 and 0 <= args.subB <= 1):
         raise ValueError("Subsample rates must be between 0 and 1")
         
+    # Package subA and subB into a tuple for processing
+    subsample = (args.subA, args.subB)
     
     # Set memory limit
     limit_memory()
