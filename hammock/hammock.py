@@ -107,6 +107,7 @@ def get_parser():
         "--mode",
         type=str,
         required=True,
+        default="A",
         choices=["A", "B", "C", "D"],
         help="Mode to indicate comparison type: A=interval, B=point, C=both, D=sequence"
     )
