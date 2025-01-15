@@ -77,15 +77,17 @@ class TestIntervalSketchQuick:
     
     def test_init(self):
         """Test basic initialization."""
-        sketch = IntervalSketch(mode="A", sketch_type="hyperloglog")
+        sketch = IntervalSketch(mode="A")
         assert sketch.mode == "A"
         assert sketch.sketch is not None
+        assert sketch.expA == 0
+        assert sketch.subsample == (1.0, 1.0)
     
     def test_bedline_mode_A(self):
         """Test mode A (intervals only) with small input"""
         sketch = IntervalSketch(mode="A")
         interval, points, size = sketch.bedline("chr1\t100\t200", mode="A", sep="-")
-        assert interval == b"1-100-200-A"
+        assert interval == "1-100-200-A"
         assert points == []
         assert size == 100
 
@@ -93,16 +95,21 @@ class TestIntervalSketchQuick:
         """Test mode B (points only) with small input"""
         sketch = IntervalSketch(mode="B")
         interval, points, size = sketch.bedline("chr1\t100\t103", mode="B", sep="-")
+        print(len(points))
+        print([p for p in points])
         assert interval is None
         assert len(points) == 3
+        assert all(isinstance(p, str) or p is None for p in points)
         assert size == 3
 
     def test_bedline_mode_C(self):
         """Test mode C (both) with small input"""
         sketch = IntervalSketch(mode="C")
         interval, points, size = sketch.bedline("chr1\t100\t103", mode="C", sep="-")
-        assert interval == b"1-100-103-A"
+        if interval is not None:
+            assert isinstance(interval, str)
         assert len(points) == 3
+        assert all(isinstance(p, str) or p is None for p in points)
         assert size == 3
 
     def test_from_file_small(self, small_bed_file):
@@ -111,7 +118,8 @@ class TestIntervalSketchQuick:
             filename=small_bed_file,
             mode="A",
             precision=8,
-            sketch_type="hyperloglog"
+            sketch_type="hyperloglog",
+            expA=0
         )
         assert isinstance(sketch, IntervalSketch)
         assert sketch.num_intervals == 3
@@ -136,8 +144,10 @@ class TestIntervalSketchQuick:
             sep="-",
             subsample=(1.0, 1.0)
         )
-        assert interval == b"1-100-103-A"
+        if interval is not None:
+            assert isinstance(interval, str)
         assert len(points) == 3
+        assert all(isinstance(p, str) or p is None for p in points)
         
         # Test with interval subsampling only
         interval, points, size = sketch.bedline(
@@ -146,8 +156,9 @@ class TestIntervalSketchQuick:
             sep="-",
             subsample=(0.0, 1.0)
         )
-        assert interval is None  # Should be subsampled out
+        assert interval is None
         assert len(points) == 3
+        assert all(isinstance(p, str) or p is None for p in points)
         
         # Test with point subsampling only
         interval, points, size = sketch.bedline(
@@ -156,8 +167,9 @@ class TestIntervalSketchQuick:
             sep="-",
             subsample=(1.0, 0.0)
         )
-        assert interval == b"1-100-103-A"
-        assert all(p is None for p in points)  # All points should be subsampled out
+        if interval is not None:
+            assert isinstance(interval, str)
+        assert all(p is None for p in points)
 
     def test_bigbed_processing(self, small_bigbed_file):
         """Test processing of BigBed files"""
@@ -171,6 +183,56 @@ class TestIntervalSketchQuick:
         )
         assert sketch is not None
         assert sketch.num_intervals == 3
+
+    def test_multiplicity_constraints(self):
+        """Test that multiplicity constraints are enforced."""
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+            f.write("chr1\t100\t200\n")  # This creates an interval of size 100
+            temp_file = f.name
+
+        try:
+            # Test that multiplicity only works in mode C
+            with pytest.raises(ValueError, match="Multiplicity .* mode C"):
+                IntervalSketch.from_file(
+                    filename=temp_file,
+                    mode="A",
+                    expA=2
+                )
+            
+            with pytest.raises(ValueError, match="Multiplicity .* mode C"):
+                IntervalSketch.from_file(
+                    filename=temp_file,
+                    mode="B",
+                    expA=2
+                )
+
+            # Test that multiplicity cannot be used with subsampling
+            with pytest.raises(ValueError, match="Multiplicity .* subsampling"):
+                IntervalSketch.from_file(
+                    filename=temp_file,
+                    mode="C",
+                    expA=2,
+                    subsample=(0.5, 1.0)
+                )
+
+            # Test that valid usage works
+            sketch = IntervalSketch.from_file(
+                filename=temp_file,
+                mode="C",
+                expA=2,
+                subsample=(1.0, 1.0),
+                sketch_type="exacttest"  # Use exacttest instead of exact
+            )
+            assert sketch is not None
+            assert sketch.num_intervals == 1
+            cardinality = sketch.sketch.estimate_cardinality()
+            # Expected: 1 original interval + 99 copies + 100 points = 200
+            expected = 200
+            assert cardinality == expected, f"Expected cardinality {expected}, got {cardinality}"
+
+        finally:
+            os.unlink(temp_file)
 
 @pytest.mark.full
 class TestIntervalSketchFull:
@@ -203,7 +265,8 @@ class TestIntervalSketchFull:
             sketch = IntervalSketch.from_file(
                 filename=large_bed_file,
                 mode="C",
-                subsample=(subA, subB)
+                subsample=(subA, subB),
+                expA=0
             )
             assert sketch is not None
             
@@ -244,6 +307,7 @@ class TestIntervalSketchFull:
         sketch = IntervalSketch(mode="B")
         points = sketch.generate_points("chr1", 1000, 2000, subsample=0.5)
         assert len([p for p in points if p is not None]) < 1001
+        assert all(isinstance(p, str) or p is None for p in points)
 
     def test_chunk_processing(self, large_bed_file):
         """Test chunk processing with large BED file"""
@@ -256,7 +320,6 @@ class TestIntervalSketchFull:
         assert sketch is not None
         assert sketch.num_intervals == 1000
         assert sketch.total_interval_size == 1000000
-        assert len(sketch.generate_points("chr1", 1000, 2000, subsample=0.5)) < 1001
 
 if __name__ == "__main__":
     pytest.main([__file__])

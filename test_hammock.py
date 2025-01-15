@@ -45,18 +45,25 @@ def test_intervals():
         for line in bed1:
             interval, points, size = sketch1.bedline(line, mode="A", sep="-")
             if interval:
-                sketch1.sketch.add_string(interval.decode('utf-8'))
+                sketch1.sketch.add_string(interval)
                 
         for line in bed2:
             interval, points, size = sketch2.bedline(line, mode="A", sep="-")
             if interval:
-                sketch2.sketch.add_string(interval.decode('utf-8'))
+                sketch2.sketch.add_string(interval)
         
         # Compare
         jaccard = sketch1.sketch.estimate_jaccard(sketch2.sketch)
         print(f"Jaccard similarity: {jaccard:.3f}")
         print(f"Cardinality 1: {sketch1.sketch.estimate_cardinality():.0f}")
         print(f"Cardinality 2: {sketch2.sketch.estimate_cardinality():.0f}")
+        
+        # Verify expected Jaccard similarity (2 shared intervals out of 4 total)
+        assert abs(jaccard - 0.5) < 0.1, f"Expected Jaccard ~0.5, got {jaccard:.3f}"
+        
+        # Verify cardinalities
+        assert abs(sketch1.sketch.estimate_cardinality() - 3) < 0.5
+        assert abs(sketch2.sketch.estimate_cardinality() - 3) < 0.5
 
 if __name__ == "__main__":
     print("Testing sequence sketching...")

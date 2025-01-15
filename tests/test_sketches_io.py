@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 import tempfile
 import pytest # type: ignore
@@ -79,13 +80,14 @@ class TestSketchesIOFull:
     def test_sequence_sketch_io(self, temp_dir):
         """Test SequenceSketch read/write functionality."""
         # Create and populate a sequence sketch with explicit parameters
+        window_size = 40  # Match the default window size
         seq = SequenceSketch(
             kmer_size=8,
-            window_size=12,  # Smaller window size
+            window_size=window_size,
             sketch_type="hyperloglog"
         )
         # Use a longer sequence that's at least a few windows long
-        test_seq = "ACGTACGTACGTACGT" * 4  # 64 bp sequence
+        test_seq = "ACGTACGTACGTACGT" * 8  # 128 bp sequence, longer than window size
         seq.add_sequence(test_seq)
         
         # Write to file
@@ -96,7 +98,7 @@ class TestSketchesIOFull:
         seq2 = SequenceSketch.load(filepath)
         
         assert seq.kmer_size == seq2.kmer_size
-        assert seq.window_size == seq2.window_size
+        assert seq.window_size == seq2.window_size  # Now should be 40 for both
         assert seq.seed == seq2.seed
         assert seq.estimate_cardinality() == seq2.estimate_cardinality()
         assert seq.estimate_jaccard(seq2) > 0.99

@@ -10,7 +10,7 @@ from typing import Optional
 from Bio import SeqIO # type: ignore
 from hammock.lib.intervals import IntervalSketch
 from hammock.lib.minimizer import MinimizerSketch
-
+from hammock.lib.exact import ExactCounter
 # Set memory limit to 28GB (adjust as needed)
 def limit_memory():
     """Set memory usage limit for the process.
@@ -36,6 +36,7 @@ def process_file(args: tuple[str, dict, list, str, int, int, tuple[float, float]
             num_hashes: Number of hashes for MinHash sketching
             precision: Precision for HyperLogLog sketching
             subsample: Subsampling rate for points
+            expA: Power of 10 exponent to use to multiply contribution of A-type intervals
             sketch_type: Type of sketching to use
             
     Returns:
@@ -44,7 +45,7 @@ def process_file(args: tuple[str, dict, list, str, int, int, tuple[float, float]
             output_dict: Dictionary mapping primary keys to similarity values
             Returns (None, None) if processing fails
     """
-    filepath, primary_sets, primary_keys, mode, num_hashes, precision, subsample, sketch_type = args
+    filepath, primary_sets, primary_keys, mode, num_hashes, precision, subsample, expA, sketch_type = args
     basename = os.path.basename(filepath)
     if not filepath or not os.path.exists(filepath):
         print(f"Error: Invalid or non-existent file path: '{filepath}'", file=sys.stderr)
@@ -115,6 +116,9 @@ def get_parser():
     parser.add_argument("--num_hashes", "-n", type=int, help="Number of hashes for MinHash sketching", default=128)
     parser.add_argument("--subA", type=float, default=1.0, help="Subsampling rate for intervals (0 to 1)")
     parser.add_argument("--subB", type=float, default=1.0, help="Subsampling rate for points (0 to 1)")
+    parser.add_argument( "--expA", type=float, default=0, help="Power of 10 exponent to use to multiply contribution of A-type intervals (only valid for mode C)",
+    )
+    
     
     # Add mutually exclusive sketch type flags
     sketch_group = parser.add_mutually_exclusive_group()
@@ -198,10 +202,18 @@ def main():
         if first_file.endswith(('.fa', '.fasta', '.fna', '.ffn', '.faa', '.frn')):
             args.mode = "D"
             print(f"Detected sequence file format, switching to mode D")
-    
-    # Validate subsample rates
-    if not (0 <= args.subA <= 1 and 0 <= args.subB <= 1):
-        raise ValueError("Subsample rates must be between 0 and 1")
+     # Validate expA is only used with mode C
+    if  args.mode != "C":
+        if args.expA > 0 :
+            raise ValueError("--expA parameter is invalid outside of mode C")
+        if args.subA != 1.0 or args.subB != 1.0:
+            raise ValueError("Mode C is the only mode that allows subsampling. Please change mode to C or remove --subA and --subB from your command.")
+    else:
+        if args.expA < 0:
+            raise ValueError("--expA parameter must be non-negative for mode C")
+        # Validate subsample rates
+        if not (0 <= args.subA <= 1 and 0 <= args.subB <= 1):
+            raise ValueError("Subsample rates must be between 0 and 1")
         
     # Package subA and subB into a tuple for processing
     subsample = (args.subA, args.subB)
@@ -245,7 +257,8 @@ def main():
                 'precision': args.precision,
                 'num_hashes': args.num_hashes,
                 'sketch_type': args.sketch_type,
-                'subsample': subsample # Pass the tuple instead of separate values
+                'subsample': subsample,
+                'expA': args.expA
             }
             primary_sets[basename] = IntervalSketch.from_file(
                 filename=filepath,

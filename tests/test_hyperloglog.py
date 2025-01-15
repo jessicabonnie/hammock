@@ -1,9 +1,11 @@
+from __future__ import annotations
 import pytest # type: ignore
 from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.abstractsketch import AbstractSketch
 import csv
 from datetime import datetime
 import os
+import numpy as np # type: ignore
 
 def run_test_case(precision: int, name: str, desc: str, expected: float, 
                   set1_size: int, set2_size: int, set2_offset: int = 0):
@@ -116,18 +118,18 @@ class TestHyperLogLogFull:
         assert error < 0.05  # Increased error tolerance from 0.02 to 0.05
         
     def test_different_seeds(self):
-        """Test that different seeds give different results."""
+        """Test that different seeds produce different results."""
         sketch1 = HyperLogLog(precision=8, seed=1)
         sketch2 = HyperLogLog(precision=8, seed=2)
         
-        # Add same strings
+        # Add same data to both sketches
         for i in range(1000):
-            s = f"item{i}"
-            sketch1.add_string(s)
-            sketch2.add_string(s)
-            
-        # Should give different register values
-        assert not (sketch1.registers == sketch2.registers).all() 
+            data = f"test{i}"
+            sketch1.add_string(data)
+            sketch2.add_string(data)
+        
+        # Registers should be different due to different seeds
+        assert not np.array_equal(sketch1.registers, sketch2.registers)
     
     def test_hyperloglog_accuracy(self):
         """Test HyperLogLog accuracy with various set sizes and overlaps."""
