@@ -118,18 +118,25 @@ class TestHyperLogLogFull:
         assert error < 0.05  # Increased error tolerance from 0.02 to 0.05
         
     def test_different_seeds(self):
-        """Test that different seeds produce different results."""
+        """Test that different seeds give different results."""
         sketch1 = HyperLogLog(precision=8, seed=1)
         sketch2 = HyperLogLog(precision=8, seed=2)
         
-        # Add same data to both sketches
+        # Add same strings to both sketches
         for i in range(1000):
-            data = f"test{i}"
-            sketch1.add_string(data)
-            sketch2.add_string(data)
+            s = str(i)
+            sketch1.add_string(s)
+            sketch2.add_string(s)
         
-        # Registers should be different due to different seeds
-        assert not np.array_equal(sketch1.registers, sketch2.registers)
+        # Different seeds should give different hash values
+        # and thus different cardinality estimates
+        card1 = sketch1.estimate_cardinality()
+        card2 = sketch2.estimate_cardinality()
+        assert card1 != card2, "Different seeds should give different estimates"
+        
+        # But estimates should be within reasonable error bounds
+        error = abs(card1 - card2) / max(card1, card2)
+        assert error < 0.1, f"Error between sketches with different seeds too large: {error:.3f}"
     
     def test_hyperloglog_accuracy(self):
         """Test HyperLogLog accuracy with various set sizes and overlaps."""

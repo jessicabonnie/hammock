@@ -1,3 +1,4 @@
+from __future__ import annotations
 import numpy as np # type: ignore
 import xxhash # type: ignore
 from typing import Optional, List, Union
@@ -127,12 +128,8 @@ class MinHash(AbstractSketch):
         
         return (k / kth_min) * (2**64) if kth_min > 0 else 0.0
 
-    def write_sketch(self, filepath: str) -> None:
-        """Write sketch to file in binary format.
-        
-        Args:
-            filepath: Path to output file
-        """
+    def write(self, filepath: str) -> None:
+        """Write sketch to file in binary format."""
         np.savez_compressed(
             filepath,
             signatures=self.signatures,
@@ -143,15 +140,8 @@ class MinHash(AbstractSketch):
         )
 
     @classmethod
-    def read_sketch(cls, filepath: str) -> 'MinHash':
-        """Read sketch from file in binary format.
-        
-        Args:
-            filepath: Path to input file
-            
-        Returns:
-            MinHash object loaded from file
-        """
+    def load(cls, filepath: str) -> 'MinHash':
+        """Load sketch from file in binary format."""
         data = np.load(filepath)
         sketch = cls(
             num_hashes=int(data['num_hashes'][0]),

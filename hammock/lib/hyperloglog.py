@@ -88,7 +88,7 @@ class HyperLogLog(AbstractSketch):
 
     def _process_kmer(self, kmer: str) -> None:
         """Process a single k-mer or string."""
-        hash_val = self._hash_str(kmer.encode())
+        hash_val = self._hash_str(kmer.encode(), seed=self.seed)
         idx = hash_val & (self.num_registers - 1)
         rank = self._rho(hash_val)
         self.registers[idx] = max(self.registers[idx], rank)
@@ -129,7 +129,7 @@ class HyperLogLog(AbstractSketch):
             # Find minimum hash in this window
             for j in range(self.window_size - self.kmer_size + 1):
                 kmer = window[j:j + self.kmer_size]
-                h = self._hash_str(kmer.encode())
+                h = self._hash_str(kmer.encode(), seed=self.seed)
                 if h < min_hash:
                     min_hash = h
                     min_pos = j
@@ -222,6 +222,61 @@ class HyperLogLog(AbstractSketch):
         return intersection
 
     def estimate_jaccard(self, other: 'HyperLogLog') -> float:
+        """Estimate Jaccard similarity with another HyperLogLog sketch."""
+        return self.estimate_jaccard_registers(other)
+
+    def estimate_jaccard_registers(self, other: 'HyperLogLog') -> float:
+        """Estimate Jaccard similarity with another HyperLogLog using register min/max."""
+        if self.precision != other.precision:
+            raise ValueError("HyperLogLogs must have same precision")
+        if self.seed != other.seed:
+            raise ValueError("HyperLogLogs must have same seed for comparison")
+        
+        # Create union and intersection sketches with same seed
+        union = HyperLogLog(precision=self.precision, seed=self.seed)
+        intersection = HyperLogLog(precision=self.precision, seed=self.seed)
+        # intersection = self.estimate_intersection(other)
+        # union = self.estimate_union(other)
+        # Compute register-wise max (union) and min (intersection)
+        for i in range(self.num_registers):
+            union.registers[i] = max(self.registers[i], other.registers[i])
+            intersection.registers[i] = min(self.registers[i], other.registers[i])
+        
+        # Estimate Jaccard similarity
+        union_card = union.estimate_cardinality()
+        if union_card == 0:
+            return 0.0
+        
+        intersection_card = intersection.estimate_cardinality()
+        return intersection_card / union_card
+
+    def estimate_jaccard_iep(self, other: 'HyperLogLog') -> float:
+        """Estimate Jaccard similarity with another HyperLogLog using inclusion-exclusion."""
+        if self.precision != other.precision:
+            raise ValueError("HyperLogLogs must have same precision")
+        if self.seed != other.seed:
+            raise ValueError("HyperLogLogs must have same seed for comparison")
+        
+        # Create union sketch with same seed
+        union = HyperLogLog(precision=self.precision, seed=self.seed)
+        
+        # Compute register-wise max for union
+        for i in range(self.num_registers):
+            union.registers[i] = max(self.registers[i], other.registers[i])
+        
+        # Use inclusion-exclusion principle to estimate intersection
+        card_a = self.estimate_cardinality()
+        card_b = other.estimate_cardinality()
+        card_union = union.estimate_cardinality()
+        card_intersection = card_a + card_b - card_union
+        
+        # Estimate Jaccard similarity
+        if card_union == 0:
+            return 0.0
+        
+        return card_intersection / card_union
+
+    def estimate_jaccard_original(self, other: 'HyperLogLog') -> float:
         """Estimate Jaccard similarity with another HyperLogLog sketch."""
         if self.precision != other.precision:
             raise ValueError("Cannot compare HLLs with different precision")
