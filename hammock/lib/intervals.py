@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from __future__ import annotations
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, TextIO, Union
 from hammock.lib.abstractsketch import AbstractDataSketch
 from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
@@ -8,6 +8,7 @@ from hammock.lib.exact import ExactCounter
 from hammock.lib.exacttest import ExactTest
 import pyBigWig
 from numpy import floor
+import gzip
 
 
 class IntervalSketch(AbstractDataSketch):
@@ -135,41 +136,31 @@ class IntervalSketch(AbstractDataSketch):
                   subsample: Tuple[float, float], expA: float, sketch: 'IntervalSketch') -> Optional['IntervalSketch']:
         """Process BED format file."""
         try:
-            with open(filename, 'r') as f:
+            # Open file with gzip if it ends in .gz, otherwise normal open
+            opener = gzip.open if filename.endswith('.gz') else open
+            with opener(filename, 'rt') as f:  # 'rt' mode for text reading from gzip
                 for line in f:
                     interval, points, size = sketch.bedline(line, mode=mode, sep=sep, subsample=subsample)
                     
                     # Add interval if present and in mode A or C
                     if interval and mode in ["A", "C"]:
-                        print(f"\nOriginal interval: {interval}")
                         sketch.sketch.add_string(interval)
-                        print(f"Cardinality after original: {sketch.sketch.estimate_cardinality()}")
                         
                         if expA > 0:
-                            num_copies = int(floor(10**expA)) - 1
-                            print(f"Adding {num_copies} copies...")
+                            num_copies = int(10**expA) - 1
                             for i in range(1, num_copies + 1):
                                 sketch.sketch.add_string(interval + str(i))
-                            print(f"Cardinality after copies: {sketch.sketch.estimate_cardinality()}")
                         
                         sketch.num_intervals += 1
                         sketch.total_interval_size += size
                     
                     # Add points if present and in mode B or C
                     if points and mode in ["B", "C"]:
-                        non_none_points = [p for p in points if p is not None]
-                        print(f"\nAdding {len(non_none_points)} points")
-                        print(f"First point: {non_none_points[0]}")
-                        print(f"Last point: {non_none_points[-1]}")
                         for point in points:
                             if point is not None:
                                 sketch.sketch.add_string(point)
-                        print(f"Cardinality after points: {sketch.sketch.estimate_cardinality()}")
-                        
                         if mode == "B":
                             sketch.num_intervals += 1
-                    
-                    print(f"\nFinal cardinality: {sketch.sketch.estimate_cardinality()}")
             return sketch
         except Exception as e:
             print(f"Error processing BED file {filename}: {e}")
@@ -238,8 +229,8 @@ class IntervalSketch(AbstractDataSketch):
             # Only apply point subsampling in mode C
             subsample_rate = subsample[1] if mode == "C" else 1.0
             points = self.generate_points(chrval, start, end, sep=sep, subsample=subsample_rate)
-            print(f"Generated points: {len(points)}")
-            print(f"Start: {start}, End: {end}")
+            # print(f"Generated points: {len(points)}")
+            # print(f"Start: {start}, End: {end}")
         
         return interval, points, interval_size
 
@@ -279,3 +270,45 @@ class IntervalSketch(AbstractDataSketch):
     def estimate_jaccard(self, other: 'IntervalSketch') -> float:
         """Estimate Jaccard similarity with another sketch."""
         return self.sketch.estimate_jaccard(other.sketch)
+
+    def write(self, filepath: str) -> None:
+        """Write sketch to file, with gzip compression if filepath ends in .gz."""
+        if filepath.endswith('.gz'):
+            with gzip.open(filepath, 'wt') as f:  # 'wt' mode for text writing to gzip
+                self.sketch.write(f)
+        else:
+            with open(filepath, 'w') as f:
+                self.sketch.write(f)
+
+    @classmethod
+    def load(cls, filepath: str) -> 'IntervalSketch':
+        """Load sketch from file, handling gzipped files if filepath ends in .gz."""
+        opener = gzip.open if filepath.endswith('.gz') else open
+        with opener(filepath, 'rt') as f:
+            # First try loading as HyperLogLog
+            try:
+                sketch = HyperLogLog.load(f)
+                interval_sketch = cls(mode="A", sketch_type="hyperloglog")
+                interval_sketch.sketch = sketch
+                return interval_sketch
+            except:
+                pass
+
+            # Then try as MinHash
+            try:
+                sketch = MinHash.load(f)
+                interval_sketch = cls(mode="A", sketch_type="minhash")
+                interval_sketch.sketch = sketch
+                return interval_sketch
+            except:
+                pass
+
+            # Finally try as ExactTest
+            try:
+                sketch = ExactTest.load(f)
+                interval_sketch = cls(mode="A", sketch_type="exacttest")
+                interval_sketch.sketch = sketch
+                return interval_sketch
+            except:
+                raise ValueError("Could not load sketch from file")
+            
