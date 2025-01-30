@@ -41,8 +41,12 @@ Options:
 - `--exact`: Use exact counting
 - `--precision`, `-p`: Precision for HyperLogLog (default: 8)
 - `--num_hashes`, `-n`: Number of hashes for MinHash (default: 128)
-- `--subsample`: Subsampling rate (default: 1.0)
-- `--balance`: When set, type A values will be subsampled by (1-subsample)
+- `--subA`: Subsampling rate for intervals in mode C (default: 1.0)
+- `--subB`: Subsampling rate for points in mode C (default: 1.0)
+- `--expA`: Power of 10 exponent to multiply contribution of A-type intervals in mode C (default: 0)
+- `--window_size`, `-w`: Window size for sequence minimizers in mode D (default: 40)
+- `--kmer_size`, `-k`: K-mer size for sequence minimizers in mode D (default: 8)
+- `--outprefix`, `-o`: The output file prefix (default: "hammock")
 - `--debug`: Output debug information including sparsity comparisons
 
 ### Output
