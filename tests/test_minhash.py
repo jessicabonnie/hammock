@@ -4,6 +4,12 @@ import csv
 from datetime import datetime
 import os
 
+# Add the slow marker at the top of the file
+pytest.mark.slow = pytest.mark.skipif(
+    not pytest.config.getoption("--runslow"),
+    reason="need --runslow option to run"
+)
+
 def run_test_case(num_hashes: int, name: str, desc: str, expected: float, 
                   set1_size: int, set2_size: int, set2_offset: int = 0):
     """Run a single test case with given parameters and return results."""
@@ -147,6 +153,25 @@ class TestMinHashFull:
             ])
         
         save_results(results, "minhash_full_test")
+
+@pytest.mark.slow
+def test_large_set_accuracy():
+    """Test MinHash accuracy with very large sets."""
+    # This test takes a long time to run
+    results = []
+    for num_hashes in [128, 256, 512, 1024]:
+        results.extend([
+            run_test_case(
+                num_hashes=num_hashes,
+                name="Large set comparison",
+                desc="Large sets (100k elements) with 50% overlap",
+                expected=0.5,
+                set1_size=100000,
+                set2_size=100000,
+                set2_offset=50000
+            )
+        ])
+    # ... rest of test ...
 
 def save_results(results: list, test_name: str):
     """Save test results to CSV file"""
