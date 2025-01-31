@@ -42,6 +42,7 @@ Hammock supports different comparison modes and includes automatic mode detectio
 Interval Files:
 - BED format (`.bed`): Tab-delimited format with chromosome, start, and end positions
 - BigBed format (`.bb`): Binary indexed version of BED format, useful for large datasets
+- BigWig format (`.bw`): Binary format for continuous data, intervals created from runs of non-zero values
 - Any tab-delimited file with at least 3 columns (chr, start, end) in BED-style format
 
 Sequence Files (triggers mode D):

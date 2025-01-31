@@ -92,27 +92,34 @@ def process_file(args: tuple[str, dict, list, str, int, int, tuple[float, float]
     
     return basename, output
 
-def get_parser():
-    """Create and configure the argument parser for hammock.
-    
-    Returns:
-        argparse.ArgumentParser: Configured parser with all command line arguments
-    """ 
+def parse_args():
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Calculate similarity between BED or sequence files using sketching",
-        epilog="\n\n"
+        description="""Calculate pairwise Jaccard similarities between lists of BED or sequence files.
+        
+        Supported file formats:
+        - BED format (.bed): Tab-delimited format with chromosome, start, and end positions
+        - BigBed format (.bb): Binary indexed version of BED format
+        - BigWig format (.bw): Binary format for continuous data, intervals from non-zero regions
+        - Any tab-delimited file with at least 3 columns (chr, start, end) in BED-style format
+        - Sequence files (.fa, .fasta, .fna, .ffn, .faa, .frn) - automatically uses mode D
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("filepaths_file", type=str, help="File containing paths of BED files to compare.")
-    parser.add_argument("primary_file", type=str, help="File containing paths of primary comparator BED files. If one of the file lists is shorter, it should be this one.")
+    
+    parser.add_argument('filepaths_file',
+                       help='Text file containing paths to files to be compared')
+    parser.add_argument('primary_file',
+                       help='Text file containing paths to primary files to compare against')
+    
+    parser.add_argument('--mode', choices=['A', 'B', 'C', 'D'], default='A',
+                       help='''Mode for comparison:
+                       A: Compare intervals only (default for BED/BigBed/BigWig files)
+                       B: Compare points only
+                       C: Compare both intervals and points
+                       D: Compare sequences (auto-detected for sequence files)''')
+    
     parser.add_argument('--outprefix', '-o', type=str, default="hammock", help='The output file prefix')
-    parser.add_argument(
-        "--mode",
-        type=str,
-        required=True,
-        default="A",
-        choices=["A", "B", "C", "D"],
-        help="Mode to indicate comparison type: A=interval, B=point, C=both, D=sequence"
-    )
     parser.add_argument("--precision", "-p", type=int, help="Precision for HyperLogLog sketching", default=8)
     parser.add_argument("--num_hashes", "-n", type=int, help="Number of hashes for MinHash sketching", default=128)
     parser.add_argument("--subA", type=float, default=1.0, help="Subsampling rate for intervals (0 to 1)")
@@ -200,7 +207,7 @@ def get_new_prefix(outprefix: str,
 
 def main():
     """Main entry point for hammock."""
-    parser = get_parser()
+    parser = parse_args()
     args = parser.parse_args()
     
     # Read first filepath to check extension

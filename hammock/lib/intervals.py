@@ -6,8 +6,8 @@ from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
 from hammock.lib.exact import ExactCounter
 from hammock.lib.exacttest import ExactTest
-import pyBigWig
-from numpy import floor
+import pyBigWig # type: ignore
+from numpy import floor # type: ignore
 import gzip
 
 
@@ -73,10 +73,10 @@ class IntervalSketch(AbstractDataSketch):
                   subsample: tuple[float, float] = (1.0, 1.0),
                   expA: float = 0,
                   **kwargs) -> Optional['IntervalSketch']:
-        """Create sketch from BED or BigBed file.
+        """Create sketch from BED/BigBed/BigWig file.
         
         Args:
-            filename: Path to BED/BigBed file
+            filename: Path to BED/BigBed/BigWig file
             mode: Mode for interval processing (A/B/C)
             precision: Precision for HyperLogLog sketching
             sketch_type: Type of sketch to use
@@ -94,6 +94,8 @@ class IntervalSketch(AbstractDataSketch):
         try:
             if filename.endswith('.bb'):
                 return cls._from_bigbed(filename, mode, sep, subsample, expA, sketch)
+            elif filename.endswith('.bw'):
+                return cls._from_bigwig(filename, mode, sep, subsample, expA, sketch)
             else:
                 return cls._from_bed(filename, mode, sep, subsample, expA, sketch)
         except Exception as e:
@@ -135,6 +137,44 @@ class IntervalSketch(AbstractDataSketch):
             return sketch
         except Exception as e:
             print(f"Error processing BigBed file {filename}: {e}")
+            return None
+
+    @classmethod
+    def _from_bigwig(cls, filename: str, mode: str, sep: str, 
+                     subsample: tuple[float, float], expA: float, sketch: 'IntervalSketch') -> Optional['IntervalSketch']:
+        """Process BigWig format file."""
+        try:
+            with pyBigWig.open(filename) as bw:
+                # Get chromosomes and their sizes
+                chroms = bw.chroms()
+                for chrom in chroms:
+                    # Get intervals for this chromosome using intervals() method
+                    # This returns runs of non-zero values as intervals
+                    intervals = bw.intervals(chrom, 0, chroms[chrom])
+                    if intervals:
+                        for start, end, value in intervals:
+                            line = f"{chrom}\t{start}\t{end}"
+                            interval, points, size = sketch.bedline(line, mode=mode, sep=sep, subsample=subsample)
+                            
+                            # Add interval if present and in mode A or C
+                            if interval and mode in ["A", "C"]:
+                                sketch.sketch.add_string(interval)
+                                if expA > 0:
+                                    for i in range(1, floor(10**expA)+1):
+                                        sketch.sketch.add_string(interval + str(i))
+                                sketch.num_intervals += 1
+                                sketch.total_interval_size += size
+                            
+                            # Add points if present and in mode B or C
+                            if points and mode in ["B", "C"]:
+                                for point in points:
+                                    if point is not None:
+                                        sketch.sketch.add_string(point)
+                                        if mode == "B":
+                                            sketch.num_intervals += 1
+            return sketch
+        except Exception as e:
+            print(f"Error processing BigWig file {filename}: {e}")
             return None
 
     @classmethod

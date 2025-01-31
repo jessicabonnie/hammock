@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 from __future__ import annotations
 import tempfile
-import pytest
+import pytest # type: ignore
+import pyBigWig # type: ignore
 from hammock.lib.intervals import IntervalSketch
 
 @pytest.mark.quick
@@ -113,3 +114,102 @@ def test_invalid_file():
         f.flush()
         sketch = IntervalSketch.from_file(filename=f.name, mode="A")
         assert sketch is None
+
+@pytest.mark.full
+def test_bigwig_file_processing():
+    """Test processing of BigWig files."""
+    with tempfile.NamedTemporaryFile(suffix='.bw', delete=False) as f:
+        # Create a test BigWig file
+        bw = pyBigWig.open(f.name, 'w')
+        # Add a header with chromosome sizes
+        chroms = [("chr1", 1000), ("chr2", 1000)]
+        bw.addHeader(list(chroms))
+        
+        # Add some test data
+        # chr1: two intervals with non-zero values
+        chroms_values = [
+            ("chr1", 100, 200, 1.0),
+            ("chr1", 300, 400, 1.0),
+            ("chr2", 500, 600, 1.0)
+        ]
+        for chrom, start, end, value in chroms_values:
+            bw.addEntries([chrom], [start], ends=[end], values=[value])
+        bw.close()
+
+        # Test mode A (intervals)
+        sketch_a = IntervalSketch.from_file(filename=f.name, mode="A")
+        assert sketch_a is not None
+        assert sketch_a.num_intervals == 3  # Should have 3 intervals
+        assert sketch_a.total_interval_size == 300  # Total size: (200-100) + (400-300) + (600-500)
+
+        # Test mode B (points)
+        sketch_b = IntervalSketch.from_file(filename=f.name, mode="B")
+        assert sketch_b is not None
+        assert sketch_b.num_intervals == 300  # Should have one point per position
+
+        # Test mode C (both)
+        sketch_c = IntervalSketch.from_file(filename=f.name, mode="C")
+        assert sketch_c is not None
+        assert sketch_c.num_intervals == 3  # Should count intervals in mode C
+
+@pytest.mark.full
+def test_bigwig_invalid_file():
+    """Test handling of invalid BigWig files."""
+    # Test with non-existent file
+    sketch = IntervalSketch.from_file(filename="nonexistent.bw", mode="A")
+    assert sketch is None
+
+    # Test with invalid format
+    with tempfile.NamedTemporaryFile(suffix='.bw') as f:
+        f.write(b"invalid bigwig format")
+        f.flush()
+        sketch = IntervalSketch.from_file(filename=f.name, mode="A")
+        assert sketch is None
+
+@pytest.mark.full
+def test_bigwig_with_expA():
+    """Test BigWig processing with expA parameter."""
+    with tempfile.NamedTemporaryFile(suffix='.bw', delete=False) as f:
+        # Create a test BigWig file
+        bw = pyBigWig.open(f.name, 'w')
+        # Add a header with chromosome sizes
+        chroms = [("chr1", 1000)]
+        bw.addHeader(list(chroms))
+        
+        # Add one test interval
+        bw.addEntries(["chr1"], [100], ends=[200], values=[1.0])
+        bw.close()
+
+        # Test with expA > 0 in mode C
+        sketch = IntervalSketch.from_file(
+            filename=f.name,
+            mode="C",
+            expA=1.0  # This should create multiple copies of each interval
+        )
+        assert sketch is not None
+        assert sketch.expA == 1.0
+
+@pytest.mark.full
+def test_bigwig_with_subsampling():
+    """Test BigWig processing with subsampling."""
+    with tempfile.NamedTemporaryFile(suffix='.bw', delete=False) as f:
+        # Create a test BigWig file
+        bw = pyBigWig.open(f.name, 'w')
+        # Add a header with chromosome sizes
+        chroms = [("chr1", 1000)]
+        bw.addHeader(list(chroms))
+        
+        # Add multiple intervals
+        for i in range(5):
+            bw.addEntries(["chr1"], [i*200], ends=[(i+1)*200], values=[1.0])
+        bw.close()
+
+        # Test with subsampling in mode C
+        sketch = IntervalSketch.from_file(
+            filename=f.name,
+            mode="C",
+            subsample=(0.5, 0.5)  # Subsample both intervals and points
+        )
+        assert sketch is not None
+        # The actual number of intervals/points will be probabilistic due to subsampling
+        assert sketch.num_intervals <= 5  # Should have fewer than total intervals due to subsampling
