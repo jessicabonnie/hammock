@@ -1,53 +1,38 @@
 #!/usr/bin/env python
-from typing import Optional, List, Iterator
+from typing import Optional, List, Iterator, Literal, Dict
 from Bio import SeqIO # type: ignore
-from hammock.lib.abstractsketch import AbstractDataSketch
+from hammock.lib.abstractsketch import AbstractSketch
 from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
 from hammock.lib.minimizer import MinimizerSketch
 import gc
 
-class SequenceSketch(AbstractDataSketch):
+class SequenceSketch(AbstractSketch):
     """Sketch class for sequence data using various sketching methods."""
     
     def __init__(self, 
-                 sketch_type: str = "minimizer",
-                 kmer_size: int = 8,
-                 window_size: int = 40,
-                 precision: int = 8,
-                 num_hashes: int = 128,
-                 seed: int = 0):
-        """Initialize sequence sketch.
+                 sketch_type: Literal["hyperloglog"], 
+                 kmer_size: int,
+                 precision: int = 8):
+        """Initialize a SequenceSketch.
         
         Args:
-            sketch_type: Type of sketch to use (minimizer/hyperloglog/minhash)
+            sketch_type: Type of sketch to use
             kmer_size: Size of kmers
-            window_size: Size of sliding window
-            precision: Precision for HyperLogLog sketching
-            num_hashes: Number of hash functions for MinHash sketching
-            seed: Random seed for hash functions
+            precision: Precision for HyperLogLog (default: 8)
         """
-        if sketch_type not in ["minimizer", "hyperloglog", "minhash"]:
-            raise ValueError(f"Invalid sketch type for sequences: {sketch_type}")
-            
-        if sketch_type == "minimizer":
-            self.sketch = MinimizerSketch(kmer_size=kmer_size, 
-                                        window_size=window_size,
-                                        seed=seed)
-        elif sketch_type == "hyperloglog":
-            self.sketch = HyperLogLog(precision=precision,
-                                    kmer_size=kmer_size,
-                                    seed=seed)
-        elif sketch_type == "minhash":
-            self.sketch = MinHash(num_hashes=num_hashes,
-                                kmer_size=kmer_size,
-                                seed=seed)
-        
+        self.sketch_type = sketch_type
         self.kmer_size = kmer_size
-        self.window_size = window_size
+        
+        if sketch_type == "hyperloglog":
+            self.sketch = HyperLogLog(kmer_size=kmer_size, precision=precision)
+        else:
+            raise ValueError(f"Invalid sketch type: {sketch_type}")
+        
+        self.window_size = 40
         self.total_sequence_length = 0
         self.num_sequences = 0
-        self.seed = seed
+        self.seed = 0
         
     def add_sequence(self, sequence: str) -> None:
         """Add a sequence to the sketch.
@@ -97,10 +82,7 @@ class SequenceSketch(AbstractDataSketch):
             sketch = cls(
                 sketch_type=sketch_type,
                 kmer_size=kmer_size,
-                window_size=window_size,
                 precision=precision,
-                num_hashes=num_hashes,
-                **kwargs
             )
             
             for records in read_sequences(filename, chunk_size):
@@ -164,6 +146,23 @@ class SequenceSketch(AbstractDataSketch):
         if self.sketch_type != other.sketch_type:
             raise ValueError("Cannot compare sketches of different types")
         return self.sketch.estimate_jaccard(other.sketch)
+
+    def add_string(self, s: str) -> None:
+        """Add a string to the sketch."""
+        self.sketch.add_string(s)
+    
+    def estimate_similarity(self, other: 'AbstractSketch') -> Dict[str, float]:
+        """Estimate similarity with another sketch.
+        
+        Returns:
+            Dictionary containing similarity measures from underlying sketch
+        """
+        if not isinstance(other, SequenceSketch):
+            raise ValueError("Can only compare with another SequenceSketch")
+        if self.kmer_size != other.kmer_size:
+            raise ValueError("Cannot compare sketches with different k-mer sizes")
+            
+        return self.sketch.estimate_similarity(other.sketch)
 
 def read_sequences(filename: str, chunk_size: int = 1000) -> Iterator[List[SeqIO.SeqRecord]]:
     """Read sequences from a FASTA/FASTQ file in chunks."""

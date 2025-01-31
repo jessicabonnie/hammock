@@ -329,6 +329,42 @@ def save_results(results: list, test_name: str):
     
     print(f"\nResults written to {filename}")
 
+def test_hll_empty():
+    hll1 = HyperLogLog()
+    hll2 = HyperLogLog()
+    sim = hll1.estimate_similarity(hll2)
+    assert sim['jaccard_similarity'] == 0.0
+
+def test_hll_identical():
+    hll1 = HyperLogLog(kmer_size=3)
+    hll2 = HyperLogLog(kmer_size=3)
+    
+    hll1.add_string("ACGTACGT")
+    hll2.add_string("ACGTACGT")
+    
+    sim = hll1.estimate_similarity(hll2)
+    assert sim['jaccard_similarity'] == 1.0
+
+def test_hll_different():
+    hll1 = HyperLogLog(kmer_size=3)
+    hll2 = HyperLogLog(kmer_size=3)
+    
+    hll1.add_string("AAAAAAA")
+    hll2.add_string("TTTTTTT")
+    
+    sim = hll1.estimate_similarity(hll2)
+    assert 0.0 <= sim['jaccard_similarity'] <= 1.0
+
+def test_hll_different_kmer():
+    hll1 = HyperLogLog(kmer_size=3)
+    hll2 = HyperLogLog(kmer_size=4)
+    
+    hll1.add_string("test")
+    hll2.add_string("test")
+    
+    with pytest.raises(ValueError):
+        hll1.estimate_similarity(hll2)
+
 if __name__ == "__main__":
     # Run quick tests
     test = TestHyperLogLogQuick()

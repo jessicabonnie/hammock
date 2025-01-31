@@ -21,13 +21,23 @@ class ExactCounter(AbstractSketch):
         """Return exact cardinality."""
         return float(len(self.elements))
         
-    def estimate_jaccard(self, other: 'ExactCounter') -> float:
-        """Calculate exact Jaccard similarity."""
+    def estimate_similarity(self, other: 'AbstractSketch') -> Dict[str, float]:
+        """Compute exact Jaccard similarity.
+        
+        Returns:
+            Dictionary containing 'jaccard_similarity'
+        """
         if not isinstance(other, ExactCounter):
-            raise TypeError("Can only compare with another ExactCounter")
+            raise ValueError("Can only compare with another ExactCounter")
+            
+        if not self.elements and not other.elements:
+            return {'jaccard_similarity': 0.0}
+            
         intersection = len(self.elements & other.elements)
         union = len(self.elements | other.elements)
-        return intersection / union if union > 0 else 0.0
+        
+        jaccard = intersection / union if union > 0 else 0.0
+        return {'jaccard_similarity': jaccard}
         
     def merge(self, other: 'ExactCounter') -> None:
         """Merge another counter into this one."""

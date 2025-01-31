@@ -1,6 +1,7 @@
 import numpy as np # type: ignore
 import xxhash # type: ignore
 from hammock.lib.abstractsketch import AbstractSketch
+from typing import Dict
 
 class HyperLogLog(AbstractSketch):
     def __init__(self, 
@@ -93,8 +94,8 @@ class HyperLogLog(AbstractSketch):
         rank = self._rho(hash_val)
         self.registers[idx] = max(self.registers[idx], rank)
 
-    def add_string(self, s: str) -> None:
-        """Add a string to the sketch.
+    def add_string_with_minimizers(self, s: str) -> None:
+        """Add a string to the sketch using minimizer windowing scheme.
         
         Processes the string according to kmer_size and window_size settings.
         If kmer_size is 0, processes whole string.
@@ -136,6 +137,29 @@ class HyperLogLog(AbstractSketch):
             
             # Process the minimizer
             self._process_kmer(window[min_pos:min_pos + self.kmer_size])
+
+    def add_string(self, s: str) -> None:
+        """Add a string to the sketch.
+        
+        Processes all k-mers in the string.
+        If kmer_size is 0, processes whole string.
+        
+        Args:
+            s: String to add to sketch
+        """
+        if len(s) < self.kmer_size:
+            return
+        
+        self.item_count += 1
+
+        # Whole string mode
+        if self.kmer_size == 0:
+            self._process_kmer(s)
+            return
+
+        # Process all k-mers
+        for i in range(len(s) - self.kmer_size + 1):
+            self._process_kmer(s[i:i + self.kmer_size])
 
     def hash64_int(self, x: int) -> int:
         """Instance method to hash an integer using the instance's seed."""
@@ -348,3 +372,17 @@ class HyperLogLog(AbstractSketch):
         )
         sketch.registers = data['registers']
         return sketch
+
+    def estimate_similarity(self, other: 'AbstractSketch') -> Dict[str, float]:
+        """Estimate similarity with another sketch.
+        
+        Returns:
+            Dictionary containing 'jaccard_similarity'
+        """
+        if not isinstance(other, HyperLogLog):
+            raise ValueError("Can only compare with another HyperLogLog sketch")
+        
+        jaccard = self.estimate_jaccard(other)
+        return {
+            'jaccard_similarity': jaccard
+        }

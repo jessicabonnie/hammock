@@ -4,12 +4,6 @@ import csv
 from datetime import datetime
 import os
 
-# Add the slow marker at the top of the file
-pytest.mark.slow = pytest.mark.skipif(
-    not pytest.config.getoption("--runslow"),
-    reason="need --runslow option to run"
-)
-
 def run_test_case(num_hashes: int, name: str, desc: str, expected: float, 
                   set1_size: int, set2_size: int, set2_offset: int = 0):
     """Run a single test case with given parameters and return results."""
@@ -26,7 +20,7 @@ def run_test_case(num_hashes: int, name: str, desc: str, expected: float,
     for i in range(set2_size * 10):  # Multiply by 10 for more elements
         sketch2.add_string(str(i + set2_offset))
         
-    jaccard = sketch1.estimate_jaccard(sketch2)
+    jaccard = sketch1.estimate_similarity(sketch2)['jaccard_similarity']
     error = abs(jaccard - expected)
     
     print(f"Calculated Jaccard similarity: {jaccard:.3f}")
@@ -58,12 +52,12 @@ class TestMinHashQuick:
         assert len(sketch.signatures) == 16
     
     def test_jaccard(self):
-        """Test MinHash estimate_jaccard method."""
+        """Test MinHash estimate_similarity method."""
         sketch1 = MinHash(num_hashes=16)
         sketch2 = MinHash(num_hashes=16)
         sketch1.add_string("test")
         sketch2.add_string("test")
-        assert sketch1.estimate_jaccard(sketch2) == 1.0
+        assert sketch1.estimate_similarity(sketch2)['jaccard_similarity'] == 1.0
 
 @pytest.mark.full
 class TestMinHashFull:
@@ -154,10 +148,9 @@ class TestMinHashFull:
         
         save_results(results, "minhash_full_test")
 
-@pytest.mark.slow
+@pytest.mark.full
 def test_large_set_accuracy():
     """Test MinHash accuracy with very large sets."""
-    # This test takes a long time to run
     results = []
     for num_hashes in [128, 256, 512, 1024]:
         results.extend([
@@ -171,7 +164,12 @@ def test_large_set_accuracy():
                 set2_offset=50000
             )
         ])
-    # ... rest of test ...
+        
+    # Verify results
+    for result in results:
+        assert result['absolute_error'] < 0.1, f"Error too large for {result['test_name']}"
+    
+    save_results(results, "minhash_large_test")
 
 def save_results(results: list, test_name: str):
     """Save test results to CSV file"""
@@ -186,6 +184,42 @@ def save_results(results: list, test_name: str):
             writer.writerows(results)
     
     print(f"\nResults written to {filename}")
+
+def test_minhash_empty():
+    mh1 = MinHash()
+    mh2 = MinHash()
+    sim = mh1.estimate_similarity(mh2)
+    assert sim['jaccard_similarity'] == 0.0
+
+def test_minhash_identical():
+    mh1 = MinHash()
+    mh2 = MinHash()
+    
+    mh1.add_string("test string")
+    mh2.add_string("test string")
+    
+    sim = mh1.estimate_similarity(mh2)
+    assert sim['jaccard_similarity'] == 1.0
+
+def test_minhash_different():
+    mh1 = MinHash()
+    mh2 = MinHash()
+    
+    mh1.add_string("test string 1")
+    mh2.add_string("test string 2")
+    
+    sim = mh1.estimate_similarity(mh2)
+    assert 0.0 <= sim['jaccard_similarity'] <= 1.0
+
+def test_minhash_different_sizes():
+    mh1 = MinHash(num_hashes=128)
+    mh2 = MinHash(num_hashes=64)
+    
+    mh1.add_string("test")
+    mh2.add_string("test")
+    
+    with pytest.raises(ValueError):
+        mh1.estimate_similarity(mh2)
 
 if __name__ == "__main__":
     # Run quick tests

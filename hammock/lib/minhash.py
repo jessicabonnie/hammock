@@ -1,7 +1,7 @@
 from __future__ import annotations
 import numpy as np # type: ignore
 import xxhash # type: ignore
-from typing import Optional, List, Union
+from typing import Optional, List, Union, Dict
 from hammock.lib.abstractsketch import AbstractSketch
 
 class MinHash(AbstractSketch):
@@ -155,3 +155,15 @@ class MinHash(AbstractSketch):
     def add_int(self, value: int) -> None:
         hashes = np.array([h.intdigest() for h in self.hashers])
         self.signatures = np.minimum(self.signatures, hashes)
+
+    def estimate_similarity(self, other: 'AbstractSketch') -> Dict[str, float]:
+        """Estimate similarity using MinHash.
+        
+        Returns:
+            Dictionary containing 'jaccard_similarity'
+        """
+        if not isinstance(other, MinHash):
+            raise ValueError("Can only compare with another MinHash sketch")
+        
+        jaccard = self.estimate_jaccard(other)
+        return {'jaccard_similarity': jaccard}
