@@ -1,5 +1,6 @@
+from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Union, Optional
+from typing import Optional
 
 class AbstractSketch(ABC):
     """Abstract base class defining core sketching operations."""

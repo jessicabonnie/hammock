@@ -3,7 +3,7 @@ from __future__ import annotations
 from hammock.lib.sequences import SequenceSketch
 from hammock.lib.intervals import IntervalSketch
 from unittest.mock import patch, mock_open
-import pytest
+import pytest # type: ignore
 from hammock.hammock import main
 
 @pytest.mark.full

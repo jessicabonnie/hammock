@@ -1,5 +1,6 @@
-import json
-from typing import Set, Optional
+from __future__ import annotations
+# import json
+from typing import Set, Optional, Union, List, Dict, Tuple
 from hammock.lib.abstractsketch import AbstractSketch
 
 class ExactCounter(AbstractSketch):
