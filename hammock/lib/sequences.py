@@ -47,6 +47,7 @@ class SequenceSketch(AbstractDataSketch):
         self.window_size = window_size
         self.total_sequence_length = 0
         self.num_sequences = 0
+        self.seed = seed
         
     def add_sequence(self, sequence: str) -> None:
         """Add a sequence to the sketch.
@@ -147,6 +148,22 @@ class SequenceSketch(AbstractDataSketch):
             return seq_sketch
         except:
             raise ValueError("Could not load sketch from file")
+
+    def estimate_cardinality(self) -> float:
+        """Estimate the number of unique k-mers in the sequences.
+        
+        Returns:
+            Estimated number of unique k-mers
+        """
+        return self.sketch.estimate_cardinality()
+
+    def estimate_jaccard(self, other: 'SequenceSketch') -> float:
+        """Estimate Jaccard similarity with another sketch."""
+        if not isinstance(other, SequenceSketch):
+            raise TypeError("Can only compare with another SequenceSketch")
+        if self.sketch_type != other.sketch_type:
+            raise ValueError("Cannot compare sketches of different types")
+        return self.sketch.estimate_jaccard(other.sketch)
 
 def read_sequences(filename: str, chunk_size: int = 1000) -> Iterator[List[SeqIO.SeqRecord]]:
     """Read sequences from a FASTA/FASTQ file in chunks."""

@@ -14,39 +14,51 @@ import gzip
 class IntervalSketch(AbstractDataSketch):
     """Sketch class for BED intervals."""
     
-    def __init__(self, 
-                 mode: str,
-                 sketch_type: str = "hyperloglog",
-                 precision: int = 8,
-                 num_hashes: int = 128,
-                 seed: int = 0,
-                 expA: float = 0,
-                 subsample: tuple[float, float] = (1.0, 1.0)):
+    def __init__(self, mode: str = "A", precision: int = 8, 
+                 sketch_type: str = "hyperloglog", expA: float = 0,
+                 subsample: tuple[float, float] = (1.0, 1.0),
+                 **kwargs):
         """Initialize interval sketch.
         
         Args:
-            mode: A/B/C for interval/point/both comparison types
-            sketch_type: "hyperloglog", "minhash", or "exact"
-            precision: Precision for HyperLogLog
-            num_hashes: Number of hashes for MinHash
-            seed: Random seed
+            mode: Mode for interval processing (A/B/C)
+            precision: Precision for HyperLogLog sketching
+            sketch_type: Type of sketch to use
             expA: Exponent for interval multiplicity (mode C only)
             subsample: Tuple of (interval_rate, point_rate) between 0 and 1
         """
-        if sketch_type == "hyperloglog":
-            self.sketch = HyperLogLog(precision=precision, seed=seed)
-        elif sketch_type == "minhash":
-            self.sketch = MinHash(num_hashes=num_hashes, seed=seed)
-        elif sketch_type == "exacttest":
-            self.sketch = ExactTest(seed=seed)
-        else:
-            raise ValueError(f"Invalid sketch type for intervals: {sketch_type}")
+        # Validate mode
+        if mode not in ["A", "B", "C"]:
+            raise ValueError(f"Invalid mode: {mode}. Must be one of: A, B, C")
+            
+        # Validate expA
+        if expA < 0:
+            raise ValueError("expA must be non-negative")
+        if expA > 0 and mode != "C":
+            raise ValueError("Multiplicity (expA) can only be used with mode C")
+            
+        # Validate subsample rates
+        if not (0 <= subsample[0] <= 1 and 0 <= subsample[1] <= 1):
+            raise ValueError("Subsample rates must be between 0 and 1")
             
         self.mode = mode
-        self.total_interval_size = 0
-        self.num_intervals = 0
         self.expA = expA
         self.subsample = subsample
+        self.precision = precision
+        self.sketch_type = sketch_type
+        
+        # Initialize sketch based on type
+        if sketch_type == "hyperloglog":
+            self.sketch = HyperLogLog(precision=precision, **kwargs)
+        elif sketch_type == "minhash":
+            self.sketch = MinHash(num_hashes=precision, **kwargs)
+        elif sketch_type == "exact":
+            self.sketch = ExactCounter(**kwargs)
+        else:
+            raise ValueError(f"Invalid sketch type: {sketch_type}")
+        
+        self.total_interval_size = 0
+        self.num_intervals = 0
         
         # Validate expA usage
         if expA > 0:
@@ -76,14 +88,8 @@ class IntervalSketch(AbstractDataSketch):
         Returns:
             New IntervalSketch instance or None if error
         """
-         # Validate expA usage
-        if expA > 0:
-            if mode != "C":
-                raise ValueError("Multiplicity (expA) can only be used with mode C")
-            if subsample != (1.0, 1.0):
-                raise ValueError("Multiplicity (expA) cannot be used with subsampling")
-
-        sketch = cls(mode=mode, precision=precision, sketch_type=sketch_type)
+        sketch = cls(mode=mode, precision=precision, sketch_type=sketch_type, 
+                    expA=expA, subsample=subsample)
         
         try:
             if filename.endswith('.bb'):
@@ -270,6 +276,17 @@ class IntervalSketch(AbstractDataSketch):
     def estimate_jaccard(self, other: 'IntervalSketch') -> float:
         """Estimate Jaccard similarity with another sketch."""
         return self.sketch.estimate_jaccard(other.sketch)
+
+    def similarity_values(self, other: 'IntervalSketch') -> float:
+        """Calculate similarity values between this sketch and another.
+        
+        Args:
+            other: Another IntervalSketch to compare against
+            
+        Returns:
+            Jaccard similarity estimate between the sketches
+        """
+        return self.estimate_jaccard(other)
 
     def write(self, filepath: str) -> None:
         """Write sketch to file, with gzip compression if filepath ends in .gz."""

@@ -1,16 +1,17 @@
 #!/usr/bin/env python
+from __future__ import annotations
 import sys
 import os
 from multiprocessing import Pool
 import argparse
 import resource
-from itertools import islice
+import csv
 import gc
-from typing import Optional
+from typing import Optional, Dict, List, Tuple, Any
 from Bio import SeqIO # type: ignore
 from hammock.lib.intervals import IntervalSketch
 from hammock.lib.minimizer import MinimizerSketch
-from hammock.lib.exact import ExactCounter
+# from hammock.lib.exact import ExactCounter
 # Set memory limit to 28GB (adjust as needed)
 def limit_memory():
     """Set memory usage limit for the process.
@@ -24,7 +25,7 @@ def limit_memory():
     soft, hard = resource.getrlimit(resource.RLIMIT_AS)
     resource.setrlimit(resource.RLIMIT_AS, (28 * 1024 * 1024 * 1024, hard))
 
-def process_file(args: tuple[str, dict, list, str, int, int, tuple[float, float], str]) -> tuple[Optional[str], Optional[dict]]:
+def process_file(args: tuple[str, dict, list, str, int, int, tuple[float, float], float, str]) -> tuple[Optional[str], Optional[dict]]:
     """Process a single file and calculate similarity values against primary sets.
     
     Args:
@@ -167,10 +168,15 @@ def get_parser():
         help="K-mer size for sequence minimizers (mode D only)"
     )
     
+    # Add threads argument
+    parser.add_argument("--threads", type=int, default=None,
+                       help="Number of threads to use for parallel processing")
+    
     return parser
 
 def get_new_prefix(outprefix: str, 
-                   sketch_type: str, 
+                   sketch_type: str,
+                   mode: str,
                    num_hashes: Optional[int] = None, 
                    precision: Optional[int] = None) -> str:
     """Get output prefix with appropriate suffix based on sketch type.
@@ -178,18 +184,19 @@ def get_new_prefix(outprefix: str,
     Args:
         outprefix: Base output prefix
         sketch_type: Type of sketch (hyperloglog/minhash/exact)
+        mode: Mode (A/B/C/D)
         num_hashes: Number of hashes for MinHash
         precision: Precision for HyperLogLog
         
     Returns:
-        String with appropriate suffix for sketch type
+        String with appropriate suffix for sketch type and mode
     """
     if sketch_type == "minhash":
-        return f"{outprefix}_minhash_{num_hashes}"
+        return f"{outprefix}_minhash_n{num_hashes}_jacc{mode}"
     elif sketch_type == "hyperloglog":
-        return f"{outprefix}_hll_{precision}"
+        return f"{outprefix}_hll_p{precision}_jacc{mode}"
     else:
-        return f"{outprefix}_exact"
+        return f"{outprefix}_exact_jacc{mode}"
 
 def main():
     """Main entry point for hammock."""
@@ -202,9 +209,18 @@ def main():
         if first_file.endswith(('.fa', '.fasta', '.fna', '.ffn', '.faa', '.frn')):
             args.mode = "D"
             print(f"Detected sequence file format, switching to mode D")
-     # Validate expA is only used with mode C
-    if  args.mode != "C":
-        if args.expA > 0 :
+
+    # Check if C-specific parameters are used and switch mode if needed
+    c_mode_params_used = args.subA != 1.0 or args.subB != 1.0 or args.expA > 0
+    if c_mode_params_used and args.mode == "A":
+        print(f"C-mode parameters detected (subA={args.subA}, subB={args.subB}, expA={args.expA}), switching from mode A to mode C")
+        args.mode = "C"
+    elif args.mode == "A":
+        print("Using default mode A for interval comparison")
+            
+    # Validate expA is only used with mode C
+    if args.mode != "C":
+        if args.expA > 0:
             raise ValueError("--expA parameter is invalid outside of mode C")
         if args.subA != 1.0 or args.subB != 1.0:
             raise ValueError("Mode C is the only mode that allows subsampling. Please change mode to C or remove --subA and --subB from your command.")
@@ -214,7 +230,7 @@ def main():
         # Validate subsample rates
         if not (0 <= args.subA <= 1 and 0 <= args.subB <= 1):
             raise ValueError("Subsample rates must be between 0 and 1")
-        
+
     # Package subA and subB into a tuple for processing
     subsample = (args.subA, args.subB)
     
@@ -265,32 +281,36 @@ def main():
                 **sketch_args
             )
     
+    # Use specified threads or default to os.cpu_count()
+    num_threads = args.threads if args.threads is not None else os.cpu_count()
+    
     # Process remaining files in parallel
     pool_args = [
         (filepath, primary_sets, primary_keys, args.mode, args.num_hashes, 
-         args.precision, subsample, args.sketch_type)  # Pass the tuple here
+         args.precision, subsample, args.expA, args.sketch_type)
         for filepath in filepaths
     ]
     
-    with Pool() as pool:
+    with Pool(processes=num_threads) as pool:
         results = pool.map(process_file, pool_args)
     
     # Write results
-    outprefix = get_new_prefix(args.outprefix, args.sketch_type, args.num_hashes, args.precision)
-    with open(f"{outprefix}.tsv", "w") as f:
+    outprefix = get_new_prefix(args.outprefix, args.sketch_type, args.mode, args.num_hashes, args.precision)
+    with open(f"{outprefix}.csv", "w", newline='') as f:
+        writer = csv.writer(f)
         # Write header
-        f.write("file\t" + "\t".join(primary_keys) + "\n")
+        writer.writerow(["file"] + primary_keys)
         
         # Write results
         for basename, output in results:
             if basename and output:
-                f.write(basename)
+                row = [basename]
                 for key in primary_keys:
                     if key in output:
-                        f.write(f"\t{output[key]}")
+                        row.append(output[key])
                     else:
-                        f.write("\tNA")
-                f.write("\n")
+                        row.append("NA")
+                writer.writerow(row)
 
 if __name__ == "__main__":
     main()
