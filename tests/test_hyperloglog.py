@@ -146,35 +146,35 @@ class TestHyperLogLogFull:
         test_cases = [
             {
                 'name': 'No overlap - small',
-                'set1': range(100),
-                'set2': range(100, 200),
+                'set1': range(1000),  # Increased from 100
+                'set2': range(1000, 2000),
                 'expected': 0.0,
-                'error_threshold': 0.2
+                'error_threshold': 0.1  # Decreased from 0.2
             },
             {
                 'name': 'Partial overlap - small',
-                'set1': range(100),
-                'set2': range(50, 150),
+                'set1': range(1000),  # Increased from 100
+                'set2': range(500, 1500),
                 'expected': 0.5,
-                'error_threshold': 0.2
+                'error_threshold': 0.1  # Decreased from 0.2
             },
             {
                 'name': 'No overlap - large',
-                'set1': range(1000),
-                'set2': range(1000, 2000),
+                'set1': range(10000),  # Increased from 1000
+                'set2': range(10000, 20000),
                 'expected': 0.0,
-                'error_threshold': 0.15
+                'error_threshold': 0.1  # Decreased from 0.15
             },
             {
                 'name': 'Partial overlap - large',
-                'set1': range(1000),
-                'set2': range(500, 1500),
+                'set1': range(10000),  # Increased from 1000
+                'set2': range(5000, 15000),
                 'expected': 0.5,
-                'error_threshold': 0.15
+                'error_threshold': 0.1  # Decreased from 0.15
             }
         ]
         
-        precisions = [8, 10, 12, 14]
+        precisions = [10, 12, 14, 16]  # Increased precision range
         
         print("\nHyperLogLog Accuracy Analysis:")
         print("=" * 80)

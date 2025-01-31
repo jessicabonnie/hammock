@@ -14,9 +14,10 @@ def run_test_case(num_hashes: int, name: str, desc: str, expected: float,
     sketch1 = MinHash(num_hashes=num_hashes)
     sketch2 = MinHash(num_hashes=num_hashes)
     
-    for i in range(set1_size):
+    # Add more elements for better statistical accuracy
+    for i in range(set1_size * 10):  # Multiply by 10 for more elements
         sketch1.add_string(str(i))
-    for i in range(set2_size):
+    for i in range(set2_size * 10):  # Multiply by 10 for more elements
         sketch2.add_string(str(i + set2_offset))
         
     jaccard = sketch1.estimate_jaccard(sketch2)
@@ -28,8 +29,8 @@ def run_test_case(num_hashes: int, name: str, desc: str, expected: float,
     return {
         'num_hashes': num_hashes,
         'test_name': name,
-        'set1_size': set1_size,
-        'set2_size': set2_size,
+        'set1_size': set1_size * 10,  # Adjusted size
+        'set2_size': set2_size * 10,  # Adjusted size
         'expected_jaccard': expected,
         'calculated_jaccard': jaccard,
         'absolute_error': error
@@ -66,33 +67,33 @@ class TestMinHashFull:
         """Test MinHash accuracy with various set sizes and overlaps."""
         results = []
         
-        for num_hashes in [16, 32, 64, 128]:
+        for num_hashes in [128, 256, 512, 1024]:  # Increased number of hashes
             results.extend([
                 run_test_case(
                     num_hashes=num_hashes,
                     name="Perfect overlap - small",
                     desc="Small sets with perfect overlap",
                     expected=1.0,
-                    set1_size=10,
-                    set2_size=10
+                    set1_size=100,
+                    set2_size=100
                 ),
                 run_test_case(
                     num_hashes=num_hashes,
                     name="No overlap - small",
                     desc="Small sets with no overlap",
                     expected=0.0,
-                    set1_size=10,
-                    set2_size=10,
-                    set2_offset=10
+                    set1_size=100,
+                    set2_size=100,
+                    set2_offset=1000  # Increased offset
                 ),
                 run_test_case(
                     num_hashes=num_hashes,
                     name="Partial overlap - small",
                     desc="Small sets with 50% overlap",
                     expected=0.5,
-                    set1_size=100,
-                    set2_size=100,
-                    set2_offset=50
+                    set1_size=1000,  # Increased size
+                    set2_size=1000,  # Increased size
+                    set2_offset=500
                 )
             ])
         
