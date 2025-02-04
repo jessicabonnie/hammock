@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 from __future__ import annotations
-from typing import Optional, List, Tuple, TextIO, Union
-from hammock.lib.abstractsketch import AbstractDataSketch
+from typing import Optional, List, Tuple, TextIO, Union, Dict
+from hammock.lib.abstractsketch import AbstractSketch
 from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
 from hammock.lib.exact import ExactCounter
 from hammock.lib.exacttest import ExactTest
-import pyBigWig # type: ignore
-from numpy import floor # type: ignore
+import pyBigWig  # type: ignore  # no type stubs available
+from numpy import floor  # type: ignore  # no type stubs available
 import gzip
 
 
-class IntervalSketch(AbstractDataSketch):
+class IntervalSketch(AbstractSketch):
     """Sketch class for BED intervals."""
     
     def __init__(self, mode: str = "A", precision: int = 8, 
@@ -324,9 +324,21 @@ class IntervalSketch(AbstractDataSketch):
             other: Another IntervalSketch to compare against
             
         Returns:
-            Jaccard similarity estimate between the sketches
+            Dictionary containing 'jaccard_similarity' and optionally 'containment'
         """
-        return self.estimate_jaccard(other)
+        if not isinstance(other, IntervalSketch):
+            raise ValueError("Can only compare with another IntervalSketch")
+        
+        # Calculate Jaccard similarity
+        jaccard = self.estimate_jaccard(other)
+        result = {'jaccard_similarity': jaccard}
+        
+        # Calculate containment if expA is set
+        if hasattr(self, 'expA') and self.expA is not None:
+            containment = self.estimate_containment(other)
+            result['containment'] = containment
+        
+        return result
 
     def write(self, filepath: str) -> None:
         """Write sketch to file, with gzip compression if filepath ends in .gz."""
@@ -368,4 +380,24 @@ class IntervalSketch(AbstractDataSketch):
                 return interval_sketch
             except:
                 raise ValueError("Could not load sketch from file")
+            
+    def estimate_containment(self, other: 'IntervalSketch') -> float:
+        """Estimate containment of other sketch in this one."""
+        if not isinstance(other, IntervalSketch):
+            raise ValueError("Can only compare with another IntervalSketch")
+        
+        # Get intersection and self cardinality
+        intersection = self.sketch.estimate_intersection(other.sketch)
+        self_card = self.sketch.estimate_cardinality()
+        
+        # Calculate containment
+        if self_card == 0:
+            return 0.0
+        
+        # Apply exponential scaling if expA is set
+        containment = intersection / self_card
+        if hasattr(self, 'expA') and self.expA is not None:
+            containment = containment ** self.expA
+        
+        return containment
             

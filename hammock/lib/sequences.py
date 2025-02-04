@@ -11,28 +11,39 @@ class SequenceSketch(AbstractSketch):
     """Sketch class for sequence data using various sketching methods."""
     
     def __init__(self, 
-                 sketch_type: Literal["hyperloglog"], 
-                 kmer_size: int,
-                 precision: int = 8):
+                 sketch_type: str = "minimizer",
+                 kmer_size: int = 8,
+                 window_size: int = 40,
+                 precision: int = 8,
+                 num_hashes: int = 128,
+                 seed: int = 0):
         """Initialize a SequenceSketch.
         
         Args:
             sketch_type: Type of sketch to use
             kmer_size: Size of kmers
+            window_size: Size of sliding window
             precision: Precision for HyperLogLog (default: 8)
+            num_hashes: Number of hash functions for MinHash
+            seed: Seed for random number generation
         """
+        super().__init__()
         self.sketch_type = sketch_type
         self.kmer_size = kmer_size
         
         if sketch_type == "hyperloglog":
             self.sketch = HyperLogLog(kmer_size=kmer_size, precision=precision)
+        elif sketch_type == "minhash":
+            self.sketch = MinHash(kmer_size=kmer_size, num_hashes=num_hashes)
+        elif sketch_type == "minimizer":
+            self.sketch = MinimizerSketch(kmer_size=kmer_size, window_size=window_size)
         else:
             raise ValueError(f"Invalid sketch type: {sketch_type}")
         
-        self.window_size = 40
+        self.window_size = window_size
         self.total_sequence_length = 0
         self.num_sequences = 0
-        self.seed = 0
+        self.seed = seed
         
     def add_sequence(self, sequence: str) -> None:
         """Add a sequence to the sketch.
@@ -82,7 +93,9 @@ class SequenceSketch(AbstractSketch):
             sketch = cls(
                 sketch_type=sketch_type,
                 kmer_size=kmer_size,
+                window_size=window_size,
                 precision=precision,
+                num_hashes=num_hashes,
             )
             
             for records in read_sequences(filename, chunk_size):
@@ -151,18 +164,17 @@ class SequenceSketch(AbstractSketch):
         """Add a string to the sketch."""
         self.sketch.add_string(s)
     
-    def estimate_similarity(self, other: 'AbstractSketch') -> Dict[str, float]:
-        """Estimate similarity with another sketch.
+    def similarity_values(self, other: 'AbstractSketch') -> Dict[str, float]:
+        """Calculate similarity values between sequence sketches.
         
         Returns:
-            Dictionary containing similarity measures from underlying sketch
+            Dictionary containing all similarity measures from the underlying sketch
         """
         if not isinstance(other, SequenceSketch):
             raise ValueError("Can only compare with another SequenceSketch")
-        if self.kmer_size != other.kmer_size:
-            raise ValueError("Cannot compare sketches with different k-mer sizes")
-            
-        return self.sketch.estimate_similarity(other.sketch)
+        
+        # Pass through all similarity values from the underlying sketch
+        return self.sketch.similarity_values(other.sketch)
 
 def read_sequences(filename: str, chunk_size: int = 1000) -> Iterator[List[SeqIO.SeqRecord]]:
     """Read sequences from a FASTA/FASTQ file in chunks."""

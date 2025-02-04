@@ -21,7 +21,7 @@ class ExactCounter(AbstractSketch):
         """Return exact cardinality."""
         return float(len(self.elements))
         
-    def estimate_similarity(self, other: 'AbstractSketch') -> Dict[str, float]:
+    def similarity_values(self, other: 'AbstractSketch') -> Dict[str, float]:
         """Compute exact Jaccard similarity.
         
         Returns:

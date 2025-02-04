@@ -20,11 +20,13 @@ class MinHash(AbstractSketch):
             seed: Random seed for hashing
             debug: Whether to print debug information
         """
+        super().__init__()
         self.num_hashes = num_hashes
         self.kmer_size = kmer_size
-        self.window_size = window_size if window_size else kmer_size
+        self.window_size = window_size
         self.seed = seed
-        self.signatures = np.full(num_hashes, np.inf)
+        # Initialize signatures to maximum possible value
+        self.signatures = np.full(num_hashes, np.iinfo(np.uint64).max, dtype=np.uint64)
         
         # Create xxhash objects for each hash function
         self.hashers = [xxhash.xxh64(seed=seed + i) for i in range(num_hashes)]
@@ -101,17 +103,20 @@ class MinHash(AbstractSketch):
 
     def estimate_jaccard(self, other: 'MinHash') -> float:
         """Estimate Jaccard similarity with another MinHash sketch."""
+        if not isinstance(other, MinHash):
+            raise TypeError("Can only compare with another MinHash sketch")
         if self.num_hashes != other.num_hashes:
-            raise ValueError("Cannot compare MinHash sketches with different sizes")
+            raise ValueError("Cannot compare MinHash sketches with different numbers of hashes")
+        if self.seed != other.seed:
+            raise ValueError("Cannot compare MinHash sketches with different seeds")
         
-        mask = (~np.isinf(self.signatures)) & (~np.isinf(other.signatures))
-        if not np.any(mask):
+        # Return 0 if either sketch is empty
+        if np.all(np.isinf(self.signatures)) or np.all(np.isinf(other.signatures)):
             return 0.0
-            
-        matches = np.sum((self.signatures == other.signatures) & mask)
-        total = np.sum(mask)
         
-        return matches / total if total > 0 else 0.0
+        # Count matches using signatures directly
+        matches = np.sum(self.signatures == other.signatures)
+        return float(matches) / self.num_hashes
 
     def estimate_union(self, other: 'MinHash') -> float:
         """Estimate union cardinality with another MinHash sketch."""
@@ -152,18 +157,34 @@ class MinHash(AbstractSketch):
         sketch.signatures = data['signatures']
         return sketch
 
+
     def add_int(self, value: int) -> None:
+        """Add an integer to the sketch."""
+        # Reset hashers and update with new value
+        for i, hasher in enumerate(self.hashers):
+            hasher.reset()
+            hasher.update(str(value).encode())  # Convert int to bytes
+            self.signatures[i] = min(self.signatures[i], hasher.intdigest())
+
+    def add_int_old(self, value: int) -> None:
         hashes = np.array([h.intdigest() for h in self.hashers])
         self.signatures = np.minimum(self.signatures, hashes)
 
-    def estimate_similarity(self, other: 'AbstractSketch') -> Dict[str, float]:
-        """Estimate similarity using MinHash.
+    def similarity_values(self, other: 'AbstractSketch') -> Dict[str, float]:
+        """Calculate similarity values using MinHash.
         
         Returns:
             Dictionary containing 'jaccard_similarity'
         """
         if not isinstance(other, MinHash):
             raise ValueError("Can only compare with another MinHash sketch")
+        if self.num_hashes != other.num_hashes:
+            raise ValueError("Cannot compare MinHash sketches with different numbers of hashes")
+        if self.seed != other.seed:
+            raise ValueError("Cannot compare MinHash sketches with different seeds")
         
-        jaccard = self.estimate_jaccard(other)
-        return {'jaccard_similarity': jaccard}
+        # Count matches
+        matches = np.sum(self.signatures == other.signatures)
+        total = self.num_hashes
+        
+        return {'jaccard_similarity': float(matches) / total if total > 0 else 0.0}

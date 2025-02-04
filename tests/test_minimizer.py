@@ -85,4 +85,17 @@ class TestMinimizerSketchQuick:
         sketch2.add_string("ACGTACGT")
         
         sim = sketch1.estimate_similarity(sketch2)
-        assert sim['combined_similarity'] == 1.0 
+        assert sim['combined_similarity'] == 1.0
+
+def test_basic_similarity():
+    """Test basic similarity calculation."""
+    sketch1 = MinimizerSketch(kmer_size=4, window_size=8)
+    sketch2 = MinimizerSketch(kmer_size=4, window_size=8)
+    
+    sketch1.add_sequence("ACGTACGT")
+    sketch2.add_sequence("ACGTACGT")
+    
+    # Use similarity_values instead of estimate_similarity
+    result = sketch1.similarity_values(sketch2)
+    assert result['jaccard_similarity'] == 1.0
+    assert result['gap_similarity'] == 1.0 

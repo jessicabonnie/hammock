@@ -50,120 +50,39 @@ class MinimizerSketch(AbstractSketch):
         if self.k != other.k or self.w != other.w or self.gapk != other.gapk:
             raise ValueError("Cannot compare sketches with different parameters")
             
-        # Check if either sketch is empty (no items added)
-        if self.minimizer_sketch.item_count == 0 or other.minimizer_sketch.item_count == 0:
-            return 0.0, 0.0
-        
         hash_sim = self.minimizer_sketch.estimate_jaccard(other.minimizer_sketch)
         gap_sim = self.gap_sketch.estimate_jaccard(other.gap_sketch)
         return hash_sim, gap_sim
         
-    def estimate_similarity(self, other: AbstractSketch) -> Dict[str, float]:
-        """Estimate similarity with another sketch.
+    def estimate_jaccard(self, other: 'MinimizerSketch') -> float:
+        """Estimate Jaccard similarity with another minimizer sketch."""
+        if not isinstance(other, MinimizerSketch):
+            raise TypeError("Can only compare with another minimizer sketch")
+        
+        # Return 0 if either sketch is empty
+        if not self.minimizers or not other.minimizers:
+            return 0.0
+        
+        # Calculate intersection and union sizes
+        intersection = len(set(self.minimizers) & set(other.minimizers))
+        union = len(set(self.minimizers) | set(other.minimizers))
+        
+        return float(intersection) / union if union > 0 else 0.0
+
+    def similarity_values(self, other: 'AbstractSketch') -> Dict[str, float]:
+        """Calculate similarity values between minimizer sketches.
         
         Returns:
-            Dictionary containing 'hash_similarity', 'gap_similarity', and 'combined_similarity'
+            Dictionary containing 'jaccard_similarity' and 'overlap_similarity'
         """
         if not isinstance(other, MinimizerSketch):
             raise ValueError("Can only compare with another MinimizerSketch")
+        if self.k != other.k or self.w != other.w or self.gapk != other.gapk:
+            raise ValueError("Cannot compare sketches with different parameters")
         
-        hash_sim, gap_sim = self.compare_overlaps(other)
-        combined_sim = (hash_sim + gap_sim) / 2
+        gap_sim, jaccard = self.compare_overlaps(other)
         
         return {
-            'hash_similarity': hash_sim,
-            'gap_similarity': gap_sim,
-            'combined_similarity': combined_sim
+            'jaccard_similarity': jaccard,
+            'gap_similarity': gap_sim
         }
-
-# class MinimizerSketch(AbstractSketch):
-#     """Sketch class for sequence data using minimizers with an underlying sketch type."""
-    
-#     def __init__(self, 
-#                  window_size: int = 40, 
-#                  kmer_size: int = 8,
-#                  sketch_type: Literal["hyperloglog", "minhash"] = "hyperloglog",
-#                  precision: int = 8,
-#                  num_hashes: int = 128,
-#                  seed: int = 0):
-#         """Initialize MinimizerSketch.
-        
-#         Args:
-#             window_size: Size of sliding window for minimizer selection
-#             kmer_size: Size of kmers to use
-#             sketch_type: Type of underlying sketch ("hyperloglog" or "minhash")
-#             precision: Precision for HyperLogLog sketching
-#             num_hashes: Number of hash functions for MinHash sketching
-#             seed: Random seed for hash functions
-#         """
-#         self.window_size = window_size
-#         self.kmer_size = kmer_size
-#         self.seed = seed
-        
-#         # Initialize underlying sketch
-#         if sketch_type == "hyperloglog":
-#             self.sketch = HyperLogLog(precision=precision, seed=seed)
-#         elif sketch_type == "minhash":
-#             self.sketch = MinHash(num_hashes=num_hashes, seed=seed)
-#         else:
-#             raise ValueError(f"Invalid sketch type: {sketch_type}")
-    
-#     def add_string(self, s: str) -> None:
-#         """Add a string to the sketch."""
-#         minimizers = window_minimizer(s, 
-#                                     w=self.window_size, 
-#                                     k=self.kmer_size, 
-#                                     include_hash=True)
-#         for _, hash_val in minimizers:
-#             self.sketch.add_int(hash_val)
-            
-#     def add_sequence(self, sequence: str) -> None:
-#         """Add a sequence using the minimizer approach."""
-#         self.add_string(sequence)
-#         # Add concatenated flanking kmers from start and end of sequence
-#         self.sketch.add_string(sequence[:self.kmer_size] + sequence[-self.kmer_size:])
-#         # For each window:
-#         #   1. Find minimizer
-#         #   2. Store minimizer with its position
-#         # ... implementation ...
-    
-#     def find_overlaps(self, other_sketch: 'MinimizerSketch') -> list:
-#         """Find overlapping regions between two sketches"""
-#         # Compare minimizers and their positions to identify overlaps
-#         # Return list of overlap regions
-#         # ... implementation ...
-        
-#     def estimate_cardinality(self) -> float:
-#         """Estimate cardinality using underlying sketch."""
-#         return self.sketch.estimate_cardinality()
-        
-#     def estimate_jaccard(self, other: 'AbstractSketch') -> float:
-#         """Estimate Jaccard similarity with another sketch."""
-#         if not isinstance(other, MinimizerSketch):
-#             raise ValueError("Can only compare with another MinimizerSketch")
-#         return self.sketch.estimate_jaccard(other.sketch)
-        
-#     def merge(self, other: 'AbstractSketch') -> None:
-#         """Merge another sketch into this one."""
-#         if not isinstance(other, MinimizerSketch):
-#             raise ValueError("Can only merge with another MinimizerSketch")
-#         self.sketch.merge(other.sketch)
-
-#     def write(self, filepath: str) -> None:
-#         """Write sketch to file."""
-#         self.sketch.write(filepath)
-
-#     @classmethod
-#     def load(cls, filepath: str) -> 'MinimizerSketch':
-#         """Load sketch from file."""
-#         # Load parameters from the underlying sketch file
-#         data = np.load(filepath)
-#         sketch = cls(
-#             kmer_size=int(data['kmer_size'][0]),
-#             window_size=int(data['window_size'][0]),
-#             precision=int(data['precision'][0]) if 'precision' in data else 8,
-#             num_hashes=int(data['num_hashes'][0]) if 'num_hashes' in data else 128,
-#             seed=int(data['seed'][0])
-#         )
-#         sketch.sketch = HyperLogLog.load(filepath)
-#         return sketch

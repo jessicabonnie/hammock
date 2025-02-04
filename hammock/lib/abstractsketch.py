@@ -11,7 +11,7 @@ class AbstractSketch(ABC):
         pass
     
     @abstractmethod
-    def estimate_similarity(self, other: 'AbstractSketch') -> Dict[str, float]:
+    def similarity_values(self, other: 'AbstractSketch') -> Dict[str, float]:
         """Estimate similarity with another sketch.
         
         Returns:
@@ -35,16 +35,16 @@ class AbstractSketch(ABC):
     #     """Load sketch from file."""
     #     pass
 
-class AbstractDataSketch(ABC):
-    """Abstract base class for data-specific sketch wrappers."""
+# class AbstractDataSketch(ABC):
+#     """Abstract base class for data-specific sketch wrappers."""
     
-    @abstractmethod
-    def __init__(self, sketch_type: str, **kwargs):
-        """Initialize with specified sketch type."""
-        pass
+#     @abstractmethod
+#     def __init__(self, sketch_type: str, **kwargs):
+#         """Initialize with specified sketch type."""
+#         pass
     
-    @classmethod
-    @abstractmethod
-    def from_file(cls, filename: str, sketch_type: str, **kwargs) -> Optional['AbstractDataSketch']:
-        """Create sketch from file."""
-        pass 
+#     @classmethod
+#     @abstractmethod
+#     def from_file(cls, filename: str, sketch_type: str, **kwargs) -> Optional['AbstractDataSketch']:
+#         """Create sketch from file."""
+#         pass 

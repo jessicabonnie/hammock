@@ -21,8 +21,12 @@ class HyperLogLog(AbstractSketch):
             seed: Random seed for hashing
             debug: Whether to print debug information
         """
-        if not 4 <= precision <= 16:
+        super().__init__()
+        if precision < 4 or precision > 16:
             raise ValueError("Precision must be between 4 and 16")
+        
+        if kmer_size < 0:
+            raise ValueError("k-mer size must be non-negative")
         
         if window_size and window_size < kmer_size:
             raise ValueError("Window size must be >= kmer size")
@@ -202,8 +206,10 @@ class HyperLogLog(AbstractSketch):
     def merge(self, other: 'HyperLogLog') -> None:
         """Merge another HLL sketch into this one.
         
-        This modifies the current sketch by taking the element-wise maximum of its registers
-        with the other sketch's registers, effectively combining their cardinality estimates.
+        This modifies the current sketch by taking the element-wise maximum of 
+        its registers
+        with the other sketch's registers, effectively combining their 
+        cardinality estimates.
         
         Args:
             other: Another HyperLogLog sketch to merge into this one
@@ -211,8 +217,12 @@ class HyperLogLog(AbstractSketch):
         Raises:
             ValueError: If the sketches have different precision values
         """
+        if not isinstance(other, HyperLogLog):
+            raise TypeError("Can only merge with another HyperLogLog sketch")
         if self.precision != other.precision:
-            raise ValueError("Cannot merge HLLs with different precision")
+            raise ValueError("Cannot merge HyperLogLog sketches with different precisions")
+        if self.kmer_size != other.kmer_size:
+            raise ValueError("Cannot merge HyperLogLog sketches with different k-mer sizes")
         
         # Take element-wise maximum and modify self.registers in-place
         np.maximum(self.registers, other.registers, out=self.registers)
@@ -247,6 +257,13 @@ class HyperLogLog(AbstractSketch):
 
     def estimate_jaccard(self, other: 'HyperLogLog') -> float:
         """Estimate Jaccard similarity with another HyperLogLog sketch."""
+        if not isinstance(other, HyperLogLog):
+            raise TypeError("Can only compare with another HyperLogLog sketch")
+        
+        # Return 0 if either sketch is empty
+        if self.is_empty() or other.is_empty():
+            return 0.0
+        
         return self.estimate_jaccard_registers(other)
 
     def estimate_jaccard_registers(self, other: 'HyperLogLog') -> float:
@@ -256,15 +273,22 @@ class HyperLogLog(AbstractSketch):
         if self.seed != other.seed:
             raise ValueError("HyperLogLogs must have same seed for comparison")
         
+        # Return 0 if either sketch is empty
+        if self.is_empty() or other.is_empty():
+            return 0.0
+        
         # Create union and intersection sketches with same seed
         union = HyperLogLog(precision=self.precision, seed=self.seed)
         intersection = HyperLogLog(precision=self.precision, seed=self.seed)
         # intersection = self.estimate_intersection(other)
         # union = self.estimate_union(other)
         # Compute register-wise max (union) and min (intersection)
-        for i in range(self.num_registers):
-            union.registers[i] = max(self.registers[i], other.registers[i])
-            intersection.registers[i] = min(self.registers[i], other.registers[i])
+        np.maximum(self.registers, other.registers, out=union.registers)
+        np.minimum(self.registers, other.registers, out=intersection.registers)
+        # for i in range(self.num_registers):
+        #     union.registers[i] = max(self.registers[i], other.registers[i])
+        #     intersection.registers[i] = min(self.registers[i], other.registers
+        #     [i])
         
         # Estimate Jaccard similarity
         union_card = union.estimate_cardinality()
@@ -373,16 +397,20 @@ class HyperLogLog(AbstractSketch):
         sketch.registers = data['registers']
         return sketch
 
-    def estimate_similarity(self, other: 'AbstractSketch') -> Dict[str, float]:
-        """Estimate similarity with another sketch.
+    def similarity_values(self, other: 'AbstractSketch') -> Dict[str, float]:
+        """Calculate similarity values using HyperLogLog.
         
         Returns:
             Dictionary containing 'jaccard_similarity'
         """
         if not isinstance(other, HyperLogLog):
             raise ValueError("Can only compare with another HyperLogLog sketch")
+        if self.kmer_size != other.kmer_size:
+            raise ValueError(f"Cannot compare HyperLogLog sketches with different k-mer sizes ({self.kmer_size} vs {other.kmer_size})")
         
         jaccard = self.estimate_jaccard(other)
-        return {
-            'jaccard_similarity': jaccard
-        }
+        return {'jaccard_similarity': jaccard}
+
+    def is_empty(self) -> bool:
+        """Check if sketch is empty."""
+        return np.all(self.registers == 0)
