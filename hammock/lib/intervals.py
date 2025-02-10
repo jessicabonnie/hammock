@@ -9,6 +9,7 @@ from hammock.lib.exacttest import ExactTest
 import pyBigWig  # type: ignore  # no type stubs available
 from numpy import floor  # type: ignore  # no type stubs available
 import gzip
+import pysam  # type: ignore  # no type stubs available
 
 
 class IntervalSketch(AbstractSketch):
@@ -73,10 +74,10 @@ class IntervalSketch(AbstractSketch):
                   subsample: tuple[float, float] = (1.0, 1.0),
                   expA: float = 0,
                   **kwargs) -> Optional['IntervalSketch']:
-        """Create sketch from BED/BigBed/BigWig file.
+        """Create sketch from BED/BigBed/BigWig/BAM file.
         
         Args:
-            filename: Path to BED/BigBed/BigWig file
+            filename: Path to BED/BigBed/BigWig/BAM file
             mode: Mode for interval processing (A/B/C)
             precision: Precision for HyperLogLog sketching
             sketch_type: Type of sketch to use
@@ -96,6 +97,8 @@ class IntervalSketch(AbstractSketch):
                 return cls._from_bigbed(filename, mode, sep, subsample, expA, sketch)
             elif filename.endswith('.bw'):
                 return cls._from_bigwig(filename, mode, sep, subsample, expA, sketch)
+            elif filename.endswith('.bam'):
+                return cls._from_bam(filename, mode, sep, subsample, expA, sketch)
             else:
                 return cls._from_bed(filename, mode, sep, subsample, expA, sketch)
         except Exception as e:
@@ -178,6 +181,63 @@ class IntervalSketch(AbstractSketch):
             return None
 
     @classmethod
+    def _from_bam(cls, filename: str, mode: str, sep: str,
+                  subsample: tuple[float, float], expA: float, 
+                  sketch: 'IntervalSketch') -> Optional['IntervalSketch']:
+        """Process BAM format file.
+        
+        Args:
+            filename: Path to BAM file
+            mode: Processing mode (A/B/C)
+            sep: Separator for string representation
+            subsample: Tuple of (interval_rate, point_rate)
+            expA: Exponent for interval multiplicity
+            sketch: IntervalSketch instance to populate
+            
+        Returns:
+            Populated IntervalSketch instance or None if error
+        """
+        try:
+            with pysam.AlignmentFile(filename, "rb") as bam:
+                for read in bam:
+                    if read.is_unmapped:
+                        continue
+                        
+                    # Get chromosome name without 'chr' prefix
+                    chrom = read.reference_name
+                    if chrom.startswith('chr'):
+                        chrom = chrom[3:]
+                        
+                    # Get alignment coordinates
+                    start = read.reference_start
+                    end = read.reference_end or (start + 1)  # fallback if end is None
+                    
+                    # Create BED-style line and process it
+                    line = f"{chrom}\t{start}\t{end}"
+                    interval, points, size = sketch.bedline(line, mode=mode, sep=sep, subsample=subsample)
+                    
+                    # Add interval if present and in mode A or C
+                    if interval and mode in ["A", "C"]:
+                        sketch.sketch.add_string(interval)
+                        if expA > 0:
+                            for i in range(1, floor(10**expA)+1):
+                                sketch.sketch.add_string(interval + str(i))
+                        sketch.num_intervals += 1
+                        sketch.total_interval_size += size
+                    
+                    # Add points if present and in mode B or C
+                    if points and mode in ["B", "C"]:
+                        for point in points:
+                            if point is not None:
+                                sketch.sketch.add_string(point)
+                                if mode == "B":
+                                    sketch.num_intervals += 1
+            return sketch
+        except Exception as e:
+            print(f"Error processing BAM file {filename}: {e}")
+            return None
+
+    @classmethod
     def _from_bed(cls, filename: str, mode: str, sep: str, 
                   subsample: Tuple[float, float], expA: float, sketch: 'IntervalSketch') -> Optional['IntervalSketch']:
         """Process BED format file."""
@@ -205,8 +265,8 @@ class IntervalSketch(AbstractSketch):
                         for point in points:
                             if point is not None:
                                 sketch.sketch.add_string(point)
-                        if mode == "B":
-                            sketch.num_intervals += 1
+            if mode in ["B"]:
+                sketch.num_intervals += 1
             return sketch
         except Exception as e:
             print(f"Error processing BED file {filename}: {e}")
@@ -334,9 +394,9 @@ class IntervalSketch(AbstractSketch):
         result = {'jaccard_similarity': jaccard}
         
         # Calculate containment if expA is set
-        if hasattr(self, 'expA') and self.expA is not None:
-            containment = self.estimate_containment(other)
-            result['containment'] = containment
+       
+        containment = self.estimate_containment(other)
+        result['containment'] = containment
         
         return result
 
@@ -381,6 +441,26 @@ class IntervalSketch(AbstractSketch):
             except:
                 raise ValueError("Could not load sketch from file")
             
+    def estimate_similarity(self, other: 'AbstractSketch') -> Dict[str, float]:
+        """Estimate similarity between interval sketches.
+        
+        Returns:
+            Dictionary containing 'jaccard_similarity' and optionally 'containment'
+        """
+        if not isinstance(other, IntervalSketch):
+            raise ValueError("Can only compare with another IntervalSketch")
+        
+        # Calculate Jaccard similarity
+        jaccard = self.estimate_jaccard(other)
+        result = {'jaccard_similarity': jaccard}
+        
+        # Calculate containment if expA is set
+        if hasattr(self, 'expA') and self.expA is not None:
+            containment = self.estimate_containment(other)
+            result['containment'] = containment
+        
+        return result
+
     def estimate_containment(self, other: 'IntervalSketch') -> float:
         """Estimate containment of other sketch in this one."""
         if not isinstance(other, IntervalSketch):
