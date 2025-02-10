@@ -17,7 +17,7 @@ def test_add_string():
     sketch2 = MinimizerSketch(kmer_size=4, window_size=6, gapk=2)
     sketch2.add_string(sequence)
     
-    sim = sketch.estimate_similarity(sketch2)
+    sim = sketch.similarity_values(sketch2)
     assert sim['hash_similarity'] == 1.0
     assert sim['gap_similarity'] == 1.0
     assert sim['combined_similarity'] == 1.0
@@ -29,7 +29,7 @@ def test_compare_different_sequences():
     sketch1.add_string("ACGTACGTACGT")
     sketch2.add_string("TGCATGCATGCA")
     
-    sim = sketch1.estimate_similarity(sketch2)
+    sim = sketch1.similarity_values(sketch2)
     assert 0 <= sim['hash_similarity'] <= 1
     assert 0 <= sim['gap_similarity'] <= 1
     assert 0 <= sim['combined_similarity'] <= 1
@@ -39,7 +39,7 @@ def test_empty_sequence():
     sketch.add_string("")  # empty sequence
     
     sketch2 = MinimizerSketch(kmer_size=4, window_size=6, gapk=2)
-    sim = sketch.estimate_similarity(sketch2)
+    sim = sketch.similarity_values(sketch2)
     # Both sketches are empty, so similarity should be 0
     assert sim['hash_similarity'] == 0
     assert sim['gap_similarity'] == 0
@@ -50,7 +50,7 @@ def test_sequence_shorter_than_k():
     sketch.add_string("ACG")  # shorter than k
     
     sketch2 = MinimizerSketch(kmer_size=5, window_size=10, gapk=2)
-    sim = sketch.estimate_similarity(sketch2)
+    sim = sketch.similarity_values(sketch2)
     # Sequence too short to generate minimizers
     assert sim['hash_similarity'] == 0
     assert sim['gap_similarity'] == 0
@@ -64,7 +64,7 @@ def test_different_parameters():
     sketch2.add_string("ACGTACGTACGT")
     
     with pytest.raises(ValueError):
-        sketch1.estimate_similarity(sketch2) 
+        sketch1.similarity_values(sketch2) 
 
 class TestMinimizerSketchQuick:
     """Quick tests for minimizer sketching functionality."""
@@ -84,7 +84,7 @@ class TestMinimizerSketchQuick:
         sketch1.add_string("ACGTACGT")
         sketch2.add_string("ACGTACGT")
         
-        sim = sketch1.estimate_similarity(sketch2)
+        sim = sketch1.similarity_values(sketch2)
         assert sim['combined_similarity'] == 1.0
 
 def test_basic_similarity():
@@ -95,7 +95,7 @@ def test_basic_similarity():
     sketch1.add_string("ACGTACGT")
     sketch2.add_string("ACGTACGT")
     
-    # Use similarity_values instead of estimate_similarity
+    # Use similarity_values instead of similarity_values
     result = sketch1.similarity_values(sketch2)
     assert result['jaccard_similarity'] == 1.0
     assert result['gap_similarity'] == 1.0 
