@@ -18,6 +18,7 @@ class IntervalSketch(AbstractSketch):
     def __init__(self, mode: str = "A", precision: int = 8, 
                  sketch_type: str = "hyperloglog", expA: float = 0,
                  subsample: tuple[float, float] = (1.0, 1.0),
+                 debug: bool = False,
                  **kwargs):
         """Initialize interval sketch.
         
@@ -27,7 +28,9 @@ class IntervalSketch(AbstractSketch):
             sketch_type: Type of sketch to use
             expA: Exponent for interval multiplicity (mode C only)
             subsample: Tuple of (interval_rate, point_rate) between 0 and 1
+            debug: Whether to print debug information
         """
+        super().__init__()
         # Validate mode
         if mode not in ["A", "B", "C"]:
             raise ValueError(f"Invalid mode: {mode}. Must be one of: A, B, C")
@@ -47,12 +50,13 @@ class IntervalSketch(AbstractSketch):
         self.subsample = subsample
         self.precision = precision
         self.sketch_type = sketch_type
+        self.debug = debug
         
         # Initialize sketch based on type
         if sketch_type == "hyperloglog":
-            self.sketch = HyperLogLog(precision=precision, **kwargs)
+            self.sketch = HyperLogLog(precision=precision, debug=debug, **kwargs)
         elif sketch_type == "minhash":
-            self.sketch = MinHash(num_hashes=precision, **kwargs)
+            self.sketch = MinHash(debug=debug, **kwargs)
         elif sketch_type == "exact":
             self.sketch = ExactCounter(**kwargs)
         else:
@@ -156,14 +160,14 @@ class IntervalSketch(AbstractSketch):
                     intervals = bw.intervals(chrom, 0, chroms[chrom])
                     if intervals:
                         for start, end, value in intervals:
-                            line = f"{chrom}\t{start}\t{end}"
+                            line = f"{chrom}\t{int(start)}\t{int(end)}"
                             interval, points, size = sketch.bedline(line, mode=mode, sep=sep, subsample=subsample)
                             
                             # Add interval if present and in mode A or C
                             if interval and mode in ["A", "C"]:
                                 sketch.sketch.add_string(interval)
                                 if expA > 0:
-                                    for i in range(1, floor(10**expA)+1):
+                                    for i in range(1, int(10**expA)+1):
                                         sketch.sketch.add_string(interval + str(i))
                                 sketch.num_intervals += 1
                                 sketch.total_interval_size += size

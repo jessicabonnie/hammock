@@ -259,66 +259,84 @@ class HyperLogLog(AbstractSketch):
         """Estimate Jaccard similarity with another HyperLogLog sketch."""
         if not isinstance(other, HyperLogLog):
             raise TypeError("Can only compare with another HyperLogLog sketch")
-        
-        # Return 0 if either sketch is empty
-        if self.is_empty() or other.is_empty():
-            return 0.0
-        
-        return self.estimate_jaccard_registers(other)
-
-    def estimate_jaccard_registers(self, other: 'HyperLogLog') -> float:
-        """Estimate Jaccard similarity with another HyperLogLog using register min/max."""
         if self.precision != other.precision:
-            raise ValueError("HyperLogLogs must have same precision")
+            raise ValueError("Cannot compare HLLs with different precision")
         if self.seed != other.seed:
             raise ValueError("HyperLogLogs must have same seed for comparison")
         
-        # Return 0 if either sketch is empty
         if self.is_empty() or other.is_empty():
+            return 0.0        
+        return self.estimate_jaccard_registers(other)  # Use register method by default
+
+    def estimate_jaccard_registers(self, other: 'HyperLogLog') -> float:
+        """Estimate Jaccard similarity with another HyperLogLog using register min/max."""
+        
+        # Return 0 if either sketch is empty
+
+        
+        # Get non-zero masks for both register sets
+        nonzero1 = self.registers != 0
+        nonzero2 = other.registers != 0
+        
+        # Only consider registers where at least one sketch has a non-zero value
+        active_registers = nonzero1 | nonzero2
+        if not active_registers.any():
             return 0.0
+        
+        # Count matching non-zero registers
+        matching_nonzero = (self.registers[active_registers] == other.registers
+        [active_registers]).sum()
+        total_active = active_registers.sum()
+        
+        # Jaccard is the proportion of matching registers among active ones
+        return matching_nonzero / total_active
         
         # Create union and intersection sketches with same seed
         union = HyperLogLog(precision=self.precision, seed=self.seed)
         intersection = HyperLogLog(precision=self.precision, seed=self.seed)
         # intersection = self.estimate_intersection(other)
         # union = self.estimate_union(other)
-        # Compute register-wise max (union) and min (intersection)
-        np.maximum(self.registers, other.registers, out=union.registers)
-        np.minimum(self.registers, other.registers, out=intersection.registers)
-        # for i in range(self.num_registers):
-        #     union.registers[i] = max(self.registers[i], other.registers[i])
-        #     intersection.registers[i] = min(self.registers[i], other.registers
-        #     [i])
+        # # Compute register-wise max (union) and min (intersection)
+        # np.maximum(self.registers, other.registers, out=union.registers)
+        # np.minimum(self.registers, other.registers, out=intersection.registers)
+        # # for i in range(self.num_registers):
+        # #     union.registers[i] = max(self.registers[i], other.registers[i])
+        # #     intersection.registers[i] = min(self.registers[i], other.registers
+        # #     [i])
         
-        # Estimate Jaccard similarity
-        union_card = union.estimate_cardinality()
-        if union_card == 0:
-            return 0.0
+        # # Estimate Jaccard similarity
+        # union_card = union.estimate_cardinality()
+        # if union_card == 0:
+        #     return 0.0
         
-        intersection_card = intersection.estimate_cardinality()
-        return intersection_card / union_card
+        # intersection_card = intersection.estimate_cardinality()
+        # return intersection_card / union_card
 
     def estimate_jaccard_iep(self, other: 'HyperLogLog') -> float:
-        """Estimate Jaccard similarity with another HyperLogLog using inclusion-exclusion."""
-        if self.precision != other.precision:
-            raise ValueError("HyperLogLogs must have same precision")
-        if self.seed != other.seed:
-            raise ValueError("HyperLogLogs must have same seed for comparison")
+        """Estimate Jaccard similarity using inclusion-exclusion principle."""
+        # if not isinstance(other, HyperLogLog):
+        #     raise TypeError("Can only compare with another HyperLogLog sketch")
+        # if self.precision != other.precision:
+        #     raise ValueError("Cannot compare HLLs with different precision")
+        # if self.seed != other.seed:
+        #     raise ValueError("HyperLogLogs must have same seed for comparison")
         
-        # Create union sketch with same seed
-        union = HyperLogLog(precision=self.precision, seed=self.seed)
+        # Return 0 if either sketch is empty
+        if self.is_empty() or other.is_empty():
+            return 0.0
         
-        # Compute register-wise max for union
-        for i in range(self.num_registers):
-            union.registers[i] = max(self.registers[i], other.registers[i])
-        
-        # Use inclusion-exclusion principle to estimate intersection
+        # Get cardinality estimates
         card_a = self.estimate_cardinality()
         card_b = other.estimate_cardinality()
-        card_union = union.estimate_cardinality()
-        card_intersection = card_a + card_b - card_union
         
-        # Estimate Jaccard similarity
+        # Create union sketch
+        union = HyperLogLog(precision=self.precision, seed=self.seed)
+        np.maximum(self.registers, other.registers, out=union.registers)
+        card_union = union.estimate_cardinality()
+        
+        # Use inclusion-exclusion principle
+        card_intersection = max(0.0, card_a + card_b - card_union)
+        
         if card_union == 0:
             return 0.0
         
