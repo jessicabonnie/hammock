@@ -16,27 +16,30 @@ class SequenceSketch(AbstractSketch):
                  window_size: int = 40,
                  precision: int = 8,
                  num_hashes: int = 128,
-                 seed: int = 0):
+                 seed: int = 42,
+                 debug: bool = False):
         """Initialize a SequenceSketch.
         
         Args:
             sketch_type: Type of sketch to use
             kmer_size: Size of kmers
             window_size: Size of sliding window
-            precision: Precision for HyperLogLog (default: 8)
+            precision: Precision for HyperLogLog
             num_hashes: Number of hash functions for MinHash
             seed: Seed for random number generation
+            debug: Whether to print debug information
         """
         super().__init__()
         self.sketch_type = sketch_type
         self.kmer_size = kmer_size
+        self.debug = debug
         
         if sketch_type == "hyperloglog":
-            self.sketch = HyperLogLog(kmer_size=kmer_size, precision=precision)
+            self.sketch = HyperLogLog(kmer_size=kmer_size, precision=precision, seed=seed, debug=debug)
         elif sketch_type == "minhash":
-            self.sketch = MinHash(kmer_size=kmer_size, num_hashes=num_hashes)
+            self.sketch = MinHash(kmer_size=kmer_size, num_hashes=num_hashes, seed=seed, debug=debug)
         elif sketch_type == "minimizer":
-            self.sketch = MinimizerSketch(kmer_size=kmer_size, window_size=window_size)
+            self.sketch = MinimizerSketch(kmer_size=kmer_size, window_size=window_size, seed=seed, debug=debug)
         else:
             raise ValueError(f"Invalid sketch type: {sketch_type}")
         
