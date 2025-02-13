@@ -130,7 +130,28 @@ class TestMinimizerSimilarity(unittest.TestCase):
 
         if debug:
             self._print_debug_results(char_sim, edit_sim, hash_sim, 
-                                    hash_ends_sim, gap_sim, jaccard_sim, expected_sim)
+                                    hash_ends_sim, gap_sim, jaccard_sim, 
+                                    expected_sim)
+        # Add assertions to verify similarity values
+        assert 0 <= hash_sim <= 1, f"Hash similarity {hash_sim} out of range [0,1]"
+        assert 0 <= hash_ends_sim <= 1, f"Hash+ends similarity {hash_ends_sim} out of range [0,1]"
+        assert 0 <= gap_sim <= 1, f"Gap similarity {gap_sim} out of range [0,1]"
+        assert 0 <= jaccard_sim <= 1, f"Jaccard similarity {jaccard_sim} out of range [0,1]"
+        
+        # Verify character similarity matches expected similarity within tolerance
+        tolerance = 0.1
+        assert abs(char_sim - expected_sim) < tolerance, \
+            f"Character similarity {char_sim} too far from expected {expected_sim}"
+        
+        # Verify similarity metrics are correlated
+        # Hash similarity should be roughly similar to character similarity
+        assert abs(hash_sim - char_sim) < 0.3, \
+            f"Hash similarity {hash_sim} too different from char similarity {char_sim}"
+        
+        # For highly similar sequences, gap patterns should be similar
+        if expected_sim > 0.9:
+            assert gap_sim > 0.7, \
+                f"Gap similarity {gap_sim} too low for highly similar sequences"
 
         # Record results
         self._write_results(writer, k, w, gapk, trial, hash_sim, hash_ends_sim,
