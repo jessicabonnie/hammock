@@ -48,7 +48,7 @@ class TestMinimizerSimilarity(unittest.TestCase):
             'seq_length': 1000,
             'k_values': [5, 7, 9, 10],
             'w_values': [10, 20, 40],
-            'gapk_values': [7, 8, 10],
+            'gapn_values': [7, 8, 10],
             'expected_sims': [0.99, 0.95, 0.80, 0.75, 0.50],
             'trials': 3
         }
@@ -78,13 +78,13 @@ class TestMinimizerSimilarity(unittest.TestCase):
         print("\nSequence Similarity Metrics Comparison")
         print(f"Sequence length: {seq_length}")
         print("-" * 140)
-        print(f"{'k':<3} {'w':<3} {'gapk':<5} {'hash_sim':<10} {'hash_ends':<10} {'gap_sim':<10} "
+        print(f"{'k':<3} {'w':<3} {'gapn':<5} {'hash_sim':<10} {'hash_ends':<10} {'gap_sim':<10} "
               f"{'jaccard':<10} {'char_sim':<10} {'edit_sim':<10} {'expected':<10}")
         print("-" * 140)
 
     def _write_csv_header(self, writer: csv.writer) -> None:
         """Write the CSV header."""
-        writer.writerow(['k', 'w', 'gapk', 'trial', 
+        writer.writerow(['k', 'w', 'gapn', 'trial', 
                         'hash_similarity', 'hash_with_ends_similarity', 
                         'gap_similarity', 'jaccard_similarity',
                         'char_similarity', 'edit_similarity', 
@@ -94,25 +94,25 @@ class TestMinimizerSimilarity(unittest.TestCase):
         """Run tests for all parameter combinations."""
         for k in params['k_values']:
             for w in params['w_values']:
-                for gapk in params['gapk_values']:
+                for gapn in params['gapn_values']:
                     for expected_sim in params['expected_sims']:
-                        self._run_trials(writer, k, w, gapk, expected_sim, params)
+                        self._run_trials(writer, k, w, gapn, expected_sim, params)
 
-    def _run_trials(self, writer: csv.writer, k: int, w: int, gapk: int, 
+    def _run_trials(self, writer: csv.writer, k: int, w: int, gapn: int, 
                     expected_sim: float, params: dict) -> None:
         """Run multiple trials for a specific parameter combination."""
         for trial in range(params['trials']):
-            self._run_single_trial(writer, k, w, gapk, expected_sim, 
+            self._run_single_trial(writer, k, w, gapn, expected_sim, 
                                  params['seq_length'], trial)
 
-    def _run_single_trial(self, writer: csv.writer, k: int, w: int, gapk: int, 
+    def _run_single_trial(self, writer: csv.writer, k: int, w: int, gapn: int, 
                          expected_sim: float, seq_length: int, trial: int, debug: bool = False) -> None:
         """Run a single trial and record results."""
         # Generate sequence pair
         seq1, seq2 = self.generate_sequence_pair(seq_length, expected_sim)
 
         if debug:
-            self._print_debug_header(k, w, gapk, expected_sim, seq1, seq2)
+            self._print_debug_header(k, w, gapn, expected_sim, seq1, seq2)
 
         # Calculate similarities
         char_sim = sum(1 for a, b in zip(seq1, seq2) if a == b) / len(seq1)
@@ -120,8 +120,8 @@ class TestMinimizerSimilarity(unittest.TestCase):
         edit_sim = 1 - (edit_dist / len(seq1))
 
         # Create sketches and compare - set debug=False
-        sketch1 = MinimizerSketch(kmer_size=k, window_size=w, gapk=gapk, debug=False)
-        sketch2 = MinimizerSketch(kmer_size=k, window_size=w, gapk=gapk, debug=False)
+        sketch1 = MinimizerSketch(kmer_size=k, window_size=w, gapn=gapn, debug=False)
+        sketch2 = MinimizerSketch(kmer_size=k, window_size=w, gapn=gapn, debug=False)
         
         sketch1.add_string(seq1)
         sketch2.add_string(seq2)
@@ -154,16 +154,16 @@ class TestMinimizerSimilarity(unittest.TestCase):
                 f"Gap similarity {gap_sim} too low for highly similar sequences"
 
         # Record results
-        self._write_results(writer, k, w, gapk, trial, hash_sim, hash_ends_sim,
+        self._write_results(writer, k, w, gapn, trial, hash_sim, hash_ends_sim,
                            gap_sim, jaccard_sim, char_sim, edit_sim, expected_sim)
-        # self._print_results(k, w, gapk, hash_sim, hash_ends_sim, gap_sim,
+        # self._print_results(k, w, gapn, hash_sim, hash_ends_sim, gap_sim,
         #                    jaccard_sim, char_sim, edit_sim, expected_sim)
 
-    def _print_debug_header(self, k: int, w: int, gapk: int, expected_sim: float, 
+    def _print_debug_header(self, k: int, w: int, gapn: int, expected_sim: float, 
                            seq1: str, seq2: str) -> None:
         """Print debug information header."""
         print(f"\n{'='*80}")
-        print(f"Debug output for k={k}, w={w}, gapk={gapk}, expected_sim={expected_sim:.2f}")
+        print(f"Debug output for k={k}, w={w}, gapn={gapn}, expected_sim={expected_sim:.2f}")
         print(f"{'='*80}")
         print(f"Sequence samples:")
         print(f"Seq1 (first 50): {seq1[:50]}...")
@@ -183,21 +183,21 @@ class TestMinimizerSimilarity(unittest.TestCase):
         print(f"Expected:      {expected_sim:.4f}")
         print(f"{'='*80}\n")
 
-    def _write_results(self, writer: csv.writer, k: int, w: int, gapk: int, trial: int,
+    def _write_results(self, writer: csv.writer, k: int, w: int, gapn: int, trial: int,
                       hash_sim: float, hash_ends_sim: float, gap_sim: float, jaccard_sim: float,
                       char_sim: float, edit_sim: float, expected_sim: float) -> None:
         """Write results to CSV file."""
-        writer.writerow([k, w, gapk, trial + 1, 
+        writer.writerow([k, w, gapn, trial + 1, 
                         f"{hash_sim:.4f}", f"{hash_ends_sim:.4f}",
                         f"{gap_sim:.4f}", f"{jaccard_sim:.4f}",
                         f"{char_sim:.4f}", f"{edit_sim:.4f}",
                         f"{expected_sim:.4f}"])
 
-    def _print_results(self, k: int, w: int, gapk: int, hash_sim: float,
+    def _print_results(self, k: int, w: int, gapn: int, hash_sim: float,
                       hash_ends_sim: float, gap_sim: float, jaccard_sim: float,
                       char_sim: float, edit_sim: float, expected_sim: float) -> None:
         """Print results to console."""
-        print(f"{k:<3} {w:<3} {gapk:<5} {hash_sim:<10.4f} {hash_ends_sim:<10.4f} "
+        print(f"{k:<3} {w:<3} {gapn:<5} {hash_sim:<10.4f} {hash_ends_sim:<10.4f} "
               f"{gap_sim:<10.4f} {jaccard_sim:<10.4f} {char_sim:<10.4f} "
               f"{edit_sim:<10.4f} {expected_sim:<10.4f}")
 
@@ -230,7 +230,7 @@ class TestMinimizerSimilarity(unittest.TestCase):
                 'seq2': 'ACGTACGTACGT',
                 'k': 4,
                 'w': 4,
-                'gapk': 0,
+                'gapn': 0,
                 'expected_hash': 1.0,
                 'expected_gap': 1.0,
                 'desc': 'identical sequences'
@@ -241,7 +241,7 @@ class TestMinimizerSimilarity(unittest.TestCase):
                 'seq2': 'CCCCCCCCCC',
                 'k': 4,
                 'w': 4,
-                'gapk': 0,
+                'gapn': 0,
                 'expected_hash': 0.0,
                 'expected_gap': 0.0,
                 'desc': 'completely different sequences'
@@ -252,7 +252,7 @@ class TestMinimizerSimilarity(unittest.TestCase):
                 'seq2': 'ACGTACCTACGT',
                 'k': 4,
                 'w': 4,
-                'gapk': 0,
+                'gapn': 0,
                 'expected_hash': 0.75,  # Most 4-mers should still match
                 'expected_gap': 0.75,
                 'desc': 'single mutation'
@@ -263,7 +263,7 @@ class TestMinimizerSimilarity(unittest.TestCase):
                 'seq2': 'TACGTACGTACG',
                 'k': 4,
                 'w': 4,
-                'gapk': 1,
+                'gapn': 1,
                 'expected_hash': 0.8,
                 'expected_gap': 0.0,  # Gap pattern should be different
                 'desc': 'shifted sequence'
@@ -275,10 +275,10 @@ class TestMinimizerSimilarity(unittest.TestCase):
                 # Create sketches
                 sketch1 = MinimizerSketch(kmer_size=case['k'], 
                                         window_size=case['w'], 
-                                        gapk=case['gapk'])
+                                        gapn=case['gapn'])
                 sketch2 = MinimizerSketch(kmer_size=case['k'], 
                                         window_size=case['w'], 
-                                        gapk=case['gapk'])
+                                        gapn=case['gapn'])
                 
                 # Add sequences
                 sketch1.add_string(case['seq1'])
@@ -289,7 +289,7 @@ class TestMinimizerSimilarity(unittest.TestCase):
                 
                 # Print results instead of asserting
                 print(f"\nTest case: {case['desc']}")
-                print(f"Parameters: k={case['k']}, w={case['w']}, gapk={case['gapk']}")
+                print(f"Parameters: k={case['k']}, w={case['w']}, gapn={case['gapn']}")
                 print(f"Hash similarity: {hash_sim:.4f} (expected: {case['expected_hash']:.4f})")
                 print(f"Gap similarity: {gap_sim:.4f} (expected: {case['expected_gap']:.4f})")
 
