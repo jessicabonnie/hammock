@@ -9,7 +9,7 @@ class MinimizerSketch(AbstractSketch):
     def __init__(self, 
                  kmer_size: int = 4, 
                  window_size: int = 8, 
-                 gapk: int = 0,
+                 gapn: int = 0,
                  seed: int = 42,
                  debug: bool = False):
         """Initialize minimizer sketch.
@@ -17,33 +17,33 @@ class MinimizerSketch(AbstractSketch):
         Args:
             window_size: Size of sliding window
             kmer_size: Size of k-mers
-            gapk: Size of gap between k-mers
+            gapn: Number of consecutive gaps to group at a time
             seed: Random seed for hashing
             debug: Whether to print debug information
         """
         super().__init__()
         self.window_size = window_size
         self.kmer_size = kmer_size
-        self.gapk = gapk
+        self.gapn = gapn
         self.seed = seed
         self.debug = debug
         # Use HyperLogLog directly for both sketches
         self.minimizer_sketch = HyperLogLog(kmer_size=0)
-        self.gap_sketch = HyperLogLog(kmer_size=gapk)
+        self.gap_sketch = HyperLogLog(kmer_size=0)
         self.startend_kmers = set()
         self.minimizers = set()
     
-    def _process_gap_patterns(self, minimizers: list, debug: bool = False) -> set:
-        """Calculate gap patterns from minimizer positions.
+    def _process_gap_patterns(self, minimizers: list, debug: bool = False) -> None:
+        """Process gap patterns from minimizer positions and add them to the gap sketch.
+        
+        Takes consecutive gaps between minimizer positions and groups them into patterns
+        of length gapn. Each pattern is added to the gap sketch for similarity comparison.
         
         Args:
             minimizers: List of (position, hash) tuples from window_minimizer
             debug: Whether to print debug information
-        
-        Returns:
-            Set of gap patterns, where each pattern is a tuple of gapk consecutive gaps
         """
-        if len(minimizers) < self.gapk:
+        if len(minimizers) < self.gapn:
             if self.debug or debug:
                 print("Not enough minimizers to calculate gap patterns")
             return 
@@ -56,9 +56,9 @@ class MinimizerSketch(AbstractSketch):
             print(f"Minimizer positions: {positions[:5]}...")
             print(f"Gaps between minimizers: {gaps[:5]}...")
         
-        # Generate gap patterns of length gapk
-        for i in range(len(gaps) - self.gapk + 1):
-            pattern = ','.join(str(gaps[i:i + self.gapk]))
+        # Generate gap patterns of length gapn
+        for i in range(len(gaps) - self.gapn + 1):
+            pattern = ','.join(str(gaps[i:i + self.gapn]))
             self.gap_sketch.add_string(pattern)
         return
 
@@ -95,14 +95,14 @@ class MinimizerSketch(AbstractSketch):
         except RuntimeError as e:
             if self.debug:
                 print(f"Error in add_string: {str(e)}")
-                print(f"Parameters: k={self.kmer_size}, w={self.window_size}, gapk={self.gapk}")
+                print(f"Parameters: k={self.kmer_size}, w={self.window_size}, gapn={self.gapn}")
             return
             
     def compare_overlaps(self, other: 'MinimizerSketch') -> tuple[float, float, float, float]:
         """Returns (hash_similarity, hash_with_ends_similarity, gap_similarity, jaccard_similarity)"""
         if not isinstance(other, MinimizerSketch):
             raise ValueError("Can only compare with another MinimizerSketch")
-        if self.kmer_size != other.kmer_size or self.window_size != other.window_size or self.gapk != other.gapk:
+        if self.kmer_size != other.kmer_size or self.window_size != other.window_size or self.gapn != other.gapn:
             raise ValueError("Cannot compare sketches with different parameters")
             
             
@@ -160,7 +160,7 @@ class MinimizerSketch(AbstractSketch):
         """
         if not isinstance(other, MinimizerSketch):
             raise ValueError("Can only compare with another MinimizerSketch")
-        if self.kmer_size != other.kmer_size or self.window_size != other.window_size or self.gapk != other.gapk:
+        if self.kmer_size != other.kmer_size or self.window_size != other.window_size or self.gapn != other.gapn:
             raise ValueError("Cannot compare sketches with different parameters")
         # NOTE: Perhaps the compare_overlaps function should just return a dictionary
         hash_sim, hash_with_ends_sim, gap_sim, jaccard_sim = self.compare_overlaps(other)
