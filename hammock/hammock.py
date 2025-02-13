@@ -8,9 +8,10 @@ import resource
 import csv
 import gc
 from typing import Optional, Dict, List, Tuple, Any
-from Bio import SeqIO # type: ignore
+from hammock.lib.abstractsketch import AbstractSketch
 from hammock.lib.intervals import IntervalSketch
 from hammock.lib.minimizer import MinimizerSketch
+from hammock.lib.sequences import SequenceSketch
 # from hammock.lib.exact import ExactCounter
 # Set memory limit to 28GB (adjust as needed)
 def limit_memory():
@@ -70,7 +71,8 @@ def process_file(args: tuple[str, dict, list, str, int, int, tuple[float, float]
             'precision': precision,
             'num_hashes': num_hashes,
             'sketch_type': sketch_type,
-            'subsample': subsample
+            'subsample': subsample,
+            'expA': expA
         }
         comparator = IntervalSketch.from_file(
             filename=filepath,
@@ -94,7 +96,7 @@ def process_file(args: tuple[str, dict, list, str, int, int, tuple[float, float]
 
 def parse_args():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
+    arg_parser = argparse.ArgumentParser(
         description="""Calculate pairwise Jaccard similarities between lists of BED or sequence files.
         
         Supported file formats:
@@ -107,29 +109,29 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
-    parser.add_argument('filepaths_file',
+    arg_parser.add_argument('filepaths_file',
                        help='Text file containing paths to files to be compared')
-    parser.add_argument('primary_file',
+    arg_parser.add_argument('primary_file',
                        help='Text file containing paths to primary files to compare against')
     
-    parser.add_argument('--mode', choices=['A', 'B', 'C', 'D'], default='A',
+    arg_parser.add_argument('--mode', choices=['A', 'B', 'C', 'D'], default='A',
                        help='''Mode for comparison:
                        A: Compare intervals only (default for BED/BigBed/BigWig files)
                        B: Compare points only
                        C: Compare both intervals and points
                        D: Compare sequences (auto-detected for sequence files)''')
     
-    parser.add_argument('--outprefix', '-o', type=str, default="hammock", help='The output file prefix')
-    parser.add_argument("--precision", "-p", type=int, help="Precision for HyperLogLog sketching", default=8)
-    parser.add_argument("--num_hashes", "-n", type=int, help="Number of hashes for MinHash sketching", default=128)
-    parser.add_argument("--subA", type=float, default=1.0, help="Subsampling rate for intervals (0 to 1)")
-    parser.add_argument("--subB", type=float, default=1.0, help="Subsampling rate for points (0 to 1)")
-    parser.add_argument( "--expA", type=float, default=0, help="Power of 10 exponent to use to multiply contribution of A-type intervals (only valid for mode C)",
+    arg_parser.add_argument('--outprefix', '-o', type=str, default="hammock", help='The output file prefix')
+    arg_parser.add_argument("--precision", "-p", type=int, help="Precision for HyperLogLog sketching", default=8)
+    arg_parser.add_argument("--num_hashes", "-n", type=int, help="Number of hashes for MinHash sketching", default=128)
+    arg_parser.add_argument("--subA", type=float, default=1.0, help="Subsampling rate for intervals (0 to 1)")
+    arg_parser.add_argument("--subB", type=float, default=1.0, help="Subsampling rate for points (0 to 1)")
+    arg_parser.add_argument( "--expA", type=float, default=0, help="Power of 10 exponent to use to multiply contribution of A-type intervals (only valid for mode C)",
     )
     
     
     # Add mutually exclusive sketch type flags
-    sketch_group = parser.add_mutually_exclusive_group()
+    sketch_group = arg_parser.add_mutually_exclusive_group()
     sketch_group.add_argument(
         "--hyperloglog",
         action="store_const",
@@ -153,33 +155,35 @@ def parse_args():
     )
     
     # Set default sketch type
-    parser.set_defaults(sketch_type="hyperloglog")
+    arg_parser.set_defaults(sketch_type="hyperloglog")
     
-    parser.add_argument(
+    arg_parser.add_argument(
         "--debug",
         action="store_true",
         help="Output debug information including sparsity comparisons"
     )
 
     # Add sequence-specific arguments
-    parser.add_argument(
-        "--window_size", "-w",
-        type=int,
-        default=40,
-        help="Window size for sequence minimizers (mode D only)"
-    )
-    parser.add_argument(
-        "--kmer_size", "-k",
-        type=int,
-        default=8,
-        help="K-mer size for sequence minimizers (mode D only)"
-    )
+    arg_parser.add_argument('--kmer_size', type=int,
+                       help='Size of k-mers (0 for whole string mode, defaults to 0 for modes A/B/C, 14 for mode D)')
+    arg_parser.add_argument('--window_size', type=int,
+                       help='Size of sliding window (defaults to 0 if kmer_size is 0, otherwise 40)')
     
     # Add threads argument
-    parser.add_argument("--threads", type=int, default=None,
+    arg_parser.add_argument("--threads", type=int, default=None,
                        help="Number of threads to use for parallel processing")
     
-    return parser
+    args = arg_parser.parse_args()
+    
+    # Set kmer_size default based on mode
+    if args.kmer_size is None:
+        args.kmer_size = 14 if args.mode == "D" else 0
+    
+    # Set window_size default based on kmer_size
+    if args.window_size is None:
+        args.window_size = 0 if args.kmer_size == 0 else 40
+    
+    return args
 
 def get_new_prefix(outprefix: str, 
                    sketch_type: str,
@@ -205,10 +209,89 @@ def get_new_prefix(outprefix: str,
     else:
         return f"{outprefix}_exact_jacc{mode}"
 
+def write_results(results: List[Dict[str, Any]], output: str) -> None:
+    """Write comparison results to file.
+    
+    Args:
+        results: List of dictionaries containing comparison results
+        output: Output file path
+    """
+    # Get all possible column names from the similarity dictionaries
+    similarity_columns = set()
+    for result in results:
+        if 'similarity' in result:
+            similarity_columns.update(result['similarity'].keys())
+    
+    # Define column order
+    columns = ['query', 'reference']
+    columns.extend(sorted(similarity_columns))  # Add all similarity measures
+    if 'metadata' in results[0]:
+        columns.append('metadata')
+    
+    # Write results
+    with open(output, 'w') as f:
+        # Write header
+        f.write('\t'.join(columns) + '\n')
+        
+        # Write data
+        for result in results:
+            row = [result['query'], result['reference']]
+            # Add similarity values, defaulting to 0.0 if not present
+            for col in sorted(similarity_columns):
+                row.append(str(result['similarity'].get(col, 0.0)))
+            if 'metadata' in result:
+                row.append(result['metadata'])
+            f.write('\t'.join(row) + '\n')
+
+def process_sketches(sketches: List[Tuple[str, AbstractSketch]], 
+                    output: str,
+                    metadata: Optional[Dict[str, str]] = None) -> None:
+    """Process all sketch comparisons and write results.
+    
+    Args:
+        sketches: List of (name, sketch) tuples
+        output: Output file path
+        metadata: Optional metadata dictionary
+    """
+    results = []
+    
+    for i, (query_name, query_sketch) in enumerate(sketches):
+        for ref_name, ref_sketch in sketches[i:]:
+            if query_name == ref_name:
+                continue
+                
+            # Get similarity measures as dictionary
+            similarity = query_sketch.similarity_values(ref_sketch)
+            
+            # Create result entry
+            result = {
+                'query': query_name,
+                'reference': ref_name,
+                'similarity': similarity
+            }
+            
+            # Add metadata if provided
+            if metadata and query_name in metadata:
+                result['metadata'] = metadata[query_name]
+                
+            results.append(result)
+            
+            # Add reverse comparison if needed
+            if query_name != ref_name:
+                reverse_result = {
+                    'query': ref_name,
+                    'reference': query_name,
+                    'similarity': similarity
+                }
+                if metadata and ref_name in metadata:
+                    reverse_result['metadata'] = metadata[ref_name]
+                results.append(reverse_result)
+    
+    write_results(results, output)
+
 def main():
     """Main entry point for hammock."""
-    parser = parse_args()
-    args = parser.parse_args()
+    args = parse_args()
     
     # Read first filepath to check extension
     with open(args.filepaths_file) as f:
@@ -268,7 +351,8 @@ def main():
                 'window_size': args.window_size,
                 'kmer_size': args.kmer_size,
                 'precision': args.precision,
-                'num_hashes': args.num_hashes
+                'num_hashes': args.num_hashes,
+                'debug': args.debug
             }
             primary_sets[basename] = MinimizerSketch.from_file(
                 filename=filepath,
@@ -281,7 +365,8 @@ def main():
                 'num_hashes': args.num_hashes,
                 'sketch_type': args.sketch_type,
                 'subsample': subsample,
-                'expA': args.expA
+                'expA': args.expA,
+                'debug': args.debug
             }
             primary_sets[basename] = IntervalSketch.from_file(
                 filename=filepath,
@@ -305,19 +390,45 @@ def main():
     outprefix = get_new_prefix(args.outprefix, args.sketch_type, args.mode, args.num_hashes, args.precision)
     with open(f"{outprefix}.csv", "w", newline='') as f:
         writer = csv.writer(f)
-        # Write header
-        writer.writerow(["file"] + primary_keys)
+        
+        # Get all similarity measure names from first result
+        similarity_measures = []
+        for basename, output in results:
+            if basename and output and output.get(primary_keys[0]):
+                if isinstance(output[primary_keys[0]], dict):
+                    similarity_measures = list(output[primary_keys[0]].keys())
+                else:
+                    similarity_measures = ["jaccard"]
+                break
+        
+        # Write header: file1, file2, sketch_type, mode, [sketch params], [C-mode params], similarity measures
+        header = ["file1", "file2", "sketch_type", "mode"]
+        if args.sketch_type in ["hyperloglog", "minhash"]:
+            header.extend(["precision", "num_hashes", "kmer_size", "window_size"])
+        if args.mode == "C":
+            header.extend(["subA", "subB", "expA"])
+        header.extend(similarity_measures)
+        writer.writerow(header)
         
         # Write results
         for basename, output in results:
             if basename and output:
-                row = [basename]
                 for key in primary_keys:
                     if key in output:
-                        row.append(output[key])
-                    else:
-                        row.append("NA")
-                writer.writerow(row)
+                        row = [basename, key, args.sketch_type, args.mode]  # files and sketch info
+                        if args.sketch_type in ["hyperloglog", "minhash"]:
+                            precision = args.precision if args.sketch_type == "hyperloglog" else "NA"
+                            num_hashes = args.num_hashes if args.sketch_type == "minhash" else "NA"
+                            window_size = "NA" if args.kmer_size == 0 else args.window_size
+                            row.extend([precision, num_hashes, args.kmer_size, window_size])
+                        if args.mode == "C":
+                            row.extend([args.subA, args.subB, args.expA])  # C-mode parameters
+                        # Add similarity values
+                        if isinstance(output[key], dict):
+                            row.extend(output[key].values())
+                        else:
+                            row.append(output[key])
+                        writer.writerow(row)
 
 if __name__ == "__main__":
     main()
