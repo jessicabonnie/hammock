@@ -1,7 +1,7 @@
 from __future__ import annotations
 import pytest # type: ignore
 from hammock.lib.sequences import SequenceSketch
-from Bio import SeqIO
+from Bio import SeqIO # type: ignore
 from io import StringIO
 
 class TestSequenceSketchQuick:
@@ -37,7 +37,7 @@ class TestSequenceSketchFull:
         sketch1.add_string("ACGTACGT")
         sketch2.add_string("ACGTACGT")
         
-        sim = sketch1.estimate_similarity(sketch2)
+        sim = sketch1.similarity_values(sketch2)
         assert sim['jaccard_similarity'] == 1.0
 
 def test_sequence_sketch_initialization():
@@ -49,7 +49,7 @@ def test_invalid_sketch_type():
     with pytest.raises(ValueError):
         SequenceSketch(sketch_type="invalid", kmer_size=3)
 
-def test_add_sequence():
+def test_add_string():
     sketch = SequenceSketch(sketch_type="hyperloglog", kmer_size=3)
     sketch.add_string("ACGTACGT")
     
@@ -57,18 +57,22 @@ def test_add_sequence():
     sketch2 = SequenceSketch(sketch_type="hyperloglog", kmer_size=3)
     sketch2.add_string("ACGTACGT")
     
-    sim = sketch.estimate_similarity(sketch2)
+    sim = sketch.similarity_values(sketch2)
     assert sim['jaccard_similarity'] == 1.0
 
 def test_sequence_similarity():
-    sketch1 = SequenceSketch(sketch_type="hyperloglog", kmer_size=3)
-    sketch2 = SequenceSketch(sketch_type="hyperloglog", kmer_size=3)
+    """Test sequence similarity calculation."""
+    sketch1 = SequenceSketch(sketch_type="minimizer", kmer_size=4)
+    sketch2 = SequenceSketch(sketch_type="minimizer", kmer_size=4)
     
     sketch1.add_string("ACGTACGT")
     sketch2.add_string("ACGTACGT")
     
-    sim = sketch1.estimate_similarity(sketch2)
-    assert sim['jaccard_similarity'] == 1.0
+    result = sketch1.similarity_values(sketch2)
+    assert 'jaccard_similarity' in result
+    assert result['jaccard_similarity'] == 1.0
+    assert 'gap_similarity' in result
+    assert result['gap_similarity'] == 1.0
 
 def test_different_sequences():
     sketch1 = SequenceSketch(sketch_type="hyperloglog", kmer_size=3)
@@ -77,28 +81,38 @@ def test_different_sequences():
     sketch1.add_string("AAAAAAA")
     sketch2.add_string("TTTTTTT")
     
-    sim = sketch1.estimate_similarity(sketch2)
+    sim = sketch1.similarity_values(sketch2)
     assert 0.0 <= sim['jaccard_similarity'] <= 1.0
 
+@pytest.mark.quick
 def test_empty_sequence():
-    sketch = SequenceSketch(sketch_type="hyperloglog", kmer_size=3)
-    sketch.add_string("")
+    """Test handling of empty sequences."""
+    sketch1 = SequenceSketch(sketch_type="hyperloglog", kmer_size=4)
+    sketch2 = SequenceSketch(sketch_type="hyperloglog", kmer_size=4)
     
-    sketch2 = SequenceSketch(sketch_type="hyperloglog", kmer_size=3)
-    sim = sketch.estimate_similarity(sketch2)
-    assert sim['jaccard_similarity'] == 0
+    sketch1.add_string("")
+    sketch2.add_string("ACGT")
+    
+    # Use similarity_values
+    result = sketch1.similarity_values(sketch2)
+    assert result['jaccard_similarity'] == 0.0
 
+@pytest.mark.quick
 def test_sequence_shorter_than_kmer():
-    sketch = SequenceSketch(sketch_type="hyperloglog", kmer_size=5)
-    sketch.add_string("ACG")  # shorter than kmer_size
+    """Test handling of sequences shorter than k-mer size."""
+    sketch1 = SequenceSketch(sketch_type="hyperloglog", kmer_size=4)
+    sketch2 = SequenceSketch(sketch_type="hyperloglog", kmer_size=4)
     
-    sketch2 = SequenceSketch(sketch_type="hyperloglog", kmer_size=5)
-    sim = sketch.estimate_similarity(sketch2)
-    assert sim['jaccard_similarity'] == 0
+    sketch1.add_string("ACG")  # shorter than k=4
+    sketch2.add_string("ACGT")
+    
+    # Use similarity_values
+    result = sketch1.similarity_values(sketch2)
+    assert result['jaccard_similarity'] == 0.0
 
 def test_different_kmer_sizes():
     sketch1 = SequenceSketch(sketch_type="hyperloglog", kmer_size=3)
     sketch2 = SequenceSketch(sketch_type="hyperloglog", kmer_size=4)
     
     with pytest.raises(ValueError):
-        sketch1.estimate_similarity(sketch2) 
+        sketch1.similarity_values(sketch2) 

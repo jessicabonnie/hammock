@@ -64,7 +64,7 @@ class MinimizerSketch(AbstractSketch):
 
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
-        if not s or len(s) < self.kmer_size:
+        if not s or len(s) < self.kmer_size or len(s)==0:
             return
             
         # Get minimizers and their positions
