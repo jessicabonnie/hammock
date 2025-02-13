@@ -29,6 +29,8 @@ class MinHash(AbstractSketch):
         # Initialize with maximum possible value
         max_val = np.iinfo(np.uint64).max
         self.min_hashes = np.full(num_hashes, max_val, dtype=np.uint64)
+        # self.hashers = [xxhash.xxh64(seed=seed + i * 31337) for i in range(0,num_hashes)]
+        self.hashers=[None]*num_hashes
         if self.debug:
             print(f"\nDebug MinHash init:")
             print(f"Max uint64 value: {max_val}")
@@ -36,66 +38,71 @@ class MinHash(AbstractSketch):
             print(f"Initial min_hashes first value: {self.min_hashes[0]}")
         
         # Create independent hash functions with different seeds
-        self.hashers = [xxhash.xxh64(seed=seed + i * 31337) for i in range(num_hashes)]
+        # self.hashers = [xxhash.xxh64(seed=seed + i * 31337) for i in range(0,num_hashes)]
     
     def _hash_str(self, s: str) -> np.ndarray:
         """Generate all hash values for a string."""
+        if not s:  # Guard against empty strings
+            raise ValueError("Cannot hash empty string")
+        
         hashes = np.zeros(self.num_hashes, dtype=np.uint64)
-        for i, hasher in enumerate(self.hashers):
-            hasher.reset()
-            # Add position to make hash values more independent
-            hasher.update(f"{i}:{s}".encode())
-            hashes[i] = hasher.intdigest()
+        s_bytes = s.encode()
+        
+        # Use a large prime number for better distribution
+        prime = 2**61 - 1  # Mersenne prime
+        
+        for i in range(self.num_hashes):
+            # Create and update hashers separately
+            hasher1 = xxhash.xxh64(seed=self.seed + i)
+            hasher2 = xxhash.xxh64(seed=self.seed + i + self.num_hashes)
+            
+            hasher1.update(s_bytes)
+            hasher2.update(s_bytes)
+            
+            h1 = hasher1.intdigest()
+            h2 = hasher2.intdigest()
+            
+            # Combine hashes using linear combination
+            combined = (h1 + i * h2) % prime
+            
+            # Map to uint64 range
+            hashes[i] = combined % (1 << 64)
+        
         return hashes
     
     def _process_kmer(self, kmer: str) -> None:
         """Process a k-mer and update minimum hash values."""
-        # Generate hash values for this k-mer
-        hashes = self._hash_str(kmer)
+        if not kmer:
+            return
         
-        if self.debug:
-            print(f"\nDebug _process_kmer:")
-            print(f"kmer: {kmer}")
-            print(f"Generated hashes type: {hashes.dtype}")
-            print(f"min_hashes type: {self.min_hashes.dtype}")
-            print(f"Generated hashes (first 3): {hashes[:3]}")
-            print(f"Current min_hashes (first 3): {self.min_hashes[:3]}")
-        
-        # Element-wise comparison and update
-        mask = hashes < self.min_hashes
-        self.min_hashes[mask] = hashes[mask]
-        
-        if self.debug:
-            print(f"Updated min_hashes (first 3): {self.min_hashes[:3]}")
+        # Get hash values for this k-mer
+        try:
+            hashes = self._hash_str(kmer)
+            # Update min_hashes with element-wise minimum
+            self.min_hashes = np.minimum(self.min_hashes, hashes)
+            
+            if self.debug and int(kmer) % 2000 == 0:
+                print(f"\nProcessing k-mer: {kmer}")
+                print(f"Hash values: {hashes[:5]}")
+                print(f"Updated min_hashes: {self.min_hashes[:5]}")
+        except Exception as e:
+            if self.debug:
+                print(f"Error processing k-mer {kmer}: {str(e)}")
+            raise
 
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
-        if len(s) < self.kmer_size:
+        if not s:
             return
-
+        
         if self.kmer_size == 0:
+            # Whole string mode
             self._process_kmer(s)
-            return
-
-        if self.window_size == self.kmer_size:
+        else:
+            # K-mer mode - process all k-mers
             for i in range(len(s) - self.kmer_size + 1):
-                self._process_kmer(s[i:i + self.kmer_size])
-            return
-
-        # Windowing mode
-        for i in range(len(s) - self.window_size + 1):
-            window = s[i:i + self.window_size]
-            min_hash = float('inf')
-            min_kmer = ''
-            
-            for j in range(self.window_size - self.kmer_size + 1):
-                kmer = window[j:j + self.kmer_size]
-                h = hash(kmer)
-                if h < min_hash:
-                    min_hash = h
-                    min_kmer = kmer
-            
-            self._process_kmer(min_kmer)
+                kmer = s[i:i + self.kmer_size]
+                self._process_kmer(kmer)
 
     def merge(self, other: 'MinHash') -> None:
         """Merge another MinHash sketch into this one."""
@@ -133,22 +140,22 @@ class MinHash(AbstractSketch):
         if self.seed != other.seed:
             raise ValueError("Cannot compare MinHash sketches with different seeds")
         
+        max_val = np.iinfo(np.uint64).max
         # Return 0 if either sketch is empty
-        if np.all(self.min_hashes == np.iinfo(np.uint64).max) or \
-           np.all(other.min_hashes == np.iinfo(np.uint64).max):
+        if np.all(self.min_hashes == max_val) or np.all(other.min_hashes == max_val):
             return 0.0
         
         # Count matches using element-wise comparison
         matches = np.sum(self.min_hashes == other.min_hashes)
         
         if self.debug:
-            print(f"\nDebug MinHash Jaccard:")
-            print(f"Sketch 1 min values: {sorted(self.min_hashes[:5])}")
-            print(f"Sketch 2 min values: {sorted(other.min_hashes[:5])}")
-            print(f"Number of matching minimums: {matches}")
+            print(f"\nJaccard estimation:")
+            print(f"Number of matching hashes: {matches}")
             print(f"Total number of hashes: {self.num_hashes}")
-            print(f"Jaccard estimate: {float(matches) / self.num_hashes:.3f}")
+            print(f"First few hashes sketch1: {self.min_hashes[:5]}")
+            print(f"First few hashes sketch2: {other.min_hashes[:5]}")
         
+        # Jaccard similarity is the fraction of matching minimums
         return float(matches) / self.num_hashes
 
     def estimate_union(self, other: 'MinHash') -> float:
@@ -193,11 +200,8 @@ class MinHash(AbstractSketch):
 
     def add_int(self, value: int) -> None:
         """Add an integer to the sketch."""
-        # Reset hashers and update with new value
-        for i, hasher in enumerate(self.hashers):
-            hasher.reset()
-            hasher.update(str(value).encode())  # Convert int to bytes
-            self.min_hashes[i] = min(self.min_hashes[i], hasher.intdigest())
+        # Convert integer to string to ensure consistent hashing
+        self._process_kmer(str(value))
 
     def add_int_old(self, value: int) -> None:
         hashes = np.array([h.intdigest() for h in self.hashers])
