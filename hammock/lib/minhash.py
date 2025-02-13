@@ -104,11 +104,28 @@ class MinHash(AbstractSketch):
                 kmer = s[i:i + self.kmer_size]
                 self._process_kmer(kmer)
 
-    def merge(self, other: 'MinHash') -> None:
-        """Merge another MinHash sketch into this one."""
+    def merge(self, other: 'MinHash') -> 'MinHash':
+        """Merge another MinHash sketch into this one.
+        
+        Returns:
+            A new MinHash sketch containing the merged values
+        """
         if self.num_hashes != other.num_hashes:
             raise ValueError("Cannot merge MinHash sketches with different sizes")
-        self.min_hashes = np.minimum(self.min_hashes, other.min_hashes)
+        
+        # Create a new sketch with same parameters
+        merged = MinHash(
+            num_hashes=self.num_hashes,
+            kmer_size=self.kmer_size,
+            window_size=self.window_size,
+            seed=self.seed,
+            debug=self.debug
+        )
+        
+        # Set its min_hashes to the minimum of both sketches
+        merged.min_hashes = np.minimum(self.min_hashes, other.min_hashes)
+        
+        return merged
 
     def estimate_cardinality(self) -> float:
         """Estimate cardinality of the set using MinHash signatures."""
