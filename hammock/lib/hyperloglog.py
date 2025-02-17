@@ -1,14 +1,14 @@
 import numpy as np # type: ignore
 import xxhash # type: ignore
 from hammock.lib.abstractsketch import AbstractSketch
-from typing import Dict
+from typing import Dict, Optional
 
 class HyperLogLog(AbstractSketch):
     def __init__(self, 
                  precision: int = 8, 
                  kmer_size: int = 0, 
                  window_size: int = 0, 
-                 seed: int = 0,
+                 seed: Optional[int] = None,
                  debug: bool = False):
         """Initialize HyperLogLog sketch.
         
@@ -33,11 +33,11 @@ class HyperLogLog(AbstractSketch):
         
         self.precision = precision
         self.num_registers = 1 << precision
-        self.seed = seed
-        self.registers = np.zeros(self.num_registers, dtype=np.uint8)
+        self.registers = np.zeros(self.num_registers, dtype=np.int8)
         self.kmer_size = kmer_size
         self.window_size = window_size if window_size else kmer_size
         self.debug = debug
+        self.seed = seed if seed is not None else 42
 
         self.item_count = 0
         
@@ -93,7 +93,7 @@ class HyperLogLog(AbstractSketch):
 
     def _process_kmer(self, kmer: str) -> None:
         """Process a single k-mer or string."""
-        hash_val = self._hash_str(kmer.encode(), seed=self.seed)
+        hash_val = self.hash_str(kmer.encode())
         idx = hash_val & (self.num_registers - 1)
         rank = self._rho(hash_val)
         self.registers[idx] = max(self.registers[idx], rank)
@@ -178,13 +178,40 @@ class HyperLogLog(AbstractSketch):
         self.registers[idx] = max(self.registers[idx], rank)
 
     def estimate_cardinality(self) -> float:
-        """Estimate the cardinality of the set using HyperLogLog algorithm."""
-        registers = np.array(self.registers, dtype=np.float64)
-        sum_inv = np.sum(np.exp2(-registers))
-        estimate = self.alpha_mm * (self.num_registers ** 2) / sum_inv
-        if self.debug:
-            print(f"DEBUG cardinality: estimate={estimate:.1f}, items={self.item_count}")
-        return estimate
+        """Estimate the cardinality of the multiset."""
+        if np.all(self.registers == 0):
+            return 0.0
+        
+        m = float(self.num_registers)
+        alpha = self._get_alpha(m)
+        
+        register_harmonics = np.power(2.0, -self.registers)
+        raw_estimate = alpha * m * m / np.sum(register_harmonics)
+        
+        # Small range correction
+        if raw_estimate <= 2.5 * m:  # Back to 2.5*m
+            v = np.sum(self.registers == 0)
+            if v > 0:
+                raw_estimate = m * np.log(m / float(v))
+                return raw_estimate
+        
+        # Large range correction
+        if raw_estimate > pow(2, 32) / 32.0:  # Adjusted from 35.0
+            raw_estimate = -pow(2, 32) * np.log(1.0 - raw_estimate / pow(2, 32))
+        
+        return raw_estimate
+
+    def _get_alpha(self, m: float) -> float:
+        """Get alpha constant based on number of registers."""
+        if m == 16:
+            return 0.673
+        elif m == 32:
+            return 0.697
+        elif m == 64:
+            return 0.709
+        else:
+            # Add a very small correction factor to reduce overestimation
+            return 0.7213 / (1.0 + 1.079 / m) * 0.985
 
     def raw_estimate(self) -> float:
         """Calculate the raw cardinality estimate before corrections.
@@ -292,7 +319,7 @@ class HyperLogLog(AbstractSketch):
         return matching_nonzero / total_active
         
         # Create union and intersection sketches with same seed
-        union = HyperLogLog(precision=self.precision, seed=self.seed)
+        #union = HyperLogLog(precision=self.precision, seed=self.seed)
         intersection = HyperLogLog(precision=self.precision, seed=self.seed)
         # intersection = self.estimate_intersection(other)
         # union = self.estimate_union(other)

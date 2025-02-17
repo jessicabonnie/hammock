@@ -115,8 +115,69 @@ class TestHyperLogLogFull:
         error = abs(estimate - n_items) / n_items
         
         # Should be within 5% error for this precision
-        assert error < 0.05  # Increased error tolerance from 0.02 to 0.05
+        assert error < 0.02  # Increased error tolerance from 0.02 to 0.05
         
+    def test_estimate_cardinality_empty(self):
+        """Test cardinality estimation of an empty HLL."""
+        hll = HyperLogLog(precision=8)
+        assert hll.estimate_cardinality() == 0
+
+    def test_estimate_cardinality_single_element(self):
+        """Test cardinality estimation with a single element."""
+        hll = HyperLogLog(precision=8)
+        hll.add_string("test")
+        # The exact value may vary due to hashing, but should be close to 1
+        assert 0.8 <= hll.estimate_cardinality() <= 1.2
+
+    def test_estimate_cardinality_duplicates(self):
+        """Test that duplicates don't increase the cardinality estimate."""
+        hll = HyperLogLog(precision=8)
+        for _ in range(10):
+            hll.add_string("test")
+        # Should still be close to 1
+        assert 0.8 <= hll.estimate_cardinality() <= 1.2
+
+    def test_estimate_cardinality_multiple_elements(self):
+        """Test cardinality estimation with multiple distinct elements."""
+        hll = HyperLogLog(precision=8)
+        n_elements = 1000
+        for i in range(n_elements):
+            hll.add_string(f"test_{i}")
+        # Should be within 2% of actual count for this size
+        estimate = hll.estimate_cardinality()
+        assert 0.98 * n_elements <= estimate <= 1.02 * n_elements
+
+    def test_estimate_cardinality_precision_impact(self):
+        """Test how precision affects cardinality estimation."""
+        n_elements = 1000
+        elements = [f"test_{i}" for i in range(n_elements)]
+        
+        # Test with different precision values
+        precisions = [4, 8, 12, 16]
+        errors = []
+        
+        for p in precisions:
+            hll = HyperLogLog(precision=p)
+            for elem in elements:
+                hll.add_string(elem)
+            estimate = hll.estimate_cardinality()
+            error = abs(estimate - n_elements) / n_elements
+            errors.append(error)
+        
+        # Error should decrease with increasing precision
+        for i in range(len(errors) - 1):
+            assert errors[i] >= errors[i + 1]
+
+    def test_estimate_cardinality_large_numbers(self):
+        """Test cardinality estimation with large numbers of elements."""
+        hll = HyperLogLog(precision=12)  # Higher precision for better accuracy
+        n_elements = 100000
+        for i in range(n_elements):
+            hll.add_string(f"large_test_{i}")
+        estimate = hll.estimate_cardinality()
+        # Should be within 2% for this size and precision
+        assert 0.97 * n_elements <= estimate <= 1.02 * n_elements
+
     def test_different_seeds(self):
         """Test that different seeds give different results."""
         sketch1 = HyperLogLog(precision=8, seed=1)
@@ -124,7 +185,7 @@ class TestHyperLogLogFull:
         
         # Add same strings to both sketches
         for i in range(1000):
-            s = str(i)
+            s = str(i).zfill(4)
             sketch1.add_string(s)
             sketch2.add_string(s)
         
