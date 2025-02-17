@@ -97,6 +97,10 @@ class HyperLogLog(AbstractSketch):
         idx = hash_val & (self.num_registers - 1)
         rank = self._rho(hash_val)
         self.registers[idx] = max(self.registers[idx], rank)
+    
+    def _register_counts(self) -> np.ndarray:
+        """Get counts of registers."""
+        return np.bincount(self.registers, minlength=64)
 
     def add_string_with_minimizers(self, s: str) -> None:
         """Add a string to the sketch using minimizer windowing scheme.
@@ -177,11 +181,22 @@ class HyperLogLog(AbstractSketch):
         rank = self._rho(hash_val)
         self.registers[idx] = max(self.registers[idx], rank)
 
-    def estimate_cardinality(self) -> float:
+    def estimate_cardinality(self, method: str = 'ertl_mle') -> float:
         """Estimate the cardinality of the multiset."""
+        self.register_counts = self._register_counts()
         if np.all(self.registers == 0):
             return 0.0
+        if method == 'original':
+            return self.original_estimate()
+        elif method == 'ertl_improved':
+            return self.ertl_improved_estimate()
+        elif method == 'ertl_mle':
+            return self.ertl_mle_estimate()
+        else:
+            raise ValueError(f"Invalid method: {method}")
         
+    def original_estimate(self) -> float:
+        # NOTE: This is using 32-bit registers, but the rest of the code is using 64-bit registers...
         m = float(self.num_registers)
         alpha = self._get_alpha(m)
         
@@ -200,6 +215,210 @@ class HyperLogLog(AbstractSketch):
             raw_estimate = -pow(2, 32) * np.log(1.0 - raw_estimate / pow(2, 32))
         
         return raw_estimate
+
+    def _get_tau(self, x) -> float:
+        """Calculate tau value for HyperLogLog bias correction.
+        Args:
+            x: Input value between 0 and 1
+        Returns:
+            Bias correction factor tau(x)
+        """
+        if x == 0.0 or x == 1.0:
+            return 0.0
+        
+        # Initialize variables
+        z = 1.0 - x  # z starts as complement of x
+        tmp = 0.0
+        y = 1.0
+        zprev = x       # zprev (z previous) starts as x
+        
+        # Iterate until convergence (z stops changing)
+        while zprev != z:
+            x = x ** 0.5    # Square root of x
+            zprev = z          # Save previous z
+            y *= 0.5       # Halve y each iteration (geometric scaling)
+            tmp = 1.0 - x   # Calculate temporary value
+            z -= tmp * tmp * y  # Update z
+            
+        return z / 3.0
+            
+    def ertl_improved_estimate(self) -> float:
+        """Estimate cardinality using Ertl's improved method."""
+        norm_const = 0.7213  # 1/(2*ln(2))
+        m = float(self.num_registers)
+        # counts = self.register_counts()
+    
+        # Get counts of maxed registers
+        n_maxed_registers = self.register_counts[64-self.precision + 1]
+        non_maxreg_frac = (m - n_maxed_registers)/m
+         # Get counts of zero registers
+        zero_reg_frac = self.register_counts[0]/m
+    
+        # Apply bias corrections
+        tau = self._get_tau(non_maxreg_frac)
+        z = m * tau
+        # Process intermediate registers
+        for i in range(64 - self.precision, 0, -1):
+            z += self.register_counts[i]  # Add count for this register value
+            z *= 0.5 # geometric scaling
+        
+        #bias correction for zero registers
+        sigma = self._get_sigma(zero_reg_frac)
+        z+= m*sigma
+        #bias correction for non-maxed registers
+        return m * norm_const * m / z
+
+    
+    def _get_probs(self, est: float) -> float:
+        """Calculate probabilities for each register value.
+        
+        Args:
+            est: Estimated cardinality
+        Returns:
+            Total probability
+        """
+        total_prob = 0.0
+        
+        # Find optimization bounds
+        # k_min: Find first non-zero register count to skip empty low registers
+        # This improves performance and numerical stability since very low registers
+        # often have no counts
+        k_min = 0
+        while k_min < 64 and self.register_counts[k_min] == 0:
+            k_min += 1
+        k_min = max(1, k_min)  # Ensure we start at least at 1 to avoid numerical issues with 0
+        
+        # k_max: Find last non-zero register count to skip empty high registers
+        # This avoids unnecessary computation for register values that can't occur
+        # given our precision parameter
+        k_max = 64 - self.precision
+        while k_max > 0 and self.register_counts[k_max] == 0:
+            k_max -= 1
+        k_max = min(64 - self.precision, k_max)  # Ensure we don't exceed maximum possible value
+        
+        # Only calculate probabilities for non-zero register counts within our bounds
+        # This optimization:
+        # 1. Reduces computation by skipping empty registers
+        # 2. Improves numerical stability by avoiding extreme probability values
+        # 3. Focuses calculation on the registers that actually contribute to the estimate
+        for j in range(k_min, k_max + 1):
+            if self.register_counts[j] > 0:
+                # Calculate probability of getting j leading zeros
+                # p = P(value = j) = P(zeros >= j) - P(zeros >= j+1)
+                p = (1.0 - 2.0 ** -j) ** est - (1.0 - 2.0 ** -(j+1)) ** est
+                total_prob += p * self.register_counts[j]
+            
+        return total_prob
+
+    def ertl_mle_estimate(self, relative_error: float = 1e-2) -> float:
+        """Estimate cardinality using Ertl's Maximum Likelihood Estimation method."""
+        num_registers = 1 << self.precision
+        max_register_value = 64 - self.precision
+        
+        # Check if all registers are maxed out
+        if self.register_counts[max_register_value + 1] == num_registers:
+            return float('inf')
+        
+        # Find bounds for non-zero register values
+        min_nonzero_value = 0
+        while min_nonzero_value < 64 and self.register_counts[min_nonzero_value] == 0:
+            min_nonzero_value += 1
+        min_value_bound = max(1, min_nonzero_value)  # Ensure minimum of 1 for numerical stability
+        
+        max_nonzero_value = max_register_value + 1
+        while max_nonzero_value > 0 and self.register_counts[max_nonzero_value] == 0:
+            max_nonzero_value -= 1
+        max_value_bound = min(max_register_value, max_nonzero_value)
+        
+        # Calculate initial harmonic mean with proper scaling
+        harmonic_mean = 0.0
+        for register_value in range(max_value_bound, min_value_bound - 1, -1):
+            harmonic_mean = 0.5 * harmonic_mean + self.register_counts[register_value]
+        harmonic_mean = harmonic_mean * (2.0 ** -min_value_bound)  # Scale by power of 2
+        
+        # Initialize estimation parameters
+        maxed_register_count = self.register_counts[max_register_value + 1]
+        if max_register_value:
+            maxed_register_count += self.register_counts[max_value_bound]
+        
+        zero_correction = harmonic_mean + self.register_counts[0]
+        active_registers = num_registers - self.register_counts[0]
+        
+        # Initial estimate using improved bound
+        prev_estimate = harmonic_mean + self.register_counts[max_register_value + 1] * (2.0 ** -max_register_value)
+        if prev_estimate <= 1.5 * zero_correction:
+            cardinality_estimate = active_registers / (0.5 * prev_estimate + zero_correction)
+        else:
+            cardinality_estimate = (active_registers / prev_estimate) * np.log1p(prev_estimate / zero_correction)
+        
+        # Adjust relative error based on number of registers
+        relative_error /= np.sqrt(num_registers)
+        estimate_change = cardinality_estimate
+        
+        # Main estimation loop with improved convergence
+        while estimate_change > cardinality_estimate * relative_error:
+            # Calculate binary exponent for scaling
+            binary_exponent = int(np.floor(np.log2(cardinality_estimate))) + 1
+            scaled_estimate = cardinality_estimate * (2.0 ** -max(max_value_bound + 1, binary_exponent + 2))
+            scaled_estimate_squared = scaled_estimate * scaled_estimate
+            
+            # Taylor series approximation for probability function
+            prob_estimate = (scaled_estimate - 
+                            scaled_estimate_squared/3 + 
+                            (scaled_estimate_squared * scaled_estimate_squared) * 
+                            (1/45 - scaled_estimate_squared/472.5))
+            
+            # Update probability estimate for each register value
+            total_probability = maxed_register_count * prob_estimate
+            for register_value in range(max_value_bound - 1, min_value_bound - 1, -1):
+                prob_complement = 1.0 - prob_estimate
+                prob_estimate = ((scaled_estimate + prob_estimate * prob_complement) / 
+                               (scaled_estimate + prob_complement))
+                scaled_estimate *= 2
+                if self.register_counts[register_value] > 0:
+                    total_probability += self.register_counts[register_value] * prob_estimate
+            
+            total_probability += cardinality_estimate * zero_correction
+            
+            # Update estimate using secant method
+            if prev_estimate < total_probability <= active_registers:
+                estimate_change *= ((total_probability - active_registers) / 
+                                  (prev_estimate - total_probability))
+            else:
+                estimate_change = 0
+            
+            cardinality_estimate += estimate_change
+            prev_estimate = total_probability
+        
+        return cardinality_estimate * num_registers
+
+ 
+    def _get_sigma(self, x: float) -> float:
+        """Calculate sigma value for HyperLogLog bias correction.
+        
+        Args:
+            x: Input value between 0 and 1 (fraction of empty registers)
+            
+        Returns:
+            Bias correction factor sigma(x)
+        """
+        if x == 1.0:
+            return float('inf')
+        
+        z = x
+        zprev = 0.0  # z previous
+        y = 1.0
+        
+        while z != zprev:
+            x = x * x    
+            zprev = z 
+            z += x * y  # Update z
+            y += y      # Double y
+            
+            if np.isnan(z):
+                # If we hit a numerical instability, return last valid value
+                return zprev
+        return z
 
     def _get_alpha(self, m: float) -> float:
         """Get alpha constant based on number of registers."""
@@ -459,3 +678,4 @@ class HyperLogLog(AbstractSketch):
     def is_empty(self) -> bool:
         """Check if sketch is empty."""
         return np.all(self.registers == 0)
+       
