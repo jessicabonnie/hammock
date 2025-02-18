@@ -9,16 +9,13 @@ git clone https://github.com/jessicabonnie/hammock.git
 cd hammock
 pip install -e .
 ```
-`hammock`'s mode D makes use of `Digest`, a C++ library that supports various sub-sampling schemes for $k$-mers in DNA sequences.
+`hammock`'s mode D makes use of `Digest`, a C++ library that supports various sub-sampling schemes for $k$-mers in DNA sequences. `Digest` is now available on bioconda:    
 ```bash
-cd ..
-git clone https://github.com/VeryAmazed/digest.git
-cd digest
-
-meson setup --prefix=$(pwd)/build --buildtype=release build
-meson install -C build
-pip install .
+conda install -c bioconda digest
 ```
+
+If you would like to install `Digest` from source, follow the instructions [here](https://github.com/VeryAmazed/digest.git).
+
 
 ## Usage
 
