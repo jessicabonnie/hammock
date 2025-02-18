@@ -126,133 +126,6 @@ def test_invalid_file():
         assert sketch is None
 
 @pytest.mark.full
-def test_bigwig_file_processing():
-    """Test processing of BigWig files."""
-    with tempfile.NamedTemporaryFile(suffix='.bw', delete=False) as f:
-        # Create a test BigWig file
-        bw = pyBigWig.open(f.name, 'w')
-        # Add a header with chromosome sizes
-        chroms = [("chr1", 1000), ("chr2", 1000)]
-        bw.addHeader(list(chroms))
-        
-        # Add some test data
-        # chr1: two intervals with non-zero values
-        chroms_values = [
-            ("chr1", 100, 200, 1.0),
-            ("chr1", 300, 400, 1.0),
-            ("chr2", 500, 600, 1.0)
-        ]
-        for chrom, start, end, value in chroms_values:
-            bw.addEntries([chrom], [start], ends=[end], values=[value])
-        bw.close()
-
-        # Test mode A (intervals)
-        sketch_a = IntervalSketch.from_file(filename=f.name, mode="A")
-        assert sketch_a is not None
-        assert sketch_a.num_intervals == 3  # Should have 3 intervals
-        assert sketch_a.sketch.estimate_cardinality() > 0  # Should have interval hashes
-
-        # Test mode B (points)
-        sketch_b = IntervalSketch.from_file(filename=f.name, mode="B")
-        assert sketch_b is not None
-        assert sketch_b.sketch.estimate_cardinality() > 0  # Should have points in the sketch
-
-        # Test mode C (both)
-        sketch_c = IntervalSketch.from_file(filename=f.name, mode="C")
-        assert sketch_c is not None
-        assert sketch_c.num_intervals == 3  # Should count intervals in mode C
-
-@pytest.mark.full
-def test_bigwig_invalid_file():
-    """Test handling of invalid BigWig files."""
-    # Test with non-existent file
-    sketch = IntervalSketch.from_file(filename="nonexistent.bw", mode="A")
-    assert sketch is None
-
-    # Test with invalid format
-    with tempfile.NamedTemporaryFile(suffix='.bw') as f:
-        f.write(b"invalid bigwig format")
-        f.flush()
-        sketch = IntervalSketch.from_file(filename=f.name, mode="A")
-        assert sketch is None
-
-@pytest.mark.full
-def test_bigwig_with_expA():
-    """Test bigWig comparison with expA."""
-    # Create temporary test files
-    with tempfile.NamedTemporaryFile(suffix='.bw', delete=False) as f1, \
-         tempfile.NamedTemporaryFile(suffix='.bw', delete=False) as f2:
-        
-        # Create first test BigWig file
-        bw1 = pyBigWig.open(f1.name, 'w')
-        chroms = [("chr1", 1000)]
-        bw1.addHeader(list(chroms))
-        bw1.addEntries(["chr1"], [100], ends=[200], values=[1.0])
-        bw1.close()  # Ensure file is properly closed
-        
-        # Create second test BigWig file
-        bw2 = pyBigWig.open(f2.name, 'w')
-        bw2.addHeader(list(chroms))
-        bw2.addEntries(["chr1"], [150], ends=[250], values=[1.0])
-        bw2.close()  # Ensure file is properly closed
-        
-        try:
-            # Test with expA in mode C
-            sketch1 = IntervalSketch.from_file(
-                filename=f1.name,
-                mode="C",
-                expA=2.0,
-                sketch_type="hyperloglog"
-            )
-            assert sketch1 is not None, "Failed to create first sketch"
-            
-            sketch2 = IntervalSketch.from_file(
-                filename=f2.name,
-                mode="C",
-                expA=2.0,
-                sketch_type="hyperloglog"
-            )
-            assert sketch2 is not None, "Failed to create second sketch"
-            
-            # Test similarity values
-            result = sketch1.similarity_values(sketch2)
-            assert result is not None
-            assert 'jaccard_similarity' in result
-            assert 'containment' in result
-            assert isinstance(result['jaccard_similarity'], float)
-            assert isinstance(result['containment'], float)
-            
-        finally:
-            # Clean up
-            os.unlink(f1.name)
-            os.unlink(f2.name)
-
-@pytest.mark.full
-def test_bigwig_with_subsampling():
-    """Test BigWig processing with subsampling."""
-    with tempfile.NamedTemporaryFile(suffix='.bw', delete=False) as f:
-        # Create a test BigWig file
-        bw = pyBigWig.open(f.name, 'w')
-        # Add a header with chromosome sizes
-        chroms = [("chr1", 1000)]
-        bw.addHeader(list(chroms))
-        
-        # Add multiple intervals
-        for i in range(5):
-            bw.addEntries(["chr1"], [i*200], ends=[(i+1)*200], values=[1.0])
-        bw.close()
-
-        # Test with subsampling in mode C
-        sketch = IntervalSketch.from_file(
-            filename=f.name,
-            mode="C",
-            subsample=(0.5, 0.5)  # Subsample both intervals and points
-        )
-        assert sketch is not None
-        assert sketch.num_intervals <= 5  # Should have fewer intervals due to subsampling
-        assert sketch.sketch.estimate_cardinality() > 0  # Should still have some points
-
-@pytest.mark.full
 def test_subsampling():
     """Test interval subsampling."""
     total_intervals = 1000  # Increase number of intervals for more reliable sampling
@@ -299,128 +172,24 @@ def test_subsampling():
         finally:
             os.unlink(f.name)
 
-@pytest.mark.full
-def test_bam_file_processing():
-    """Test processing of BAM files."""
-    # Create a temporary BAM file
-    with tempfile.NamedTemporaryFile(suffix='.bam', delete=False) as f:
-        # Create a test BAM file
-        header = {'HD': {'VN': '1.0'},
-                 'SQ': [{'LN': 1000, 'SN': 'chr1'},
-                       {'LN': 1000, 'SN': 'chr2'}]}
-        
-        with pysam.AlignmentFile(f.name, 'wb', header=header) as bam:
-            # Create test alignments
-            a1 = pysam.AlignedSegment()
-            a1.query_name = "read1"
-            a1.reference_id = 0  # chr1
-            a1.reference_start = 100
-            a1.query_sequence = "A" * 100
-            a1.flag = 0
-            a1.mapping_quality = 20
-            a1.cigar = [(0, 100)]  # 100M (match)
-            
-            a2 = pysam.AlignedSegment()
-            a2.query_name = "read2"
-            a2.reference_id = 0  # chr1
-            a2.reference_start = 150
-            a2.query_sequence = "A" * 100
-            a2.flag = 0
-            a2.mapping_quality = 20
-            a2.cigar = [(0, 100)]  # 100M (match)
-            
-            a3 = pysam.AlignedSegment()
-            a3.query_name = "read3"
-            a3.reference_id = 1  # chr2
-            a3.reference_start = 300
-            a3.query_sequence = "A" * 100
-            a3.flag = 0
-            a3.mapping_quality = 20
-            a3.cigar = [(0, 100)]  # 100M (match)
-            
-            # Write alignments
-            bam.write(a1)
-            bam.write(a2)
-            bam.write(a3)
-
-        # Create index for the BAM file
-        pysam.index(f.name)
-        
-        try:
-            # Test mode A (intervals)
-            sketch_a = IntervalSketch.from_file(filename=f.name, mode="A")
-            assert sketch_a is not None
-            assert sketch_a.num_intervals == 3  # Should count all intervals
-            assert sketch_a.sketch.estimate_cardinality() > 0  # Should have interval hashes
-            
-            # Test mode B (points)
-            sketch_b = IntervalSketch.from_file(filename=f.name, mode="B")
-            assert sketch_b is not None
-            assert sketch_b.sketch.estimate_cardinality() > 0  # Should have points
-            
-            # Test mode C (both)
-            sketch_c = IntervalSketch.from_file(filename=f.name, mode="C")
-            assert sketch_c is not None
-            assert sketch_c.num_intervals == 3  # Should count intervals
-            assert sketch_c.sketch.estimate_cardinality() > 0  # Should have both intervals and points
-            
-        finally:
-            # Clean up
-            os.unlink(f.name)
-            if os.path.exists(f.name + '.bai'):
-                os.unlink(f.name + '.bai')
 
 @pytest.mark.full
-def test_bam_invalid_file():
-    """Test handling of invalid BAM files."""
-    # Test with non-existent file
-    sketch = IntervalSketch.from_file(filename="nonexistent.bam", mode="A")
-    assert sketch is None
-    
-    # Test with invalid format
-    with tempfile.NamedTemporaryFile(suffix='.bam') as f:
-        f.write(b"invalid bam format")
-        f.flush()
+def test_unsupported_file():
+    """Test handling of unsupported file formats."""
+    with tempfile.NamedTemporaryFile(suffix='.cram', delete=False) as f:
         sketch = IntervalSketch.from_file(filename=f.name, mode="A")
         assert sketch is None
 
 @pytest.mark.full
-def test_bam_with_subsampling():
-    """Test BAM processing with subsampling."""
-    with tempfile.NamedTemporaryFile(suffix='.bam', delete=False) as f:
-        # Create header
-        header = {'HD': {'VN': '1.0'},
-                 'SQ': [{'LN': 1000, 'SN': 'chr1'}]}
-        
-        with pysam.AlignmentFile(f.name, 'wb', header=header) as bam:
-            # Create 10 test alignments
-            for i in range(10):
-                a = pysam.AlignedSegment()
-                a.query_name = f"read{i}"
-                a.reference_id = 0
-                a.reference_start = i * 100
-                a.query_sequence = "A" * 100
-                a.flag = 0
-                a.mapping_quality = 20
-                a.cigar = [(0, 100)]
-                bam.write(a)
-        
-        # Create index
-        pysam.index(f.name)
-        
-        try:
-            # Test with subsampling in mode C
-            sketch = IntervalSketch.from_file(
-                filename=f.name,
-                mode="C",
-                subsample=(0.5, 0.5)  # Subsample both intervals and points
-            )
-            assert sketch is not None
-            assert sketch.num_intervals <= 10  # Should have fewer intervals due to subsampling
-            assert sketch.sketch.estimate_cardinality() > 0  # Should still have some points
-            
-        finally:
-            # Clean up
-            os.unlink(f.name)
-            if os.path.exists(f.name + '.bai'):
-                os.unlink(f.name + '.bai')
+def test_error_handling():
+    """Test error handling for malformed files."""
+    # Test non-existent file
+    sketch = IntervalSketch.from_file(filename="nonexistent.bed", mode="A")
+    assert sketch is None
+
+    # Test malformed Bed file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.bed', delete=False) as f:
+        f.write("ch1\t100\t200\t300\n")
+        f.flush()
+        sketch = IntervalSketch.from_file(filename=f.name, mode="A")
+        assert sketch is None

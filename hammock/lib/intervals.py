@@ -15,216 +15,125 @@ import pysam  # type: ignore  # no type stubs available
 class IntervalSketch(AbstractSketch):
     """Sketch class for BED intervals."""
     
-    def __init__(self, mode: str = "A", precision: int = 8, 
-                 sketch_type: str = "hyperloglog", expA: float = 0,
-                 subsample: tuple[float, float] = (1.0, 1.0),
-                 debug: bool = False,
-                 **kwargs):
-        """Initialize interval sketch.
+    def __init__(self, **kwargs):
+        """Initialize the sketch."""
+        # Extract parameters with defaults
+        precision = kwargs.get('precision', 12)
+        debug = kwargs.get('debug', False)
         
-        Args:
-            mode: Mode for interval processing (A/B/C)
-            precision: Precision for HyperLogLog sketching
-            sketch_type: Type of sketch to use
-            expA: Exponent for interval multiplicity (mode C only)
-            subsample: Tuple of (interval_rate, point_rate) between 0 and 1
-            debug: Whether to print debug information
-        """
-        super().__init__()
-        # Validate mode
-        if mode not in ["A", "B", "C"]:
-            raise ValueError(f"Invalid mode: {mode}. Must be one of: A, B, C")
-            
-        # Validate expA
-        if expA < 0:
-            raise ValueError("expA must be non-negative")
-        if expA > 0 and mode != "C":
+        # Store mode and validation
+        self.mode = kwargs.get('mode', 'A')
+        if self.mode not in ['A', 'B', 'C', 'D']:
+            raise ValueError(f"Invalid mode: {self.mode}")
+        
+        # Store and validate expA
+        self.expA = kwargs.get('expA', 0)
+        if not isinstance(self.expA, (int, float)) or self.expA < 0:
+            raise ValueError(f"expA must be a non-negative number, got {self.expA}")
+        
+        # Validate expA can only be used with mode C
+        if self.expA > 0 and self.mode != 'C':
             raise ValueError("Multiplicity (expA) can only be used with mode C")
-            
-        # Validate subsample rates
-        if not (0 <= subsample[0] <= 1 and 0 <= subsample[1] <= 1):
-            raise ValueError("Subsample rates must be between 0 and 1")
-            
-        self.mode = mode
-        self.expA = expA
-        self.subsample = subsample
-        self.precision = precision
-        self.sketch_type = sketch_type
-        self.debug = debug
         
-        # Initialize sketch based on type
-        if sketch_type == "hyperloglog":
-            self.sketch = HyperLogLog(precision=precision, debug=debug, **kwargs)
-        elif sketch_type == "minhash":
-            self.sketch = MinHash(debug=debug, **kwargs)
-        elif sketch_type == "exact":
-            self.sketch = ExactCounter(**kwargs)
-        else:
-            raise ValueError(f"Invalid sketch type: {sketch_type}")
+        # Store and validate subsample
+        self.subsample = kwargs.get('subsample', (1.0, 1.0))
+        if not isinstance(self.subsample, tuple) or len(self.subsample) != 2:
+            raise ValueError(f"subsample must be a tuple of length 2, got {self.subsample}")
+        if not all(isinstance(x, (int, float)) and 0 <= x <= 1 for x in self.subsample):
+            raise ValueError(f"subsample values must be between 0 and 1, got {self.subsample}")
         
-        self.total_interval_size = 0
+        # Only pass precision and debug to HyperLogLog
+        self.sketch = HyperLogLog(precision=precision, debug=debug)
+        
+        # Initialize other instance variables
         self.num_intervals = 0
-        
-        # Validate expA usage
-        if expA > 0:
-            if mode != "C":
-                raise ValueError("Multiplicity (expA) can only be used with mode C")
-            if subsample != (1.0, 1.0):
-                raise ValueError("Multiplicity (expA) cannot be used with subsampling")
+        self.total_interval_size = 0
 
     @classmethod
-    def from_file(cls, filename: str, mode: str, precision: int = 8, 
-                  sketch_type: str = "hyperloglog", sep: str = "-", 
-                  subsample: tuple[float, float] = (1.0, 1.0),
-                  expA: float = 0,
-                  **kwargs) -> Optional['IntervalSketch']:
-        """Create sketch from BED/BigBed/BigWig/BAM file.
+    def from_file(cls, filename: str, **kwargs) -> Optional['IntervalSketch']:
+        """Create a sketch from a file."""
+        # Initialize sketch
+        sketch = cls(**kwargs)
         
-        Args:
-            filename: Path to BED/BigBed/BigWig/BAM file
-            mode: Mode for interval processing (A/B/C)
-            precision: Precision for HyperLogLog sketching
-            sketch_type: Type of sketch to use
-            sep: Separator for interval string representation
-            subsample: Tuple of (interval_rate, point_rate) between 0 and 1,
-            expA: Exponent for interval multiplicity (mode C only)
-            **kwargs: Additional arguments for sketch initialization
-            
-        Returns:
-            New IntervalSketch instance or None if error
-        """
-        sketch = cls(mode=mode, precision=precision, sketch_type=sketch_type, 
-                    expA=expA, subsample=subsample)
+        # Add sketch to kwargs for helper methods
+        kwargs['sketch'] = sketch
         
-        try:
-            if filename.endswith('.bb'):
-                return cls._from_bigbed(filename, mode, sep, subsample, expA, sketch)
-            elif filename.endswith('.bw'):
-                return cls._from_bigwig(filename, mode, sep, subsample, expA, sketch)
-            elif filename.endswith('.bam'):
-                return cls._from_bam(filename, mode, sep, subsample, expA, sketch)
-            else:
-                return cls._from_bed(filename, mode, sep, subsample, expA, sketch)
-        except Exception as e:
-            print(f"Error processing file {filename}: {e}")
+        # Check file extension and process accordingly
+        file_ext = filename.lower().split('.')[-1]
+        
+        # # Handle BigWig files
+        # if file_ext == 'bw' or file_ext == 'bigwig':
+        #     return cls._from_bigwig(filename, **kwargs)
+        
+        # Handle BigBed files
+        if file_ext == 'bb' or file_ext == 'bigbed':
+            return cls._from_bigbed(filename, **kwargs)
+        
+        # # Handle BAM files
+        # elif file_ext in ['bam']:
+        #     return cls._from_bam(filename, **kwargs)
+        
+        # Skip other unsupported binary formats
+        elif file_ext in ['cram', 'sam']:
+            print(f"Skipping unsupported file format: {filename}")
             return None
+        
+        # Handle regular BED files (including gzipped)
+        else:
+            try:
+                # Handle gzipped files
+                if filename.endswith('.gz'):
+                    opener = gzip.open
+                else:
+                    opener = open
+                
+                with opener(filename, 'rt') as f:
+                    for line in f:
+                        if not line.startswith('#'):
+                            interval, points, size = sketch.bedline(line, mode=kwargs.get('mode', 'A'), sep=kwargs.get('sep', '-'), subsample=kwargs.get('subsample', (1.0, 1.0)))
+                            
+                            # Add interval if present and in mode A or C
+                            if interval and kwargs.get('mode', 'A') in ["A", "C"]:
+                                sketch.sketch.add_string(interval)
+                                if kwargs.get('expA', 0) > 0:
+                                    for i in range(1, int(10**kwargs.get('expA', 0))+1):
+                                        sketch.sketch.add_string(interval + str(i))
+                                sketch.num_intervals += 1
+                                sketch.total_interval_size += size
+                            
+                            # Add points if present and in mode B or C
+                            if points and kwargs.get('mode', 'A') in ["B", "C"]:
+                                for point in points:
+                                    if point is not None:
+                                        sketch.sketch.add_string(point)
+                                        if kwargs.get('mode', 'A') == "B":
+                                            sketch.num_intervals += 1
+                return sketch
+            except Exception as e:
+                print(f"Error processing file {filename}: {e}")
+                return None
 
     @classmethod
-    def _from_bigbed(cls, filename: str, mode: str, sep: str, 
-                     subsample: tuple[float, float], expA: float, sketch: 'IntervalSketch') -> Optional['IntervalSketch']:
+    def _from_bigbed(cls, filename: str, **kwargs) -> Optional['IntervalSketch']:
         """Process BigBed format file."""
         try:
-            with pyBigWig.open(filename) as bw:
-                # Get chromosomes and their sizes
-                chroms = bw.chroms()
-                for chrom in chroms:
-                    # Fetch all intervals for this chromosome
-                    intervals = bw.entries(chrom, 0, chroms[chrom])
-                    if intervals:
-                        for start, end, _ in intervals:
-                            line = f"{chrom}\t{start}\t{end}"
-                            interval, points, size = sketch.bedline(line, mode=mode, sep=sep, subsample=subsample)
-                            
-                            # Add interval if present and in mode A or C
-                            if interval and mode in ["A", "C"]:
-                                sketch.sketch.add_string(interval)
-                                if expA > 0:
-                                    for i in range(1, floor(10**expA)+1):
-                                        sketch.sketch.add_string(interval + str(i))
-                                sketch.num_intervals += 1
-                                sketch.total_interval_size += size
-                            
-                            # Add points if present and in mode B or C
-                            if points and mode in ["B", "C"]:
-                                for point in points:
-                                    if point is not None:
-                                        sketch.sketch.add_string(point)
-                                        if mode == "B":
-                                            sketch.num_intervals += 1
-            return sketch
-        except Exception as e:
-            print(f"Error processing BigBed file {filename}: {e}")
-            return None
-
-    @classmethod
-    def _from_bigwig(cls, filename: str, mode: str, sep: str, 
-                     subsample: tuple[float, float], expA: float, sketch: 'IntervalSketch') -> Optional['IntervalSketch']:
-        """Process BigWig format file."""
-        try:
-            with pyBigWig.open(filename) as bw:
-                # Get chromosomes and their sizes
-                chroms = bw.chroms()
-                for chrom in chroms:
-                    # Get intervals for this chromosome using intervals() method
-                    # This returns runs of non-zero values as intervals
-                    intervals = bw.intervals(chrom, 0, chroms[chrom])
-                    if intervals:
-                        for start, end, value in intervals:
-                            line = f"{chrom}\t{int(start)}\t{int(end)}"
-                            interval, points, size = sketch.bedline(line, mode=mode, sep=sep, subsample=subsample)
-                            
-                            # Add interval if present and in mode A or C
-                            if interval and mode in ["A", "C"]:
-                                sketch.sketch.add_string(interval)
-                                if expA > 0:
-                                    for i in range(1, int(10**expA)+1):
-                                        sketch.sketch.add_string(interval + str(i))
-                                sketch.num_intervals += 1
-                                sketch.total_interval_size += size
-                            
-                            # Add points if present and in mode B or C
-                            if points and mode in ["B", "C"]:
-                                for point in points:
-                                    if point is not None:
-                                        sketch.sketch.add_string(point)
-                                        if mode == "B":
-                                            sketch.num_intervals += 1
-            return sketch
-        except Exception as e:
-            print(f"Error processing BigWig file {filename}: {e}")
-            return None
-
-    @classmethod
-    def _from_bam(cls, filename: str, mode: str, sep: str,
-                  subsample: tuple[float, float], expA: float, 
-                  sketch: 'IntervalSketch') -> Optional['IntervalSketch']:
-        """Process BAM format file.
-        
-        Args:
-            filename: Path to BAM file
-            mode: Processing mode (A/B/C)
-            sep: Separator for string representation
-            subsample: Tuple of (interval_rate, point_rate)
-            expA: Exponent for interval multiplicity
-            sketch: IntervalSketch instance to populate
+            # Get parameters from kwargs
+            mode = kwargs.get('mode', 'A')
+            sep = kwargs.get('sep', '-')
+            subsample = kwargs.get('subsample', (1.0, 1.0))
+            expA = kwargs.get('expA', 0)
+            sketch = kwargs.get('sketch')
             
-        Returns:
-            Populated IntervalSketch instance or None if error
-        """
-        try:
-            with pysam.AlignmentFile(filename, "rb") as bam:
-                for read in bam:
-                    if read.is_unmapped:
-                        continue
-                        
-                    # Get chromosome name without 'chr' prefix
-                    chrom = read.reference_name
-                    if chrom.startswith('chr'):
-                        chrom = chrom[3:]
-                        
-                    # Get alignment coordinates
-                    start = read.reference_start
-                    end = read.reference_end or (start + 1)  # fallback if end is None
-                    
-                    # Create BED-style line and process it
-                    line = f"{chrom}\t{start}\t{end}"
+            # Use pysam to read BigBed file
+            with pysam.TabixFile(filename) as bb:
+                for line in bb.fetch():
                     interval, points, size = sketch.bedline(line, mode=mode, sep=sep, subsample=subsample)
                     
                     # Add interval if present and in mode A or C
                     if interval and mode in ["A", "C"]:
                         sketch.sketch.add_string(interval)
                         if expA > 0:
-                            for i in range(1, floor(10**expA)+1):
+                            for i in range(1, int(10**expA)+1):
                                 sketch.sketch.add_string(interval + str(i))
                         sketch.num_intervals += 1
                         sketch.total_interval_size += size
@@ -234,11 +143,11 @@ class IntervalSketch(AbstractSketch):
                         for point in points:
                             if point is not None:
                                 sketch.sketch.add_string(point)
-                                if mode == "B":
-                                    sketch.num_intervals += 1
+                        if mode == "B":
+                            sketch.num_intervals += 1
             return sketch
         except Exception as e:
-            print(f"Error processing BAM file {filename}: {e}")
+            print(f"Error processing BigBed file {filename}: {e}")
             return None
 
     @classmethod
@@ -299,6 +208,8 @@ class IntervalSketch(AbstractSketch):
                 raise ValueError("bedline: one of the lines in malformed")
         # Ensure chromosome has 'chr' prefix
         chrval = columns[0][3:] if columns[0].startswith('chr') else columns[0]
+        # if not (chrval.isnumeric() or chrval in ["X","Y","M"]):
+        #     raise ValueError("bedline: chromosome is not numeric")
         return chrval, int(columns[1]), int(columns[2])
 
     def bedline(self, line: str, 
