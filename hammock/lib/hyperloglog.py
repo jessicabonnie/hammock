@@ -560,13 +560,6 @@ class HyperLogLog(AbstractSketch):
 
     def estimate_jaccard_iep(self, other: 'HyperLogLog') -> float:
         """Estimate Jaccard similarity using inclusion-exclusion principle."""
-        # if not isinstance(other, HyperLogLog):
-        #     raise TypeError("Can only compare with another HyperLogLog sketch")
-        # if self.precision != other.precision:
-        #     raise ValueError("Cannot compare HLLs with different precision")
-        # if self.seed != other.seed:
-        #     raise ValueError("HyperLogLogs must have same seed for comparison")
-        
         # Return 0 if either sketch is empty
         if self.is_empty() or other.is_empty():
             return 0.0
@@ -576,9 +569,7 @@ class HyperLogLog(AbstractSketch):
         card_b = other.estimate_cardinality()
         
         # Create union sketch
-        union = HyperLogLog(precision=self.precision, seed=self.seed)
-        np.maximum(self.registers, other.registers, out=union.registers)
-        card_union = union.estimate_cardinality()
+        card_union = self.estimate_union(other)
         
         # Use inclusion-exclusion principle
         card_intersection = max(0.0, card_a + card_b - card_union)

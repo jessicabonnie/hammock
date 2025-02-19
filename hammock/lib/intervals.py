@@ -65,6 +65,7 @@ class IntervalSketch(AbstractSketch):
         # if file_ext == 'bw' or file_ext == 'bigwig':
         #     return cls._from_bigwig(filename, **kwargs)
         
+        # NOTE: rearrange this elif to start with the most common file type
         # Handle BigBed files
         if file_ext == 'bb' or file_ext == 'bigbed':
             return cls._from_bigbed(filename, **kwargs)
