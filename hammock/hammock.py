@@ -102,7 +102,6 @@ def parse_args():
         Supported file formats:
         - BED format (.bed): Tab-delimited format with chromosome, start, and end positions
         - BigBed format (.bb): Binary indexed version of BED format
-        - BigWig format (.bw): Binary format for continuous data, intervals from non-zero regions
         - Any tab-delimited file with at least 3 columns (chr, start, end) in BED-style format
         - Sequence files (.fa, .fasta, .fna, .ffn, .faa, .frn) - automatically uses mode D
         """,
@@ -116,13 +115,13 @@ def parse_args():
     
     arg_parser.add_argument('--mode', choices=['A', 'B', 'C', 'D'], default='A',
                        help='''Mode for comparison:
-                       A: Compare intervals only (default for BED/BigBed/BigWig files)
+                       A: Compare intervals only (default for BED/BigBed files)
                        B: Compare points only
                        C: Compare both intervals and points
                        D: Compare sequences (auto-detected for sequence files)''')
     
     arg_parser.add_argument('--outprefix', '-o', type=str, default="hammock", help='The output file prefix')
-    arg_parser.add_argument("--precision", "-p", type=int, help="Precision for HyperLogLog sketching", default=8)
+    arg_parser.add_argument("--precision", "-p", type=int, help="Precision for HyperLogLog sketching", default=12)
     arg_parser.add_argument("--num_hashes", "-n", type=int, help="Number of hashes for MinHash sketching", default=128)
     arg_parser.add_argument("--subA", type=float, default=1.0, help="Subsampling rate for intervals (0 to 1)")
     arg_parser.add_argument("--subB", type=float, default=1.0, help="Subsampling rate for points (0 to 1)")
@@ -189,7 +188,10 @@ def get_new_prefix(outprefix: str,
                    sketch_type: str,
                    mode: str,
                    num_hashes: Optional[int] = None, 
-                   precision: Optional[int] = None) -> str:
+                   precision: Optional[int] = None,
+                   subA: Optional[float] = None,
+                   subB: Optional[float] = None,
+                   expA: Optional[float] = None) -> str:
     """Get output prefix with appropriate suffix based on sketch type.
     
     Args:
@@ -202,12 +204,25 @@ def get_new_prefix(outprefix: str,
     Returns:
         String with appropriate suffix for sketch type and mode
     """
+
     if sketch_type == "minhash":
-        return f"{outprefix}_minhash_n{num_hashes}_jacc{mode}"
+        outprefix = f"{outprefix}_minhash_n{num_hashes}_jacc{mode}"
     elif sketch_type == "hyperloglog":
-        return f"{outprefix}_hll_p{precision}_jacc{mode}"
+        outprefix = f"{outprefix}_hll_p{precision}_jacc{mode}"
     else:
-        return f"{outprefix}_exact_jacc{mode}"
+        outprefix = f"{outprefix}_exact_jacc{mode}"
+        
+    # Add either subA or expA (mutually exclusive)
+    if expA is not None:
+        outprefix = f"{outprefix}_expA{expA:.2f}"
+    elif subA is not None and subA != 1.0:
+        outprefix = f"{outprefix}_A{subA:.2f}"
+        
+    # Add subB if present
+    if subB is not None and subB != 1.0:
+        outprefix = f"{outprefix}_B{subB:.2f}"
+        
+    return outprefix
 
 def write_results(results: List[Dict[str, Any]], output: str) -> None:
     """Write comparison results to file.
@@ -387,7 +402,7 @@ def main():
         results = pool.map(process_file, pool_args)
     
     # Write results
-    outprefix = get_new_prefix(args.outprefix, args.sketch_type, args.mode, args.num_hashes, args.precision)
+    outprefix = get_new_prefix(args.outprefix, args.sketch_type, args.mode, args.num_hashes, args.precision, args.subA, args.subB, args.expA)
     with open(f"{outprefix}.csv", "w", newline='') as f:
         writer = csv.writer(f)
         
