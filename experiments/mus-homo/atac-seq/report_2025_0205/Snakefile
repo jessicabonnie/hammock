@@ -1,0 +1,82 @@
+# Snakemake experiment using ATAC-seq bed files as intervals with hammock
+
+import numpy as np
+import os
+from snakemake.io import ancient
+import itertools
+
+configfile: "config/mus_homo.yaml"  # Config is in the same directory level as Snakefile
+
+# Validate input files exist
+input_file1 = config['data_dir'] + "/" + config['input_list1']
+input_file2 = config['data_dir'] + "/" + config['input_list2']
+
+if not os.path.exists(input_file1):
+    raise ValueError(f"Input file not found: {input_file1}")
+if not os.path.exists(input_file2):
+    raise ValueError(f"Input file not found: {input_file2}")
+
+# Create results directory
+os.makedirs(config['results_dir'], exist_ok=True)
+
+# Generate all combinations of parameters
+SUBB_VALUES = [f"{x:.2f}" for x in config["subB"]]
+EXPA_VALUES = [f"{x:.2f}" for x in config["expA"]]
+
+# Input files
+input_file1 = os.path.join(config["data_dir"], config["input_list1"])
+input_file2 = os.path.join(config["data_dir"], config["input_list2"])
+
+# Generate list of all output files
+OUTPUT_FILES = [
+    f"{config['results_dir']}/{config['outprefix']}_hll_p{config['precision']}_jacc{config['mode']}_expA{expA}_B{subB}.csv"
+    for subB, expA in itertools.product(SUBB_VALUES, EXPA_VALUES)
+]
+
+# Debug prints
+print(f"Input file 1: {input_file1}")
+print(f"Input file 2: {input_file2}")
+print(f"Input file 1 exists: {os.path.exists(input_file1)}")
+print(f"Input file 2 exists: {os.path.exists(input_file2)}")
+print(f"Number of output files: {len(OUTPUT_FILES)}")
+print(f"First few output files:")
+for f in OUTPUT_FILES[:3]:
+    print(f"  {f}")
+
+# This rule must be uncommented - it tells Snakemake what files to create
+rule all:
+    input:
+        OUTPUT_FILES
+
+# Add a new rule to ensure input files exist
+rule check_inputs:
+    output:
+        temp(touch("input_files_checked"))
+    run:
+        if not os.path.exists(input_file1):
+            raise ValueError(f"Input file not found: {input_file1}")
+        if not os.path.exists(input_file2):
+            raise ValueError(f"Input file not found: {input_file2}")
+
+rule compare_intervals:
+    input:
+        paths1=input_file1,
+        paths2=input_file2
+    output:
+        f"{config['results_dir']}/{config['outprefix']}_hll_p{config['precision']}_jacc{config['mode']}_expA{{expA}}_B{{subB}}.csv"
+    params:
+        outprefix=f"{config['results_dir']}/{config['outprefix']}"
+    threads: config["threads"]
+    shell:
+        """
+        mkdir -p {config[results_dir]}
+        
+        hammock {input.paths1} {input.paths2} \
+            --mode {config[mode]} \
+            --outprefix {params.outprefix} \
+            --precision {config[precision]} \
+            --subB {wildcards.subB} \
+            --expA {wildcards.expA} \
+            --{config[sketch_type]} \
+            --threads {threads}
+        """
