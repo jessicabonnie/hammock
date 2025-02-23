@@ -2,7 +2,7 @@
 precision: 18
 mode: "C"
 sketch_type: "hyperloglog"
-threads: 16
+threads: 32
 
 # Paths
 data_dir: "/home/jbonnie1/interval_sketch/hammock/experiments/mus-homo/atac-seq/report_2025_0205/data/processed_paths"
