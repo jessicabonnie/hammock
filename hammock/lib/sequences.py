@@ -6,6 +6,8 @@ from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
 from hammock.lib.minimizer import MinimizerSketch
 import gc
+import gzip
+from hammock.lib.utils import read_sequences
 
 class SequenceSketch(AbstractSketch):
     """Sketch class for sequence data using various sketching methods."""
@@ -99,6 +101,7 @@ class SequenceSketch(AbstractSketch):
                 window_size=window_size,
                 precision=precision,
                 num_hashes=num_hashes,
+                seed=kwargs.get('seed', 42),
             )
             
             for records in read_sequences(filename, chunk_size):
@@ -178,17 +181,3 @@ class SequenceSketch(AbstractSketch):
         
         # Pass through all similarity values from the underlying sketch
         return self.sketch.similarity_values(other.sketch)
-
-def read_sequences(filename: str, chunk_size: int = 1000) -> Iterator[List[SeqIO.SeqRecord]]:
-    """Read sequences from a FASTA/FASTQ file in chunks."""
-    formatx = "fasta" if filename.endswith((".fa", ".fasta")) else "fastq"
-    records = []
-    
-    with open(filename, "r") as file:
-        for record in SeqIO.parse(file, formatx):
-            records.append(record)
-            if len(records) >= chunk_size:
-                yield records
-                records = []
-        if records:  # Yield any remaining records
-            yield records
