@@ -3,6 +3,8 @@ import xxhash # type: ignore
 from hammock.lib.abstractsketch import AbstractSketch
 from typing import Dict, Optional
 
+MAXBIT=32
+
 class HyperLogLog(AbstractSketch):
     def __init__(self, 
                  precision: int = 8, 
@@ -22,8 +24,8 @@ class HyperLogLog(AbstractSketch):
             debug: Whether to print debug information
         """
         super().__init__()
-        if precision < 4 or precision > 16:
-            raise ValueError("Precision must be between 4 and 16")
+        if precision < 4 or precision > 30:
+            raise ValueError("Precision must be between 4 and 30")
         
         if kmer_size < 0:
             raise ValueError("k-mer size must be non-negative")
@@ -66,6 +68,21 @@ class HyperLogLog(AbstractSketch):
         hasher = xxhash.xxh64(seed=seed)
         hasher.update(x.to_bytes(8, byteorder='little'))
         return hasher.intdigest()
+    
+    @staticmethod
+    def _hash32_int(x: int, seed: int = 0) -> int:
+        """32-bit hash function for integers.
+        
+        Args:
+            x: Integer value to hash
+            seed: Random seed for hashing
+            
+        Returns:
+            32-bit hash value as integer
+        """
+        hasher = xxhash.xxh32(seed=seed)
+        hasher.update(x.to_bytes(8, byteorder='little'))
+        return hasher.intdigest()
 
     # def hash64(self, x: int) -> int:
     #     """Instance method to hash an integer using the instance's seed."""
@@ -74,7 +91,7 @@ class HyperLogLog(AbstractSketch):
     @staticmethod
     def _hash_str(s: bytes, seed: int = 0) -> int:
         """Hash a string using xxhash."""
-        hasher = xxhash.xxh64(seed=seed)
+        hasher = xxhash.xxh32(seed=seed) if MAXBIT == 32 else xxhash.xxh64(seed=seed)
         hasher.update(s)
         return hasher.intdigest()
 
@@ -86,7 +103,7 @@ class HyperLogLog(AbstractSketch):
         """Calculate position of leftmost 1-bit."""
         hash_val >>= self.precision
         pos = 1
-        while (hash_val & 1) == 0 and pos <= 64:
+        while (hash_val & 1) == 0 and pos <= MAXBIT:
             pos += 1
             hash_val >>= 1
         return pos
@@ -100,7 +117,7 @@ class HyperLogLog(AbstractSketch):
     
     def _register_counts(self) -> np.ndarray:
         """Get counts of registers."""
-        return np.bincount(self.registers, minlength=64)
+        return np.bincount(self.registers, minlength=MAXBIT)
 
     def add_string_with_minimizers(self, s: str) -> None:
         """Add a string to the sketch using minimizer windowing scheme.
@@ -172,11 +189,15 @@ class HyperLogLog(AbstractSketch):
     def hash64_int(self, x: int) -> int:
         """Instance method to hash an integer using the instance's seed."""
         return self._hash64_int(x, seed=self.seed)
+    
+    def hash32_int(self, x: int) -> int:
+        """Instance method to hash an integer using the instance's seed."""
+        return self._hash32_int(x, seed=self.seed)
 
     def add_int(self, value: int) -> None:
         """Add an integer to the sketch."""
         self.item_count += 1
-        hash_val = self.hash64_int(value)
+        hash_val = self.hash32_int(value) if MAXBIT == 32 else self.hash64_int(value)
         idx = hash_val & (self.num_registers - 1)
         rank = self._rho(hash_val)
         self.registers[idx] = max(self.registers[idx], rank)
@@ -211,8 +232,8 @@ class HyperLogLog(AbstractSketch):
                 return raw_estimate
         
         # Large range correction
-        if raw_estimate > pow(2, 32) / 32.0:  # Adjusted from 35.0
-            raw_estimate = -pow(2, 32) * np.log(1.0 - raw_estimate / pow(2, 32))
+        if raw_estimate > pow(2, MAXBIT) / 32.0:  # Adjusted from 35.0
+            raw_estimate = -pow(2, MAXBIT) * np.log(1.0 - raw_estimate / pow(2, MAXBIT))
         
         return raw_estimate
 
@@ -249,7 +270,7 @@ class HyperLogLog(AbstractSketch):
         # counts = self.register_counts()
     
         # Get counts of maxed registers
-        n_maxed_registers = self.register_counts[64-self.precision + 1]
+        n_maxed_registers = self.register_counts[MAXBIT-self.precision + 1]
         non_maxreg_frac = (m - n_maxed_registers)/m
          # Get counts of zero registers
         zero_reg_frac = self.register_counts[0]/m
@@ -258,7 +279,7 @@ class HyperLogLog(AbstractSketch):
         tau = self._get_tau(non_maxreg_frac)
         z = m * tau
         # Process intermediate registers
-        for i in range(64 - self.precision, 0, -1):
+        for i in range(MAXBIT - self.precision, 0, -1):
             z += self.register_counts[i]  # Add count for this register value
             z *= 0.5 # geometric scaling
         
@@ -291,10 +312,10 @@ class HyperLogLog(AbstractSketch):
         # k_max: Find last non-zero register count to skip empty high registers
         # This avoids unnecessary computation for register values that can't occur
         # given our precision parameter
-        k_max = 64 - self.precision
+        k_max = MAXBIT - self.precision
         while k_max > 0 and self.register_counts[k_max] == 0:
             k_max -= 1
-        k_max = min(64 - self.precision, k_max)  # Ensure we don't exceed maximum possible value
+        k_max = min(MAXBIT - self.precision, k_max)  # Ensure we don't exceed maximum possible value
         
         # Only calculate probabilities for non-zero register counts within our bounds
         # This optimization:
@@ -313,7 +334,7 @@ class HyperLogLog(AbstractSketch):
     def ertl_mle_estimate(self, relative_error: float = 1e-2) -> float:
         """Estimate cardinality using Ertl's Maximum Likelihood Estimation method."""
         num_registers = 1 << self.precision
-        max_register_value = 64 - self.precision
+        max_register_value = MAXBIT - self.precision
         
         # Check if all registers are maxed out
         if self.register_counts[max_register_value + 1] == num_registers:
@@ -321,7 +342,7 @@ class HyperLogLog(AbstractSketch):
         
         # Find bounds for non-zero register values
         min_nonzero_value = 0
-        while min_nonzero_value < 64 and self.register_counts[min_nonzero_value] == 0:
+        while min_nonzero_value < MAXBIT and self.register_counts[min_nonzero_value] == 0:
             min_nonzero_value += 1
         min_value_bound = max(1, min_nonzero_value)  # Ensure minimum of 1 for numerical stability
         
@@ -440,7 +461,7 @@ class HyperLogLog(AbstractSketch):
         """
         # Sum 2^(-max(register)) for each register
         # sum_inv = sum(math.pow(2.0, -max(0, x)) for x in self.registers)
-        registers = np.array(self.registers, dtype=np.float64)
+        registers = np.array(self.registers, dtype=(np.float32 if MAXBIT == 32 else np.float64))
         sum_inv = np.sum(np.exp2(-registers))
         
         # Calculate alpha_m * m^2 / sum

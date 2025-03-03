@@ -187,9 +187,12 @@ def test_error_handling():
     sketch = IntervalSketch.from_file(filename="nonexistent.bed", mode="A")
     assert sketch is None
 
-    # Test malformed Bed file
+    # Test malformed Bed file - use truly malformed data
     with tempfile.NamedTemporaryFile(mode='w', suffix='.bed', delete=False) as f:
-        f.write("ch1\t100\t200\t300\n")
+        f.write("ch1\tinvalid\t200\n")  # Non-integer start position
         f.flush()
-        sketch = IntervalSketch.from_file(filename=f.name, mode="A")
-        assert sketch is None
+        try:
+            sketch = IntervalSketch.from_file(filename=f.name, mode="A")
+            assert sketch is None
+        finally:
+            os.unlink(f.name)  # Make sure to clean up the file
