@@ -30,6 +30,7 @@ class MinimizerSketch(AbstractSketch):
         # Use HyperLogLog directly for both sketches
         self.minimizer_sketch = HyperLogLog(kmer_size=0)
         self.gap_sketch = HyperLogLog(kmer_size=0)
+        self.startend_sketch = HyperLogLog(kmer_size=0)
         self.startend_kmers = set()
         self.minimizers = set()
     
@@ -61,7 +62,7 @@ class MinimizerSketch(AbstractSketch):
             pattern = ','.join(str(gaps[i:i + self.gapn]))
             self.gap_sketch.add_string(pattern)
         return
-
+        
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
         if not s or len(s) < self.kmer_size or len(s)==0:
@@ -84,6 +85,8 @@ class MinimizerSketch(AbstractSketch):
             if len(s) >= self.kmer_size:
                 self.startend_kmers.add(s[:self.kmer_size]+
                                     s[-self.kmer_size:])
+                self.startend_sketch.add_string(s[:self.kmer_size]+
+                                    s[-self.kmer_size:])
                 
                 if self.debug:
                     print(f"End k-mers added: {s[:self.kmer_size]}, {s[-self.kmer_size:]}")
@@ -98,13 +101,20 @@ class MinimizerSketch(AbstractSketch):
                 print(f"Parameters: k={self.kmer_size}, w={self.window_size}, gapn={self.gapn}")
             return
             
-    def compare_overlaps(self, other: 'MinimizerSketch') -> tuple[float, float, float, float]:
-        """Returns (hash_similarity, hash_with_ends_similarity, gap_similarity, jaccard_similarity)"""
+    def compare_overlaps(self, other: 'MinimizerSketch') -> Dict[str, float]:
+        """Returns dictionary of similarity metrics between two minimizer sketches.
+        
+        Returns:
+            Dictionary containing:
+                - 'hash_similarity': Similarity based on minimizer hashes only
+                - 'hash_with_ends_similarity': Similarity including end k-mers
+                - 'gap_similarity': Similarity of gap patterns
+                - 'jaccard_similarity': Overall Jaccard similarity
+        """
         if not isinstance(other, MinimizerSketch):
             raise ValueError("Can only compare with another MinimizerSketch")
         if self.kmer_size != other.kmer_size or self.window_size != other.window_size or self.gapn != other.gapn:
             raise ValueError("Cannot compare sketches with different parameters")
-            
             
         # Calculate hash similarity using minimizer sets only
         # NOTE: This should probably not be part of this function
@@ -118,6 +128,8 @@ class MinimizerSketch(AbstractSketch):
         # Calculate hash similarity including end k-mers
         combined_self = self.minimizers | self.startend_kmers
         combined_other = other.minimizers | other.startend_kmers
+        combined_self_sketch = self.minimizer_sketch.merge(self.startend_sketch)
+        combined_other_sketch = other.minimizer_sketch.merge(other.startend_sketch)
         intersection = len(combined_self & combined_other)
         union = len(combined_self | combined_other)
         hash_with_ends_sim = float(intersection) / union if union > 0 else 0.0
@@ -125,10 +137,10 @@ class MinimizerSketch(AbstractSketch):
         if self.debug:
             print(f"Hash+ends similarity - intersection: {intersection}, union: {union}, similarity: {hash_with_ends_sim:.4f}")
         
-        # 3. Calculate gap similarity using HyperLogLog
+        # Calculate gap similarity using HyperLogLog
         gap_sim = self.gap_sketch.estimate_jaccard(other.gap_sketch)
         
-        # 4. Calculate overall Jaccard similarity
+        # Calculate overall Jaccard similarity
         jaccard_sim = self.estimate_jaccard(other)
         
         if self.debug:
@@ -138,8 +150,13 @@ class MinimizerSketch(AbstractSketch):
             print(f"Gap similarity: {gap_sim:.4f}")
             print(f"Jaccard similarity: {jaccard_sim:.4f}")
         
-        return hash_sim, hash_with_ends_sim, gap_sim, jaccard_sim
-        
+        return {
+            'hash_similarity': hash_sim,
+            'hash_with_ends_similarity': hash_with_ends_sim,
+            'gap_similarity': gap_sim,
+            'jaccard_similarity': jaccard_sim
+        }
+
     def estimate_jaccard(self, other: 'MinimizerSketch') -> float:
         """Estimate Jaccard similarity with another minimizer sketch."""
         if not isinstance(other, MinimizerSketch):
@@ -155,19 +172,41 @@ class MinimizerSketch(AbstractSketch):
         """Calculate similarity values between minimizer sketches.
         
         Returns:
-            Dictionary containing 'hash_similarity', 'hash_with_ends_similarity', 
-            'gap_similarity', and 'jaccard_similarity'
+            Dictionary containing similarity metrics
         """
         if not isinstance(other, MinimizerSketch):
             raise ValueError("Can only compare with another MinimizerSketch")
         if self.kmer_size != other.kmer_size or self.window_size != other.window_size or self.gapn != other.gapn:
             raise ValueError("Cannot compare sketches with different parameters")
-        # NOTE: Perhaps the compare_overlaps function should just return a dictionary
-        hash_sim, hash_with_ends_sim, gap_sim, jaccard_sim = self.compare_overlaps(other)
         
-        return {
-            'hash_similarity': hash_sim,
-            'hash_with_ends_similarity': hash_with_ends_sim,
-            'gap_similarity': gap_sim,
-            'jaccard_similarity': jaccard_sim
-        }
+        return self.compare_overlaps(other)
+
+    def estimate_cardinality(self) -> float:
+        """Estimate the number of unique minimizers in the sequences."""
+        return float(len(self.minimizers))
+    
+    def merge(self, other: 'MinimizerSketch') -> 'MinimizerSketch':
+        """Merge another minimizer sketch into this one."""
+        if not isinstance(other, MinimizerSketch):
+            raise TypeError("Can only merge with another MinimizerSketch")
+        
+        result = MinimizerSketch(
+            kmer_size=self.kmer_size,
+            window_size=self.window_size,
+            gapn=self.gapn,
+            seed=self.seed,
+            debug=self.debug
+        )
+        
+        # Merge minimizer sets
+        result.minimizers = self.minimizers.union(other.minimizers)
+        
+        # Merge startend kmers
+        result.startend_kmers = self.startend_kmers.union(other.startend_kmers)
+        
+        # Merge sketches
+        result.minimizer_sketch = self.minimizer_sketch.merge(other.minimizer_sketch)
+        result.gap_sketch = self.gap_sketch.merge(other.gap_sketch)
+        result.startend_sketch = self.startend_sketch.merge(other.startend_sketch)
+        
+        return result

@@ -10,8 +10,8 @@ import gc
 from typing import Optional, Dict, List, Tuple, Any
 from hammock.lib.abstractsketch import AbstractSketch
 from hammock.lib.intervals import IntervalSketch
-from hammock.lib.minimizer import MinimizerSketch
 from hammock.lib.sequences import SequenceSketch
+from hammock.lib.minimizer import MinimizerSketch
 # from hammock.lib.exact import ExactCounter
 # Set memory limit to 28GB (adjust as needed)
 def limit_memory():
@@ -26,7 +26,7 @@ def limit_memory():
     soft, hard = resource.getrlimit(resource.RLIMIT_AS)
     resource.setrlimit(resource.RLIMIT_AS, (28 * 1024 * 1024 * 1024, hard))
 
-def process_file(args: tuple[str, dict, list, str, int, int, tuple[float, float], float, str]) -> tuple[Optional[str], Optional[dict]]:
+def process_file(args: tuple[str, dict, list, str, int, int, int, int,tuple[float, float], float, str]) -> tuple[Optional[str], Optional[dict]]:
     """Process a single file and calculate similarity values against primary sets.
     
     Args:
@@ -37,6 +37,8 @@ def process_file(args: tuple[str, dict, list, str, int, int, tuple[float, float]
             mode: Mode for comparison (A/B/C/D)
             num_hashes: Number of hashes for MinHash sketching
             precision: Precision for HyperLogLog sketching
+            kmer_size: Size of k-mers for sequence sketching
+            window_size: Size of sliding window for sequence sketching
             subsample: Subsampling rate for points
             expA: Power of 10 exponent to use to multiply contribution of A-type intervals
             sketch_type: Type of sketching to use
@@ -47,7 +49,7 @@ def process_file(args: tuple[str, dict, list, str, int, int, tuple[float, float]
             output_dict: Dictionary mapping primary keys to similarity values
             Returns (None, None) if processing fails
     """
-    filepath, primary_sets, primary_keys, mode, num_hashes, precision, subsample, expA, sketch_type = args
+    filepath, primary_sets, primary_keys, mode, num_hashes, precision, kmer_size, window_size, subsample, expA, sketch_type = args
     basename = os.path.basename(filepath)
     if not filepath or not os.path.exists(filepath):
         print(f"Error: Invalid or non-existent file path: '{filepath}'", file=sys.stderr)
@@ -56,12 +58,13 @@ def process_file(args: tuple[str, dict, list, str, int, int, tuple[float, float]
     # Choose sketch class based on mode
     if mode == "D":
         sketch_args = {
-            'window_size': args.window_size,
-            'kmer_size': args.kmer_size,
+            'sketch_type': sketch_type,
+            'window_size': window_size,
+            'kmer_size': kmer_size,
             'precision': precision,
             'num_hashes': num_hashes
         }
-        comparator = MinimizerSketch.from_file(
+        comparator = SequenceSketch.from_file(
             filename=filepath,
             **sketch_args
         )
@@ -85,7 +88,7 @@ def process_file(args: tuple[str, dict, list, str, int, int, tuple[float, float]
     output = {}
     for i in range(len(primary_keys)):
         primary = primary_sets[primary_keys[i]]
-        if not isinstance(primary, (IntervalSketch, MinimizerSketch)):
+        if not isinstance(primary, (IntervalSketch, MinimizerSketch, SequenceSketch)):
             print(f"Error: Invalid type for primary set {primary_keys[i]}: {type(primary)}")
             continue
         sim_values = primary.similarity_values(comparator)
@@ -128,7 +131,6 @@ def parse_args():
     arg_parser.add_argument( "--expA", type=float, default=0, help="Power of 10 exponent to use to multiply contribution of A-type intervals (only valid for mode C)",
     )
     
-    
     # Add mutually exclusive sketch type flags
     sketch_group = arg_parser.add_mutually_exclusive_group()
     sketch_group.add_argument(
@@ -152,6 +154,13 @@ def parse_args():
         dest="sketch_type",
         help="Use MinHash sketching"
     )
+    sketch_group.add_argument(
+        "--minimizer",
+        action="store_const",
+        const="minimizer",
+        dest="sketch_type",
+        help="Use Minimizer sketching (default for mode D)"
+    )
     
     # Set default sketch type
     arg_parser.set_defaults(sketch_type="hyperloglog")
@@ -163,14 +172,22 @@ def parse_args():
     )
 
     # Add sequence-specific arguments
-    arg_parser.add_argument('--kmer_size', type=int,
+    arg_parser.add_argument('--kmer_size', "-k",type=int,
                        help='Size of k-mers (0 for whole string mode, defaults to 0 for modes A/B/C, 14 for mode D)')
-    arg_parser.add_argument('--window_size', type=int,
+    arg_parser.add_argument('--window_size', '-w', type=int,
                        help='Size of sliding window (defaults to 0 if kmer_size is 0, otherwise 40)')
     
     # Add threads argument
     arg_parser.add_argument("--threads", type=int, default=None,
                        help="Number of threads to use for parallel processing")
+    
+    # Add seed argument
+    arg_parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for sketching (default: 42)")
+    
+    # Add verbose argument
+    arg_parser.add_argument("--verbose", action="store_true",
+                        help="Print verbose output")
     
     args = arg_parser.parse_args()
     
@@ -206,14 +223,16 @@ def get_new_prefix(outprefix: str,
     """
 
     if sketch_type == "minhash":
-        outprefix = f"{outprefix}_minhash_n{num_hashes}_jacc{mode}"
+        outprefix = f"{outprefix}_mh_n{num_hashes}_jacc{mode}"
     elif sketch_type == "hyperloglog":
         outprefix = f"{outprefix}_hll_p{precision}_jacc{mode}"
+    elif sketch_type == "minimizer":
+        outprefix = f"{outprefix}_mnmzr_jacc{mode}"
     else:
         outprefix = f"{outprefix}_exact_jacc{mode}"
         
     # Add either subA or expA (mutually exclusive)
-    if expA is not None:
+    if expA is not None and expA > 0:
         outprefix = f"{outprefix}_expA{expA:.2f}"
     elif subA is not None and subA != 1.0:
         outprefix = f"{outprefix}_A{subA:.2f}"
@@ -312,9 +331,19 @@ def main():
     with open(args.filepaths_file) as f:
         first_file = f.readline().strip()
         if first_file.endswith(('.fa', '.fasta', '.fna', '.ffn', '.faa', '.frn')):
-            args.mode = "D"
-            print(f"Detected sequence file format, switching to mode D")
-
+            if args.mode != "D":
+                args.mode = "D"
+                print(f"Detected sequence file format, switching to mode D")
+                
+                # Check if any sketch type flag was explicitly provided in command line
+                sketch_flags = ["--hyperloglog", "--exact", "--minhash", "--minimizer"]
+                sketch_type_explicitly_set = any(flag in sys.argv for flag in sketch_flags)
+                
+                # Only change default sketch type if not explicitly set by user
+                if not sketch_type_explicitly_set:
+                    args.sketch_type = "minimizer"
+                    print("Changing default sketch type to 'minimizer' for sequence data")
+    
     # Check if C-specific parameters are used and switch mode if needed
     c_mode_params_used = args.subA != 1.0 or args.subB != 1.0 or args.expA > 0
     if c_mode_params_used and args.mode == "A":
@@ -362,22 +391,23 @@ def main():
         
         # Choose sketch class based on mode
         if args.mode == "D":
-            sketch_args = {
-                'window_size': args.window_size,
-                'kmer_size': args.kmer_size,
-                'precision': args.precision,
-                'num_hashes': args.num_hashes,
-                'debug': args.debug
-            }
-            primary_sets[basename] = MinimizerSketch.from_file(
+            primary_sets[basename] = SequenceSketch.from_file(
                 filename=filepath,
-                **sketch_args
+                sketch_type=args.sketch_type,
+                kmer_size=args.kmer_size,
+                window_size=args.window_size,
+                precision=args.precision,
+                num_hashes=args.num_hashes,
+                seed=args.seed,
+                verbose=args.verbose
             )
         else:
             sketch_args = {
                 'mode': args.mode,
                 'precision': args.precision,
                 'num_hashes': args.num_hashes,
+                'kmer_size': args.kmer_size,
+                'window_size': args.window_size,
                 'sketch_type': args.sketch_type,
                 'subsample': subsample,
                 'expA': args.expA,
@@ -394,7 +424,7 @@ def main():
     # Process remaining files in parallel
     pool_args = [
         (filepath, primary_sets, primary_keys, args.mode, args.num_hashes, 
-         args.precision, subsample, args.expA, args.sketch_type)
+         args.precision, args.kmer_size, args.window_size, subsample, args.expA, args.sketch_type)
         for filepath in filepaths
     ]
     
@@ -418,7 +448,7 @@ def main():
         
         # Write header: file1, file2, sketch_type, mode, [sketch params], [C-mode params], similarity measures
         header = ["file1", "file2", "sketch_type", "mode"]
-        if args.sketch_type in ["hyperloglog", "minhash"]:
+        if args.sketch_type in ["hyperloglog", "minhash", "minimizer"]:
             header.extend(["precision", "num_hashes", "kmer_size", "window_size"])
         if args.mode == "C":
             header.extend(["subA", "subB", "expA"])
