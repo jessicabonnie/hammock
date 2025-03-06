@@ -1,0 +1,17 @@
+This started as a reproduction of the cobind paper. However, the data is worth exploring further, so the results for the analysis after the building of hammock are also included.
+
+The original code for cobind can be found here:
+XXXXX
+
+The first attempt to reproduce the findings of the cobind paper can be found in the `cobind_wrapup_preham.Rmd` file. The various result files are in results_preham.
+
+
+XXXXXX
+
+The steps for retrieving the associated data files and spliting them by Transcription Factor / Protein are in the data/get_data.sh script (don't run this, it's just a historical record to assist in reproduction.)
+
+
+
+
+
+
