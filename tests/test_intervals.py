@@ -6,6 +6,7 @@ import pyBigWig # type: ignore
 from hammock.lib.intervals import IntervalSketch
 import os
 import pysam # type: ignore
+import gzip
 
 @pytest.mark.quick
 def test_interval_sketch_init():
@@ -196,3 +197,118 @@ def test_error_handling():
             assert sketch is None
         finally:
             os.unlink(f.name)  # Make sure to clean up the file
+
+@pytest.mark.full
+def test_gff_file_processing():
+    """Test processing of GFF format files."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.gff', delete=False) as f:
+        # Write test GFF content
+        f.write("""##gff-version 3
+#!genome-build GRCh38.p13
+chr1\tHAVANA\tgene\t11869\t14409\t.\t+\t.\tID=ENSG00000223972.5
+chr1\tHAVANA\texon\t11869\t12227\t.\t+\t.\tParent=ENSG00000223972.5
+chr1\tHAVANA\tCDS\t12010\t12057\t.\t+\t0\tParent=ENSG00000223972.5
+chr1\tHAVANA\tgene\t14404\t29570\t.\t-\t.\tID=ENSG00000227232.5
+""")
+        f.flush()
+        
+        try:
+            # Test basic GFF processing in mode A
+            sketch = IntervalSketch.from_file(filename=f.name, mode="A")
+            assert sketch is not None
+            assert sketch.num_intervals == 4  # Should have 4 features
+            
+            # Test with feature type filtering
+            sketch_genes = IntervalSketch.from_file(
+                filename=f.name,
+                mode="A",
+                feature_types=['gene']
+            )
+            assert sketch_genes is not None
+            assert sketch_genes.num_intervals == 2  # Should only have 2 gene features
+            
+            # Test mode B (points)
+            sketch_points = IntervalSketch.from_file(filename=f.name, mode="B")
+            assert sketch_points is not None
+            # Total points should be sum of interval lengths
+            expected_points = (14409-11869) + (12227-11869) + (12057-12010) + (29570-14404)
+            assert sketch_points.sketch.estimate_cardinality() > 0
+            
+            # Test mode C with subsampling
+            sketch_c = IntervalSketch.from_file(
+                filename=f.name,
+                mode="C",
+                subsample=(0.5, 0.5)  # 50% sampling for both intervals and points
+            )
+            assert sketch_c is not None
+            assert sketch_c.num_intervals <= 4  # Should have <= 4 intervals due to sampling
+            
+        finally:
+            os.unlink(f.name)
+
+@pytest.mark.full
+def test_gff_gz_processing():
+    """Test processing of gzipped GFF files."""
+    with tempfile.NamedTemporaryFile(suffix='.gff.gz', delete=False) as f:
+        # Create gzipped content
+        gff_content = """##gff-version 3
+chr1\tHAVANA\tgene\t11869\t14409\t.\t+\t.\tID=ENSG00000223972.5
+"""
+        with gzip.open(f.name, 'wt') as gz_writer:
+            gz_writer.write(gff_content)
+        
+        try:
+            sketch = IntervalSketch.from_file(filename=f.name, mode="A")
+            assert sketch is not None
+            assert sketch.num_intervals == 1
+            
+        finally:
+            os.unlink(f.name)
+
+@pytest.mark.full
+def test_gff_coordinate_conversion():
+    """Test conversion from 1-based GFF coordinates to 0-based internal coordinates."""
+    with tempfile.NamedTemporaryFile(suffix='.gff', delete=False) as gff_f, \
+         tempfile.NamedTemporaryFile(suffix='.bed', delete=False) as bed_f:
+        
+        # Write test content
+        gff_content = """##gff-version 3
+chr1\ttest\tgene\t1\t100\t.\t+\t.\tID=test1
+"""
+        bed_content = "chr1\t0\t100\n"  # BED coordinates are 0-based
+        
+        # Write files
+        gff_f.write(gff_content.encode('utf-8'))
+        bed_f.write(bed_content.encode('utf-8'))
+        gff_f.flush()
+        bed_f.flush()
+        
+        try:
+            sketch_gff = IntervalSketch.from_file(filename=gff_f.name, mode="A")
+            sketch_bed = IntervalSketch.from_file(filename=bed_f.name, mode="A")
+            
+            assert sketch_gff is not None
+            assert sketch_bed is not None
+            
+            # Sketches should be identical since they represent the same interval
+            assert sketch_gff.estimate_jaccard(sketch_bed) == 1.0
+            
+        finally:
+            os.unlink(gff_f.name)
+            os.unlink(bed_f.name)
+
+@pytest.mark.full
+def test_invalid_gff():
+    """Test handling of invalid GFF files."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.gff', delete=False) as f:
+        # Write invalid GFF content
+        f.write("invalid\tgff\tdata\n")
+        f.flush()
+        
+        try:
+            sketch = IntervalSketch.from_file(filename=f.name, mode="A")
+            assert sketch is not None
+            assert sketch.num_intervals == 0  # Should handle invalid data gracefully
+            
+        finally:
+            os.unlink(f.name)

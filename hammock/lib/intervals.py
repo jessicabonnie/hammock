@@ -59,28 +59,25 @@ class IntervalSketch(AbstractSketch):
         kwargs['sketch'] = sketch
         
         # Check file extension and process accordingly
-        file_ext = filename.lower().split('.')[-1]
+        # Split on '.' and get all extensions (handles multiple extensions like .gff.gz)
+        extensions = filename.lower().split('.')
         
-        # # Handle BigWig files
-        # if file_ext == 'bw' or file_ext == 'bigwig':
-        #     return cls._from_bigwig(filename, **kwargs)
+        # Handle GFF files (both plain and gzipped)
+        if any(ext in ['gff', 'gff3'] for ext in extensions):
+            return cls._from_gff(filename, **kwargs)
         
         # NOTE: rearrange this elif to start with the most common file type
         # Handle BigBed files
-        if file_ext == 'bb' or file_ext == 'bigbed':
+        elif extensions[-1] in ['bb', 'bigbed']:
             return cls._from_bigbed(filename, **kwargs)
         
-        # # Handle BAM files
-        # elif file_ext in ['bam']:
-        #     return cls._from_bam(filename, **kwargs)
-        
         # Skip other unsupported binary formats
-        elif file_ext in ['cram', 'sam']:
+        elif extensions[-1] in ['cram', 'sam']:
             print(f"Skipping unsupported file format: {filename}")
             return None
         
         # Handle regular BED files (including gzipped)
-        else:
+        elif extensions[-1] in ["bed"] or (len(extensions) >= 2 and extensions[-2:] == ["bed", "gz"]):
             try:
                 # Handle gzipped files
                 if filename.endswith('.gz'):
@@ -113,17 +110,22 @@ class IntervalSketch(AbstractSketch):
             except Exception as e:
                 print(f"Error processing file {filename}: {e}")
                 return None
+        else:
+            raise ValueError(f"Unsupported file extension: {extensions[-1]}")
 
     @classmethod
     def _from_bigbed(cls, filename: str, **kwargs) -> Optional['IntervalSketch']:
         """Process BigBed format file."""
+        if 'sketch' not in kwargs:
+            return None
+        
         try:
             # Get parameters from kwargs
             mode = kwargs.get('mode', 'A')
             sep = kwargs.get('sep', '-')
             subsample = kwargs.get('subsample', (1.0, 1.0))
             expA = kwargs.get('expA', 0)
-            sketch = kwargs.get('sketch')
+            sketch = kwargs['sketch']
             
             # Use pysam to read BigBed file
             with pysam.TabixFile(filename) as bb:
@@ -184,6 +186,87 @@ class IntervalSketch(AbstractSketch):
             return sketch
         except Exception as e:
             print(f"Error processing BED file {filename}: {e}")
+            return None
+
+    @classmethod
+    def _from_gff(cls, filename: str, **kwargs) -> Optional['IntervalSketch']:
+        """Process GFF format file.
+        
+        Args:
+            filename: Path to GFF file
+            **kwargs: Additional arguments including:
+                - mode: Sketch mode (A/B/C)
+                - sep: Separator for string representation
+                - subsample: Tuple of sampling rates
+                - expA: Exponential scaling factor
+                - feature_types: List of feature types to include (optional)
+        """
+        if 'sketch' not in kwargs:
+            return None
+        
+        try:
+            # Get parameters from kwargs
+            mode = kwargs.get('mode', 'A')
+            sep = kwargs.get('sep', '-')
+            subsample = kwargs.get('subsample', (1.0, 1.0))
+            expA = kwargs.get('expA', 0)
+            sketch = kwargs['sketch']
+            feature_types = kwargs.get('feature_types', None)  # Optional filter for specific features
+            
+            opener = gzip.open if filename.endswith('.gz') else open
+            with opener(filename, 'rt') as f:
+                for line in f:
+                    # Skip comments and empty lines
+                    if line.startswith('#') or not line.strip():
+                        continue
+                    
+                    # Parse GFF fields
+                    fields = line.strip().split('\t')
+                    if len(fields) != 9:
+                        continue
+                    
+                    seqid, source, ftype, start, end, score, strand, phase, attrs = fields
+                    
+                    # Skip if feature type filtering is enabled and type doesn't match
+                    if feature_types and ftype not in feature_types:
+                        continue
+                    
+                    try:
+                        start_pos = int(start) - 1  # Convert to 0-based coordinates
+                        end_pos = int(end)
+                    except ValueError:
+                        continue
+                    
+                    # Create BED-style line and process using existing bedline method
+                    bed_line = f"{seqid}\t{start_pos}\t{end_pos}"
+                    interval, points, size = sketch.bedline(
+                        bed_line, 
+                        mode=mode, 
+                        sep=sep, 
+                        subsample=subsample
+                    )
+                    
+                    # Add interval if present and in mode A or C
+                    if interval and mode in ["A", "C"]:
+                        sketch.sketch.add_string(interval)
+                        if expA > 0:
+                            for i in range(1, int(10**expA)+1):
+                                sketch.sketch.add_string(interval + str(i))
+                        sketch.num_intervals += 1
+                        sketch.total_interval_size += size
+                    
+                    # Add points if present and in mode B or C
+                    if points and mode in ["B", "C"]:
+                        for point in points:
+                            if point is not None:
+                                sketch.sketch.add_string(point)
+                        if mode == "B":
+                            sketch.num_intervals += 1
+            
+            return sketch
+            
+        except Exception as e:
+            print(f"Error processing GFF file {filename}: {e}")
             return None
 
     @staticmethod
