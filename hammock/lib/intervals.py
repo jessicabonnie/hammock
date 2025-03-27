@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Optional, List, Tuple, TextIO, Union, Dict
 from hammock.lib.abstractsketch import AbstractSketch
-from hammock.lib.hyperloglog import HyperLogLog
+from hammock.lib.rusthll import FastHyperLogLog
 from hammock.lib.minhash import MinHash
 from hammock.lib.exact import ExactCounter
 from hammock.lib.exacttest import ExactTest
@@ -43,7 +43,7 @@ class IntervalSketch(AbstractSketch):
             raise ValueError(f"subsample values must be between 0 and 1, got {self.subsample}")
         
         # Only pass precision and debug to HyperLogLog
-        self.sketch = HyperLogLog(precision=precision, debug=debug)
+        self.sketch = FastHyperLogLog(precision=precision, debug=debug)
         
         # Initialize other instance variables
         self.num_intervals = 0
@@ -371,6 +371,10 @@ class IntervalSketch(AbstractSketch):
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
         self.sketch.add_string(s)
+        
+    def add(self, s: str) -> None:
+        """Add a string to the sketch."""
+        self.sketch.add_string(s)
 
     def estimate_jaccard(self, other: 'IntervalSketch') -> float:
         """Estimate Jaccard similarity with another sketch."""
@@ -415,7 +419,7 @@ class IntervalSketch(AbstractSketch):
         with opener(filepath, 'rt') as f:
             # First try loading as HyperLogLog
             try:
-                sketch = HyperLogLog.load(f)
+                sketch = FastHyperLogLog.load(f)
                 interval_sketch = cls(mode="A", sketch_type="hyperloglog")
                 interval_sketch.sketch = sketch
                 return interval_sketch
