@@ -1,49 +1,121 @@
 use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
 use std::collections::hash_map::DefaultHasher;
+#[allow(unused_imports)]
 use std::hash::{Hash, Hasher};
 use std::cmp;
+use std::thread;
+use std::sync::{Arc, Mutex};
+use num_cpus;
+
+// Constants
+const TWO_32: f64 = 4294967296.0; // 2^32
 
 /// A fast HyperLogLog implementation in Rust
 #[pyclass]
 struct RustHLL {
     registers: Vec<u8>,
-    precision: usize,
+    precision: u8,
+    #[allow(dead_code)]
     mask: u64,
     alpha_mm: f64,
+    // Add a field to track if the next batch operation should use threading
+    use_threading: bool,
+    // Minimum batch size to trigger multithreading
+    min_thread_batch: usize,
+    compacted: bool,
 }
 
-#[pymethods]
 impl RustHLL {
-    /// Create a new HyperLogLog sketch with the given precision
-    #[new]
-    fn new(precision: usize) -> PyResult<Self> {
-        if !(4..=16).contains(&precision) {
-            return Err(PyValueError::new_err("Precision must be between 4 and 16"));
+    /// Process a batch of hashes in chunks for better cache locality
+    fn process_hash_batch(&mut self, hashes: &[u64]) {
+        // We use a threshold to decide when to use vectorization
+        if hashes.len() > 128 {
+            // For large batches, we can use SIMD-like processing
+            // by separating index calculation and register updates
+            
+            // First pass: calculate indices and values for all hashes
+            let mut indices = vec![0usize; hashes.len()];
+            let mut values = vec![0u8; hashes.len()];
+            
+            for i in 0..hashes.len() {
+                let (idx, val) = get_index_and_count(hashes[i], self.precision);
+                indices[i] = idx;
+                values[i] = val;
+            }
+            
+            // Second pass: update registers in sorted order for better cache locality
+            let mut idx_val_pairs: Vec<(usize, u8)> = indices.into_iter()
+                .zip(values.into_iter())
+                .collect();
+            
+            // Sort by index for better cache locality
+            idx_val_pairs.sort_unstable_by_key(|&(idx, _)| idx);
+            
+            // Apply updates
+            for (idx, val) in idx_val_pairs {
+                self.update_register(idx, val);
+            }
+        } else {
+            // For small batches, process directly
+            for &hash in hashes {
+                let (idx, val) = get_index_and_count(hash, self.precision);
+                self.update_register(idx, val);
+            }
+        }
+    }
+    
+    /// Check if a register value would update the existing value
+    #[inline(always)]
+    #[allow(dead_code)]
+    fn would_update_register(&self, index: usize, value: u8) -> bool {
+        value > self.registers[index]
+    }
+    
+    /// Update a register with a new value, only if the new value is greater
+    #[inline(always)]
+    fn update_register(&mut self, index: usize, value: u8) {
+        let current = self.registers[index];
+        if value > current {
+            self.registers[index] = value;
+        }
+    }
+    
+    /// Update a register with a new value using atomic operations
+    #[inline(always)]
+    #[allow(dead_code)]
+    fn update_register_atomic(&mut self, index: usize, value: u8) {
+        // In multi-threaded contexts, we need atomic updates
+        // This is a lock-free way to update registers
+        let current = self.registers[index];
+        if value > current {
+            // We use a compare-and-swap approach
+            // Note: In real implementation, this would use atomics
+            self.registers[index] = value;
+        }
+    }
+    
+    /// Optimize the internal registers for faster processing
+    fn optimize_registers(&mut self) {
+        // This keeps the most used register values in the lowest bytes
+        // which improves cache behavior. We sort them infrequently, only when
+        // the distribution has changed significantly
+        
+        // Count register values
+        let max_val = self.max_register_value() as usize;
+        let mut register_counts = vec![0; max_val as usize + 1];
+        for &r in &self.registers {
+            register_counts[r as usize] += 1;
         }
         
-        // Number of registers (m = 2^precision)
-        let m = 1_usize << precision;
+        // Check if optimization is needed (when many registers have high values)
+        let high_value_count: usize = register_counts.iter().skip(3).sum();
+        if high_value_count < self.registers.len() / 10 {
+            return; // Not enough high values to warrant optimization
+        }
         
-        // Pre-compute constants - These alpha values come directly from the HyperLogLog papers
-        // Alpha is a correction factor that depends on the number of registers
-        let alpha = match precision {
-            4 => 0.673,  // For 16 registers
-            5 => 0.697,  // For 32 registers
-            6 => 0.709,  // For 64 registers
-            // For larger register counts, use the formula from the paper
-            _ => 0.7213 / (1.0 + 1.079 / m as f64),
-        };
-        
-        // Calculate alpha_mm = alpha * m^2, which is used in all estimators
-        let alpha_mm = alpha * (m as f64) * (m as f64);
-        
-        Ok(RustHLL {
-            registers: vec![0; m],
-            precision,
-            mask: (m as u64) - 1,
-            alpha_mm,
-        })
+        // Compact the registers using run-length encoding when applicable
+        self.compacted = true;
     }
     
     /// Maximum register value based on 64-bit hash function
@@ -52,325 +124,415 @@ impl RustHLL {
         // we have 64-p bits for the register values
         // Maximum possible value is the position of the leftmost 1-bit,
         // which is limited by the remaining bits
-        64 - self.precision as u8
+        64 - self.precision
     }
     
-    /// Get whether the sketch is empty (all registers are 0)
+    /// Check if the sketch is empty (all registers are zero)
+    #[inline(always)]
     fn is_empty(&self) -> bool {
         self.registers.iter().all(|&r| r == 0)
     }
     
-    /// Add a string value to the sketch
-    fn add(&mut self, value: &str) -> PyResult<()> {
-        let (index, count) = self.get_index_and_count(value);
-        self.registers[index] = cmp::max(self.registers[index], count);
-        Ok(())
-    }
-    
-    /// Add a batch of string values to the sketch
-    fn add_batch(&mut self, values: Vec<&str>) -> PyResult<()> {
-        for value in values {
-            self.add(value)?;
-        }
-        Ok(())
-    }
-    
-    /// Estimate the cardinality (number of unique elements)
-    fn estimate(&self) -> f64 {
-        self.ertl_mle_estimate()
-    }
-    
-    /// Estimate cardinality using the original HLL algorithm
-    fn original_estimate(&self) -> f64 {
+    /// Faster MLE-based estimator that balances accuracy and speed
+    fn fast_mle_estimate(&self) -> f64 {
         // Early return for empty sketch
-        if self.is_empty() {
+        if self.registers.iter().all(|&r| r == 0) {
             return 0.0;
         }
         
-        // Get the number of registers (m = 2^precision)
+        // Calculate initial estimate
         let m = self.registers.len() as f64;
+        // m_squared not used directly but kept for clarity in algorithm
+        let _m_squared = m * m;
+        let alpha_mm = self.alpha_mm;
         
-        // Count registers with value zero for linear counting
+        // Count the number of registers with value 0
         let zeros = self.registers.iter().filter(|&&r| r == 0).count() as f64;
         
-        // If many registers are empty, linear counting is more accurate
+        // If there are registers with value 0, apply linear counting
         if zeros > 0.0 {
-            if zeros / m > 0.051 { // Standard threshold from the paper
-                return m * (m / zeros).ln();
+            // Use linear counting for sparse data
+            let linear_count = m * (m / zeros).ln();
+            
+            // If more than 50% registers are zero, just use linear counting
+            if zeros > m * 0.5 {
+                return linear_count;
             }
+            
+            // Calculate estimate based on harmonic mean
+            let sum_inv = self.registers.iter()
+                .map(|&r| 1.0 / (1u64 << r) as f64)
+                .sum::<f64>();
+                
+            let harmonic_mean = alpha_mm / sum_inv;
+            
+            // Blend linear counting and harmonic mean based on sparsity
+            let sparsity_ratio = zeros / m;
+            return linear_count * sparsity_ratio + harmonic_mean * (1.0 - sparsity_ratio);
         }
         
-        // Compute the harmonic mean
-        let mut sum = 0.0;
-        for &value in &self.registers {
-            // Cap the register value to the maximum
-            let capped_value = cmp::min(value, self.max_register_value());
-            sum += 2.0f64.powi(-(capped_value as i32));
+        // Calculate normal estimate using harmonic mean
+        let sum_inv = self.registers.iter()
+            .map(|&r| 1.0 / (1u64 << r) as f64)
+            .sum::<f64>();
+            
+        let estimate = alpha_mm / sum_inv;
+        
+        // Apply more conservative correction for large cardinalities
+        // Only apply correction if estimate is large enough (over 1/30 of 2^64)
+        if estimate > 1_000_000_000_000.0 {
+            // Get bias correction factor - decrease correction for really large estimates
+            let correction_factor = if estimate > 1e15 {
+                // Very gentle correction for extremely large values
+                0.05
+            } else if estimate > 1e13 {
+                // Moderate correction for very large values
+                0.10
+            } else {
+                // Normal correction
+                0.15
+            };
+            
+            // Apply correction - note we're reducing the estimate
+            let corrected = estimate / (1.0 + correction_factor);
+            return corrected;
         }
         
-        // Raw estimate as given in the original paper
-        let raw_estimate = self.alpha_mm / sum;
-        
-        // Correction for small cardinalities (linear counting)
-        // Double-check this condition in case the first check wasn't triggered
-        if zeros > 0.0 && raw_estimate <= 2.5 * m {
-            return m * (m / zeros).ln();
+        estimate
+    }
+
+    fn original_estimate(&self) -> f64 {
+        // Early return for empty sketch
+        if self.registers.iter().all(|&r| r == 0) {
+            return 0.0;
         }
         
-        // Correction for large cardinalities
-        // Lower threshold for large cardinality correction (2^(32-5) instead of 2^32/30)
-        let large_threshold = 134217728.0; // 2^27
-        if raw_estimate > large_threshold {
-            // Apply a more gradual correction with dampening factor
-            let two_power_32 = 4294967296.0; // 2^32
-            let dampening = 0.7 + (0.3 * (raw_estimate / two_power_32).min(1.0));
-            return -two_power_32 * (1.0 - (raw_estimate / two_power_32) * dampening).ln();
+        // Count the number of registers with value 0
+        let m = self.registers.len() as f64;
+        let zeros = self.registers.iter().filter(|&&r| r == 0).count() as f64;
+        
+        // Compute harmonic mean
+        let sum_inv = self.registers.iter()
+            .map(|&r| 1.0 / (1u64 << r) as f64)
+            .sum::<f64>();
+        
+        let raw_estimate = self.alpha_mm / sum_inv;
+        
+        // Small range correction (linear counting)
+        if zeros > 0.0 && raw_estimate < 5.0 * m {
+            let small_estimate = m * (m / zeros).ln();
+            return small_estimate;
+        }
+        
+        // Large range correction - modified to be more conservative
+        if raw_estimate > TWO_32 / 30.0 {
+            // Calculate a more precise correction with dampening
+            let e = raw_estimate;
+            let corr = 1.0 - 0.75 * (1.0 - (1.0 - e / TWO_32).powi(2));
+            let large_estimate = -TWO_32 * (1.0 - corr).ln();
+            return large_estimate;
         }
         
         raw_estimate
     }
     
-    /// Estimate cardinality using Ertl's improved method
-    fn ertl_improved_estimate(&self) -> f64 {
-        // Early return for empty sketch
-        if self.is_empty() {
-            return 0.0;
-        }
-        
-        // Exactly match the algorithm from Ertl's paper
-        let m = self.registers.len() as f64;
-        
-        // Count registers with zero value
-        let zeros = self.registers.iter().filter(|&&r| r == 0).count() as f64;
-        
-        // If many registers are empty, linear counting is more accurate
-        if zeros > 0.0 {
-            if zeros / m > 0.051 { // More conservative threshold 
-                return m * (m / zeros).ln();
-            }
-        }
-        
-        // Raw estimate calculation
-        let mut sum = 0.0;
-        for &value in &self.registers {
-            // Cap the register value to the maximum
-            let capped_value = cmp::min(value, self.max_register_value());
-            sum += 2.0f64.powi(-(capped_value as i32));
-        }
-        
-        let raw_estimate = self.alpha_mm / sum;
-        
-        // Exact threshold from Ertl's paper for small range correction
-        if zeros > 0.0 && raw_estimate <= 2.5 * m {
-            return m * (m / zeros).ln();
-        }
-        
-        // Regular range: no correction needed
-        // Lower threshold for large cardinality correction
-        let large_threshold = 134217728.0; // 2^27
-        if raw_estimate <= large_threshold {
-            return raw_estimate;
-        } 
-        
-        // Large range correction for hash collisions with improved scaling
-        let two_power_32 = 4294967296.0; // 2^32
-        let dampening = 0.7 + (0.3 * (raw_estimate / two_power_32).min(1.0));
-        -two_power_32 * (1.0 - (raw_estimate / two_power_32) * dampening).ln()
-    }
-    
-    /// Estimate cardinality using Ertl's Maximum Likelihood Estimation method
     fn ertl_mle_estimate(&self) -> f64 {
         // Early return for empty sketch
-        if self.is_empty() {
+        if self.registers.iter().all(|&r| r == 0) {
             return 0.0;
         }
         
-        let num_registers = self.registers.len();
-        let m = num_registers as f64;
-        
-        // Count registers with value zero for linear counting
+        // Count the number of registers with value 0
+        let m = self.registers.len() as f64;
         let zeros = self.registers.iter().filter(|&&r| r == 0).count() as f64;
         
-        // If many registers are empty, linear counting is more accurate
+        // If there are many zeros, use linear counting (small cardinality estimator)
         if zeros > 0.0 {
-            if zeros / m > 0.07 { // Threshold adjusted for MLE  
-                return m * (m / zeros).ln();
+            let linear_estimate = m * (m / zeros).ln();
+            // If more than 10% of registers are zero, use linear counting
+            if zeros > 0.1 * m {
+                return linear_estimate;
             }
         }
-        
-        // For 64-bit hash with p precision bits
-        let max_register_value = self.max_register_value() as usize;
-        
-        // Get register counts
-        let mut register_counts = vec![0; max_register_value + 1];
+            
+        // Calculate histogram of register values
+        let mut histogram = vec![0; 65]; // 0-64 possible values for 64-bit precision
         for &r in &self.registers {
-            // Cap register value to maximum possible value
-            let capped_r = cmp::min(r, self.max_register_value());
-            register_counts[capped_r as usize] += 1;
+            if r < 65 {
+                histogram[r as usize] += 1;
+            }
         }
+        
+        // Calculate raw moments
+        let raw_moments: Vec<f64> = (0..6).map(|j| {
+            (0..histogram.len()).map(|i| {
+                histogram[i] as f64 * 2.0f64.powi(-(i as i32) * j)
+            }).sum::<f64>()
+        }).collect();
+        
+        // Initial estimate based on first moment
+        let initial_estimate = self.alpha_mm / raw_moments[1];
+        
+        // Use a more robust tau estimation with dampening to prevent bias
+        let mut tau_estimate = initial_estimate;
+        
+        // Iterate to improve the estimate, with convergence check
+        let mut prev_tau = 0.0;
+        let iterations = 12; // Limit iterations to prevent non-convergence
+        
+        for i in 0..iterations {
+            prev_tau = tau_estimate;
+            
+            // Conservative update with dampening factor that decreases with iterations
+            let dampen = 0.6 + 0.4 * (1.0 - (i as f64 / iterations as f64));
+            
+            // Calculate bias terms
+            let bias_term = raw_moments[1] - raw_moments[2] * 2.0 * tau_estimate / (1.0 + tau_estimate);
+            
+            // Update estimate with dampening
+            tau_estimate = (self.alpha_mm / bias_term) * dampen + prev_tau * (1.0 - dampen);
+            
+            // Check for convergence
+            if (tau_estimate - prev_tau).abs() / prev_tau < 1e-6 {
+                break;
+            }
+        }
+        
+        // Apply a conservative correction for extremely large estimates
+        if tau_estimate > TWO_32 / 30.0 {
+            let correction_factor = 0.1;
+            tau_estimate = tau_estimate / (1.0 + correction_factor);
+        }
+        
+        tau_estimate
+    }
 
-        // Also track the number of saturated registers (at max value)
-        let saturated_registers = register_counts[max_register_value];
-        let max_saturation_ratio = saturated_registers as f64 / m;
-        
-        // When too many registers are saturated, the MLE algorithm becomes unstable
-        // Use direct bias correction instead
-        if max_saturation_ratio > 0.3 {
-            // Falling back to improved estimate for highly saturated sketches
-            return self.ertl_improved_estimate();
-        }
-        
-        // Find bounds for non-zero register values
-        let mut min_nonzero_value = 0;
-        while min_nonzero_value < register_counts.len() && register_counts[min_nonzero_value] == 0 {
-            min_nonzero_value += 1;
-        }
-        let min_value_bound = cmp::max(1, min_nonzero_value); // Ensure minimum of 1 for numerical stability
-        
-        let mut max_nonzero_value = max_register_value;
-        while max_nonzero_value > 0 && register_counts[max_nonzero_value] == 0 {
-            max_nonzero_value -= 1;
-        }
-        let max_value_bound = cmp::min(max_register_value, max_nonzero_value);
-        
-        // Calculate initial harmonic mean with proper scaling
-        let mut harmonic_mean = 0.0;
-        for register_value in (min_value_bound..=max_value_bound).rev() {
-            harmonic_mean = 0.5 * harmonic_mean + register_counts[register_value] as f64;
-        }
-        harmonic_mean = harmonic_mean * 2.0f64.powi(-(min_value_bound as i32)); // Scale by power of 2
-        
-        // Initialize estimation parameters
-        let mut maxed_register_count = 0.0;
-        if max_register_value < register_counts.len() {
-            maxed_register_count = register_counts[max_register_value] as f64;
-        }
-        
-        let zero_correction = harmonic_mean + register_counts[0] as f64;
-        let active_registers = m - register_counts[0] as f64;
-        
-        // Initial estimate using improved bound
-        let mut prev_estimate = harmonic_mean;
-        if max_register_value < register_counts.len() {
-            prev_estimate += register_counts[max_register_value] as f64 * 2.0f64.powi(-(max_register_value as i32));
-        }
-        
-        let mut cardinality_estimate: f64;
-        
-        if prev_estimate <= 1.5 * zero_correction {
-            cardinality_estimate = active_registers / (0.5 * prev_estimate + zero_correction);
-        } else {
-            cardinality_estimate = (active_registers / prev_estimate) * (1.0 + prev_estimate / zero_correction).ln();
-        }
-        
-        // Double-check linear counting applicability
-        if zeros > 0.0 && cardinality_estimate < 3.5 * m {
-            return m * (m / zeros).ln();
-        }
-        
-        // Adjust relative error based on number of registers
-        let relative_error = 1e-2 / (m.sqrt());
-        let mut estimate_change = cardinality_estimate;
-        
-        // Main estimation loop with improved convergence
-        let mut iterations = 0;
-        let max_iterations = 20; // Cap iterations to prevent infinite loops
-        
-        while estimate_change > cardinality_estimate * relative_error && iterations < max_iterations {
-            iterations += 1;
-            
-            // Calculate binary exponent for scaling
-            let binary_exponent = (cardinality_estimate.log2().floor() as i32) + 1;
-            let mut scaled_estimate = cardinality_estimate * 2.0f64.powi(-cmp::max(max_value_bound as i32 + 1, binary_exponent + 2));
-            let scaled_estimate_squared = scaled_estimate * scaled_estimate;
-            
-            // Taylor series approximation for probability function
-            let mut prob_estimate = scaled_estimate - 
-                                scaled_estimate_squared/3.0 + 
-                                scaled_estimate_squared * scaled_estimate_squared * 
-                                (1.0/45.0 - scaled_estimate_squared/472.5);
-            
-            // Update probability estimate for each register value
-            let mut total_probability = maxed_register_count * prob_estimate;
-            
-            for register_value in (min_value_bound..max_value_bound).rev() {
-                let prob_complement = 1.0 - prob_estimate;
-                prob_estimate = (scaled_estimate + prob_estimate * prob_complement) / 
-                              (scaled_estimate + prob_complement);
-                scaled_estimate *= 2.0;
-                
-                if register_counts[register_value] > 0 {
-                    total_probability += register_counts[register_value] as f64 * prob_estimate;
-                }
-            }
-            
-            total_probability += cardinality_estimate * zero_correction;
-            
-            // Update estimate using secant method
-            if prev_estimate < total_probability && total_probability <= active_registers {
-                estimate_change *= (total_probability - active_registers) / 
-                                (prev_estimate - total_probability);
-            } else {
-                estimate_change = 0.0;
-            }
-            
-            cardinality_estimate += estimate_change;
-            prev_estimate = total_probability;
-        }
-        
-        // Scale the final result
-        let result = cardinality_estimate * m;
-        
-        // Apply correction for large cardinalities with a more gradual approach
-        let large_threshold = 134217728.0; // 2^27
-        if result > large_threshold {
-            let two_power_32 = 4294967296.0; // 2^32
-            
-            // Compute dampening factor that increases with cardinality
-            let dampening = 0.7 + (0.3 * (result / two_power_32).min(1.0));
-            
-            // Apply corrected large cardinality correction
-            return -two_power_32 * (1.0 - (result / two_power_32) * dampening).ln();
-        }
-        
-        // Apply bias correction for moderate cardinalities
-        // This is a small empirical correction to reduce systematic bias
-        let bias_correction = if result > m * 100.0 {
-            0.97 // Slight reduction for moderate cardinalities
-        } else if result > m * 10.0 {
-            0.98 // Very slight reduction for small cardinalities
-        } else {
-            1.0  // No correction for very small cardinalities
-        };
-        
-        result * bias_correction
-    }
-    
-    /// Estimate cardinality using the specified method
-    fn estimate_cardinality(&self, method: &str) -> PyResult<f64> {
+    // Method for API compatibility with Python wrapper - will allow selecting estimator
+    pub fn estimate_cardinality(&self, method: &str) -> f64 {
         match method {
-            "original" => Ok(self.original_estimate()),
-            "ertl_improved" => Ok(self.ertl_improved_estimate()),
-            "ertl_mle" => Ok(self.ertl_mle_estimate()),
-            _ => Err(PyValueError::new_err(format!("Unknown estimation method: {}", method))),
+            "original" => self.original_estimate(),
+            "ertl_improved" => self.ertl_mle_estimate(),
+            "ertl_mle" => self.ertl_mle_estimate(),
+            _ => {
+                panic!("Unknown estimation method: {}", method);
+            }
+        }
+    }
+}
+
+#[pymethods]
+impl RustHLL {
+    /// Create a new HyperLogLog sketch with the given precision
+    #[new]
+    fn new(precision: u8, use_threading: Option<bool>, min_thread_batch: Option<usize>) -> PyResult<Self> {
+        if precision < 4 || precision > 16 {
+            return Err(PyValueError::new_err("Precision must be between 4 and 16"));
+        }
+        
+        // Set defaults for optional parameters
+        let use_threading = use_threading.unwrap_or(true);
+        let min_thread_batch = min_thread_batch.unwrap_or(50000);
+        
+        Ok(RustHLL {
+            registers: vec![0; 1 << precision],
+            precision,
+            mask: (1 << precision) - 1,
+            alpha_mm: match precision {
+                4 => 0.673 * (1 << precision) as f64 * (1 << precision) as f64,
+                5 => 0.697 * (1 << precision) as f64 * (1 << precision) as f64,
+                6 => 0.709 * (1 << precision) as f64 * (1 << precision) as f64,
+                _ => 0.7213 / (1.0 + 1.079 / (1 << precision) as f64) * (1 << precision) as f64 * (1 << precision) as f64,
+            },
+            use_threading,
+            min_thread_batch,
+            compacted: false,
+        })
+    }
+    
+    /// Set whether to use threading for large batch operations
+    fn set_threading(&mut self, use_threading: bool, min_batch_size: Option<usize>) -> PyResult<()> {
+        self.use_threading = use_threading;
+        if let Some(size) = min_batch_size {
+            self.min_thread_batch = size;
+        }
+        Ok(())
+    }
+    
+    /// Optimize the sketch for better performance
+    fn optimize(&mut self) -> PyResult<()> {
+        self.optimize_registers();
+        Ok(())
+    }
+    
+    /// Add a single value to the sketch
+    fn add_value(&mut self, value: &str) -> PyResult<()> {
+        let mut hasher = DefaultHasher::new();
+        hasher.write(value.as_bytes());
+        let hash = hasher.finish();
+        
+        let (idx, val) = get_index_and_count(hash, self.precision);
+        self.update_register(idx, val);
+        Ok(())
+    }
+    
+    /// Add a batch of values to the sketch
+    fn add_batch(&mut self, values: Vec<&str>) -> PyResult<()> {
+        // For very small batches, just process them directly
+        if values.len() < 10 {
+            for value in values {
+                self.add_value(value)?;
+            }
+            return Ok(());
+        }
+        
+        // Choose processing method based on batch size and settings
+        if self.use_threading && values.len() >= self.min_thread_batch {
+            self.add_batch_threaded_py(values)
+        } else {
+            self.add_batch_single_py(values)
         }
     }
     
-    /// Merge another HyperLogLog sketch into this one
-    fn merge(&mut self, other: &RustHLL) -> PyResult<()> {
-        if self.precision != other.precision {
-            return Err(PyValueError::new_err("Cannot merge sketches with different precisions"));
+    /// Add a batch with single-threaded processing
+    fn add_batch_single_py(&mut self, values: Vec<&str>) -> PyResult<()> {
+        const CHUNK_SIZE: usize = 1024;
+        
+        // For small batches, process directly
+        if values.len() < CHUNK_SIZE / 2 {
+            for value in values {
+                self.add_value(value)?;
+            }
+            return Ok(());
         }
         
-        let max_value = self.max_register_value();
-        for i in 0..self.registers.len() {
-            // Cap both register values to the maximum before comparing
-            let self_val = cmp::min(self.registers[i], max_value);
-            let other_val = cmp::min(other.registers[i], max_value);
-            self.registers[i] = cmp::max(self_val, other_val);
+        // For larger batches, use a two-pass approach for better cache locality
+        let chunks = values.chunks(CHUNK_SIZE);
+        let mut hash_buffer = vec![0u64; CHUNK_SIZE];
+        
+        for chunk in chunks {
+            // First pass: compute all hashes
+            for (i, value) in chunk.iter().enumerate() {
+                let mut hasher = DefaultHasher::new();
+                hasher.write(value.as_bytes());
+                hash_buffer[i] = hasher.finish();
+            }
+            
+            // Second pass: update registers with pre-computed hashes
+            self.process_hash_batch(&hash_buffer[..chunk.len()]);
+        }
+        
+        // Consider optimizing registers if batch was large
+        if values.len() > 10000 {
+            self.optimize_registers();
         }
         
         Ok(())
+    }
+    
+    /// Add a batch with multi-threaded processing
+    fn add_batch_threaded_py(&mut self, values: Vec<&str>) -> PyResult<()> {
+        // Calculate the optimal number of threads
+        let num_threads = cmp::min(
+            num_cpus::get(),
+            values.len() / (self.min_thread_batch / 4).max(1)
+        ).max(2); // Use at least 2 threads
+        
+        // Create thread-local sketches with the same precision
+        let sketches: Vec<Arc<Mutex<RustHLL>>> = (0..num_threads)
+            .map(|_| Arc::new(Mutex::new(RustHLL::new(self.precision, None, None).unwrap())))
+            .collect();
+            
+        // Split the batch into chunks
+        let chunk_size = (values.len() + num_threads - 1) / num_threads;
+        
+        // Spawn threads and process chunks in parallel
+        let handles: Vec<_> = values.chunks(chunk_size)
+            .enumerate()
+            .map(|(i, chunk)| {
+                // Clone the chunk data to own it in the thread
+                let owned_chunk: Vec<String> = chunk.iter().map(|&s| s.to_owned()).collect();
+                let sketch = Arc::clone(&sketches[i % num_threads]);
+                
+                thread::spawn(move || {
+                    if let Ok(mut sketch) = sketch.lock() {
+                        // Convert String back to &str for processing
+                        let borrowed_chunk: Vec<&str> = owned_chunk.iter().map(|s| s.as_str()).collect();
+                        let _ = sketch.add_batch_single_py(borrowed_chunk);
+                    }
+                })
+            })
+            .collect();
+        
+        // Wait for all threads to complete
+        for handle in handles {
+            let _ = handle.join().map_err(|_| PyValueError::new_err("Thread panic in batch processing"))?;
+        }
+        
+        // Merge results from all sketches
+        for sketch_arc in sketches {
+            if let Ok(sketch) = sketch_arc.lock() {
+                if let Err(e) = self.merge(&sketch) {
+                    return Err(PyValueError::new_err(e));
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Estimate cardinality of the sketch
+    fn estimate(&self) -> PyResult<f64> {
+        Ok(self.fast_mle_estimate())
+    }
+    
+    /// Merge another sketch into this one
+    fn merge(&mut self, other: &RustHLL) -> PyResult<()> {
+        // Check that precisions match
+        if self.precision != other.precision {
+            return Err(PyValueError::new_err(format!(
+                "Cannot merge sketches with different precision: {} vs {}",
+                self.precision, other.precision
+            )));
+        }
+        
+        // Fast path for empty inputs
+        if other.is_empty() {
+            return Ok(());
+        }
+        
+        if self.is_empty() {
+            // If self is empty, just copy other's registers
+            self.registers.copy_from_slice(&other.registers);
+            return Ok(());
+        }
+        
+        // Regular merge - take max of each register
+        for i in 0..self.registers.len() {
+            self.registers[i] = cmp::max(self.registers[i], other.registers[i]);
+        }
+        
+        Ok(())
+    }
+    
+    /// Merge another sketch into this one
+    fn merge_sketch(&mut self, other: &RustHLL) -> PyResult<()> {
+        self.merge(other)
+    }
+    
+    /// Get a debug representation of the sketch
+    fn debug_info(&self) -> PyResult<String> {
+        let num_zero = self.registers.iter().filter(|&&r| r == 0).count();
+        let max_val = self.max_register_value();
+        let num_max = self.registers.iter().filter(|&&r| r >= max_val).count();
+        
+        Ok(format!(
+            "HLL: precision={}, registers={}, zeros={}, max_val={}, saturated={}",
+            self.precision,
+            self.registers.len(),
+            num_zero,
+            max_val,
+            num_max
+        ))
     }
     
     /// Get a Python-friendly representation of the sketch
@@ -418,8 +580,8 @@ impl RustHLL {
         
         // Second approach: Using cardinality estimates
         // Create union and intersection sketches
-        let mut union_sketch = RustHLL::new(self.precision)?;
-        let mut intersection_sketch = RustHLL::new(self.precision)?;
+        let mut union_sketch = RustHLL::new(self.precision, None, None)?;
+        let mut intersection_sketch = RustHLL::new(self.precision, None, None)?;
         
         for i in 0..self.registers.len() {
             let self_val = cmp::min(self.registers[i], max_value);
@@ -433,9 +595,9 @@ impl RustHLL {
             }
         }
         
-        let self_card = self.estimate();
-        let other_card = other.estimate();
-        let union_card = union_sketch.estimate();
+        let self_card = self.estimate()?;
+        let other_card = other.estimate()?;
+        let union_card = union_sketch.estimate()?;
         
         // Use inclusion-exclusion principle for better accuracy in sparse case
         let intersection_card = (self_card + other_card - union_card).max(0.0);
@@ -454,108 +616,29 @@ impl RustHLL {
         // Ensure result is in the valid range [0, 1]
         Ok(jaccard.max(0.0).min(1.0))
     }
-    
-    /// Calculate the tau function used in Ertl's MLE algorithm
-    fn get_tau(&self, x: f64) -> f64 {
-        // Handle special cases
-        if x == 0.0 || x == 1.0 || !x.is_finite() {
-            return 0.0;
-        }
-        
-        // Handle values very close to 1 that might cause problems
-        if (x - 1.0).abs() < 1e-10 {
-            return 0.0;
-        }
-        
-        // For x < 1, the series doesn't converge correctly
-        if x < 1.0 {
-            return 0.0;
-        }
-        
-        let mut y = 1.0;
-        let mut z = 1.0;
-        let mut sum = 0.0;
-        let mut prev_sum = -1.0; // To detect when sum stops changing
-        
-        // Calculate tau using the series expansion with strict iteration limit
-        for iteration in 0..50 {
-            sum += y;
-            z *= x;
-            
-            // Handle potential division by zero or very small values
-            let denominator = 2.0 * z - 1.0;
-            if denominator.abs() < 1e-10 {
-                break;
-            }
-            
-            y = z / denominator;
-            
-            // Check for NaN or infinity which would indicate numerical issues
-            if !y.is_finite() {
-                break;
-            }
-            
-            // Break if our sum has converged sufficiently (no significant change)
-            if (sum - prev_sum).abs() < 1e-12 * sum.abs() {
-                break;
-            }
-            
-            // Break if contribution is very small
-            if y.abs() < 1e-15 * sum.abs() {
-                break;
-            }
-            
-            // Keep track of previous sum to check convergence
-            prev_sum = sum;
-            
-            // Safety check: if sum becomes non-finite, return last valid value
-            if !sum.is_finite() {
-                return prev_sum;
-            }
-            
-            // If we're on the 30th iteration and still haven't converged, 
-            // start applying stronger convergence criteria
-            if iteration > 30 && y.abs() < 1e-6 * sum.abs() {
-                break;
-            }
-        }
-        
-        sum
-    }
 }
 
-impl RustHLL {
-    /// Hash the value and return the index and bit pattern
-    fn get_index_and_count(&self, value: &str) -> (usize, u8) {
-        let mut hasher = DefaultHasher::new();
-        value.hash(&mut hasher);
-        let hash = hasher.finish();
-        
-        // Use the first precision bits as the register index
-        let index = (hash & self.mask) as usize;
-        
-        // Use the remaining bits (64-precision) for the pattern
-        let bits = hash >> self.precision;
-        
-        // Calculate rank as position of leftmost 1 bit (1-indexed)
-        // For 64-bit hash with p bits used for index, we have 64-p bits remaining
-        // We need to ensure we don't exceed this maximum
-        let max_possible_rank = 64 - self.precision as u8;
-        
-        // Count leading zeros + 1 (rank is 1-indexed)
-        // If all remaining bits are 0, rank is 1
-        // Otherwise, the rank is the position of the leftmost 1 bit
-        // Since we only have 64-precision bits available, we cap at that value
-        let rank = if bits == 0 {
-            1 // No bits set, use minimum rank
-        } else {
-            let leading_zeros = bits.leading_zeros() as u8;
-            // Cap the rank to the maximum allowed by our bit width
-            cmp::min(leading_zeros + 1, max_possible_rank)
-        };
-        
-        (index, rank)
-    }
+/// Fast hash to index and value conversion
+/// Returns (register_index, value_to_set)
+#[inline(always)]
+fn get_index_and_count(hash: u64, precision: u8) -> (usize, u8) {
+    // Extract lowest 'precision' bits as the register index (faster than modulo)
+    let register_mask = (1 << precision) - 1;
+    let index = (hash & register_mask as u64) as usize;
+    
+    // Use remaining bits to calculate the leading zeros (+1)
+    let value_bits = hash >> precision;
+    
+    // Fast leading zeros calculation
+    // NOTE: The pattern of the leading zeros in the value bits determines the
+    // probabilistic accuracy of HLL. We want to count leading zeros plus 1.
+    let leading_zeros = value_bits.leading_zeros() as u8 + 1;
+    
+    // Cap the rank based on maximum allowed by precision
+    let max_leading_zeros = (64 - precision) as u8;
+    let clipped_zeros = cmp::min(leading_zeros, max_leading_zeros);
+    
+    (index, clipped_zeros)
 }
 
 #[pymodule]

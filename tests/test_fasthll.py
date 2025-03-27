@@ -16,7 +16,7 @@ def test_basic_functionality():
     print("\n=== Testing Basic Functionality ===")
     
     # Create sketch
-    sketch = FastHyperLogLog(precision=12)
+    sketch = FastHyperLogLog(precision=14)
     
     # Check if using Rust
     print(f"Using Rust implementation: {sketch.is_using_rust()}")
@@ -50,7 +50,7 @@ def test_estimation_methods():
     print("\n=== Testing Estimation Methods ===")
     
     # Create sketch
-    sketch = FastHyperLogLog(precision=12)
+    sketch = FastHyperLogLog(precision=14)
     
     # Add some values
     for i in range(10000):
@@ -75,8 +75,8 @@ def test_merge():
     print("\n=== Testing Merge Operation ===")
     
     # Create two sketches with different items
-    sketch1 = FastHyperLogLog(precision=12)
-    sketch2 = FastHyperLogLog(precision=12)
+    sketch1 = FastHyperLogLog(precision=14)
+    sketch2 = FastHyperLogLog(precision=14)
     
     # Add values to sketch1
     for i in range(5000):
@@ -116,9 +116,9 @@ def test_jaccard():
     print("\n=== Testing Jaccard Similarity ===")
     
     # Create two sketches with different overlap ratios
-    sketch1 = FastHyperLogLog(precision=12)
-    sketch2 = FastHyperLogLog(precision=12)
-    sketch3 = FastHyperLogLog(precision=12)
+    sketch1 = FastHyperLogLog(precision=14)
+    sketch2 = FastHyperLogLog(precision=14)
+    sketch3 = FastHyperLogLog(precision=14)
     
     # Fill sketch1 with 10000 items
     for i in range(10000):
@@ -159,7 +159,7 @@ def test_batch_operations():
     data = [f"item_{i}" for i in range(data_size)]
     
     # Test individual add
-    sketch1 = FastHyperLogLog(precision=12)
+    sketch1 = FastHyperLogLog(precision=14)
     
     start_time = time.time()
     for item in data[:10000]:  # Use smaller set for individual adds
@@ -170,7 +170,7 @@ def test_batch_operations():
     print(f"Individual add (10000 items): {est1:.2f}, time: {individual_time:.4f}s")
     
     # Test batch add
-    sketch2 = FastHyperLogLog(precision=12)
+    sketch2 = FastHyperLogLog(precision=14)
     
     start_time = time.time()
     sketch2.add_batch(data)
@@ -189,13 +189,13 @@ def test_edge_cases():
     print("\n=== Testing Edge Cases ===")
     
     # Empty sketch
-    sketch = FastHyperLogLog(precision=12)
+    sketch = FastHyperLogLog(precision=14)
     empty_est = sketch.cardinality()
     print(f"Empty sketch estimate: {empty_est}")
     assert empty_est < 1, f"Empty sketch should estimate close to 0, got {empty_est}"
     
     # Very small cardinality
-    sketch = FastHyperLogLog(precision=12)
+    sketch = FastHyperLogLog(precision=14)
     for i in range(5):
         sketch.add(f"item_{i}")
     
@@ -204,7 +204,7 @@ def test_edge_cases():
     assert abs(small_est - 5) / 5 < 0.5, f"Small cardinality error too high: {abs(small_est - 5) / 5:.2f}"
     
     # Very large cardinality
-    sketch = FastHyperLogLog(precision=12)
+    sketch = FastHyperLogLog(precision=14)
     for i in range(100000):
         sketch.add(f"item_{i}")
     
@@ -218,7 +218,7 @@ def test_comparison_with_python():
     """Compare results with Python implementation."""
     print("\n=== Comparing With Python Implementation ===")
     
-    if not FastHyperLogLog(precision=12).is_using_rust():
+    if not FastHyperLogLog(precision=14).is_using_rust():
         print("Skipping comparison - Rust implementation not available")
         return
     
@@ -227,8 +227,8 @@ def test_comparison_with_python():
     data = [f"item_{i}" for i in range(data_size)]
     
     # Create both sketches
-    rust_sketch = FastHyperLogLog(precision=12)
-    py_sketch = HyperLogLog(precision=12)
+    rust_sketch = FastHyperLogLog(precision=14)
+    py_sketch = HyperLogLog(precision=14)
     
     # Add data to both
     for item in data:

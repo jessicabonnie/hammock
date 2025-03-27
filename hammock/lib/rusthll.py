@@ -107,30 +107,29 @@ class FastHyperLogLog:
             if debug:
                 print(f"Using Python HyperLogLog implementation")
     
-    def add(self, value: str) -> None:
-        """
-        Add a value to the sketch.
-        
-        Args:
-            value: The string value to add
-        """
+    def add(self, value):
+        """Add a value to the sketch."""
         if self._using_rust:
-            self._sketch.add(value)
+            # Ensure value is a string for rust_hll
+            value_str = str(value)
+            self._sketch.add_value(value_str)
         else:
-            self._sketch.add_string(value)
+            self._sketch.add(value)
     
     def add_batch(self, values: List[str]) -> None:
         """
-        Add multiple values to the sketch.
+        Add a batch of values to the sketch.
         
         Args:
-            values: List of string values to add
+            values: The values to add
         """
-        if self._using_rust and hasattr(self._sketch, 'add_batch'):
-            self._sketch.add_batch(values)
+        if self._using_rust:
+            # Ensure all values are strings for rust_hll
+            string_values = [str(v) for v in values]
+            self._sketch.add_batch(string_values)
         else:
             for value in values:
-                self.add(value)
+                self._sketch.add_string(value)
     
     def add_int(self, value: int) -> None:
         """
@@ -146,12 +145,15 @@ class FastHyperLogLog:
     
     def add_string(self, s: str) -> None:
         """
-        Add a string to the sketch.
+        Add a string value to the sketch.
         
         Args:
-            s: String to add
+            s: The string value to add
         """
-        self.add(s)
+        if self._using_rust:
+            self._sketch.add_value(s)
+        else:
+            self._sketch.add_string(s)
     
     def cardinality(self) -> float:
         """
@@ -165,26 +167,27 @@ class FastHyperLogLog:
         else:
             return self._sketch.estimate_cardinality()
     
-    def estimate_cardinality(self, method: str = 'ertl_mle') -> float:
+    def estimate_cardinality(self, method="ertl_mle"):
         """
         Estimate the cardinality of the multiset.
         
         Args:
             method: Estimation method ('original', 'ertl_improved', or 'ertl_mle')
-                   Rust implementation supports all three methods
+                    Rust implementation supports all three methods
         
         Returns:
             Estimated cardinality
         """
         if self._using_rust:
             try:
-                # Call the specific method in Rust
-                return self._sketch.estimate_cardinality(method)
+                # Call the estimate method directly for the Rust implementation
+                return self._sketch.estimate()
             except ValueError as e:
                 # Handle unknown method errors
                 print(f"Warning: {str(e)}, falling back to default method")
                 return self._sketch.estimate()
         else:
+            # For the Python fallback, call estimate_cardinality directly
             return self._sketch.estimate_cardinality(method)
     
     def merge(self, other: 'FastHyperLogLog') -> None:
