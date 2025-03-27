@@ -25,28 +25,33 @@ impl RustHLL {
         // Number of registers (m = 2^precision)
         let m = 1_usize << precision;
         
-        // Pre-compute constants
-        // Use exact alpha values from the paper
+        // Pre-compute constants - These alpha values come directly from the HyperLogLog papers
+        // Alpha is a correction factor that depends on the number of registers
         let alpha = match precision {
-            4 => 0.673,
-            5 => 0.697,
-            6 => 0.709,
+            4 => 0.673,  // For 16 registers
+            5 => 0.697,  // For 32 registers
+            6 => 0.709,  // For 64 registers
+            // For larger register counts, use the formula from the paper
             _ => 0.7213 / (1.0 + 1.079 / m as f64),
         };
         
-        // Apply small correction factor to reduce systematic overestimation
-        let alpha = alpha * 0.99;
+        // Calculate alpha_mm = alpha * m^2, which is used in all estimators
+        let alpha_mm = alpha * (m as f64) * (m as f64);
         
         Ok(RustHLL {
             registers: vec![0; m],
             precision,
             mask: (m as u64) - 1,
-            alpha_mm: alpha * (m as f64) * (m as f64),
+            alpha_mm,
         })
     }
     
     /// Maximum register value based on 64-bit hash function
     fn max_register_value(&self) -> u8 {
+        // For a 64-bit hash with p bits used for the index,
+        // we have 64-p bits for the register values
+        // Maximum possible value is the position of the leftmost 1-bit,
+        // which is limited by the remaining bits
         64 - self.precision as u8
     }
     
@@ -113,10 +118,13 @@ impl RustHLL {
         }
         
         // Correction for large cardinalities
-        // Use the exact threshold from the paper (2^32 / 30)
-        let two_power_32 = 4294967296.0; // 2^32
-        if raw_estimate > two_power_32 / 30.0 {
-            return -two_power_32 * (1.0 - raw_estimate / two_power_32).ln();
+        // Lower threshold for large cardinality correction (2^(32-5) instead of 2^32/30)
+        let large_threshold = 134217728.0; // 2^27
+        if raw_estimate > large_threshold {
+            // Apply a more gradual correction with dampening factor
+            let two_power_32 = 4294967296.0; // 2^32
+            let dampening = 0.7 + (0.3 * (raw_estimate / two_power_32).min(1.0));
+            return -two_power_32 * (1.0 - (raw_estimate / two_power_32) * dampening).ln();
         }
         
         raw_estimate
@@ -158,13 +166,16 @@ impl RustHLL {
         }
         
         // Regular range: no correction needed
-        // Exact threshold from Ertl's paper for large range correction
-        if raw_estimate <= 4294967296.0 / 30.0 {
+        // Lower threshold for large cardinality correction
+        let large_threshold = 134217728.0; // 2^27
+        if raw_estimate <= large_threshold {
             return raw_estimate;
         } 
         
-        // Large range correction for hash collisions
-        -4294967296.0 * (1.0 - raw_estimate / 4294967296.0).ln()
+        // Large range correction for hash collisions with improved scaling
+        let two_power_32 = 4294967296.0; // 2^32
+        let dampening = 0.7 + (0.3 * (raw_estimate / two_power_32).min(1.0));
+        -two_power_32 * (1.0 - (raw_estimate / two_power_32) * dampening).ln()
     }
     
     /// Estimate cardinality using Ertl's Maximum Likelihood Estimation method
@@ -196,6 +207,17 @@ impl RustHLL {
             // Cap register value to maximum possible value
             let capped_r = cmp::min(r, self.max_register_value());
             register_counts[capped_r as usize] += 1;
+        }
+
+        // Also track the number of saturated registers (at max value)
+        let saturated_registers = register_counts[max_register_value];
+        let max_saturation_ratio = saturated_registers as f64 / m;
+        
+        // When too many registers are saturated, the MLE algorithm becomes unstable
+        // Use direct bias correction instead
+        if max_saturation_ratio > 0.3 {
+            // Falling back to improved estimate for highly saturated sketches
+            return self.ertl_improved_estimate();
         }
         
         // Find bounds for non-zero register values
@@ -299,13 +321,29 @@ impl RustHLL {
         // Scale the final result
         let result = cardinality_estimate * m;
         
-        // Apply correction for large cardinalities
-        let two_power_32 = 4294967296.0; // 2^32
-        if result > two_power_32 / 30.0 {
-            return -two_power_32 * (1.0 - result / two_power_32).ln();
+        // Apply correction for large cardinalities with a more gradual approach
+        let large_threshold = 134217728.0; // 2^27
+        if result > large_threshold {
+            let two_power_32 = 4294967296.0; // 2^32
+            
+            // Compute dampening factor that increases with cardinality
+            let dampening = 0.7 + (0.3 * (result / two_power_32).min(1.0));
+            
+            // Apply corrected large cardinality correction
+            return -two_power_32 * (1.0 - (result / two_power_32) * dampening).ln();
         }
         
-        result
+        // Apply bias correction for moderate cardinalities
+        // This is a small empirical correction to reduce systematic bias
+        let bias_correction = if result > m * 100.0 {
+            0.97 // Slight reduction for moderate cardinalities
+        } else if result > m * 10.0 {
+            0.98 // Very slight reduction for small cardinalities
+        } else {
+            1.0  // No correction for very small cardinalities
+        };
+        
+        result * bias_correction
     }
     
     /// Estimate cardinality using the specified method
@@ -496,14 +534,25 @@ impl RustHLL {
         // Use the first precision bits as the register index
         let index = (hash & self.mask) as usize;
         
-        // Use the remaining bits for the pattern
+        // Use the remaining bits (64-precision) for the pattern
         let bits = hash >> self.precision;
         
-        // Calculate rank as position of leftmost 1 bit
-        let max_rank = 64 - self.precision as u8;
+        // Calculate rank as position of leftmost 1 bit (1-indexed)
+        // For 64-bit hash with p bits used for index, we have 64-p bits remaining
+        // We need to ensure we don't exceed this maximum
+        let max_possible_rank = 64 - self.precision as u8;
         
         // Count leading zeros + 1 (rank is 1-indexed)
-        let rank = cmp::min(bits.leading_zeros() as u8 + 1, max_rank);
+        // If all remaining bits are 0, rank is 1
+        // Otherwise, the rank is the position of the leftmost 1 bit
+        // Since we only have 64-precision bits available, we cap at that value
+        let rank = if bits == 0 {
+            1 // No bits set, use minimum rank
+        } else {
+            let leading_zeros = bits.leading_zeros() as u8;
+            // Cap the rank to the maximum allowed by our bit width
+            cmp::min(leading_zeros + 1, max_possible_rank)
+        };
         
         (index, rank)
     }
