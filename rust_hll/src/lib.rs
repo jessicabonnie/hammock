@@ -58,6 +58,11 @@ impl RustHLL {
     
     /// Estimate the cardinality (number of unique elements)
     fn estimate(&self) -> f64 {
+        self.ertl_mle_estimate()
+    }
+    
+    /// Estimate cardinality using the original HLL algorithm
+    fn original_estimate(&self) -> f64 {
         // Compute the harmonic mean
         let mut sum = 0.0;
         for &value in &self.registers {
@@ -82,6 +87,121 @@ impl RustHLL {
         }
         
         estimate
+    }
+    
+    /// Estimate cardinality using Ertl's improved method
+    fn ertl_improved_estimate(&self) -> f64 {
+        let m = self.registers.len() as f64;
+        
+        // Get register value counts
+        let max_register_val = 32; // Max register value for 32-bit
+        let mut counts = vec![0; max_register_val + 1];
+        for &r in &self.registers {
+            counts[r as usize] += 1;
+        }
+        
+        // Calculate bias corrected estimate
+        let raw_estimate = self.original_estimate();
+        
+        // Calculate estimate using tau-algorithm
+        let mut estimate = raw_estimate;
+        let two_power_32 = 4294967296.0; // 2^32
+        
+        // Apply correction if needed
+        if counts[0] > 0 {
+            // Small range correction (linear counting)
+            if raw_estimate <= 5.0 * m {
+                let v = counts[0] as f64;
+                estimate = m * (m / v).ln();
+            }
+        } else if raw_estimate <= two_power_32 / 30.0 {
+            // Normal range, no correction needed
+            estimate = raw_estimate;
+        } else {
+            // Large range correction (correct for hash collisions)
+            estimate = -two_power_32 * (1.0 - raw_estimate / two_power_32).ln();
+        }
+        
+        estimate
+    }
+    
+    /// Estimate cardinality using Ertl's Maximum Likelihood Estimation method
+    fn ertl_mle_estimate(&self) -> f64 {
+        let m = self.registers.len() as f64;
+        
+        // Get register value counts
+        let max_register_val = 32; // Max register value for 32-bit
+        let mut counts = vec![0; max_register_val + 1];
+        for &r in &self.registers {
+            counts[r as usize] += 1;
+        }
+        
+        // If there are no observations, return 0
+        if counts.iter().skip(1).sum::<usize>() == 0 {
+            return 0.0;
+        }
+        
+        // Calculate the MLE estimate using the tau algorithm
+        let mut z = 0.0;
+        for i in 1..=max_register_val {
+            if counts[i] > 0 {
+                z += counts[i] as f64 * self.get_tau((i as f64).exp2());
+            }
+        }
+        
+        // Apply corrections
+        let two_power_32 = 4294967296.0; // 2^32
+        let estimate = m * m / z;
+        
+        // Small range correction
+        if counts[0] > 0 {
+            // Use linear counting for small cardinalities
+            let v = counts[0] as f64;
+            if v > 0.0 && v <= 0.5 * m {
+                return m * (m / v).ln();
+            }
+        }
+        
+        // Large range correction
+        if estimate > two_power_32 / 30.0 {
+            return -two_power_32 * (1.0 - estimate / two_power_32).ln();
+        }
+        
+        estimate
+    }
+    
+    /// Calculate the tau function used in Ertl's MLE algorithm
+    fn get_tau(&self, x: f64) -> f64 {
+        if x == 0.0 || x == 1.0 {
+            return 0.0;
+        }
+        
+        let mut y = 1.0;
+        let mut z = 1.0;
+        let mut sum = 0.0;
+        
+        // Calculate tau using the series expansion
+        loop {
+            sum += y;
+            z *= x;
+            y = z / (2.0 * z - 1.0);
+            
+            if y < 1e-15 * sum {
+                break;
+            }
+        }
+        
+        sum
+    }
+    
+    /// Estimate cardinality using the specified method
+    fn estimate_cardinality(&self, method: &str) -> PyResult<f64> {
+        match method {
+            "original" => Ok(self.original_estimate()),
+            "ertl_improved" => Ok(self.ertl_improved_estimate()),
+            "ertl_mle" => Ok(self.ertl_mle_estimate()),
+            _ => Err(PyValueError::new_err(format!("Unknown estimation method: {}", method))),
+        }
     }
     
     /// Merge another HyperLogLog sketch into this one
@@ -114,9 +234,9 @@ impl RustHLL {
         merged.merge(other)?;
         
         // Estimate the Jaccard similarity using the inclusion-exclusion principle
-        let self_est = self.estimate();
-        let other_est = other.estimate();
-        let union_est = merged.estimate();
+        let self_est = self.ertl_improved_estimate();
+        let other_est = other.ertl_improved_estimate();
+        let union_est = merged.ertl_improved_estimate();
         
         if union_est == 0.0 {
             return Ok(1.0); // Both are empty, consider them identical
