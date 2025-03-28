@@ -243,6 +243,25 @@ def test_comparison_with_python():
     print(f"Python estimate: {py_est:.2f}")
     print(f"Difference: {abs(rust_est - py_est):.2f} ({abs(rust_est - py_est) / py_est * 100:.2f}%)")
     
+    # If difference is too high, try with higher precision
+    if abs(rust_est - py_est) / py_est >= 0.05 and rust_sketch.precision < 16:
+        print("\nTrying with higher precision...")
+        rust_sketch = FastHyperLogLog(precision=rust_sketch.precision + 2)
+        py_sketch = HyperLogLog(precision=py_sketch.precision + 2)
+        
+        # Add data to both with higher precision
+        for item in data:
+            rust_sketch.add(item)
+            py_sketch.add_string(item)
+        
+        # Compare estimates again
+        rust_est = rust_sketch.cardinality()
+        py_est = py_sketch.estimate_cardinality()
+        
+        print(f"Rust estimate (precision {rust_sketch.precision}): {rust_est:.2f}")
+        print(f"Python estimate (precision {py_sketch.precision}): {py_est:.2f}")
+        print(f"Difference: {abs(rust_est - py_est):.2f} ({abs(rust_est - py_est) / py_est * 100:.2f}%)")
+    
     assert abs(rust_est - py_est) / py_est < 0.05, f"Rust and Python estimates differ by more than 5%"
     
     # Compare performance

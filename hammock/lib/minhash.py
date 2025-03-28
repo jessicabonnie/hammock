@@ -104,6 +104,15 @@ class MinHash(AbstractSketch):
                 kmer = s[i:i + self.kmer_size]
                 self._process_kmer(kmer)
 
+    def add_batch(self, strings: List[str]) -> None:
+        """Add multiple strings to the sketch.
+        
+        Args:
+            strings: List of strings to add to the sketch
+        """
+        for s in strings:
+            self.add_string(s)
+
     def merge(self, other: 'MinHash') -> 'MinHash':
         """Merge another MinHash sketch into this one.
         

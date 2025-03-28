@@ -7,6 +7,7 @@ from hammock.lib.intervals import IntervalSketch
 import os
 import pysam # type: ignore
 import gzip
+import time
 
 @pytest.mark.quick
 def test_interval_sketch_init():
@@ -309,6 +310,85 @@ def test_invalid_gff():
             sketch = IntervalSketch.from_file(filename=f.name, mode="A")
             assert sketch is not None
             assert sketch.num_intervals == 0  # Should handle invalid data gracefully
+            
+        finally:
+            os.unlink(f.name)
+
+@pytest.mark.full
+def test_parallel_file_reading():
+    """Test parallelized file reading functionality."""
+    # Create a large test bed file with many intervals
+    total_intervals = 100000  # Large number of intervals to make parallelization worthwhile
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.bed', delete=False) as f:
+        for i in range(total_intervals):
+            f.write(f"chr1\t{i*100}\t{(i+1)*100}\n")
+        f.flush()
+        
+        try:
+            # Test with different numbers of processes
+            for num_processes in [1, 2, 4]:
+                start_time = time.time()
+                sketch = IntervalSketch.from_file(
+                    filename=f.name,
+                    mode="A",
+                    num_processes=num_processes,
+                    chunk_size=10000
+                )
+                end_time = time.time()
+                
+                assert sketch is not None
+                assert sketch.num_intervals == total_intervals
+                print(f"Processing time with {num_processes} processes: {end_time - start_time:.2f}s")
+                
+                # Verify cardinality estimate
+                est_card = sketch.sketch.estimate_cardinality()
+                assert est_card > 0
+                
+                # Test with different chunk sizes
+                for chunk_size in [5000, 10000, 20000]:
+                    start_time = time.time()
+                    sketch = IntervalSketch.from_file(
+                        filename=f.name,
+                        mode="A",
+                        num_processes=4,
+                        chunk_size=chunk_size
+                    )
+                    end_time = time.time()
+                    
+                    assert sketch is not None
+                    assert sketch.num_intervals == total_intervals
+                    print(f"Processing time with chunk_size {chunk_size}: {end_time - start_time:.2f}s")
+            
+            # Test with different modes
+            for mode in ["A", "B", "C"]:
+                start_time = time.time()
+                sketch = IntervalSketch.from_file(
+                    filename=f.name,
+                    mode=mode,
+                    num_processes=4,
+                    chunk_size=10000
+                )
+                end_time = time.time()
+                
+                assert sketch is not None
+                if mode == "A":
+                    assert sketch.num_intervals == total_intervals
+                print(f"Processing time for mode {mode}: {end_time - start_time:.2f}s")
+                
+            # Test with subsampling
+            start_time = time.time()
+            sketch = IntervalSketch.from_file(
+                filename=f.name,
+                mode="C",
+                num_processes=4,
+                chunk_size=10000,
+                subsample=(0.5, 0.5)
+            )
+            end_time = time.time()
+            
+            assert sketch is not None
+            assert sketch.num_intervals <= total_intervals  # Should have fewer intervals due to subsampling
+            print(f"Processing time with subsampling: {end_time - start_time:.2f}s")
             
         finally:
             os.unlink(f.name)

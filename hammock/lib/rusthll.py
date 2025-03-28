@@ -232,6 +232,18 @@ class FastHyperLogLog:
                 # Use the Python implementation's method
                 return self._sketch.estimate_jaccard(other._sketch)
     
+    def estimate_jaccard(self, other: 'FastHyperLogLog') -> float:
+        """
+        Alias for jaccard() to maintain compatibility with existing code.
+        
+        Args:
+            other: Another HyperLogLog sketch to compare with
+            
+        Returns:
+            Jaccard similarity [0, 1]
+        """
+        return self.jaccard(other)
+    
     def similarity_values(self, other: 'FastHyperLogLog') -> Dict[str, float]:
         """
         Get similarity values between this sketch and another.
