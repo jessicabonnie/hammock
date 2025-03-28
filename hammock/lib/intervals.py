@@ -10,7 +10,60 @@ import pyBigWig  # type: ignore  # no type stubs available
 from numpy import floor  # type: ignore  # no type stubs available
 import gzip
 import pysam  # type: ignore  # no type stubs available
+from multiprocessing import Pool, cpu_count
+from itertools import islice
+import os
 
+def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], expA: float = 0, sep: str = "-", precision: int = 12, debug: bool = False) -> Tuple[List[str], List[str], List[int]]:
+    """Process a chunk of lines in parallel.
+    
+    Args:
+        chunk: List of lines to process
+        mode: Mode for comparison (A/B/C/D)
+        subsample: Subsampling rate for points
+        expA: Power of 10 exponent to use to multiply contribution of A-type intervals
+        sep: Separator for string representation
+        precision: Precision for HyperLogLog sketch
+        debug: Whether to enable debug mode
+        
+    Returns:
+        Tuple of (intervals, points, sizes)
+    """
+    try:
+        intervals = []
+        points = []
+        sizes = []
+        
+        # Create a temporary sketch to use its bedline method with all required parameters
+        temp_sketch = IntervalSketch(
+            mode=mode,
+            subsample=subsample,
+            precision=precision,
+            debug=debug,
+            expA=expA
+        )
+        
+        for line in chunk:
+            if not line.startswith('#'):
+                try:
+                    interval, point, size = temp_sketch.bedline(line, mode=mode, sep=sep, subsample=subsample)
+                    if interval and mode in ["A", "C"]:
+                        intervals.append(interval)
+                        if expA > 0:
+                            for i in range(1, int(10**expA)+1):
+                                intervals.append(interval + str(i))
+                    if point and mode in ["B", "C"] and point is not None:
+                        points.append(point)
+                    if size is not None:
+                        sizes.append(size)
+                except Exception as e:
+                    print(f"Error processing line: {str(e)}")
+                    continue
+        
+        return intervals, points, sizes
+    except Exception as e:
+        print(f"Error in _process_chunk: {str(e)}")
+        return [], [], []
 
 class IntervalSketch(AbstractSketch):
     """Sketch class for BED intervals."""
@@ -52,66 +105,97 @@ class IntervalSketch(AbstractSketch):
     @classmethod
     def from_file(cls, filename: str, **kwargs) -> Optional['IntervalSketch']:
         """Create a sketch from a file."""
-        # Initialize sketch
-        sketch = cls(**kwargs)
-        
-        # Add sketch to kwargs for helper methods
-        kwargs['sketch'] = sketch
-        
-        # Check file extension and process accordingly
-        # Split on '.' and get all extensions (handles multiple extensions like .gff.gz)
-        extensions = filename.lower().split('.')
-        
-        # Handle GFF files (both plain and gzipped)
-        if any(ext in ['gff', 'gff3'] for ext in extensions):
-            return cls._from_gff(filename, **kwargs)
-        
-        # NOTE: rearrange this elif to start with the most common file type
-        # Handle BigBed files
-        elif extensions[-1] in ['bb', 'bigbed']:
-            return cls._from_bigbed(filename, **kwargs)
-        
-        # Skip other unsupported binary formats
-        elif extensions[-1] in ['cram', 'sam']:
-            print(f"Skipping unsupported file format: {filename}")
-            return None
-        
-        # Handle regular BED files (including gzipped)
-        elif extensions[-1] in ["bed"] or (len(extensions) >= 2 and extensions[-2:] == ["bed", "gz"]):
-            try:
-                # Handle gzipped files
-                if filename.endswith('.gz'):
-                    opener = gzip.open
-                else:
-                    opener = open
-                
-                with opener(filename, 'rt') as f:
-                    for line in f:
-                        if not line.startswith('#'):
-                            interval, points, size = sketch.bedline(line, mode=kwargs.get('mode', 'A'), sep=kwargs.get('sep', '-'), subsample=kwargs.get('subsample', (1.0, 1.0)))
-                            
-                            # Add interval if present and in mode A or C
-                            if interval and kwargs.get('mode', 'A') in ["A", "C"]:
-                                sketch.sketch.add_string(interval)
-                                if kwargs.get('expA', 0) > 0:
-                                    for i in range(1, int(10**kwargs.get('expA', 0))+1):
-                                        sketch.sketch.add_string(interval + str(i))
-                                sketch.num_intervals += 1
-                                sketch.total_interval_size += size
-                            
-                            # Add points if present and in mode B or C
-                            if points and kwargs.get('mode', 'A') in ["B", "C"]:
-                                for point in points:
-                                    if point is not None:
-                                        sketch.sketch.add_string(point)
-                                        if kwargs.get('mode', 'A') == "B":
-                                            sketch.num_intervals += 1
-                return sketch
-            except Exception as e:
-                print(f"Error processing file {filename}: {e}")
+        try:
+            # Check if file exists first
+            if not os.path.exists(filename):
+                print(f"Error: File not found: {filename}")
                 return None
-        else:
-            raise ValueError(f"Unsupported file extension: {extensions[-1]}")
+            
+            # Initialize sketch
+            sketch = cls(**kwargs)
+            
+            # Add sketch to kwargs for helper methods
+            kwargs['sketch'] = sketch
+            
+            # Check file extension and process accordingly
+            # Split on '.' and get all extensions (handles multiple extensions like .gff.gz)
+            extensions = filename.lower().split('.')
+            
+            # Handle GFF files (both plain and gzipped)
+            if any(ext in ['gff', 'gff3'] for ext in extensions):
+                result = cls._from_gff(filename, **kwargs)
+                return result if result is not None else None
+            
+            # Handle BigBed files
+            elif extensions[-1] in ['bb', 'bigbed']:
+                result = cls._from_bigbed(filename, **kwargs)
+                return result if result is not None else None
+            
+            # Skip other unsupported binary formats
+            elif extensions[-1] in ['cram', 'sam']:
+                print(f"Skipping unsupported file format: {filename}")
+                return None
+            
+            # Handle regular BED files (including gzipped)
+            elif extensions[-1] in ["bed"] or (len(extensions) >= 2 and extensions[-2:] == ["bed", "gz"]):
+                try:
+                    # Handle gzipped files
+                    if filename.endswith('.gz'):
+                        opener = gzip.open
+                    else:
+                        opener = open
+                    
+                    # Determine number of processes to use
+                    num_processes = kwargs.get('num_processes', max(1, cpu_count() - 1))
+                    chunk_size = kwargs.get('chunk_size', 10000)  # Number of lines per chunk
+                    sep = kwargs.get('sep', '-')  # Get separator from kwargs
+                    precision = kwargs.get('precision', 12)  # Get precision from kwargs
+                    debug = kwargs.get('debug', False)  # Get debug mode from kwargs
+                    
+                    with opener(filename, 'rt') as f:
+                        # Create a pool of workers
+                        with Pool(processes=num_processes) as pool:
+                            while True:
+                                # Read a chunk of lines
+                                chunk = list(islice(f, chunk_size))
+                                if not chunk:
+                                    break
+                                
+                                # Process chunk in parallel
+                                intervals, points, sizes = pool.apply(
+                                    _process_chunk,
+                                    (chunk, kwargs.get('mode', 'A'), kwargs.get('subsample', (1.0, 1.0)), kwargs.get('expA', 0), sep, precision, debug)
+                                )
+                                
+                                # If we got empty lists and there was an error, return None
+                                if not intervals and not points and not sizes:
+                                    return None
+                                
+                                # Add intervals to sketch
+                                for interval in intervals:
+                                    sketch.sketch.add_string(interval)
+                                    sketch.num_intervals += 1
+                                
+                                # Add points to sketch
+                                sketch.add_batch(points)
+                                
+                                # Update total size
+                                sketch.total_interval_size += sum(sizes)
+                    
+                    # If we processed no data at all, return None
+                    if sketch.num_intervals == 0 and sketch.total_interval_size == 0:
+                        return None
+                    
+                    return sketch
+                    
+                except Exception as e:
+                    print(f"Error processing file {filename}: {str(e)}")
+                    return None
+            else:
+                raise ValueError(f"Unsupported file extension: {extensions[-1]}")
+        except Exception as e:
+            print(f"Error in from_file: {str(e)}")
+            return None
 
     @classmethod
     def _from_bigbed(cls, filename: str, **kwargs) -> Optional['IntervalSketch']:
@@ -317,16 +401,14 @@ class IntervalSketch(AbstractSketch):
         interval = None
         points = []
         chrval, start, end = self.basic_bedline(line)
-        # start = min(startx, endx)
-        # end = max(startx, endx)
         interval_size = end - start
-        # subsample=self.subsample
         
         if mode in ["A", "C"]:
             interval = sep.join([chrval, str(start), str(end), "A"])
             # Only apply interval subsampling in mode C
             if mode == "C":
-                hashv = self.sketch._hash_str(interval.encode('utf-8'), seed=777)
+                import xxhash
+                hashv = xxhash.xxh64(interval.encode('utf-8'), seed=777).intdigest()
                 if hashv % (2**32) > int(subsample[0] * (2**32)):
                     interval = None
             
@@ -334,8 +416,6 @@ class IntervalSketch(AbstractSketch):
             # Only apply point subsampling in mode C
             subsample_rate = subsample[1] if mode == "C" else 1.0
             points = self.generate_points(chrval, start, end, sep=sep, subsample=subsample_rate)
-            # print(f"Generated points: {len(points)}")
-            # print(f"Start: {start}, End: {end}")
         
         return interval, points, interval_size
 
@@ -358,10 +438,11 @@ class IntervalSketch(AbstractSketch):
         Returns:
             List of point strings (some may be None if subsampled)
         """
+        import xxhash
         maximum = int(min(1, subsample) * (2**32))
         def gp(x):
             outstr = sep.join([str(chrval), str(x), str(x+1)])
-            hashv = self.sketch._hash_str(outstr.encode('utf-8'), seed)
+            hashv = xxhash.xxh64(outstr.encode('utf-8'), seed=seed).intdigest()
             if hashv % (2**32) <= maximum:
                 return outstr
             return None
@@ -372,9 +453,20 @@ class IntervalSketch(AbstractSketch):
         """Add a string to the sketch."""
         self.sketch.add_string(s)
         
+    def add_batch(self, strings: List[str]) -> None:
+        """Add multiple strings to the sketch.
+        
+        Args:
+            strings: List of strings to add to the sketch
+        """
+        # Filter out None values
+        valid_strings = [s for s in strings if s is not None]
+        if valid_strings:
+            self.sketch.add_batch(valid_strings)
+            
     def add(self, s: str) -> None:
-        """Add a string to the sketch."""
-        self.sketch.add_string(s)
+        """Alias for add_string."""
+        self.add_string(s)
 
     def estimate_jaccard(self, other: 'IntervalSketch') -> float:
         """Estimate Jaccard similarity with another sketch."""

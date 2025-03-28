@@ -1,7 +1,7 @@
 import numpy as np # type: ignore
 import xxhash # type: ignore
 from hammock.lib.abstractsketch import AbstractSketch
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 MAXBIT=32
 
@@ -185,6 +185,15 @@ class HyperLogLog(AbstractSketch):
         # Process all k-mers
         for i in range(len(s) - self.kmer_size + 1):
             self._process_kmer(s[i:i + self.kmer_size])
+
+    def add_batch(self, strings: List[str]) -> None:
+        """Add multiple strings to the sketch.
+        
+        Args:
+            strings: List of strings to add to the sketch
+        """
+        for s in strings:
+            self.add_string(s)
 
     def hash64_int(self, x: int) -> int:
         """Instance method to hash an integer using the instance's seed."""

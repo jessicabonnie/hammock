@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 class AbstractSketch(ABC):
     """Base class for all sketch types."""
@@ -8,6 +8,15 @@ class AbstractSketch(ABC):
     @abstractmethod
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
+        pass
+    
+    @abstractmethod
+    def add_batch(self, strings: List[str]) -> None:
+        """Add multiple strings to the sketch.
+        
+        Args:
+            strings: List of strings to add to the sketch
+        """
         pass
     
     @abstractmethod
