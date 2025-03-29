@@ -7,6 +7,27 @@ from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
 from hammock.lib.minimizer import MinimizerSketch
 from hammock.lib.exact import ExactCounter
+from hammock.lib.setsketch import SetSketch
+import random
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Create results directory if it doesn't exist
+RESULTS_DIR = os.path.join(os.path.dirname(__file__), 'results')
+os.makedirs(RESULTS_DIR, exist_ok=True)
+
+def save_results_to_file(results, filename):
+    """Save benchmark results to a file in the results directory."""
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    base, ext = os.path.splitext(filename)
+    filepath = os.path.join(RESULTS_DIR, f"{base}_{timestamp}{ext}")
+    with open(filepath, 'w') as f:
+        for category, data in results.items():
+            f.write(f"\n{category.upper()}:\n")
+            f.write("-" * 40 + "\n")
+            for key, value in data.items():
+                f.write(f"{key}: {value}\n")
+    print(f"Results saved to {filepath}")
 
 def run_test_case(sketch_class, param_name: str, param_value: int, 
                   set1_size: int, set2_size: int, set2_offset: int = 0):
@@ -83,78 +104,43 @@ def benchmark_sketch(sketch_class, param_name: str, param_values: list, test_cas
     
     return results
 
-def run_benchmarks():
-    """Run all benchmarks and save results."""
-    # Define test cases
-    test_cases = [
-        (
-            "Very sparse perfect overlap",
-            "10 integers with perfect overlap",
-            10, 10, 0
-        ),
-        (
-            "Sparse vs Dense",
-            "100 vs 1000 integers with partial overlap",
-            100, 1000, 0
-        ),
-        (
-            "Medium density overlap",
-            "1000 integers with 90% overlap",
-            1000, 1000, 100
-        ),
-        (
-            "Dense high overlap",
-            "10000 integers with 90% overlap",
-            10000, 10000, 1000
-        ),
-        (
-            "Very dense partial overlap",
-            "100000 integers with 50% overlap",
-            100000, 100000, 50000
-        ),
-        (
-            "Extremely dense minimal overlap",
-            "1000000 integers with 5% overlap",
-            1000000, 1000000, 900000
-        )
-    ]
+def plot_results(title, x_data, y_data, x_label, y_label, legend_loc='upper left'):
+    """Plot benchmark results."""
+    plt.figure(figsize=(10, 6))
     
-    # Run benchmarks for each sketch type
-    results = []
-    results.extend(benchmark_sketch(
-        MinHash, 'num_hashes', 
-        [16, 32, 64, 128, 256, 512, 1024],
-        test_cases
-    ))
-    results.extend(benchmark_sketch(
-        HyperLogLog, 'precision',
-        [4, 6, 8, 10, 12, 14],
-        test_cases
-    ))
-    results.extend(benchmark_sketch(
-        MinimizerSketch, 'precision',  # Using HLL as underlying sketch
-        [4, 6, 8, 10, 12, 14],
-        test_cases
-    ))
-    results.extend(benchmark_sketch(
-        ExactCounter, 'kmer_size',
-        [0],  # ExactCounter doesn't need parameters for benchmarking
-        test_cases[:3]  # Only run smaller test cases for exact counter
-    ))
+    for name, data in y_data.items():
+        plt.plot(x_data, data, marker='o', linewidth=2, label=name)
     
-    # Create results directory if it doesn't exist
-    os.makedirs('test_results', exist_ok=True)
+    plt.title(title)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.legend(loc=legend_loc)
+    plt.tight_layout()
     
-    # Write results to CSV
+    # Save to file in results directory with timestamp
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    filename = f'test_results/sketch_benchmark_{timestamp}.csv'
+    filename = title.lower().replace(' ', '_') + f'_{timestamp}.png'
+    filepath = os.path.join(RESULTS_DIR, filename)
+    plt.savefig(filepath)
+    print(f"Saved plot to {filepath}")
     
-    with open(filename, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=results[0].keys())
-        writer.writeheader()
-        writer.writerows(results)
+    plt.close()
+
+def run_benchmarks():
+    """Run all benchmarks and return the results."""
+    sketch_classes = [HyperLogLog, MinHash, SetSketch]
     
-    print(f"\nResults written to {filename}")
+    results = {
+        'add': benchmark_add(sketch_classes),
+        'merge': benchmark_merge(sketch_classes),
+        'accuracy': benchmark_accuracy(sketch_classes)
+    }
+    
+    # Save results to file
+    save_results_to_file(results, 'sketch_comparison_results.txt')
+    
+    return results
 
 if __name__ == "__main__":
     run_benchmarks() 

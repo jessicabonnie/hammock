@@ -443,6 +443,76 @@ def test_hll_different_kmer():
     with pytest.raises(ValueError):
         hll1.similarity_values(hll2)
 
+def test_hyperloglog_cardinality():
+    """Test cardinality estimation."""
+    # For small sets, use lower precision
+    sketch = HyperLogLog(expected_cardinality=1000)
+    items = [f"item{i}" for i in range(1000)]
+    
+    # Add items
+    sketch.add_batch(items)
+    
+    # Get estimate
+    estimate = sketch.estimate_cardinality()
+    
+    # Should be close to actual cardinality
+    assert abs(estimate - 1000) / 1000 < 0.1  # Within 10% error
+
+def test_hyperloglog_merge():
+    """Test merging two HyperLogLog sketches."""
+    # For medium sets, use medium precision
+    sketch1 = HyperLogLog(expected_cardinality=5000)
+    sketch2 = HyperLogLog(expected_cardinality=5000)
+    
+    # Add different items to each sketch
+    items1 = [f"item1_{i}" for i in range(500)]
+    items2 = [f"item2_{i}" for i in range(500)]
+    
+    sketch1.add_batch(items1)
+    sketch2.add_batch(items2)
+    
+    # Merge sketches
+    sketch1.merge(sketch2)
+    
+    # Estimate should be close to union cardinality
+    estimate = sketch1.estimate_cardinality()
+    assert abs(estimate - 1000) / 1000 < 0.1  # Within 10% error
+
+def test_hyperloglog_large_batch():
+    """Test handling of very large batches."""
+    # For very large sets, use higher precision
+    sketch = HyperLogLog(expected_cardinality=1000000)
+    large_values = [f"large_item_{i}" for i in range(1000000)]
+    
+    # Test adding large batch
+    sketch.add_batch(large_values)
+    
+    # Get estimate
+    estimate = sketch.estimate_cardinality()
+    assert abs(estimate - 1000000) / 1000000 < 0.1
+
+def test_hyperloglog_basic_operations():
+    """Test basic operations of HyperLogLog."""
+    # For very small sets, use lowest precision
+    sketch = HyperLogLog(expected_cardinality=100)
+    
+    # Test adding strings
+    sketch.add_string("test1")
+    sketch.add_string("test2")
+    sketch.add_string("test3")
+    
+    # Test cardinality estimation
+    est = sketch.estimate_cardinality()
+    assert est > 0
+    assert est < 5  # Should be close to 3, allow for some error
+    
+    # Test batch operations
+    strings = ["batch1", "batch2", "batch3"]
+    sketch.add_batch(strings)
+    est = sketch.estimate_cardinality()
+    assert est > 0
+    assert est < 8  # Should be close to 6, allow for some error
+
 if __name__ == "__main__":
     # Run quick tests
     test = TestHyperLogLogQuick()

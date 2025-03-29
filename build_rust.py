@@ -47,6 +47,6 @@ if __name__ == "__main__":
     
     print("\nVerifying extension...")
     if verify_extension():
-        print("\nBuild successful! You can now use FastHyperLogLog with Rust acceleration.")
+        print("\nBuild successful! You can now use RustHyperLogLog with Rust acceleration.")
     else:
         print("\nBuild failed. Using Python fallback.") 

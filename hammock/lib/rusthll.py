@@ -1,9 +1,14 @@
 """
 Fast HyperLogLog implementation using Rust.
 """
+from __future__ import annotations
 from typing import Optional, Dict, Any, List, Set, Tuple, Union
 import sys
 import os
+
+from hammock.lib.abstractsketch import AbstractSketch
+import numpy as np  # type: ignore
+import xxhash  # type: ignore
 
 # Try to import the Rust extension
 try:
@@ -13,40 +18,14 @@ try:
     rust_target_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "rust_hll", "target", "release")
     sys.path.append(rust_target_dir)
     
-    # First import the module to check available classes
+    # Import the Rust module
     import rust_hll
-    
-    # Check what classes are available
-    rust_classes = [name for name in dir(rust_hll) if not name.startswith('_')]
-    print(f"Available classes in rust_hll: {rust_classes}")
-    
-    # Try to find a suitable HyperLogLog class
-    RustHLLClass = None
-    for class_name in rust_classes:
-        try:
-            class_obj = getattr(rust_hll, class_name)
-            # Check if this class has the methods we need
-            if (hasattr(class_obj, 'new') or hasattr(class_obj, '__new__') or 
-                hasattr(class_obj, '__init__')):
-                # This looks like a class
-                if hasattr(class_obj, 'add') or hasattr(class_obj, 'estimate'):
-                    # This looks like a HyperLogLog class
-                    RustHLLClass = class_obj
-                    break
-        except Exception:
-            pass
-    
-    if RustHLLClass:
-        RUST_AVAILABLE = True
-        print(f"Found Rust HyperLogLog class: {RustHLLClass.__name__}")
-    else:
-        print("No suitable HyperLogLog class found in rust_hll module")
-        RUST_AVAILABLE = False
-    
+    RUST_AVAILABLE = True
+    print(f"Found Rust HyperLogLog module")
 except ImportError as e:
     print(f"Error importing Rust HyperLogLog module: {e}")
     RUST_AVAILABLE = False
-    RustHLLClass = None
+    rust_hll = None
 
 # If the Rust extension is not available, use the Python implementation
 if not RUST_AVAILABLE:
@@ -54,228 +33,181 @@ if not RUST_AVAILABLE:
     print("Rust HyperLogLog extension not found. Using Python implementation.")
 
 
-class FastHyperLogLog:
-    """
-    A fast HyperLogLog implementation that uses Rust if available,
-    otherwise falls back to the Python implementation.
-    """
+class RustHyperLogLog(AbstractSketch):
+    """Rust implementation of HyperLogLog."""
     
-    def __init__(self, precision: int = 12, kmer_size: int = 0, window_size: int = 0, 
-                 seed: Optional[int] = None, debug: bool = False):
-        """
-        Initialize a new HyperLogLog sketch.
+    def __init__(self, precision: int = 12, debug: bool = False, expected_cardinality: Optional[int] = None):
+        """Initialize the sketch.
         
         Args:
-            precision: The precision parameter (number of registers = 2^precision)
-            kmer_size: Size of k-mers (0 for whole string mode)
-            window_size: Size of sliding window (0 or == kmer_size for no windowing)
-            seed: Random seed for hashing
-            debug: Whether to print debug information
+            precision: Base precision value (4-24)
+            debug: Enable debug output
+            expected_cardinality: Expected number of unique items. If provided, precision will be adjusted.
         """
+        if not RUST_AVAILABLE:
+            raise ImportError("Rust HyperLogLog module is not available")
+            
+        if expected_cardinality is not None:
+            # Adjust precision based on expected cardinality
+            if expected_cardinality < 50:
+                precision = 4 
+            elif expected_cardinality < 100:
+                precision = 6  # For smallest sets, use lower precision
+            elif expected_cardinality < 1000:
+                precision = 8  # For small sets, use lower precision
+            elif expected_cardinality < 10000:
+                precision = 12  # For medium sets
+            elif expected_cardinality < 100000:
+                precision = 18  # For larger sets
+            else:
+                precision = 22  # For very large sets
+        
+        if not 4 <= precision <= 24:
+            raise ValueError("Precision must be between 4 and 24")
+        
         self.precision = precision
-        self.kmer_size = kmer_size
-        self.window_size = window_size
-        self.seed = seed
+        self.num_registers = 1 << precision
         self.debug = debug
+        self.sketch = rust_hll.RustHLL(precision)
         
-        if RUST_AVAILABLE:
-            try:
-                self._sketch = RustHLLClass(precision)
-                self._using_rust = True
-                if debug:
-                    print(f"Using Rust HyperLogLog implementation")
-                    print(f"Available methods: {dir(self._sketch)}")
-            except Exception as e:
-                print(f"Error initializing Rust HyperLogLog: {e}, falling back to Python implementation")
-                self._using_rust = False
-                self._sketch = PyHyperLogLog(
-                    precision=precision,
-                    kmer_size=kmer_size,
-                    window_size=window_size,
-                    seed=seed,
-                    debug=debug
-                )
-        else:
-            self._sketch = PyHyperLogLog(
-                precision=precision,
-                kmer_size=kmer_size,
-                window_size=window_size,
-                seed=seed,
-                debug=debug
-            )
-            self._using_rust = False
-            if debug:
-                print(f"Using Python HyperLogLog implementation")
-    
-    def add(self, value):
+    def is_using_rust(self) -> bool:
+        """Check if using Rust implementation."""
+        return True  # This class always uses Rust
+        
+    def add(self, value: Union[str, int, float]) -> None:
         """Add a value to the sketch."""
-        if self._using_rust:
-            # Ensure value is a string for rust_hll
-            value_str = str(value)
-            self._sketch.add_value(value_str)
-        else:
-            self._sketch.add(value)
-    
-    def add_batch(self, values: List[str]) -> None:
-        """
-        Add a batch of values to the sketch.
+        # Convert to string and use add for Rust implementation
+        if isinstance(value, (int, float)):
+            value = str(value)
+        self.sketch.add_value(value)
         
-        Args:
-            values: The values to add
-        """
-        if self._using_rust:
-            # Ensure all values are strings for rust_hll
-            string_values = [str(v) for v in values]
-            self._sketch.add_batch(string_values)
-        else:
-            for value in values:
-                self._sketch.add_string(value)
-    
-    def add_int(self, value: int) -> None:
-        """
-        Add an integer value to the sketch.
-        
-        Args:
-            value: Integer value to add
-        """
-        if self._using_rust:
-            self._sketch.add(str(value))
-        else:
-            self._sketch.add_int(value)
-    
     def add_string(self, s: str) -> None:
-        """
-        Add a string value to the sketch.
+        """Add a string to the sketch."""
+        self.sketch.add_value(s)
+        
+    def add_batch(self, strings: List[str]) -> None:
+        """Add multiple strings to the sketch."""
+        # Convert any non-string values to strings
+        string_values = [str(s) if not isinstance(s, str) else s for s in strings]
+        self.sketch.add_batch(string_values)
+        
+    def estimate_cardinality(self, method: str = "fast_mle") -> float:
+        """Estimate the cardinality of the set.
         
         Args:
-            s: The string value to add
+            method: The estimation method to use. One of:
+                - "original": Original HyperLogLog estimation
+                - "ertl_mle": ERTL Maximum Likelihood Estimation
+                - "fast_mle": Fast MLE implementation (default)
         """
-        if self._using_rust:
-            self._sketch.add_value(s)
-        else:
-            self._sketch.add_string(s)
+        if method not in ["original", "ertl_mle", "fast_mle"]:
+            raise ValueError("Method must be one of: original, ertl_mle, fast_mle")
+        return float(self.sketch.estimate_cardinality())
+        
+    def estimate_intersection(self, other: 'RustHyperLogLog') -> float:
+        """Estimate intersection cardinality with another sketch."""
+        if not isinstance(other, RustHyperLogLog):
+            raise ValueError("Can only compare with another RustHyperLogLog")
+        if self.precision != other.precision:
+            raise ValueError("Cannot compute intersection of HLLs with different precision")
+        
+        # Basic inclusion-exclusion
+        a = self.estimate_cardinality()
+        b = other.estimate_cardinality()
+        union = self.estimate_union(other)
+        intersection = max(0.0, a + b - union)
+        
+        if self.debug:
+            print(f"DEBUG: a={a:.1f}, b={b:.1f}, union={union:.1f}, intersection={intersection:.1f}")
+        return float(intersection)
+        
+    def estimate_union(self, other: 'RustHyperLogLog') -> float:
+        """Estimate union cardinality with another sketch."""
+        if not isinstance(other, RustHyperLogLog):
+            raise ValueError("Can only compare with another RustHyperLogLog")
+        if self.precision != other.precision:
+            raise ValueError("Cannot compute union of HLLs with different precision")
+        
+        # Create a temporary sketch for the union
+        temp_sketch = rust_hll.RustHLL(self.precision)
+        temp_sketch.merge(self.sketch)
+        temp_sketch.merge(other.sketch)
+        return float(temp_sketch.estimate_cardinality())
+        
+    def estimate_jaccard(self, other: 'RustHyperLogLog') -> float:
+        """Estimate Jaccard similarity with another sketch."""
+        if not isinstance(other, RustHyperLogLog):
+            raise ValueError("Can only compare with another RustHyperLogLog")
+        if self.precision != other.precision:
+            raise ValueError("Cannot compare HLLs with different precision")
+        
+        if self.is_empty() or other.is_empty():
+            return 0.0
+        
+        intersection = self.estimate_intersection(other)
+        union = self.estimate_union(other)
+        
+        if union == 0:
+            return 0.0
+            
+        return float(intersection / union)
+        
+    def is_empty(self) -> bool:
+        """Check if the sketch is empty."""
+        return self.sketch.is_empty()
+        
+    def merge(self, other: 'RustHyperLogLog') -> None:
+        """Merge another sketch into this one."""
+        if not isinstance(other, RustHyperLogLog):
+            raise ValueError("Can only merge with another RustHyperLogLog")
+        if self.precision != other.precision:
+            raise ValueError("Cannot merge HLLs with different precision")
+        
+        self.sketch.merge(other.sketch)
+        
+    def save(self, filepath: str) -> None:
+        """Write sketch to file."""
+        # Convert to absolute path and ensure directory exists
+        filepath = os.path.abspath(filepath)
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        try:
+            self.sketch.write(filepath)
+        except Exception as e:
+            print(f"Error saving sketch to {filepath}: {e}", file=sys.stderr)
+            raise
+        
+    @classmethod
+    def load(cls, filepath: str) -> 'RustHyperLogLog':
+        """Load sketch from file."""
+        # Convert to absolute path
+        filepath = os.path.abspath(filepath)
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Sketch file not found: {filepath}")
+        try:
+            sketch = cls()
+            sketch.sketch = rust_hll.RustHLL.load(filepath)
+            return sketch
+        except Exception as e:
+            print(f"Error loading sketch from {filepath}: {e}", file=sys.stderr)
+            raise
     
     def cardinality(self) -> float:
-        """
-        Get the estimated cardinality (number of unique values).
-        
-        Returns:
-            Estimated number of unique values
-        """
-        if self._using_rust:
-            return self._sketch.estimate()
-        else:
-            return self._sketch.estimate_cardinality()
+        """Get the estimated cardinality (number of unique values)."""
+        return float(self.sketch.estimate_cardinality())
     
-    def estimate_cardinality(self, method="ertl_mle"):
-        """
-        Estimate the cardinality of the multiset.
-        
-        Args:
-            method: Estimation method ('original', 'ertl_improved', or 'ertl_mle')
-                    Rust implementation supports all three methods
-        
-        Returns:
-            Estimated cardinality
-        """
-        if self._using_rust:
-            try:
-                # Call the estimate method directly for the Rust implementation
-                return self._sketch.estimate()
-            except ValueError as e:
-                # Handle unknown method errors
-                print(f"Warning: {str(e)}, falling back to default method")
-                return self._sketch.estimate()
-        else:
-            # For the Python fallback, call estimate_cardinality directly
-            return self._sketch.estimate_cardinality(method)
+    def jaccard(self, other: 'RustHyperLogLog') -> float:
+        """Calculate the Jaccard similarity with another sketch."""
+        return float(self.estimate_jaccard(other))
     
-    def merge(self, other: 'FastHyperLogLog') -> None:
-        """
-        Merge another HyperLogLog sketch into this one.
-        
-        Args:
-            other: Another HyperLogLog sketch to merge
-        """
-        if self.precision != other.precision:
-            raise ValueError("Cannot merge sketches with different precisions")
-        
-        if self._using_rust and other._using_rust:
-            self._sketch.merge(other._sketch)
-        elif not self._using_rust and not other._using_rust:
-            self._sketch.merge(other._sketch)
-        else:
-            # Different implementations, need to convert
-            raise NotImplementedError("Merging different HyperLogLog implementations not supported yet")
-    
-    def jaccard(self, other: 'FastHyperLogLog') -> float:
-        """
-        Calculate the Jaccard similarity with another sketch.
-        
-        Args:
-            other: Another HyperLogLog sketch to compare with
-            
-        Returns:
-            Jaccard similarity [0, 1]
-        """
-        if self.precision != other.precision:
-            raise ValueError("Cannot compare sketches with different precisions")
-        
-        if self._using_rust and other._using_rust:
-            return self._sketch.jaccard(other._sketch)
-        else:
-            # For Python implementation, calculate Jaccard similarity manually
-            if self._using_rust:
-                # Convert to Python implementation
-                raise NotImplementedError("Jaccard similarity between different implementations not supported yet")
-            else:
-                # Use the Python implementation's method
-                return self._sketch.estimate_jaccard(other._sketch)
-    
-    def estimate_jaccard(self, other: 'FastHyperLogLog') -> float:
-        """
-        Alias for jaccard() to maintain compatibility with existing code.
-        
-        Args:
-            other: Another HyperLogLog sketch to compare with
-            
-        Returns:
-            Jaccard similarity [0, 1]
-        """
-        return self.jaccard(other)
-    
-    def similarity_values(self, other: 'FastHyperLogLog') -> Dict[str, float]:
-        """
-        Get similarity values between this sketch and another.
-        
-        Args:
-            other: Another HyperLogLog sketch to compare with
-            
-        Returns:
-            Dictionary of similarity measures
-        """
-        if self._using_rust:
-            return {"jaccard": self.jaccard(other)}
-        else:
-            # Use the Python implementation's method if available
-            if hasattr(self._sketch, 'similarity_values'):
-                return self._sketch.similarity_values(other._sketch)
-            else:
-                return {"jaccard": self.jaccard(other)}
-    
-    def is_using_rust(self) -> bool:
-        """
-        Check if this instance is using the Rust implementation.
-        
-        Returns:
-            True if using Rust, False otherwise
-        """
-        return self._using_rust
+    def similarity_values(self, other: 'RustHyperLogLog') -> Dict[str, float]:
+        """Get similarity values between this sketch and another."""
+        return {"jaccard": float(self.jaccard(other))}
     
     def __str__(self) -> str:
         """Get string representation."""
-        impl = "Rust" if self._using_rust else "Python"
-        return f"FastHyperLogLog(precision={self.precision}, implementation={impl})"
+        return f"RustHyperLogLog(precision={self.precision})"
     
     def __repr__(self) -> str:
         """Get representation string."""

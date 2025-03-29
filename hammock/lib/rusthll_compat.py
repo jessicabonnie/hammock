@@ -35,11 +35,11 @@ class RustHLLWrapper:
     
     def cardinality(self):
         """Estimate the cardinality."""
-        return self._sketch.estimate()
+        return self._sketch.estimate_cardinality()
     
     def estimate_cardinality(self, method=None):
         """Estimate the cardinality (method parameter is ignored)."""
-        return self._sketch.estimate()
+        return self._sketch.estimate_cardinality()
     
     def merge(self, other):
         """Merge with another sketch."""
