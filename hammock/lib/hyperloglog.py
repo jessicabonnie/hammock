@@ -11,21 +11,35 @@ class HyperLogLog(AbstractSketch):
                  kmer_size: int = 0, 
                  window_size: int = 0, 
                  seed: Optional[int] = None,
-                 debug: bool = False):
+                 debug: bool = False,
+                 expected_cardinality: Optional[int] = None):
         """Initialize HyperLogLog sketch.
         
         Args:
-            precision: Number of bits for register indexing (4-16)
+            precision: Number of bits for register indexing (4-24)
                       Lower values (8-10) work better for sparse sets
-                      Higher values (14-16) work better for dense sets
+                      Higher values (14-24) work better for dense sets
             kmer_size: Size of k-mers (0 for whole string mode)
             window_size: Size of sliding window (0 or == kmer_size for no windowing)
             seed: Random seed for hashing
             debug: Whether to print debug information
+            expected_cardinality: Expected number of unique items. If provided, precision will be adjusted.
         """
         super().__init__()
-        if precision < 4 or precision > 30:
-            raise ValueError("Precision must be between 4 and 30")
+        
+        if expected_cardinality is not None:
+            # Adjust precision based on expected cardinality
+            if expected_cardinality < 1000:
+                precision = 8  # For small sets, use lower precision
+            elif expected_cardinality < 10000:
+                precision = 12  # For medium sets
+            elif expected_cardinality < 100000:
+                precision = 18  # For larger sets
+            else:
+                precision = 22  # For very large sets
+        
+        if precision < 4 or precision > 24:
+            raise ValueError("Precision must be between 4 and 24")
         
         if kmer_size < 0:
             raise ValueError("k-mer size must be non-negative")

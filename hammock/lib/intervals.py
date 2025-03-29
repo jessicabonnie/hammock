@@ -2,7 +2,8 @@
 from __future__ import annotations
 from typing import Optional, List, Tuple, TextIO, Union, Dict
 from hammock.lib.abstractsketch import AbstractSketch
-from hammock.lib.rusthll import FastHyperLogLog
+from hammock.lib.rusthll import RustHyperLogLog
+from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
 from hammock.lib.exact import ExactCounter
 from hammock.lib.exacttest import ExactTest
@@ -13,6 +14,7 @@ import pysam  # type: ignore  # no type stubs available
 from multiprocessing import Pool, cpu_count
 from itertools import islice
 import os
+import xxhash
 
 def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], expA: float = 0, sep: str = "-", precision: int = 12, debug: bool = False) -> Tuple[List[str], List[str], List[int]]:
     """Process a chunk of lines in parallel.
@@ -46,16 +48,37 @@ def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], 
         for line in chunk:
             if not line.startswith('#'):
                 try:
-                    interval, point, size = temp_sketch.bedline(line, mode=mode, sep=sep, subsample=subsample)
-                    if interval and mode in ["A", "C"]:
-                        intervals.append(interval)
-                        if expA > 0:
-                            for i in range(1, int(10**expA)+1):
-                                intervals.append(interval + str(i))
-                    if point and mode in ["B", "C"] and point is not None:
-                        points.append(point)
-                    if size is not None:
-                        sizes.append(size)
+                    # Use basic_bedline directly to avoid using the sketch's methods
+                    chrval, start, end = temp_sketch.basic_bedline(line)
+                    interval_size = end - start
+                    
+                    # Process interval
+                    if mode in ["A", "C"]:
+                        interval = sep.join([chrval, str(start), str(end), "A"])
+                        # Only apply interval subsampling in mode C
+                        if mode == "C":
+                            hashv = xxhash.xxh64(interval.encode('utf-8'), seed=777).intdigest()
+                            if hashv % (2**32) > int(subsample[0] * (2**32)):
+                                interval = None
+                        if interval:
+                            intervals.append(interval)
+                            if expA > 0:
+                                for i in range(1, int(10**expA)+1):
+                                    intervals.append(interval + str(i))
+                    
+                    # Process points
+                    if mode in ["B", "C"]:
+                        # Only apply point subsampling in mode C
+                        subsample_rate = subsample[1] if mode == "C" else 1.0
+                        maximum = int(min(1, subsample_rate) * (2**32))
+                        for x in range(start, end):
+                            outstr = sep.join([str(chrval), str(x), str(x+1)])
+                            hashv = xxhash.xxh64(outstr.encode('utf-8'), seed=23).intdigest()
+                            if hashv % (2**32) <= maximum:
+                                points.append(outstr)
+                    
+                    if interval_size is not None:
+                        sizes.append(interval_size)
                 except Exception as e:
                     print(f"Error processing line: {str(e)}")
                     continue
@@ -73,6 +96,7 @@ class IntervalSketch(AbstractSketch):
         # Extract parameters with defaults
         precision = kwargs.get('precision', 12)
         debug = kwargs.get('debug', False)
+        use_rust = kwargs.get('use_rust', False)
         
         # Store mode and validation
         self.mode = kwargs.get('mode', 'A')
@@ -95,8 +119,11 @@ class IntervalSketch(AbstractSketch):
         if not all(isinstance(x, (int, float)) and 0 <= x <= 1 for x in self.subsample):
             raise ValueError(f"subsample values must be between 0 and 1, got {self.subsample}")
         
-        # Only pass precision and debug to HyperLogLog
-        self.sketch = FastHyperLogLog(precision=precision, debug=debug)
+        # Choose sketch implementation based on use_rust flag
+        if use_rust:
+            self.sketch = RustHyperLogLog(precision=precision, debug=debug)
+        else:
+            self.sketch = HyperLogLog(precision=precision, debug=debug)
         
         # Initialize other instance variables
         self.num_intervals = 0
@@ -162,14 +189,16 @@ class IntervalSketch(AbstractSketch):
                                     break
                                 
                                 # Process chunk in parallel
-                                intervals, points, sizes = pool.apply(
+                                result = pool.apply(
                                     _process_chunk,
                                     (chunk, kwargs.get('mode', 'A'), kwargs.get('subsample', (1.0, 1.0)), kwargs.get('expA', 0), sep, precision, debug)
                                 )
                                 
                                 # If we got empty lists and there was an error, return None
-                                if not intervals and not points and not sizes:
+                                if not result or (not result[0] and not result[1] and not result[2]):
                                     return None
+                                
+                                intervals, points, sizes = result
                                 
                                 # Add intervals to sketch
                                 for interval in intervals:
@@ -407,7 +436,6 @@ class IntervalSketch(AbstractSketch):
             interval = sep.join([chrval, str(start), str(end), "A"])
             # Only apply interval subsampling in mode C
             if mode == "C":
-                import xxhash
                 hashv = xxhash.xxh64(interval.encode('utf-8'), seed=777).intdigest()
                 if hashv % (2**32) > int(subsample[0] * (2**32)):
                     interval = None
@@ -438,7 +466,6 @@ class IntervalSketch(AbstractSketch):
         Returns:
             List of point strings (some may be None if subsampled)
         """
-        import xxhash
         maximum = int(min(1, subsample) * (2**32))
         def gp(x):
             outstr = sep.join([str(chrval), str(x), str(x+1)])
@@ -511,8 +538,17 @@ class IntervalSketch(AbstractSketch):
         with opener(filepath, 'rt') as f:
             # First try loading as HyperLogLog
             try:
-                sketch = FastHyperLogLog.load(f)
+                sketch = HyperLogLog.load(f)
                 interval_sketch = cls(mode="A", sketch_type="hyperloglog")
+                interval_sketch.sketch = sketch
+                return interval_sketch
+            except:
+                pass
+
+            # Then try as RustHyperLogLog
+            try:
+                sketch = RustHyperLogLog.load(f)
+                interval_sketch = cls(mode="A", sketch_type="hyperloglog", use_rust=True)
                 interval_sketch.sketch = sketch
                 return interval_sketch
             except:

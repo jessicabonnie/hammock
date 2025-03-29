@@ -7,6 +7,8 @@ from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
 from hammock.lib.exact import ExactCounter
 from hammock.lib.sequences import SequenceSketch
+import gzip
+from hammock.lib.intervals import IntervalSketch
 
 @pytest.fixture
 def temp_dir():
@@ -54,7 +56,7 @@ class TestSketchesIOQuick:
         assert mh.kmer_size == mh2.kmer_size
         assert mh.window_size == mh2.window_size
         assert mh.seed == mh2.seed
-        np.testing.assert_array_equal(mh.signatures, mh2.signatures)
+        np.testing.assert_array_equal(mh.hashers, mh2.hashers)
     
     # def test_exact_io(self, temp_dir):
     #     """Test ExactCounter read/write functionality."""
@@ -88,7 +90,7 @@ class TestSketchesIOFull:
         )
         # Use a longer sequence that's at least a few windows long
         test_seq = "ACGTACGTACGTACGT" * 8  # 128 bp sequence, longer than window size
-        seq.add_sequence(test_seq)
+        seq.add_string(test_seq)
         
         # Write to file
         filepath = os.path.join(temp_dir, "test_seq.npz")
@@ -135,6 +137,71 @@ class TestSketchesIOFull:
             counter.write("test.txt")
         with pytest.raises(NotImplementedError):
             ExactCounter.load("test.txt")
+
+    def test_gff_file_processing(self, temp_dir):
+        """Test processing of GFF format files."""
+        filepath = os.path.join(temp_dir, "test.gff")
+        with open(filepath, 'w') as f:
+            f.write("""##gff-version 3
+#!genome-build GRCh38.p13
+chr1\tHAVANA\tgene\t11869\t14409\t.\t+\t.\tID=ENSG00000223972.5
+chr1\tHAVANA\texon\t11869\t12227\t.\t+\t.\tParent=ENSG00000223972.5
+chr1\tHAVANA\tCDS\t12010\t12057\t.\t+\t0\tParent=ENSG00000223972.5
+chr1\tHAVANA\tgene\t14404\t29570\t.\t-\t.\tID=ENSG00000227232.5
+""")
+        
+        # Test basic GFF processing
+        sketch = IntervalSketch.from_file(filepath, mode="A")
+        assert sketch is not None
+        assert sketch.num_intervals == 4
+        
+        # Test feature filtering
+        sketch_genes = IntervalSketch.from_file(filepath, mode="A", feature_types=['gene'])
+        assert sketch_genes is not None
+        assert sketch_genes.num_intervals == 2
+
+    def test_gff_gz_processing(self, temp_dir):
+        """Test processing of gzipped GFF files."""
+        filepath = os.path.join(temp_dir, "test.gff.gz")
+        with gzip.open(filepath, 'wt') as f:
+            f.write("""##gff-version 3
+chr1\tHAVANA\tgene\t11869\t14409\t.\t+\t.\tID=ENSG00000223972.5
+""")
+        
+        sketch = IntervalSketch.from_file(filepath, mode="A")
+        assert sketch is not None
+        assert sketch.num_intervals == 1
+
+    def test_gff_coordinate_conversion(self, temp_dir):
+        """Test conversion from 1-based GFF coordinates to 0-based internal coordinates."""
+        gff_path = os.path.join(temp_dir, "test.gff")
+        bed_path = os.path.join(temp_dir, "test.bed")
+        
+        # Write equivalent GFF and BED files
+        with open(gff_path, 'w') as f:
+            f.write("""##gff-version 3
+chr1\ttest\tgene\t1\t100\t.\t+\t.\tID=test1
+""")
+        
+        with open(bed_path, 'w') as f:
+            f.write("chr1\t0\t100\n")  # BED coordinates are 0-based
+        
+        sketch_gff = IntervalSketch.from_file(gff_path, mode="A")
+        sketch_bed = IntervalSketch.from_file(bed_path, mode="A")
+        
+        assert sketch_gff is not None
+        assert sketch_bed is not None
+        assert sketch_gff.estimate_jaccard(sketch_bed) == 1.0
+
+    def test_invalid_gff(self, temp_dir):
+        """Test handling of invalid GFF files."""
+        filepath = os.path.join(temp_dir, "invalid.gff")
+        with open(filepath, 'w') as f:
+            f.write("invalid\tgff\tdata\n")
+        
+        sketch = IntervalSketch.from_file(filepath, mode="A")
+        assert sketch is not None
+        assert sketch.num_intervals == 0
 
 if __name__ == "__main__":
     pytest.main([__file__])
