@@ -310,12 +310,8 @@ class RustHyperLogLog(AbstractSketch):
             value = value.encode() if hasattr(value, 'encode') else str(value).encode()
         hash_val = self.hash_str(value)
         idx = hash_val & ((1 << self.precision) - 1)
-        # Implement the rho function for Python fallback
-        rank = 1
-        hash_val >>= self.precision
-        while hash_val & 1 == 0 and rank <= self.hash_size - self.precision:
-            rank += 1
-            hash_val >>= 1
+        # Get rank using _rho function
+        rank = self._rho(hash_val)
         
         # Update register
         self.registers[idx] = max(self.registers[idx], rank)
@@ -381,6 +377,19 @@ class RustHyperLogLog(AbstractSketch):
         if self._using_rust:
             raise RuntimeError("This method should not be called when using Rust")
         return np.all(self.registers == 0)
+
+    def _rho(self, value: int) -> int:
+        """Calculate the position of the leftmost 1-bit."""
+        if value == 0:
+            return self.hash_size - self.precision + 1
+        # Shift right by precision bits to get the remaining hash bits
+        value >>= self.precision
+        # Count leading zeros in the remaining bits
+        rank = 1
+        while value & 1 == 0 and rank <= self.hash_size - self.precision:
+            rank += 1
+            value >>= 1
+        return rank
 
 # Alias for backward compatibility
 RustHLL = RustHyperLogLog 
