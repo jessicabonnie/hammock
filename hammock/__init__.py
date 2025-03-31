@@ -29,10 +29,67 @@ __all__ = [
     'SequenceSketch',
     'IntervalSketch',
     'MinimizerSketch',
-    'RustHLL'
+    'RustHLL',
+    'create_sketch',
+    'load_sketch',
+    'write_sketch',
+    'compare_files',
+    'compare_bed_files',
+    'compare_sequence_files'
 ]
 if RUST_HLL_AVAILABLE:
     __all__.append('RustHLLWrapper')
+
+def create_sketch(sketch_type: str = "hyperloglog", **kwargs) -> AbstractSketch:
+    """Create a new sketch of the specified type.
+    
+    Args:
+        sketch_type: Type of sketch to create ('hyperloglog', 'minhash', 'minimizer', or 'exact')
+        **kwargs: Additional arguments passed to the sketch constructor
+        
+    Returns:
+        A new sketch instance of the specified type
+    """
+    if sketch_type == "hyperloglog":
+        return HyperLogLog(**kwargs)
+    elif sketch_type == "minhash":
+        return MinHash(**kwargs)
+    elif sketch_type == "minimizer":
+        return MinimizerSketch(**kwargs)
+    elif sketch_type == "exact":
+        return ExactCounter(**kwargs)
+    else:
+        raise ValueError(f"Unknown sketch type: {sketch_type}")
+
+def write_sketch(sketch: AbstractSketch, filepath: str) -> None:
+    """Write a sketch to a file.
+    
+    Args:
+        sketch: The sketch to write
+        filepath: Path to write the sketch to
+    """
+    sketch.write(filepath)
+
+def load_sketch(filepath: str) -> AbstractSketch:
+    """Load a sketch from a file.
+    
+    Args:
+        filepath: Path to load the sketch from
+        
+    Returns:
+        The loaded sketch
+    """
+    # Determine sketch type from file extension or content
+    if filepath.endswith('.hll'):
+        return HyperLogLog.load(filepath)
+    elif filepath.endswith('.mh'):
+        return MinHash.load(filepath)
+    elif filepath.endswith('.mnmzr'):
+        return MinimizerSketch.load(filepath)
+    elif filepath.endswith('.exact'):
+        return ExactCounter.load(filepath)
+    else:
+        raise ValueError(f"Unknown sketch file type: {filepath}")
 
 def compare_files(file1: str, file2: str, mode: str = 'A', 
                  sketch_type: str = "hyperloglog",

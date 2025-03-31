@@ -146,16 +146,11 @@ class IntervalSketch(AbstractSketch):
             kwargs['sketch'] = sketch
             
             # Check file extension and process accordingly
-            # Split on '.' and get all extensions (handles multiple extensions like .gff.gz)
+            # Split on '.' and get all extensions (handles multiple extensions like .bed.gz)
             extensions = filename.lower().split('.')
             
-            # Handle GFF files (both plain and gzipped)
-            if any(ext in ['gff', 'gff3'] for ext in extensions):
-                result = cls._from_gff(filename, **kwargs)
-                return result if result is not None else None
-            
             # Handle BigBed files
-            elif extensions[-1] in ['bb', 'bigbed']:
+            if extensions[-1] in ['bb', 'bigbed']:
                 result = cls._from_bigbed(filename, **kwargs)
                 return result if result is not None else None
             
@@ -249,22 +244,23 @@ class IntervalSketch(AbstractSketch):
                     # Add interval if present and in mode A or C
                     if interval and mode in ["A", "C"]:
                         sketch.sketch.add_string(interval)
+                        sketch.num_intervals += 1
                         if expA > 0:
                             for i in range(1, int(10**expA)+1):
                                 sketch.sketch.add_string(interval + str(i))
-                        sketch.num_intervals += 1
-                        sketch.total_interval_size += size
                     
                     # Add points if present and in mode B or C
                     if points and mode in ["B", "C"]:
-                        for point in points:
-                            if point is not None:
-                                sketch.sketch.add_string(point)
-                        if mode == "B":
-                            sketch.num_intervals += 1
+                        sketch.add_batch(points)
+                    
+                    # Update total size
+                    if size is not None:
+                        sketch.total_interval_size += size
+            
             return sketch
+            
         except Exception as e:
-            print(f"Error processing BigBed file {filename}: {e}")
+            print(f"Error processing BigBed file {filename}: {str(e)}")
             return None
 
     @classmethod
@@ -272,143 +268,60 @@ class IntervalSketch(AbstractSketch):
                   subsample: Tuple[float, float], expA: float, sketch: 'IntervalSketch') -> Optional['IntervalSketch']:
         """Process BED format file."""
         try:
-            # Open file with gzip if it ends in .gz, otherwise normal open
-            opener = gzip.open if filename.endswith('.gz') else open
-            with opener(filename, 'rt') as f:  # 'rt' mode for text reading from gzip
+            with open(filename, 'rt') as f:
                 for line in f:
-                    interval, points, size = sketch.bedline(line, mode=mode, sep=sep, subsample=subsample)
-                    
-                    # Add interval if present and in mode A or C
-                    if interval and mode in ["A", "C"]:
-                        sketch.sketch.add_string(interval)
+                    if not line.startswith('#'):
+                        interval, points, size = sketch.bedline(line, mode=mode, sep=sep, subsample=subsample)
                         
-                        if expA > 0:
-                            num_copies = int(10**expA) - 1
-                            for i in range(1, num_copies + 1):
-                                sketch.sketch.add_string(interval + str(i))
-                        
-                        sketch.num_intervals += 1
-                        sketch.total_interval_size += size
-                    
-                    # Add points if present and in mode B or C
-                    if points and mode in ["B", "C"]:
-                        for point in points:
-                            if point is not None:
-                                sketch.sketch.add_string(point)
-            if mode in ["B"]:
-                sketch.num_intervals += 1
-            return sketch
-        except Exception as e:
-            print(f"Error processing BED file {filename}: {e}")
-            return None
-
-    @classmethod
-    def _from_gff(cls, filename: str, **kwargs) -> Optional['IntervalSketch']:
-        """Process GFF format file.
-        
-        Args:
-            filename: Path to GFF file
-            **kwargs: Additional arguments including:
-                - mode: Sketch mode (A/B/C)
-                - sep: Separator for string representation
-                - subsample: Tuple of sampling rates
-                - expA: Exponential scaling factor
-                - feature_types: List of feature types to include (optional)
-        """
-        if 'sketch' not in kwargs:
-            return None
-        
-        try:
-            # Get parameters from kwargs
-            mode = kwargs.get('mode', 'A')
-            sep = kwargs.get('sep', '-')
-            subsample = kwargs.get('subsample', (1.0, 1.0))
-            expA = kwargs.get('expA', 0)
-            sketch = kwargs['sketch']
-            feature_types = kwargs.get('feature_types', None)  # Optional filter for specific features
-            
-            opener = gzip.open if filename.endswith('.gz') else open
-            with opener(filename, 'rt') as f:
-                for line in f:
-                    # Skip comments and empty lines
-                    if line.startswith('#') or not line.strip():
-                        continue
-                    
-                    # Parse GFF fields
-                    fields = line.strip().split('\t')
-                    if len(fields) != 9:
-                        continue
-                    
-                    seqid, source, ftype, start, end, score, strand, phase, attrs = fields
-                    
-                    # Skip if feature type filtering is enabled and type doesn't match
-                    if feature_types and ftype not in feature_types:
-                        continue
-                    
-                    try:
-                        start_pos = int(start) - 1  # Convert to 0-based coordinates
-                        end_pos = int(end)
-                    except ValueError:
-                        continue
-                    
-                    # Create BED-style line and process using existing bedline method
-                    bed_line = f"{seqid}\t{start_pos}\t{end_pos}"
-                    interval, points, size = sketch.bedline(
-                        bed_line, 
-                        mode=mode, 
-                        sep=sep, 
-                        subsample=subsample
-                    )
-                    
-                    # Add interval if present and in mode A or C
-                    if interval and mode in ["A", "C"]:
-                        sketch.sketch.add_string(interval)
-                        if expA > 0:
-                            for i in range(1, int(10**expA)+1):
-                                sketch.sketch.add_string(interval + str(i))
-                        sketch.num_intervals += 1
-                        sketch.total_interval_size += size
-                    
-                    # Add points if present and in mode B or C
-                    if points and mode in ["B", "C"]:
-                        for point in points:
-                            if point is not None:
-                                sketch.sketch.add_string(point)
-                        if mode == "B":
+                        # Add interval if present and in mode A or C
+                        if interval and mode in ["A", "C"]:
+                            sketch.sketch.add_string(interval)
                             sketch.num_intervals += 1
+                            if expA > 0:
+                                for i in range(1, int(10**expA)+1):
+                                    sketch.sketch.add_string(interval + str(i))
+                        
+                        # Add points if present and in mode B or C
+                        if points and mode in ["B", "C"]:
+                            sketch.add_batch(points)
+                        
+                        # Update total size
+                        if size is not None:
+                            sketch.total_interval_size += size
             
             return sketch
             
         except Exception as e:
-            print(f"Error processing GFF file {filename}: {e}")
+            print(f"Error processing BED file {filename}: {str(e)}")
             return None
 
     @staticmethod
     def basic_bedline(line: str) -> tuple[str, int, int]:
-        """Parse a single line from a BED file into chromosome, start, and end coordinates.
+        """Parse a BED line and return chromosome, start, and end values.
         
         Args:
-            line: A string containing a single line from a BED file
+            line: A line from a BED file
             
         Returns:
-            Tuple of (chrom, start, end) where:
-                chrom: Chromosome name (preserves 'chr' prefix if present)
-                start: Integer start coordinate
-                end: Integer end coordinate
-                
-        Raises:
-            ValueError: If line has fewer than 3 tab or space-separated columns
+            Tuple of (chromosome, start, end)
         """
-        columns = line.strip().split('\t')
-        if len(columns) < 2:
-            columns = line.strip().split(" ")
-            if len(columns) < 2:
-                raise ValueError("bedline: one of the lines in malformed")
-        # Ensure chromosome has 'chr' prefix
-        chrval = columns[0][3:] if columns[0].startswith('chr') else columns[0]
-        # if not (chrval.isnumeric() or chrval in ["X","Y","M"]):
-        #     raise ValueError("bedline: chromosome is not numeric")
-        return chrval, int(columns[1]), int(columns[2])
+        try:
+            fields = line.strip().split('\t')
+            if len(fields) < 3:
+                raise ValueError(f"Invalid BED line: {line}")
+            
+            chrval = fields[0]
+            start = int(fields[1])
+            end = int(fields[2])
+            
+            if start < 0 or end <= start:
+                raise ValueError(f"Invalid coordinates in BED line: {line}")
+            
+            return chrval, start, end
+            
+        except Exception as e:
+            print(f"Error parsing BED line: {str(e)}")
+            raise
 
     def bedline(self, line: str, 
                 mode: str, 

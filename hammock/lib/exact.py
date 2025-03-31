@@ -54,20 +54,37 @@ class ExactCounter(AbstractSketch):
         self.elements.update(strings)
 
     def write(self, filepath: str) -> None:
-        """Write operation not supported for ExactCounter."""
-        raise NotImplementedError("ExactCounter does not support writing to file")
-        # """Write sketch to file."""
-        # with open(filepath, 'w') as f:
-        #     for element in self.elements:
-        #         f.write(f"{element}\n")
+        """Write the ExactCounter to a file.
+        
+        Args:
+            filepath: Path to write the counter to
+        """
+        import pickle
+        with open(filepath, 'wb') as f:
+            pickle.dump({
+                'kmer_size': self.kmer_size,
+                'seed': self.seed,
+                'elements': self.elements
+            }, f)
 
     @classmethod
     def load(cls, filepath: str) -> 'ExactCounter':
-        """Load operation not supported for ExactCounter."""
-        raise NotImplementedError("ExactCounter does not support loading from file")
-        # """Load sketch from file."""
-        # sketch = cls()
-        # with open(filepath, 'r') as f:
-        #     for line in f:
-        #         sketch.add_string(line.strip())
-        # return sketch
+        """Load an ExactCounter from a file.
+        
+        Args:
+            filepath: Path to load the counter from
+            
+        Returns:
+            The loaded ExactCounter
+        """
+        import pickle
+        with open(filepath, 'rb') as f:
+            data = pickle.load(f)
+            
+        counter = cls(
+            kmer_size=data['kmer_size'],
+            seed=data['seed']
+        )
+        
+        counter.elements = data['elements']
+        return counter

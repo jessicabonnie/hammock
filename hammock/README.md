@@ -18,6 +18,11 @@ A Python library for sketching and comparing files containing lists of things, w
   - Mode B: Compare points only
   - Mode C: Compare both intervals and points
   - Mode D: Compare sequences
+- Sketch creation and management:
+  - Create sketches with custom parameters
+  - Write sketches to files
+  - Load sketches from files
+  - Compare sketches directly
 
 ## Installation
 
@@ -33,6 +38,29 @@ pip install -e ".[dev]"
 ```
 
 ## Usage
+
+### Creating and Managing Sketches
+
+```python
+from hammock import create_sketch, write_sketch, load_sketch
+
+# Create a new HyperLogLog sketch
+hll_sketch = create_sketch("hyperloglog", precision=12)
+
+# Add items to the sketch
+hll_sketch.add_string("item1")
+hll_sketch.add_batch(["item2", "item3", "item4"])
+
+# Write the sketch to a file
+write_sketch(hll_sketch, "my_sketch.hll")
+
+# Load a sketch from a file
+loaded_sketch = load_sketch("my_sketch.hll")
+
+# Compare two sketches
+similarity = hll_sketch.similarity_values(loaded_sketch)
+print(similarity)  # {'jaccard': 0.75, 'containment': 0.8, ...}
+```
 
 ### Python API
 

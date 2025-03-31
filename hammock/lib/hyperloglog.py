@@ -690,69 +690,76 @@ class HyperLogLog(AbstractSketch):
         return merged.estimate_cardinality()
 
     def get_alpha(self) -> float:
-        """Get alpha correction factor based on number of registers.
-        
-        The alpha factor corrects for bias in the HyperLogLog algorithm.
-        Values are based on the original HyperLogLog paper.
-        
-        Returns:
-            Alpha correction factor as a float
-        """
-        # This is redundant since alpha_mm is already calculated in __init__
+        """Get the alpha correction factor."""
         return self.alpha_mm
 
     def write(self, filepath: str) -> None:
-        """Write sketch to file in binary format.
+        """Write the HyperLogLog sketch to a file.
         
         Args:
-            filepath: Path to output file
+            filepath: Path to write the sketch to
         """
-        np.savez_compressed(
-            filepath,
-            registers=self.registers,
-            precision=np.array([self.precision]),
-            kmer_size=np.array([self.kmer_size]),
-            window_size=np.array([self.window_size]),
-            seed=np.array([self.seed]),
-            hash_size=np.array([self.hash_size])
-        )
+        import pickle
+        with open(filepath, 'wb') as f:
+            pickle.dump({
+                'precision': self.precision,
+                'num_registers': self.num_registers,
+                'registers': self.registers,
+                'kmer_size': self.kmer_size,
+                'window_size': self.window_size,
+                'debug': self.debug,
+                'seed': self.seed,
+                'hash_size': self.hash_size,
+                'item_count': self.item_count,
+                'alpha_mm': self.alpha_mm
+            }, f)
 
     @classmethod
     def load(cls, filepath: str) -> 'HyperLogLog':
-        """Load sketch from file in binary format.
+        """Load a HyperLogLog sketch from a file.
         
         Args:
-            filepath: Path to input file
+            filepath: Path to load the sketch from
             
         Returns:
-            HyperLogLog object loaded from file
+            The loaded HyperLogLog sketch
         """
-        data = np.load(filepath)
+        import pickle
+        with open(filepath, 'rb') as f:
+            data = pickle.load(f)
+            
         sketch = cls(
-            precision=int(data['precision'][0]),
-            kmer_size=int(data['kmer_size'][0]),
-            window_size=int(data['window_size'][0]),
-            seed=int(data['seed'][0]),
-            hash_size=int(data['hash_size'][0])
+            precision=data['precision'],
+            kmer_size=data['kmer_size'],
+            window_size=data['window_size'],
+            seed=data['seed'],
+            debug=data['debug'],
+            hash_size=data['hash_size']
         )
+        
         sketch.registers = data['registers']
+        sketch.item_count = data['item_count']
+        sketch.alpha_mm = data['alpha_mm']
+        
         return sketch
 
     def similarity_values(self, other: 'AbstractSketch') -> Dict[str, float]:
-        """Calculate similarity values using HyperLogLog.
+        """Estimate similarity with another sketch.
         
         Returns:
-            Dictionary containing 'jaccard_similarity'
+            Dictionary containing similarity metrics
         """
         if not isinstance(other, HyperLogLog):
-            raise ValueError("Can only compare with another HyperLogLog sketch")
-        if self.kmer_size != other.kmer_size:
-            raise ValueError(f"Cannot compare HyperLogLog sketches with different k-mer sizes ({self.kmer_size} vs {other.kmer_size})")
-        
-        jaccard = self.estimate_jaccard(other)
-        return {'jaccard_similarity': jaccard}
+            raise TypeError("Can only compare HyperLogLog sketches")
+            
+        return {
+            'jaccard': self.estimate_jaccard(other),
+            'containment': self.estimate_intersection(other) / self.estimate_cardinality(),
+            'intersection': self.estimate_intersection(other),
+            'union': self.estimate_union(other)
+        }
 
     def is_empty(self) -> bool:
-        """Check if sketch is empty."""
-        return np.all(self.registers == 0)
+        """Check if the sketch is empty."""
+        return self.item_count == 0
        

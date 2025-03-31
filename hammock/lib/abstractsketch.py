@@ -33,16 +33,27 @@ class AbstractSketch(ABC):
     #     """Merge another sketch into this one."""
     #     pass
         
-    # @abstractmethod
-    # def write(self, filepath: str) -> None:
-    #     """Write sketch to file."""
-    #     pass
+    @abstractmethod
+    def write(self, filepath: str) -> None:
+        """Write sketch to file.
         
-    # @classmethod
-    # @abstractmethod
-    # def load(cls, filepath: str) -> 'AbstractSketch':
-    #     """Load sketch from file."""
-    #     pass
+        Args:
+            filepath: Path to write the sketch to
+        """
+        pass
+        
+    @classmethod
+    @abstractmethod
+    def load(cls, filepath: str) -> 'AbstractSketch':
+        """Load sketch from file.
+        
+        Args:
+            filepath: Path to load the sketch from
+            
+        Returns:
+            The loaded sketch
+        """
+        pass
 
 # class AbstractDataSketch(ABC):
 #     """Abstract base class for data-specific sketch wrappers."""

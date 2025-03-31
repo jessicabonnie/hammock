@@ -207,51 +207,53 @@ class MinimizerSketch(AbstractSketch):
         return result
 
     def write(self, filepath: str) -> None:
-        """Write sketch to file."""
-        # Save the sketches to a single npz file
-        np.savez(filepath,
-                 # Save HyperLogLog sketches
-                 minimizer_sketch_registers=self.minimizer_sketch.registers,
-                 gap_sketch_registers=self.gap_sketch.registers,
-                 startend_sketch_registers=self.startend_sketch.registers,
-                 
-                 # Save sets
-                 minimizers=list(self.minimizers),
-                 startend_kmers=list(self.startend_kmers),
-                 
-                 # Save parameters
-                 kmer_size=self.kmer_size,
-                 window_size=self.window_size,
-                 gapn=self.gapn,
-                 seed=self.seed,
-                 debug=self.debug)
+        """Write the MinimizerSketch to a file.
+        
+        Args:
+            filepath: Path to write the sketch to
+        """
+        import pickle
+        with open(filepath, 'wb') as f:
+            pickle.dump({
+                'kmer_size': self.kmer_size,
+                'window_size': self.window_size,
+                'gapn': self.gapn,
+                'seed': self.seed,
+                'debug': self.debug,
+                'minimizers': self.minimizers,
+                'startend_kmers': self.startend_kmers,
+                'minimizer_sketch': self.minimizer_sketch,
+                'gap_sketch': self.gap_sketch,
+                'startend_sketch': self.startend_sketch
+            }, f)
 
     @classmethod
     def load(cls, filepath: str) -> 'MinimizerSketch':
-        """Load sketch from file."""
-        try:
-            # Load the npz file
-            data = np.load(filepath + '.npz', allow_pickle=True)
+        """Load a MinimizerSketch from a file.
+        
+        Args:
+            filepath: Path to load the sketch from
             
-            # Create new sketch with loaded parameters
-            sketch = cls(
-                kmer_size=int(data['kmer_size']),
-                window_size=int(data['window_size']),
-                gapn=int(data['gapn']),
-                seed=int(data['seed']),
-                debug=bool(data['debug'])
-            )
+        Returns:
+            The loaded MinimizerSketch
+        """
+        import pickle
+        with open(filepath, 'rb') as f:
+            data = pickle.load(f)
             
-            # Restore the sets
-            sketch.minimizers = set(data['minimizers'])
-            sketch.startend_kmers = set(data['startend_kmers'])
-            
-            # Restore the registers for each sketch
-            sketch.minimizer_sketch.registers = data['minimizer_sketch_registers']
-            sketch.gap_sketch.registers = data['gap_sketch_registers']
-            sketch.startend_sketch.registers = data['startend_sketch_registers']
-            
-            return sketch
-            
-        except Exception as e:
-            raise ValueError(f"Could not load sketch from file: {str(e)}")
+        sketch = cls(
+            kmer_size=data['kmer_size'],
+            window_size=data['window_size'],
+            gapn=data['gapn'],
+            seed=data['seed'],
+            debug=data['debug']
+        )
+        
+        # Restore the sets and sketches
+        sketch.minimizers = data['minimizers']
+        sketch.startend_kmers = data['startend_kmers']
+        sketch.minimizer_sketch = data['minimizer_sketch']
+        sketch.gap_sketch = data['gap_sketch']
+        sketch.startend_sketch = data['startend_sketch']
+        
+        return sketch

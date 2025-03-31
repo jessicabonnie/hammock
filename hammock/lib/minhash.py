@@ -200,29 +200,46 @@ class MinHash(AbstractSketch):
         return (k / kth_min) * (2**64) if kth_min > 0 else 0.0
 
     def write(self, filepath: str) -> None:
-        """Write sketch to file in binary format."""
-        np.savez_compressed(
-            filepath,
-            min_hashes=self.min_hashes,
-            num_hashes=np.array([self.num_hashes]),
-            kmer_size=np.array([self.kmer_size]),
-            window_size=np.array([self.window_size]),
-            seed=np.array([self.seed])
-        )
+        """Write the MinHash sketch to a file.
+        
+        Args:
+            filepath: Path to write the sketch to
+        """
+        import pickle
+        with open(filepath, 'wb') as f:
+            pickle.dump({
+                'num_hashes': self.num_hashes,
+                'kmer_size': self.kmer_size,
+                'window_size': self.window_size,
+                'seed': self.seed,
+                'debug': self.debug,
+                'min_hashes': self.min_hashes
+            }, f)
 
     @classmethod
     def load(cls, filepath: str) -> 'MinHash':
-        """Load sketch from file in binary format."""
-        data = np.load(filepath)
+        """Load a MinHash sketch from a file.
+        
+        Args:
+            filepath: Path to load the sketch from
+            
+        Returns:
+            The loaded MinHash sketch
+        """
+        import pickle
+        with open(filepath, 'rb') as f:
+            data = pickle.load(f)
+            
         sketch = cls(
-            num_hashes=int(data['num_hashes'][0]),
-            kmer_size=int(data['kmer_size'][0]),
-            window_size=int(data['window_size'][0]),
-            seed=int(data['seed'][0])
+            num_hashes=data['num_hashes'],
+            kmer_size=data['kmer_size'],
+            window_size=data['window_size'],
+            seed=data['seed'],
+            debug=data['debug']
         )
+        
         sketch.min_hashes = data['min_hashes']
         return sketch
-
 
     def add_int(self, value: int) -> None:
         """Add an integer to the sketch."""
@@ -234,20 +251,35 @@ class MinHash(AbstractSketch):
         self.min_hashes = np.minimum(self.min_hashes, hashes)
 
     def similarity_values(self, other: 'AbstractSketch') -> Dict[str, float]:
-        """Calculate similarity values using MinHash.
+        """Estimate similarity with another sketch.
         
         Returns:
-            Dictionary containing 'jaccard_similarity'
+            Dictionary containing similarity metrics
         """
         if not isinstance(other, MinHash):
-            raise ValueError("Can only compare with another MinHash sketch")
+            raise TypeError("Can only compare MinHash sketches")
         if self.num_hashes != other.num_hashes:
             raise ValueError("Cannot compare MinHash sketches with different numbers of hashes")
         if self.seed != other.seed:
             raise ValueError("Cannot compare MinHash sketches with different seeds")
         
-        # Count matches
-        matches = np.sum(self.min_hashes == other.min_hashes)
-        total = self.num_hashes
+        max_val = np.iinfo(np.uint64).max
+        # Return 0 if either sketch is empty
+        if np.all(self.min_hashes == max_val) or np.all(other.min_hashes == max_val):
+            return {
+                'jaccard': 0.0,
+                'containment': 0.0,
+                'intersection': 0.0,
+                'union': 0.0
+            }
         
-        return {'jaccard_similarity': float(matches) / total if total > 0 else 0.0}
+        # Count matches using element-wise comparison
+        matches = np.sum(self.min_hashes == other.min_hashes)
+        jaccard = float(matches) / self.num_hashes
+        
+        return {
+            'jaccard': jaccard,
+            'containment': jaccard * self.estimate_union(other) / self.estimate_cardinality(),
+            'intersection': jaccard * self.estimate_union(other),
+            'union': self.estimate_union(other)
+        }
