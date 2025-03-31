@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Optional, List, Tuple, TextIO, Union, Dict
 from hammock.lib.abstractsketch import AbstractSketch
-from hammock.lib.rusthll import RustHyperLogLog
+from hammock.lib.rusthll import RustHLL
 from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
 from hammock.lib.exact import ExactCounter
@@ -14,7 +14,8 @@ import pysam  # type: ignore  # no type stubs available
 from multiprocessing import Pool, cpu_count
 from itertools import islice
 import os
-import xxhash
+import xxhash  # type: ignore
+import numpy as np  # type: ignore
 
 def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], expA: float = 0, sep: str = "-", precision: int = 12, debug: bool = False) -> Tuple[List[str], List[str], List[int]]:
     """Process a chunk of lines in parallel.
@@ -121,7 +122,7 @@ class IntervalSketch(AbstractSketch):
         
         # Choose sketch implementation based on use_rust flag
         if use_rust:
-            self.sketch = RustHyperLogLog(precision=precision, debug=debug)
+            self.sketch = RustHLL(precision=precision, debug=debug)
         else:
             self.sketch = HyperLogLog(precision=precision, debug=debug)
         
@@ -545,9 +546,9 @@ class IntervalSketch(AbstractSketch):
             except:
                 pass
 
-            # Then try as RustHyperLogLog
+            # Then try as RustHLL
             try:
-                sketch = RustHyperLogLog.load(f)
+                sketch = RustHLL.load(f)
                 interval_sketch = cls(mode="A", sketch_type="hyperloglog", use_rust=True)
                 interval_sketch.sketch = sketch
                 return interval_sketch
@@ -571,7 +572,7 @@ class IntervalSketch(AbstractSketch):
                 return interval_sketch
             except:
                 raise ValueError("Could not load sketch from file")
-            
+
     def estimate_similarity(self, other: 'AbstractSketch') -> Dict[str, float]:
         """Estimate similarity between interval sketches.
         

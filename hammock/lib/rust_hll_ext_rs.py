@@ -1,19 +1,41 @@
+"""
+This module contains the pure Python implementation of HyperLogLog that serves as a fallback
+when the Rust implementation is not available.
+
+This file is not meant to be imported directly by users. Instead, users should import
+from rust_hll_ext.py, which will automatically use this implementation if the Rust
+version is not available.
+
+The implementation here is a direct translation of the Rust algorithm to Python,
+using numpy for efficient array operations. It provides the same interface and
+functionality as the Rust version, but may be slower for large datasets.
+"""
+
 from __future__ import annotations
 from typing import Optional, List, Tuple, TextIO, Union, Dict
 import numpy as np  # type: ignore
 import xxhash  # type: ignore
 
-class RustHyperLogLog:
-    """Pure Rust implementation of HyperLogLog."""
+class RustHLLExtRS:
+    """Rust implementation of HyperLogLog with fallback to pure Python."""
     
-    def __init__(self, precision: int = 12):
-        """Initialize the sketch."""
-        if not 4 <= precision <= 16:
-            raise ValueError("Precision must be between 4 and 16")
+    def __init__(self, precision: int = 12, hash_size: int = 32):
+        """Initialize the sketch.
         
+        Args:
+            precision: Number of bits to use for register addressing.
+            hash_size: Size of hash in bits (32 or 64)
+        """
         self.precision = precision
         self.num_registers = 1 << precision
-        self.registers = np.zeros(self.num_registers, dtype=np.float64)
+        self.hash_size = hash_size
+        
+        if RUST_AVAILABLE:
+            self._sketch = RustHLLClass(precision, hash_size=hash_size)
+            self._using_rust = True
+        else:
+            self.registers = np.zeros(self.num_registers, dtype=np.float64)
+            self._using_rust = False
         
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
@@ -21,20 +43,29 @@ class RustHyperLogLog:
         
     def add_batch(self, strings: List[str]) -> None:
         """Add multiple strings to the sketch."""
-        for s in strings:
-            self.add(s)
+        if self._using_rust:
+            self._sketch.add_batch(strings)
+        else:
+            for s in strings:
+                self.add(s)
         
     def add(self, value: str) -> None:
         """Add a value to the sketch."""
-        hash_val = xxhash.xxh64(value.encode()).intdigest()
-        idx = hash_val & (self.num_registers - 1)
-        rank = self._rho(hash_val)
-        self.registers[idx] = max(self.registers[idx], rank)
+        if self._using_rust:
+            self._sketch.add_value(value)
+        else:
+            if self.hash_size == 32:
+                hash_val = xxhash.xxh32(value.encode()).intdigest()
+            else:
+                hash_val = xxhash.xxh64(value.encode()).intdigest()
+            idx = hash_val & (self.num_registers - 1)
+            rank = self._rho(hash_val)
+            self.registers[idx] = max(self.registers[idx], rank)
         
     def _rho(self, value: int) -> int:
         """Calculate the position of the leftmost 1-bit."""
         if value == 0:
-            return 64
+            return self.hash_size
         return 1 + (value & -value).bit_length() - 1
         
     def estimate_cardinality(self) -> float:
@@ -124,10 +155,10 @@ class RustHyperLogLog:
         """Check if the sketch is empty."""
         return np.all(self.registers == 0)
         
-    def merge(self, other: 'RustHyperLogLog') -> None:
+    def merge(self, other: 'RustHLLExtRS') -> None:
         """Merge another sketch into this one."""
-        if not isinstance(other, RustHyperLogLog):
-            raise ValueError("Can only merge with another RustHyperLogLog")
+        if not isinstance(other, RustHLLExtRS):
+            raise ValueError("Can only merge with another RustHLLExtRS")
         if self.precision != other.precision:
             raise ValueError("Cannot merge HLLs with different precision")
         
@@ -138,7 +169,7 @@ class RustHyperLogLog:
         np.save(filepath, self.registers)
         
     @classmethod
-    def load(cls, filepath: str) -> 'RustHyperLogLog':
+    def load(cls, filepath: str) -> 'RustHLLExtRS':
         """Load sketch from file."""
         registers = np.load(filepath)
         sketch = cls(precision=int(np.log2(len(registers))))

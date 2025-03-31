@@ -13,6 +13,10 @@ from hammock.lib.intervals import IntervalSketch
 from hammock.lib.sequences import SequenceSketch
 from hammock.lib.minimizer import MinimizerSketch
 # from hammock.lib.exact import ExactCounter
+
+# Maximum precision for HyperLogLog sketches
+MAX_PRECISION = 24
+
 # Set memory limit to 28GB (adjust as needed)
 def limit_memory():
     """Set memory usage limit for the process.
@@ -29,7 +33,8 @@ def limit_memory():
 def process_file(filepath: str, primary_files: List[str], mode: str = 'A',
                 num_hashes: int = 64, precision: int = 12, kmer_size: int = 0,
                 window_size: int = 0, subA: float = 1.0, subB: float = 1.0,
-                expA: float = 0.5, use_rust: bool = False, sketch_type: str = "hyperloglog") -> Dict[str, float]:
+                expA: float = 0.5, use_rust: bool = False, sketch_type: str = "hyperloglog",
+                hash_size: int = 32) -> Dict[str, float]:
     """Process a file and calculate similarity against primary sets."""
     if not os.path.exists(filepath):
         print(f"Error: File {filepath} does not exist", file=sys.stderr)
@@ -38,9 +43,9 @@ def process_file(filepath: str, primary_files: List[str], mode: str = 'A',
     # Print implementation info
     if sketch_type == "hyperloglog":
         if use_rust:
-            print("Using Rust implementation")
+            print(f"Using Rust implementation with {hash_size}-bit hashing")
         else:
-            print("Using Python implementation")
+            print(f"Using Python implementation with {hash_size}-bit hashing")
     elif sketch_type == "minhash":
         print("Using MinHash implementation")
     elif sketch_type == "minimizer":
@@ -158,6 +163,8 @@ def parse_args():
     sketch_group.add_argument("--exact", action="store_true", help="Use exact counting")
     sketch_group.add_argument("--minhash", action="store_true", help="Use MinHash sketching")
     sketch_group.add_argument("--minimizer", action="store_true", help="Use minimizer sketching")
+    
+    arg_parser.add_argument('--hashsize', type=int, default=32, choices=[32, 64], help='Hash size in bits (32 or 64, default: 32)', dest='hash_size')
     
     return arg_parser.parse_args()
 
@@ -285,7 +292,18 @@ def process_sketches(sketches: List[Tuple[str, AbstractSketch]],
 
 def main():
     """Main entry point for hammock."""
+    import warnings
+    
+    # Parse arguments
     args = parse_args()
+    
+    # Set memory limit
+    limit_memory()
+    
+    # Validate precision value
+    if args.precision < 4 or args.precision >= args.hash_size:
+        warnings.warn(f"Precision {args.precision} is outside recommended range (4-{args.hash_size-10}). "
+                     "This may reduce accuracy.", RuntimeWarning)
     
     # Determine sketch type
     if args.hyperloglog:
@@ -354,9 +372,6 @@ def main():
     # Package subA and subB into a tuple for processing
     subsample = (args.subA, args.subB)
     
-    # Set memory limit
-    limit_memory()
-    
     # Read file paths
     with open(args.filepaths_file) as f:
         filepaths = [line.strip() for line in f if line.strip()]
@@ -410,15 +425,15 @@ def main():
     
     # Process remaining files in parallel
     pool_args = [
-        (filepath, primary_paths, args.mode, args.num_hashes, args.precision, args.kmer_size, args.window_size, args.subA, args.subB, args.expA, args.rust, args.sketch_type)
+        (filepath, primary_paths, args.mode, args.num_hashes, args.precision, args.kmer_size, args.window_size, args.subA, args.subB, args.expA, args.rust, args.sketch_type, args.hash_size)
         for filepath in filepaths
     ]
     
     # Process files sequentially instead of in parallel to avoid pickling issues
     results = []
     for pool_arg in pool_args:
-        filepath, primary_paths, mode, num_hashes, precision, kmer_size, window_size, subA, subB, expA, use_rust, sketch_type = pool_arg
-        result = process_file(filepath, primary_paths, mode, num_hashes, precision, kmer_size, window_size, subA, subB, expA, use_rust, sketch_type)
+        filepath, primary_paths, mode, num_hashes, precision, kmer_size, window_size, subA, subB, expA, use_rust, sketch_type, hash_size = pool_arg
+        result = process_file(filepath, primary_paths, mode, num_hashes, precision, kmer_size, window_size, subA, subB, expA, use_rust, sketch_type, hash_size)
         results.append((os.path.basename(filepath), result))
     
     # Write results

@@ -1,28 +1,49 @@
+"""
+This module provides the main interface for the Rust HyperLogLog implementation.
+
+The module structure is:
+1. rust_hll_ext.py (this file) - Main interface that provides a unified API
+2. rust_hll_ext_rs.py - Contains the actual Rust implementation
+3. rust_hll.py - Python wrapper that uses this interface
+
+This file acts as a bridge between the Python and Rust implementations:
+- If the Rust implementation is available (from rust_hll_ext_rs.py), it uses that
+- If not, it falls back to a pure Python implementation
+- The user doesn't need to know which implementation is being used
+
+The fallback implementation is provided here rather than in rust_hll_ext_rs.py
+to avoid circular imports and to keep the Rust-specific code separate.
+"""
+
 from __future__ import annotations
 from typing import Optional, List, Tuple, TextIO, Union, Dict
 import numpy as np  # type: ignore
 import xxhash  # type: ignore
+import warnings
 
 # Try to import the Rust extension
 try:
-    from hammock.lib.rust_hll_ext_rs import RustHyperLogLog as RustHLLClass
+    from hammock.lib.rust_hll_ext_rs import RustHLLExtRS as RustHLLClass
     RUST_AVAILABLE = True
 except ImportError:
     RUST_AVAILABLE = False
 
-class RustHyperLogLog:
-    """Rust implementation of HyperLogLog."""
+class RustHLLWrapper:
+    """Rust implementation of HyperLogLog with fallback to pure Python."""
     
-    def __init__(self, precision: int = 12):
-        """Initialize the sketch."""
-        if not 4 <= precision <= 16:
-            raise ValueError("Precision must be between 4 and 16")
+    def __init__(self, precision: int = 12, hash_size: int = 32):
+        """Initialize the sketch.
         
+        Args:
+            precision: Number of bits to use for register addressing.
+            hash_size: Size of hash in bits (32 or 64)
+        """
         self.precision = precision
         self.num_registers = 1 << precision
+        self.hash_size = hash_size
         
         if RUST_AVAILABLE:
-            self._sketch = RustHLLClass(precision)
+            self._sketch = RustHLLClass(precision, hash_size=hash_size)
             self._using_rust = True
         else:
             self.registers = np.zeros(self.num_registers, dtype=np.float64)
@@ -43,9 +64,12 @@ class RustHyperLogLog:
     def add(self, value: str) -> None:
         """Add a value to the sketch."""
         if self._using_rust:
-            self._sketch.add(value)
+            self._sketch.add_value(value)
         else:
-            hash_val = xxhash.xxh64(value.encode()).intdigest()
+            if self.hash_size == 32:
+                hash_val = xxhash.xxh32(value.encode()).intdigest()
+            else:
+                hash_val = xxhash.xxh64(value.encode()).intdigest()
             idx = hash_val & (self.num_registers - 1)
             rank = self._rho(hash_val)
             self.registers[idx] = max(self.registers[idx], rank)
@@ -53,7 +77,7 @@ class RustHyperLogLog:
     def _rho(self, value: int) -> int:
         """Calculate the position of the leftmost 1-bit."""
         if value == 0:
-            return 64
+            return self.hash_size
         return 1 + (value & -value).bit_length() - 1
         
     def estimate_cardinality(self) -> float:
@@ -148,10 +172,10 @@ class RustHyperLogLog:
             return self._sketch.is_empty()
         return np.all(self.registers == 0)
         
-    def merge(self, other: 'RustHyperLogLog') -> None:
+    def merge(self, other: 'RustHLLWrapper') -> None:
         """Merge another sketch into this one."""
-        if not isinstance(other, RustHyperLogLog):
-            raise ValueError("Can only merge with another RustHyperLogLog")
+        if not isinstance(other, RustHLLWrapper):
+            raise ValueError("Can only merge with another RustHLLWrapper")
         if self.precision != other.precision:
             raise ValueError("Cannot merge HLLs with different precision")
         
@@ -170,7 +194,7 @@ class RustHyperLogLog:
             np.save(filepath, self.registers)
         
     @classmethod
-    def load(cls, filepath: str) -> 'RustHyperLogLog':
+    def load(cls, filepath: str) -> 'RustHLLWrapper':
         """Load sketch from file."""
         if RUST_AVAILABLE:
             sketch = cls()

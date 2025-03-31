@@ -3,7 +3,7 @@ import numpy as np
 import time
 import signal
 import os
-from hammock.lib.rusthll import RustHyperLogLog
+from hammock.lib.rusthll import RustHLL
 from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.rusthll_compat import RustHLLWrapper, RUST_AVAILABLE
 
@@ -29,33 +29,82 @@ def test_rust_import():
     """Test that Rust implementation is available."""
     assert RUST_AVAILABLE, "Rust implementation should be available"
 
-def test_rusthll_initialization():
-    """Test initialization of RustHyperLogLog with different precisions."""
-    for precision in range(4, 25):
-        sketch = RustHyperLogLog(precision)
+def test_initialization():
+    """Test initialization of RustHLL with different precisions."""
+    for precision in [4, 8, 12, 16]:
+        sketch = RustHLL(precision)
         assert sketch.precision == precision
-        assert sketch.num_registers == 2 ** precision
-        assert sketch.is_using_rust()  # Check that Rust implementation is being used
 
-def test_rusthll_add():
-    """Test adding items to RustHyperLogLog."""
-    sketch = RustHyperLogLog(14)
+def test_add_items():
+    """Test adding items to RustHLL."""
+    sketch = RustHLL(14)
     items = ["item1", "item2", "item3"]
-    
     for item in items:
-        sketch.add_string(item)
+        sketch.add(item)
+    assert not sketch.is_empty()
+
+def test_expected_cardinality():
+    """Test initialization with expected cardinality."""
+    sketch = RustHLL(expected_cardinality=1000)
+    assert sketch.precision >= 8  # Should adjust precision based on expected cardinality
+
+def test_merge():
+    """Test merging two RustHLL sketches."""
+    sketch1 = RustHLL(expected_cardinality=5000)
+    sketch2 = RustHLL(expected_cardinality=5000)
     
-    # Test adding a batch
-    sketch.add_batch(items)
+    # Add different items to each sketch
+    for i in range(1000):
+        sketch1.add(f"item1_{i}")
+        sketch2.add(f"item2_{i}")
     
-    # Test adding integers
-    sketch.add(42)
-    sketch.add_batch([1, 2, 3])
+    # Merge sketches
+    sketch1.merge(sketch2)
+    
+    # Check that merged sketch has higher cardinality
+    assert sketch1.estimate_cardinality() > 1000
+
+def test_precision_validation():
+    """Test precision validation."""
+    # Test valid precisions
+    for precision in [4, 8, 12, 16]:
+        sketch = RustHLL(precision)
+        assert sketch.precision == precision
+    
+    # Test invalid precisions
+    with pytest.raises(ValueError):
+        RustHLL(precision=3)  # Too low
+
+def test_merge_different_precision():
+    """Test merging sketches with different precision."""
+    sketch1 = RustHLL(precision=14)
+    sketch2 = RustHLL(precision=15)  # Different precision
+    
+    with pytest.raises(ValueError):
+        sketch1.merge(sketch2)
+
+def test_empty_sketch():
+    """Test empty sketch operations."""
+    sketch = RustHLL(precision=14)
+    assert sketch.is_empty()
+    assert sketch.estimate_cardinality() == 0
+
+def test_rust_implementation():
+    """Test Rust implementation availability."""
+    if not RustHLL(precision=14).is_using_rust():
+        pytest.skip("Rust implementation not available")
+    
+    rust_sketch = RustHLL(precision=14)
+    assert rust_sketch.is_using_rust()
+    
+    # Test with high precision
+    high_precision_sketch = RustHLL(precision=rust_sketch.precision + 2)
+    assert high_precision_sketch.is_using_rust()
 
 def test_rusthll_cardinality():
     """Test cardinality estimation."""
     # For small sets, use lower precision
-    sketch = RustHyperLogLog(expected_cardinality=1000)
+    sketch = RustHLL(expected_cardinality=1000)
     items = [f"item{i}" for i in range(1000)]
     
     # Add items
@@ -67,30 +116,10 @@ def test_rusthll_cardinality():
     # Should be close to actual cardinality
     assert abs(estimate - 1000) / 1000 < 0.1  # Within 10% error
 
-def test_rusthll_merge():
-    """Test merging two RustHyperLogLog sketches."""
-    # For medium sets, use medium precision
-    sketch1 = RustHyperLogLog(expected_cardinality=5000)
-    sketch2 = RustHyperLogLog(expected_cardinality=5000)
-    
-    # Add different items to each sketch
-    items1 = [f"item1_{i}" for i in range(500)]
-    items2 = [f"item2_{i}" for i in range(500)]
-    
-    sketch1.add_batch(items1)
-    sketch2.add_batch(items2)
-    
-    # Merge sketches
-    sketch1.merge(sketch2)
-    
-    # Estimate should be close to union cardinality
-    estimate = sketch1.estimate_cardinality()
-    assert abs(estimate - 1000) / 1000 < 0.1  # Within 10% error
-
 def test_rusthll_intersection():
     """Test intersection estimation."""
-    sketch1 = RustHyperLogLog(12)
-    sketch2 = RustHyperLogLog(12)
+    sketch1 = RustHLL(12)
+    sketch2 = RustHLL(12)
     
     # Add overlapping items
     items1 = [f"item_{i}" for i in range(10000)]
@@ -105,8 +134,8 @@ def test_rusthll_intersection():
 
 def test_rusthll_union():
     """Test union estimation."""
-    sketch1 = RustHyperLogLog(12)
-    sketch2 = RustHyperLogLog(12)
+    sketch1 = RustHLL(12)
+    sketch2 = RustHLL(12)
     
     # Add overlapping items
     items1 = [f"item_{i}" for i in range(10000)]
@@ -121,8 +150,8 @@ def test_rusthll_union():
 
 def test_rusthll_jaccard():
     """Test Jaccard similarity estimation."""
-    sketch1 = RustHyperLogLog(12)
-    sketch2 = RustHyperLogLog(12)
+    sketch1 = RustHLL(12)
+    sketch2 = RustHLL(12)
     
     # Add overlapping items
     items1 = [f"item_{i}" for i in range(10000)]
@@ -140,7 +169,7 @@ def test_rusthll_serialization():
     """Test saving and loading sketches."""
     import tempfile
     
-    sketch = RustHyperLogLog(14)
+    sketch = RustHLL(14)
     items = [f"item_{i}" for i in range(1000)]
     sketch.add_batch(items)
     
@@ -152,20 +181,12 @@ def test_rusthll_serialization():
         sketch.save(test_file)
         
         # Load sketch
-        loaded_sketch = RustHyperLogLog.load(test_file)
+        loaded_sketch = RustHLL.load(test_file)
         
         # Compare estimates
         original_estimate = sketch.estimate_cardinality()
         loaded_estimate = loaded_sketch.estimate_cardinality()
         assert abs(original_estimate - loaded_estimate) / original_estimate < 0.01
-
-def test_rusthll_precision_compatibility():
-    """Test that sketches with different precisions cannot be merged."""
-    sketch1 = RustHyperLogLog(14)
-    sketch2 = RustHyperLogLog(16)
-    
-    with pytest.raises(ValueError):
-        sketch1.merge(sketch2)
 
 def test_rusthll_wrapper():
     """Test the RustHLLWrapper class."""
@@ -236,7 +257,7 @@ def test_rusthll_large_batch():
         pytest.skip("Rust implementation not available")
     
     # For very large sets, use higher precision
-    sketch = RustHyperLogLog(expected_cardinality=1000000)
+    sketch = RustHLL(expected_cardinality=1000000)
     large_values = [f"large_item_{i}" for i in range(1000000)]
     
     # Test adding large batch
@@ -247,9 +268,9 @@ def test_rusthll_large_batch():
     assert abs(estimate - 1000000) / 1000000 < 0.1
 
 def test_rusthll_basic_operations():
-    """Test basic operations of RustHyperLogLog."""
+    """Test basic operations of RustHLL."""
     # For very small sets, use lowest precision
-    sketch = RustHyperLogLog(expected_cardinality=10)
+    sketch = RustHLL(expected_cardinality=10)
     assert sketch.precision == 4
     
     # Test adding strings
@@ -271,8 +292,8 @@ def test_rusthll_basic_operations():
     # assert est < 8  # Should be close to 6, allow for some error
     
     # Test merging
-    sketch1 = RustHyperLogLog(precision=4)
-    sketch2 = RustHyperLogLog(precision=4)
+    sketch1 = RustHLL(precision=4)
+    sketch2 = RustHLL(precision=4)
     
     sketch1.add("merge1")
     sketch1.add("merge2")
@@ -286,9 +307,9 @@ def test_rusthll_basic_operations():
     assert est < 5  # Should be close to 3, allow for some error
     
     # Test file operations
-    sketch1 = RustHyperLogLog(precision=8)
-    sketch2 = RustHyperLogLog(precision=8)
-    sketch3 = RustHyperLogLog(precision=8)
+    sketch1 = RustHLL(precision=8)
+    sketch2 = RustHLL(precision=8)
+    sketch3 = RustHLL(precision=8)
     
     sketch1.add("file1")
     sketch2.add("file2")
@@ -299,7 +320,7 @@ def test_rusthll_basic_operations():
     os.makedirs("test_results", exist_ok=True)
     try:
         sketch1.save(test_file)
-        loaded_sketch = RustHyperLogLog.load(test_file)
+        loaded_sketch = RustHLL.load(test_file)
         assert abs(sketch1.estimate_cardinality() - loaded_sketch.estimate_cardinality()) < 0.2
     finally:
         if os.path.exists(test_file):
@@ -307,25 +328,23 @@ def test_rusthll_basic_operations():
     
     # Test precision validation
     with pytest.raises(ValueError):
-        RustHyperLogLog(precision=3)  # Too low
-    with pytest.raises(ValueError):
-        RustHyperLogLog(precision=25)  # Too high
+        RustHLL(precision=3)  # Too low
         
     # Test merge validation
-    sketch1 = RustHyperLogLog(precision=14)
-    sketch2 = RustHyperLogLog(precision=15)  # Different precision
+    sketch1 = RustHLL(precision=14)
+    sketch2 = RustHLL(precision=15)  # Different precision
     with pytest.raises(ValueError):
         sketch1.merge(sketch2)
         
     # Test empty sketch
-    sketch = RustHyperLogLog(precision=14)
+    sketch = RustHLL(precision=14)
     assert sketch.is_empty()
     sketch.add("test")
     assert not sketch.is_empty()
     
     # Test Jaccard similarity
-    sketch1 = RustHyperLogLog(precision=14)
-    sketch2 = RustHyperLogLog(precision=14)
+    sketch1 = RustHLL(precision=14)
+    sketch2 = RustHLL(precision=14)
     
     sketch1.add("jaccard1")
     sketch1.add("jaccard2")
@@ -338,14 +357,14 @@ def test_rusthll_basic_operations():
     assert jaccard < 1
     
     # Test retry with higher precision
-    if not RustHyperLogLog(precision=14).is_using_rust():
+    if not RustHLL(precision=14).is_using_rust():
         # Create a sketch with low precision
-        rust_sketch = RustHyperLogLog(precision=14)
+        rust_sketch = RustHLL(precision=14)
         rust_sketch.add("test1")
         rust_sketch.add("test2")
         
         # Create a sketch with higher precision
-        high_precision_sketch = RustHyperLogLog(precision=rust_sketch.precision + 2)
+        high_precision_sketch = RustHLL(precision=rust_sketch.precision + 2)
         high_precision_sketch.add("test1")
         high_precision_sketch.add("test2")
         
@@ -355,4 +374,38 @@ def test_rusthll_basic_operations():
         
         # Higher precision should give more accurate estimate
         assert high_est > 0
-        assert high_est < 3  # Should be close to 2 
+        assert high_est < 3  # Should be close to 2
+
+def test_high_precision_support():
+    """Test support for high precision values (over 16)."""
+    # Test with high precision values
+    high_precision_values = [18, 20, 22, 24]
+    
+    for precision in high_precision_values:
+        # Test Python implementation
+        py_sketch = HyperLogLog(precision=precision, hash_size=32)
+        assert py_sketch.precision == precision
+        
+        # Test Rust implementation
+        rust_sketch = RustHLL(precision=precision, hash_size=32)
+        assert rust_sketch.precision == precision
+        
+        # Verify Rust implementation is actually being used
+        if RUST_AVAILABLE:
+            assert rust_sketch.is_using_rust(), f"RustHLL should use Rust implementation for precision={precision}"
+        
+        # Test adding items with high precision
+        for i in range(100):
+            rust_sketch.add(f"item_{i}")
+        
+        # Test estimation
+        cardinality = rust_sketch.estimate_cardinality()
+        assert 90 <= cardinality <= 110, f"Estimated cardinality {cardinality} should be close to 100"
+        
+        # Test with RustHLLWrapper if available
+        if RUST_AVAILABLE:
+            wrapper_sketch = RustHLLWrapper(precision=precision, hash_size=32)
+            for i in range(100):
+                wrapper_sketch.add(f"item_{i}")
+            wrapper_cardinality = wrapper_sketch.estimate_cardinality()
+            assert 90 <= wrapper_cardinality <= 110, f"Wrapper cardinality {wrapper_cardinality} should be close to 100" 

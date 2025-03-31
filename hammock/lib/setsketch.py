@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np # type: ignore
 import xxhash # type: ignore
 from hammock.lib.abstractsketch import AbstractSketch
+from typing import List
 
 class SetSketch(AbstractSketch):
     def __init__(self, 
@@ -14,14 +15,14 @@ class SetSketch(AbstractSketch):
         """Initialize SetSketch sketch.
         
         Args:
-            precision: Number of registers (4-16)
+            precision: Number of registers (4 or higher)
             kmer_size: Size of k-mers (0 for whole string mode)
             window_size: Size of sliding window (0 or == kmer_size for no windowing)
             seed: Random seed for hashing
             debug: Whether to print debug information
         """
-        if not 4 <= precision <= 16:
-            raise ValueError("Precision must be between 4 and 16")
+        if precision < 4:
+            raise ValueError("Precision must be at least 4")
         
         if window_size and window_size < kmer_size:
             raise ValueError("Window size must be >= kmer size")
@@ -73,7 +74,24 @@ class SetSketch(AbstractSketch):
         Args:
             s: String to add to sketch
         """
-        raise NotImplementedError("SetSketch.add_string() not implemented")
+        if self.kmer_size == 0:
+            # Whole string mode
+            self.add_int(self.hash_str(s.encode()))
+        else:
+            # K-mer mode
+            s_bytes = s.encode()
+            for i in range(len(s_bytes) - self.kmer_size + 1):
+                kmer = s_bytes[i:i + self.kmer_size]
+                self.add_int(self.hash_str(kmer))
+
+    def add_batch(self, strings: List[str]) -> None:
+        """Add multiple strings to the sketch.
+        
+        Args:
+            strings: List of strings to add to the sketch
+        """
+        for s in strings:
+            self.add_string(s)
 
     def add_int(self, value: int) -> None:
         """Add an integer to the sketch."""

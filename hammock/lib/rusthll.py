@@ -36,24 +36,33 @@ if not RUST_AVAILABLE:
 class RustHyperLogLog(AbstractSketch):
     """Rust implementation of HyperLogLog."""
     
-    def __init__(self, precision: int = 12, debug: bool = False, expected_cardinality: Optional[int] = None):
+    def __init__(self, 
+                 precision: int = 12,
+                 kmer_size: int = 0,
+                 window_size: int = 0,
+                 seed: Optional[int] = None,
+                 expected_cardinality: Optional[int] = None,
+                 hash_size: int = 32,
+                 debug: bool = False):
         """Initialize the sketch.
         
         Args:
-            precision: Base precision value (4-24)
-            debug: Enable debug output
+            precision: Number of bits to use for register addressing.
+            kmer_size: Size of k-mers (0 for whole string mode)
+            window_size: Size of sliding window (0 or == kmer_size for no windowing)
+            seed: Random seed for hashing
             expected_cardinality: Expected number of unique items. If provided, precision will be adjusted.
+            hash_size: Size of hash in bits (32 or 64)
+            debug: Debug flag (not used, provided for backward compatibility)
         """
-        if not RUST_AVAILABLE:
-            raise ImportError("Rust HyperLogLog module is not available")
+        super().__init__()
+        
+        if hash_size not in [32, 64]:
+            raise ValueError("hash_size must be 32 or 64")
             
         if expected_cardinality is not None:
             # Adjust precision based on expected cardinality
-            if expected_cardinality < 50:
-                precision = 4 
-            elif expected_cardinality < 100:
-                precision = 6  # For smallest sets, use lower precision
-            elif expected_cardinality < 1000:
+            if expected_cardinality < 1000:
                 precision = 8  # For small sets, use lower precision
             elif expected_cardinality < 10000:
                 precision = 12  # For medium sets
@@ -62,34 +71,115 @@ class RustHyperLogLog(AbstractSketch):
             else:
                 precision = 22  # For very large sets
         
-        if not 4 <= precision <= 24:
-            raise ValueError("Precision must be between 4 and 24")
+        # Enforce only theoretical limits
+        if precision < 4:
+            raise ValueError(f"Precision must be at least 4")
+        if precision >= hash_size:
+            raise ValueError(f"Precision must be less than hash_size ({hash_size})")
+            
+        if kmer_size < 0:
+            raise ValueError("k-mer size must be non-negative")
+            
+        if window_size and window_size < kmer_size:
+            raise ValueError("Window size must be >= kmer size")
         
         self.precision = precision
-        self.num_registers = 1 << precision
-        self.debug = debug
-        self.sketch = rust_hll.RustHLL(precision)
+        self.kmer_size = kmer_size
+        self.window_size = window_size if window_size else kmer_size
+        self.seed = seed if seed is not None else 42
+        self.hash_size = hash_size
+        
+        if RUST_AVAILABLE:
+            try:
+                # Try to create the Rust HLL - no arbitrary precision limit
+                self._sketch = rust_hll.RustHLL(precision, None, None, hash_size)
+                self._using_rust = True
+            except ValueError as e:
+                # Fallback to Python implementation if Rust fails
+                print(f"Warning: Rust implementation rejected precision={precision}: {e}")
+                print(f"Falling back to Python implementation")
+                self._using_rust = False
+                self.registers = np.zeros(1 << precision, dtype=np.float64)
+                
+                # Create a wrapper object that redirects calls to fallback methods
+                class FallbackWrapper:
+                    def __init__(self, parent):
+                        self.parent = parent
+                    
+                    def add_value(self, value):
+                        return self.parent.add_value(value)
+                    
+                    def add_batch(self, values):
+                        return self.parent.add_batch_fallback(values)
+                    
+                    def merge(self, other):
+                        if hasattr(other, '_sketch'):
+                            other = other._sketch
+                        return self.parent.merge_fallback(other)
+                    
+                    def estimate_cardinality(self):
+                        return self.parent.estimate_cardinality_fallback()
+                    
+                    def is_empty(self):
+                        return self.parent.is_empty_fallback()
+                    
+                    def debug_info(self):
+                        return f"FallbackWrapper(precision={self.parent.precision}, using_rust=False)"
+                
+                self._sketch = FallbackWrapper(self)
+                return
+        else:
+            print(f"Rust HLL not available, using Python implementation with precision={precision}")
+            self.registers = np.zeros(1 << precision, dtype=np.float64)
+            self._using_rust = False
+            
+            # Create a wrapper object that redirects calls to fallback methods
+            class FallbackWrapper:
+                def __init__(self, parent):
+                    self.parent = parent
+                
+                def add_value(self, value):
+                    return self.parent.add_value(value)
+                
+                def add_batch(self, values):
+                    return self.parent.add_batch_fallback(values)
+                
+                def merge(self, other):
+                    if hasattr(other, '_sketch'):
+                        other = other._sketch
+                    return self.parent.merge_fallback(other)
+                
+                def estimate_cardinality(self):
+                    return self.parent.estimate_cardinality_fallback()
+                
+                def is_empty(self):
+                    return self.parent.is_empty_fallback()
+                
+                def debug_info(self):
+                    return f"FallbackWrapper(precision={self.parent.precision}, using_rust=False)"
+            
+            self._sketch = FallbackWrapper(self)
         
     def is_using_rust(self) -> bool:
         """Check if using Rust implementation."""
-        return True  # This class always uses Rust
+        return self._using_rust
         
     def add(self, value: Union[str, int, float]) -> None:
         """Add a value to the sketch."""
         # Convert to string and use add for Rust implementation
         if isinstance(value, (int, float)):
             value = str(value)
-        self.sketch.add_value(value)
+        self._sketch.add_value(value)
         
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
-        self.sketch.add_value(s)
+        self._sketch.add_value(s)
         
     def add_batch(self, strings: List[str]) -> None:
         """Add multiple strings to the sketch."""
         # Convert any non-string values to strings
         string_values = [str(s) if not isinstance(s, str) else s for s in strings]
-        self.sketch.add_batch(string_values)
+        self._sketch.add_batch(string_values)
         
     def estimate_cardinality(self, method: str = "fast_mle") -> float:
         """Estimate the cardinality of the set.
@@ -102,7 +192,7 @@ class RustHyperLogLog(AbstractSketch):
         """
         if method not in ["original", "ertl_mle", "fast_mle"]:
             raise ValueError("Method must be one of: original, ertl_mle, fast_mle")
-        return float(self.sketch.estimate_cardinality())
+        return float(self._sketch.estimate_cardinality())
         
     def estimate_intersection(self, other: 'RustHyperLogLog') -> float:
         """Estimate intersection cardinality with another sketch."""
@@ -117,8 +207,6 @@ class RustHyperLogLog(AbstractSketch):
         union = self.estimate_union(other)
         intersection = max(0.0, a + b - union)
         
-        if self.debug:
-            print(f"DEBUG: a={a:.1f}, b={b:.1f}, union={union:.1f}, intersection={intersection:.1f}")
         return float(intersection)
         
     def estimate_union(self, other: 'RustHyperLogLog') -> float:
@@ -129,9 +217,9 @@ class RustHyperLogLog(AbstractSketch):
             raise ValueError("Cannot compute union of HLLs with different precision")
         
         # Create a temporary sketch for the union
-        temp_sketch = rust_hll.RustHLL(self.precision)
-        temp_sketch.merge(self.sketch)
-        temp_sketch.merge(other.sketch)
+        temp_sketch = rust_hll.RustHLL(self.precision, None, None, self.hash_size)
+        temp_sketch.merge(self._sketch)
+        temp_sketch.merge(other._sketch)
         return float(temp_sketch.estimate_cardinality())
         
     def estimate_jaccard(self, other: 'RustHyperLogLog') -> float:
@@ -154,7 +242,7 @@ class RustHyperLogLog(AbstractSketch):
         
     def is_empty(self) -> bool:
         """Check if the sketch is empty."""
-        return self.sketch.is_empty()
+        return self._sketch.is_empty()
         
     def merge(self, other: 'RustHyperLogLog') -> None:
         """Merge another sketch into this one."""
@@ -163,7 +251,7 @@ class RustHyperLogLog(AbstractSketch):
         if self.precision != other.precision:
             raise ValueError("Cannot merge HLLs with different precision")
         
-        self.sketch.merge(other.sketch)
+        self._sketch.merge(other._sketch)
         
     def save(self, filepath: str) -> None:
         """Write sketch to file."""
@@ -173,7 +261,7 @@ class RustHyperLogLog(AbstractSketch):
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
         try:
-            self.sketch.write(filepath)
+            self._sketch.write(filepath)
         except Exception as e:
             print(f"Error saving sketch to {filepath}: {e}", file=sys.stderr)
             raise
@@ -187,7 +275,7 @@ class RustHyperLogLog(AbstractSketch):
             raise FileNotFoundError(f"Sketch file not found: {filepath}")
         try:
             sketch = cls()
-            sketch.sketch = rust_hll.RustHLL.load(filepath)
+            sketch._sketch = rust_hll.RustHLL.load(filepath)
             return sketch
         except Exception as e:
             print(f"Error loading sketch from {filepath}: {e}", file=sys.stderr)
@@ -195,7 +283,7 @@ class RustHyperLogLog(AbstractSketch):
     
     def cardinality(self) -> float:
         """Get the estimated cardinality (number of unique values)."""
-        return float(self.sketch.estimate_cardinality())
+        return float(self._sketch.estimate_cardinality())
     
     def jaccard(self, other: 'RustHyperLogLog') -> float:
         """Calculate the Jaccard similarity with another sketch."""
@@ -207,8 +295,92 @@ class RustHyperLogLog(AbstractSketch):
     
     def __str__(self) -> str:
         """Get string representation."""
-        return f"RustHyperLogLog(precision={self.precision})"
+        return f"RustHyperLogLog(precision={self.precision}, kmer_size={self.kmer_size}, window_size={self.window_size}, seed={self.seed}, hash_size={self.hash_size})"
     
     def __repr__(self) -> str:
         """Get representation string."""
-        return self.__str__() 
+        return self.__str__()
+
+    def add_value(self, value: str) -> None:
+        """Add a value to the sketch (Python fallback)."""
+        if self._using_rust:
+            raise RuntimeError("This method should not be called when using Rust")
+        # Convert value to bytes if needed
+        if isinstance(value, str):
+            value = value.encode() if hasattr(value, 'encode') else str(value).encode()
+        hash_val = self.hash_str(value)
+        idx = hash_val & ((1 << self.precision) - 1)
+        # Implement the rho function for Python fallback
+        rank = 1
+        hash_val >>= self.precision
+        while hash_val & 1 == 0 and rank <= self.hash_size - self.precision:
+            rank += 1
+            hash_val >>= 1
+        
+        # Update register
+        self.registers[idx] = max(self.registers[idx], rank)
+    
+    def hash_str(self, s: bytes) -> int:
+        """Hash a string for Python fallback."""
+        import xxhash  # type: ignore
+        hasher = xxhash.xxh64(seed=self.seed) if self.hash_size == 64 else xxhash.xxh32(seed=self.seed)
+        hasher.update(s)
+        return hasher.intdigest()
+    
+    def _get_alpha(self, m: float) -> float:
+        """Get alpha correction factor for HyperLogLog."""
+        if m == 16:
+            return 0.673
+        elif m == 32:
+            return 0.697
+        elif m == 64:
+            return 0.709
+        else:
+            return 0.7213 / (1.0 + 1.079 / m)
+            
+    def add_batch_fallback(self, values: List[str]) -> None:
+        """Add multiple values to the sketch (Python fallback)."""
+        if self._using_rust:
+            raise RuntimeError("This method should not be called when using Rust")
+        for value in values:
+            self.add_value(value)
+    
+    def merge_fallback(self, other) -> None:
+        """Merge another sketch (Python fallback)."""
+        if self._using_rust:
+            raise RuntimeError("This method should not be called when using Rust")
+        if hasattr(other, 'registers'):
+            # Take element-wise maximum
+            np.maximum(self.registers, other.registers, out=self.registers)
+    
+    def estimate_cardinality_fallback(self) -> float:
+        """Estimate cardinality (Python fallback)."""
+        if self._using_rust:
+            raise RuntimeError("This method should not be called when using Rust")
+        # Implement a basic HyperLogLog cardinality estimation
+        m = float(1 << self.precision)
+        alpha = self._get_alpha(m)
+        
+        # Calculate the sum of 2^(-register[i])
+        register_harmonics = np.power(2.0, -self.registers)
+        estimate = alpha * m * m / np.sum(register_harmonics)
+        
+        # Apply corrections
+        if estimate <= 2.5 * m:
+            # Small range correction
+            zero_count = np.sum(self.registers == 0)
+            if zero_count > 0:
+                estimate = m * np.log(m / zero_count)
+        
+        # Large range correction omitted for simplicity
+        
+        return float(estimate)
+    
+    def is_empty_fallback(self) -> bool:
+        """Check if sketch is empty (Python fallback)."""
+        if self._using_rust:
+            raise RuntimeError("This method should not be called when using Rust")
+        return np.all(self.registers == 0)
+
+# Alias for backward compatibility
+RustHLL = RustHyperLogLog 

@@ -38,6 +38,48 @@ class TestSketchesIOQuick:
         assert hll.window_size == hll2.window_size
         assert hll.seed == hll2.seed
         np.testing.assert_array_equal(hll.registers, hll2.registers)
+
+    def test_hyperloglog_hash_size_io(self, temp_dir):
+        """Test HyperLogLog read/write functionality with different hash sizes."""
+        # Test with 32-bit hash
+        hll_32 = HyperLogLog(precision=8, hash_size=32)
+        hll_32.add_string("ACGTACGT")
+        
+        # Test with 64-bit hash
+        hll_64 = HyperLogLog(precision=8, hash_size=64)
+        hll_64.add_string("ACGTACGT")
+        
+        # Write to files
+        filepath_32 = os.path.join(temp_dir, "test_hll_32.npz")
+        filepath_64 = os.path.join(temp_dir, "test_hll_64.npz")
+        hll_32.write(filepath_32)
+        hll_64.write(filepath_64)
+        
+        # Read back and compare
+        hll_32_loaded = HyperLogLog.load(filepath_32)
+        hll_64_loaded = HyperLogLog.load(filepath_64)
+        
+        # Check hash sizes are preserved
+        assert hll_32.hash_size == hll_32_loaded.hash_size == 32
+        assert hll_64.hash_size == hll_64_loaded.hash_size == 64
+        
+        # Check other parameters are preserved
+        assert hll_32.precision == hll_32_loaded.precision
+        assert hll_64.precision == hll_64_loaded.precision
+        assert hll_32.kmer_size == hll_32_loaded.kmer_size
+        assert hll_64.kmer_size == hll_64_loaded.kmer_size
+        assert hll_32.window_size == hll_32_loaded.window_size
+        assert hll_64.window_size == hll_64_loaded.window_size
+        assert hll_32.seed == hll_32_loaded.seed
+        assert hll_64.seed == hll_64_loaded.seed
+        
+        # Check registers are preserved
+        np.testing.assert_array_equal(hll_32.registers, hll_32_loaded.registers)
+        np.testing.assert_array_equal(hll_64.registers, hll_64_loaded.registers)
+        
+        # Check cardinality estimates are reasonable
+        assert abs(hll_32.estimate_cardinality() - hll_32_loaded.estimate_cardinality()) < 1e-10
+        assert abs(hll_64.estimate_cardinality() - hll_64_loaded.estimate_cardinality()) < 1e-10
     
     def test_minhash_io(self, temp_dir):
         """Test MinHash read/write functionality."""

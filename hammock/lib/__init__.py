@@ -6,7 +6,15 @@ from .exact import ExactCounter
 from .sequences import SequenceSketch
 from .intervals import IntervalSketch
 from .minimizer import MinimizerSketch
-from .rusthll import RustHyperLogLog
+from .rusthll import RustHLL
+from .rusthll_compat import RustHLLWrapper, RUST_AVAILABLE
 
-__all__ = ['HyperLogLog', 'MinHash', 'ExactCounter', 'SequenceSketch', 
-           'IntervalSketch', 'MinimizerSketch', 'RustHyperLogLog']
+__all__ = [
+    'HyperLogLog',
+    'MinHash',
+    'ExactCounter',
+    'ExactTest',
+    'RustHLL',
+    'RustHLLWrapper',
+    'RUST_AVAILABLE'
+]

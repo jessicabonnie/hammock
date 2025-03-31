@@ -1,29 +1,52 @@
+"""
+This module provides a high-level Python interface to the HyperLogLog implementation.
+
+The module structure is:
+1. rust_hll.py (this file) - High-level Python interface
+2. rust_hll_ext.py - Bridge between Python and Rust implementations
+3. rust_hll_ext_rs.py - Pure Python fallback implementation
+
+This file provides a more Pythonic interface to the HyperLogLog implementation,
+with additional features like:
+- Support for different estimation methods
+- Union and intersection operations
+- Jaccard similarity estimation
+- File I/O operations
+
+The actual implementation is delegated to the Rust or Python version through
+rust_hll_ext.py, which handles the implementation selection automatically.
+"""
+
 from __future__ import annotations
 from typing import Optional, List, Tuple, TextIO, Union, Dict
 import numpy as np  # type: ignore
 import xxhash  # type: ignore
 import os
+import warnings
 
 # Try to import the Rust extension
 try:
-    from hammock.lib.rust_hll_ext import RustHLL as RustHLLClass
-    RUST_AVAILABLE = True
+    from hammock.lib.rust_hll_ext import RustHLLWrapper as RustHLLClass
+    RUST_HLL_AVAILABLE = True
 except ImportError:
-    RUST_AVAILABLE = False
+    RUST_HLL_AVAILABLE = False
 
 class RustHLL:
     """Rust implementation of HyperLogLog."""
     
-    def __init__(self, precision: int = 12):
-        """Initialize the sketch."""
-        if not 4 <= precision <= 24:
-            raise ValueError("Precision must be between 4 and 24")
+    def __init__(self, precision: int = 12, hash_size: int = 32):
+        """Initialize the sketch.
         
+        Args:
+            precision: Number of bits to use for register addressing.
+            hash_size: Size of hash in bits (32 or 64)
+        """
         self.precision = precision
         self.num_registers = 1 << precision
+        self.hash_size = hash_size
         
-        if RUST_AVAILABLE:
-            self._sketch = RustHLLClass(precision)
+        if RUST_HLL_AVAILABLE:
+            self._sketch = RustHLLClass(precision, hash_size=hash_size)
             self._using_rust = True
         else:
             self.registers = np.zeros(self.num_registers, dtype=np.float64)
@@ -44,9 +67,12 @@ class RustHLL:
     def add(self, value: str) -> None:
         """Add a value to the sketch."""
         if self._using_rust:
-            self._sketch.add(value)
+            self._sketch.add_value(value)
         else:
-            hash_val = xxhash.xxh64(value.encode()).intdigest()
+            if self.hash_size == 32:
+                hash_val = xxhash.xxh32(value.encode()).intdigest()
+            else:
+                hash_val = xxhash.xxh64(value.encode()).intdigest()
             idx = hash_val & (self.num_registers - 1)
             rank = self._rho(hash_val)
             self.registers[idx] = max(self.registers[idx], rank)
@@ -54,7 +80,7 @@ class RustHLL:
     def _rho(self, value: int) -> int:
         """Calculate the position of the leftmost 1-bit."""
         if value == 0:
-            return 64
+            return self.hash_size
         return 1 + (value & -value).bit_length() - 1
         
     def estimate_cardinality(self) -> float:
@@ -178,7 +204,7 @@ class RustHLL:
     @classmethod
     def load(cls, filepath: str) -> 'RustHLL':
         """Load sketch from file."""
-        if RUST_AVAILABLE:
+        if RUST_HLL_AVAILABLE:
             sketch = cls()
             sketch._sketch = RustHLLClass.load(filepath)
             sketch._using_rust = True

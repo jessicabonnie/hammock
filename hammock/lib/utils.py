@@ -1,6 +1,6 @@
 import gzip
 from typing import Iterator, List, Optional
-from Bio import SeqIO
+from Bio import SeqIO # type: ignore
 
 def read_sequences(filename: str, chunk_size: int = 1000) -> Iterator[List[SeqIO.SeqRecord]]:
     """Read sequences from a FASTA/FASTQ file in chunks.

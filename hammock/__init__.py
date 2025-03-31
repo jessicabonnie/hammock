@@ -8,7 +8,7 @@ from hammock.lib.exact import ExactCounter
 from hammock.lib.sequences import SequenceSketch
 from hammock.lib.intervals import IntervalSketch
 from hammock.lib.minimizer import MinimizerSketch
-from hammock.lib.rusthll import RustHyperLogLog
+from hammock.lib.rusthll import RustHLL
 
 # Try importing the native RustHLL implementation
 try:
@@ -29,7 +29,7 @@ __all__ = [
     'SequenceSketch',
     'IntervalSketch',
     'MinimizerSketch',
-    'RustHyperLogLog'
+    'RustHLL'
 ]
 if RUST_HLL_AVAILABLE:
     __all__.append('RustHLLWrapper') 

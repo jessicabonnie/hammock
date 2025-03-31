@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
-use pyo3::types::PyDict;
+#[allow(unused_imports)]
 use std::collections::hash_map::DefaultHasher;
 #[allow(unused_imports)]
 use std::hash::{Hash, Hasher};
@@ -8,6 +8,8 @@ use std::cmp;
 use std::thread;
 use std::sync::{Arc, Mutex};
 use num_cpus;
+use bincode;
+use serde::{Serialize, Deserialize};
 
 /// A fast HyperLogLog implementation in Rust
 #[pyclass]
@@ -22,6 +24,8 @@ struct RustHLL {
     // Minimum batch size to trigger multithreading
     min_thread_batch: usize,
     compacted: bool,
+    // Track hash size (32 or 64 bits)
+    hash_size: u8,
 }
 
 // Internal implementation
@@ -38,7 +42,7 @@ impl RustHLL {
             let mut values = vec![0u8; hashes.len()];
             
             for i in 0..hashes.len() {
-                let (idx, val) = get_index_and_count(hashes[i], self.precision);
+                let (idx, val) = get_index_and_count(hashes[i], self.precision, self.hash_size);
                 indices[i] = idx;
                 values[i] = val;
             }
@@ -58,7 +62,7 @@ impl RustHLL {
         } else {
             // For small batches, process directly
             for &hash in hashes {
-                let (idx, val) = get_index_and_count(hash, self.precision);
+                let (idx, val) = get_index_and_count(hash, self.precision, self.hash_size);
                 self.update_register(idx, val);
             }
         }
@@ -98,11 +102,6 @@ impl RustHLL {
 
     fn max_register_value(&self) -> u8 {
         self.registers.iter().max().copied().unwrap_or(0)
-    }
-
-    #[allow(dead_code)]
-    fn is_empty(&self) -> bool {
-        self.registers.iter().all(|&r| r == 0)
     }
 
     fn fast_mle_estimate(&self) -> f64 {
@@ -169,9 +168,17 @@ impl RustHLL {
 #[pymethods]
 impl RustHLL {
     #[new]
-    pub fn new(precision: u8, use_threading: Option<bool>, min_thread_batch: Option<usize>) -> PyResult<Self> {
-        if precision < 4 || precision > 16 {
-            return Err(PyValueError::new_err("Precision must be between 4 and 16"));
+    #[pyo3(signature = (precision, use_threading=None, min_thread_batch=None, hash_size=None))]
+    pub fn new(precision: u8, use_threading: Option<bool>, min_thread_batch: Option<usize>, hash_size: Option<u8>) -> PyResult<Self> {
+        // Validate hash_size
+        let hash_size = hash_size.unwrap_or(32);  // Default to 32-bit hashing
+        if hash_size != 32 && hash_size != 64 {
+            return Err(PyValueError::new_err("hash_size must be 32 or 64"));
+        }
+
+        // Check if precision would exceed the hash length
+        if precision >= hash_size {
+            return Err(PyValueError::new_err(format!("Precision must be < {} ({}-bit hash)", hash_size, hash_size)));
         }
 
         let m = 1 << precision;
@@ -190,7 +197,13 @@ impl RustHLL {
             use_threading: use_threading.unwrap_or(true),
             min_thread_batch: min_thread_batch.unwrap_or(10000),
             compacted: false,
+            hash_size,
         })
+    }
+
+    #[getter]
+    pub fn hash_size(&self) -> u8 {
+        self.hash_size
     }
 
     pub fn set_threading(&mut self, use_threading: bool, min_batch_size: Option<usize>) -> PyResult<()> {
@@ -209,9 +222,13 @@ impl RustHLL {
     pub fn add_value(&mut self, value: &str) -> PyResult<()> {
         let mut hasher = DefaultHasher::new();
         value.hash(&mut hasher);
-        let hash = hasher.finish();
+        let hash = if self.hash_size == 32 {
+            hasher.finish() as u32 as u64
+        } else {
+            hasher.finish()
+        };
         
-        let (idx, val) = get_index_and_count(hash, self.precision);
+        let (idx, val) = get_index_and_count(hash, self.precision, self.hash_size);
         self.update_register(idx, val);
         Ok(())
     }
@@ -223,7 +240,12 @@ impl RustHLL {
         for value in values {
             let mut hasher = DefaultHasher::new();
             value.hash(&mut hasher);
-            hashes.push(hasher.finish());
+            let hash = if self.hash_size == 32 {
+                hasher.finish() as u32 as u64
+            } else {
+                hasher.finish()
+            };
+            hashes.push(hash);
         }
         
         // Second pass: process hashes in batches
@@ -237,6 +259,8 @@ impl RustHLL {
         
         let values_arc = Arc::new(values);
         let registers_arc = Arc::new(Mutex::new(vec![0u8; self.registers.len()]));
+        let precision = self.precision;
+        let hash_size = self.hash_size;  // Clone hash_size before the loop
         
         let mut handles = vec![];
         
@@ -250,7 +274,6 @@ impl RustHLL {
             
             let values_clone = Arc::clone(&values_arc);
             let registers_clone = Arc::clone(&registers_arc);
-            let precision = self.precision;
             
             let handle = thread::spawn(move || {
                 let mut local_registers = vec![0u8; 1 << precision];
@@ -258,9 +281,13 @@ impl RustHLL {
                 for value in &values_clone[start..end] {
                     let mut hasher = DefaultHasher::new();
                     value.hash(&mut hasher);
-                    let hash = hasher.finish();
+                    let hash = if hash_size == 32 {
+                        hasher.finish() as u32 as u64
+                    } else {
+                        hasher.finish()
+                    };
                     
-                    let (idx, val) = get_index_and_count(hash, precision);
+                    let (idx, val) = get_index_and_count(hash, precision, hash_size);
                     if local_registers[idx] < val {
                         local_registers[idx] = val;
                     }
@@ -343,11 +370,11 @@ impl RustHLL {
             union_registers[i] = cmp::max(self.registers[i], other.registers[i]);
         }
         
-        let mut intersection_sketch = RustHLL::new(self.precision, None, None)?;
+        let mut intersection_sketch = RustHLL::new(self.precision, None, None, None)?;
         intersection_sketch.registers = intersection_registers;
         intersection_sketch.alpha_mm = self.alpha_mm;
         
-        let mut union_sketch = RustHLL::new(self.precision, None, None)?;
+        let mut union_sketch = RustHLL::new(self.precision, None, None, None)?;
         union_sketch.registers = union_registers;
         union_sketch.alpha_mm = self.alpha_mm;
         
@@ -360,16 +387,98 @@ impl RustHLL {
         
         Ok(intersection / union)
     }
+
+    pub fn is_empty(&self) -> PyResult<bool> {
+        Ok(self.registers.iter().all(|&r| r == 0))
+    }
+
+    pub fn write(&self, filepath: &str) -> PyResult<()> {
+        use std::fs::File;
+        use std::io::Write;
+        use bincode::serialize;
+
+        let mut file = File::create(filepath)
+            .map_err(|e| PyValueError::new_err(format!("Failed to create file: {}", e)))?;
+
+        // Create a serializable struct with all the data
+        #[derive(Serialize)]
+        struct HLLData {
+            registers: Vec<u8>,
+            precision: u8,
+            hash_size: u8,
+            alpha_mm: f64,
+            use_threading: bool,
+            min_thread_batch: usize,
+            compacted: bool,
+        }
+
+        let data = HLLData {
+            registers: self.registers.clone(),
+            precision: self.precision,
+            hash_size: self.hash_size,
+            alpha_mm: self.alpha_mm,
+            use_threading: self.use_threading,
+            min_thread_batch: self.min_thread_batch,
+            compacted: self.compacted,
+        };
+
+        let serialized = serialize(&data)
+            .map_err(|e| PyValueError::new_err(format!("Failed to serialize data: {}", e)))?;
+
+        file.write_all(&serialized)
+            .map_err(|e| PyValueError::new_err(format!("Failed to write to file: {}", e)))?;
+
+        Ok(())
+    }
+
+    #[staticmethod]
+    pub fn load(filepath: &str) -> PyResult<Self> {
+        use std::fs::File;
+        use std::io::Read;
+        use bincode::deserialize;
+
+        let mut file = File::open(filepath)
+            .map_err(|e| PyValueError::new_err(format!("Failed to open file: {}", e)))?;
+
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)
+            .map_err(|e| PyValueError::new_err(format!("Failed to read file: {}", e)))?;
+
+        #[derive(Deserialize)]
+        struct HLLData {
+            registers: Vec<u8>,
+            precision: u8,
+            hash_size: u8,
+            alpha_mm: f64,
+            use_threading: bool,
+            min_thread_batch: usize,
+            compacted: bool,
+        }
+
+        let data: HLLData = deserialize(&buffer)
+            .map_err(|e| PyValueError::new_err(format!("Failed to deserialize data: {}", e)))?;
+
+        Ok(RustHLL {
+            registers: data.registers,
+            precision: data.precision,
+            mask: (1 << data.precision) - 1,
+            alpha_mm: data.alpha_mm,
+            use_threading: data.use_threading,
+            min_thread_batch: data.min_thread_batch,
+            compacted: data.compacted,
+            hash_size: data.hash_size,
+        })
+    }
 }
 
-fn get_index_and_count(hash: u64, precision: u8) -> (usize, u8) {
+fn get_index_and_count(hash: u64, precision: u8, hash_size: u8) -> (usize, u8) {
     // Get the index bits (lowest precision bits)
     let index = (hash & ((1 << precision) - 1)) as usize;
     
     // Get the remaining bits and count leading zeros
     let remaining = hash >> precision;
     let value = if remaining == 0 {
-        64 - precision + 1
+        hash_size - precision + 1
     } else {
         remaining.trailing_zeros() as u8 + 1
     };
