@@ -9,6 +9,7 @@ from hammock.lib.sequences import SequenceSketch
 from hammock.lib.intervals import IntervalSketch
 from hammock.lib.minimizer import MinimizerSketch
 from hammock.lib.rusthll import RustHLL
+from hammock.lib.abstractsketch import AbstractSketch
 
 # Try importing the native RustHLL implementation
 try:

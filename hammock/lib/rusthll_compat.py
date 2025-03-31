@@ -164,4 +164,56 @@ class RustHLLWrapper:
             result._sketch = HyperLogLog(hash_size=self._hash_size, precision=self._precision)
             result._sketch.registers = self._sketch.registers.copy()
             
-        return result 
+        return result
+        
+    def write(self, filepath: str) -> None:
+        """Write sketch to file."""
+        import os
+        import sys
+        
+        # Convert to absolute path and ensure directory exists
+        filepath = os.path.abspath(filepath)
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+            
+        try:
+            if hasattr(self._sketch, 'write'):
+                self._sketch.write(filepath)
+            elif hasattr(self._sketch, 'save'):
+                self._sketch.save(filepath)
+            else:
+                raise NotImplementedError("The underlying sketch implementation does not support writing to file")
+        except Exception as e:
+            print(f"Error saving sketch to {filepath}: {e}", file=sys.stderr)
+            raise
+            
+    @classmethod
+    def load(cls, filepath: str):
+        """Load sketch from file."""
+        import os
+        import sys
+        
+        # Convert to absolute path
+        filepath = os.path.abspath(filepath)
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Sketch file not found: {filepath}")
+            
+        try:
+            # Try using Rust implementation first
+            try:
+                import rust_hll
+                sketch = cls()
+                sketch._sketch = rust_hll.RustHLL.load(filepath)
+                sketch._using_rust = True
+                return sketch
+            except (ImportError, Exception) as e:
+                # Fall back to Python implementation
+                from hammock.lib.hyperloglog import HyperLogLog
+                sketch = cls()
+                sketch._sketch = HyperLogLog.load(filepath)
+                sketch._using_rust = False
+                return sketch
+        except Exception as e:
+            print(f"Error loading sketch from {filepath}: {e}", file=sys.stderr)
+            raise 

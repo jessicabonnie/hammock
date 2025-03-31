@@ -253,7 +253,8 @@ class RustHyperLogLog(AbstractSketch):
         
         self._sketch.merge(other._sketch)
         
-    def save(self, filepath: str) -> None:
+        
+    def write(self, filepath: str) -> None:
         """Write sketch to file."""
         # Convert to absolute path and ensure directory exists
         filepath = os.path.abspath(filepath)
