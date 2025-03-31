@@ -1,0 +1,17 @@
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeA_2.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeA_3.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeA_4.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeA_5.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeA_6.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeA_7.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeA_8.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeA_9.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeB_2.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeB_3.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeB_4.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeB_5.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeB_6.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeB_7.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeB_8.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_modeB_9.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/CTCF_hg38_c3_no_overlap.bed

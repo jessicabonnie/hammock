@@ -1,0 +1,17 @@
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeA_2.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeA_3.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeA_4.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeA_5.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeA_6.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeA_7.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeA_8.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeA_9.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeB_2.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeB_3.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeB_4.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeB_5.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeB_6.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeB_7.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeB_8.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_modeB_9.bed
+/home/jbonnie1/interval_sketch/hammock/cmode/generated/remap2022_crm_macs2_hg38_v1_0_no_overlap.bed

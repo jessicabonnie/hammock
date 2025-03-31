@@ -1,0 +1,15 @@
+/data/blangme2/jessica/mus_homo/report_2025_0205/processed_n75/ENCFF858CCP.bed.gz
+/data/blangme2/jessica/mus_homo/report_2025_0205/processed_n75/ENCFF081WNU.bed.gz
+/data/blangme2/jessica/mus_homo/report_2025_0205/processed_n75/ENCFF489ORF.bed.gz
+/data/blangme2/jessica/mus_homo/report_2025_0205/processed_n75/ENCFF482LTD.bed.gz
+/data/blangme2/jessica/mus_homo/report_2025_0205/processed_n75/ENCFF310RKB.bed.gz
+/data/blangme2/jessica/mus_homo/report_2025_0205/processed_n75/ENCFF995IBF.bed.gz
+/data/blangme2/jessica/mus_homo/report_2025_0205/processed_n75/ENCFF962WEB.bed.gz
+/data/blangme2/jessica/mus_homo/report_2025_0205/processed_n75/ENCFF404QVP.bed.gz
+/data/blangme2/jessica/mus_homo/report_2025_0205/processed_n75/ENCFF080QJP.bed.gz
+/data/blangme2/jessica/mus_homo/report_2025_0205/processed_n75/ENCFF989BEN.bed.gz
+/data/blangme2/jessica/mus_homo/report_2025_0205/processed_n75/ENCFF021JKS.bed.gz
+/data/blangme2/jessica/mus_homo/report_2025_0205/processed_n75/ENCFF409JYK.bed.gz
+/data/blangme2/jessica/mus_homo/report_2025_0205/processed_n75/ENCFF456QXH.bed.gz
+/data/blangme2/jessica/mus_homo/report_2025_0205/processed_n75/ENCFF971ONK.bed.gz
+/data/blangme2/jessica/mus_homo/report_2025_0205/processed_n75/ENCFF883QMV.bed.gz
