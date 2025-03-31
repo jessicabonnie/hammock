@@ -9,6 +9,24 @@ git clone https://github.com/jessicabonnie/hammock.git
 cd hammock
 pip install -e .
 ```
+
+For optimal performance, you can use the Rust implementation of HyperLogLog. There are two ways to build the Rust extension:
+
+1. Using the automated build script (recommended):
+```bash
+python build_rust.py
+```
+This script will:
+- Install maturin if not already installed
+- Build the Rust extension
+- Verify the installation
+
+2. Manual build:
+```bash
+cd rust_hll
+python -m maturin develop
+```
+
 `hammock`'s mode D makes use of `Digest`, a C++ library that supports various sub-sampling schemes for $k$-mers in DNA sequences. `Digest` is now available on bioconda:    
 ```bash
 conda install -c bioconda digest
@@ -69,6 +87,8 @@ Sketching Options:
 - `--exact`: Use exact counting
 - `--precision`, `-p`: Precision for HyperLogLog (default: 8)
 - `--num_hashes`, `-n`: Number of hashes for MinHash (default: 128)
+- `--hashsize`: Hash size in bits for HyperLogLog (32 or 64, default: 64)
+- `--rust`: Use the Rust implementation of HyperLogLog for better performance
 
 Mode C Options:
 - `--subA`: Subsampling rate for intervals (default: 1.0)
@@ -103,6 +123,12 @@ hammock files.txt primary.txt --subA 0.5 --subB 0.5
 
 # Compare sequences (automatically uses mode D)
 hammock fasta_files.txt primary_fastas.txt
+
+# Use Rust implementation with 32-bit hashing
+hammock files.txt primary.txt --rust --hashsize 32
+
+# Use Rust implementation with 64-bit hashing (default)
+hammock files.txt primary.txt --rust --hashsize 64
 ```
 
 ## Testing
