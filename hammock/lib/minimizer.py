@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 from Bio import SeqIO # type: ignore
 from digest import window_minimizer # type: ignore
-from typing import Optional, Union, Literal, Dict
+from typing import Optional, Union, Literal, Dict, List
 from hammock.lib.abstractsketch import AbstractSketch
 from hammock.lib.hyperloglog import HyperLogLog
+import numpy as np
 
 class MinimizerSketch(AbstractSketch):
     def __init__(self, 
@@ -27,10 +28,10 @@ class MinimizerSketch(AbstractSketch):
         self.gapn = gapn
         self.seed = seed
         self.debug = debug
-        # Use HyperLogLog directly for both sketches
-        self.minimizer_sketch = HyperLogLog(kmer_size=0)
-        self.gap_sketch = HyperLogLog(kmer_size=0)
-        self.startend_sketch = HyperLogLog(kmer_size=0)
+        # Initialize HyperLogLog sketches with proper parameters
+        self.minimizer_sketch = HyperLogLog(kmer_size=kmer_size, window_size=window_size, seed=seed)
+        self.gap_sketch = HyperLogLog(kmer_size=kmer_size, window_size=window_size, seed=seed)
+        self.startend_sketch = HyperLogLog(kmer_size=kmer_size, window_size=window_size, seed=seed)
         self.startend_kmers = set()
         self.minimizers = set()
     
@@ -65,42 +66,36 @@ class MinimizerSketch(AbstractSketch):
         
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
-        if not s or len(s) < self.kmer_size or len(s)==0:
-            return
-            
-        # Get minimizers and their positions
-        try:
-            minimizers = window_minimizer(s, self.kmer_size, self.window_size, include_hash=True)
-            
-            if self.debug:
-                print(f"\nDebug: add_string")
-                print(f"Number of minimizers found: {len(minimizers)}")
-                print(f"First few minimizers (pos, hash): {minimizers[:5]}")
-            
-            # 1. Add minimizer hashes to sketch
-            for _, h in minimizers:
-                self.minimizer_sketch.add_string(str(h))
-                self.minimizers.add(h)
-            # 2. Store start+end k-mers separately
-            if len(s) >= self.kmer_size:
-                self.startend_kmers.add(s[:self.kmer_size]+
-                                    s[-self.kmer_size:])
-                self.startend_sketch.add_string(s[:self.kmer_size]+
-                                    s[-self.kmer_size:])
-                
-                if self.debug:
-                    print(f"End k-mers added: {s[:self.kmer_size]}, {s[-self.kmer_size:]}")
-            
-            # Calculate and store gap patterns
-            # NOTE: currently cycling through minimizers more than once
-            self._process_gap_patterns(minimizers)
-            
-        except RuntimeError as e:
-            if self.debug:
-                print(f"Error in add_string: {str(e)}")
-                print(f"Parameters: k={self.kmer_size}, w={self.window_size}, gapn={self.gapn}")
-            return
-            
+        # Get minimizers from the string
+        minimizers = window_minimizer(s, self.window_size, self.kmer_size, self.seed)
+        
+        # Add minimizers to the sketch
+        for _, hash_val in minimizers:
+            self.minimizer_sketch.add_string(str(hash_val))
+            self.minimizers.add(hash_val)
+        
+        # Process gap patterns if gapn > 0
+        if self.gapn > 0:
+            self._process_gap_patterns(minimizers, self.debug)
+        
+        # Add start and end k-mers
+        if len(s) >= self.kmer_size:
+            start_kmer = s[:self.kmer_size]
+            end_kmer = s[-self.kmer_size:]
+            self.startend_sketch.add_string(start_kmer)
+            self.startend_sketch.add_string(end_kmer)
+            self.startend_kmers.add(start_kmer)
+            self.startend_kmers.add(end_kmer)
+    
+    def add_batch(self, strings: List[str]) -> None:
+        """Add multiple strings to the sketch.
+        
+        Args:
+            strings: List of strings to add to the sketch
+        """
+        for s in strings:
+            self.add_string(s)
+    
     def compare_overlaps(self, other: 'MinimizerSketch') -> Dict[str, float]:
         """Returns dictionary of similarity metrics between two minimizer sketches.
         
@@ -210,3 +205,53 @@ class MinimizerSketch(AbstractSketch):
         result.startend_sketch = self.startend_sketch.merge(other.startend_sketch)
         
         return result
+
+    def write(self, filepath: str) -> None:
+        """Write sketch to file."""
+        # Save the sketches to a single npz file
+        np.savez(filepath,
+                 # Save HyperLogLog sketches
+                 minimizer_sketch_registers=self.minimizer_sketch.registers,
+                 gap_sketch_registers=self.gap_sketch.registers,
+                 startend_sketch_registers=self.startend_sketch.registers,
+                 
+                 # Save sets
+                 minimizers=list(self.minimizers),
+                 startend_kmers=list(self.startend_kmers),
+                 
+                 # Save parameters
+                 kmer_size=self.kmer_size,
+                 window_size=self.window_size,
+                 gapn=self.gapn,
+                 seed=self.seed,
+                 debug=self.debug)
+
+    @classmethod
+    def load(cls, filepath: str) -> 'MinimizerSketch':
+        """Load sketch from file."""
+        try:
+            # Load the npz file
+            data = np.load(filepath + '.npz', allow_pickle=True)
+            
+            # Create new sketch with loaded parameters
+            sketch = cls(
+                kmer_size=int(data['kmer_size']),
+                window_size=int(data['window_size']),
+                gapn=int(data['gapn']),
+                seed=int(data['seed']),
+                debug=bool(data['debug'])
+            )
+            
+            # Restore the sets
+            sketch.minimizers = set(data['minimizers'])
+            sketch.startend_kmers = set(data['startend_kmers'])
+            
+            # Restore the registers for each sketch
+            sketch.minimizer_sketch.registers = data['minimizer_sketch_registers']
+            sketch.gap_sketch.registers = data['gap_sketch_registers']
+            sketch.startend_sketch.registers = data['startend_sketch_registers']
+            
+            return sketch
+            
+        except Exception as e:
+            raise ValueError(f"Could not load sketch from file: {str(e)}")

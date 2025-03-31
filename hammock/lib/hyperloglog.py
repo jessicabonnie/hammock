@@ -1,9 +1,7 @@
 import numpy as np # type: ignore
 import xxhash # type: ignore
 from hammock.lib.abstractsketch import AbstractSketch
-from typing import Dict, Optional
-
-MAXBIT=32
+from typing import Dict, Optional, List
 
 class HyperLogLog(AbstractSketch):
     def __init__(self, 
@@ -11,21 +9,42 @@ class HyperLogLog(AbstractSketch):
                  kmer_size: int = 0, 
                  window_size: int = 0, 
                  seed: Optional[int] = None,
-                 debug: bool = False):
+                 debug: bool = False,
+                 expected_cardinality: Optional[int] = None,
+                 hash_size: int = 32):
         """Initialize HyperLogLog sketch.
         
         Args:
-            precision: Number of bits for register indexing (4-16)
+            precision: Number of bits for register indexing (4-{hash_size-1})
                       Lower values (8-10) work better for sparse sets
-                      Higher values (14-16) work better for dense sets
+                      Higher values (14-24) work better for dense sets
             kmer_size: Size of k-mers (0 for whole string mode)
             window_size: Size of sliding window (0 or == kmer_size for no windowing)
             seed: Random seed for hashing
             debug: Whether to print debug information
+            expected_cardinality: Expected number of unique items. If provided, precision will be adjusted.
+            hash_size: Size of hash in bits (32 or 64)
         """
         super().__init__()
-        if precision < 4 or precision > 30:
-            raise ValueError("Precision must be between 4 and 30")
+        
+        if hash_size not in [32, 64]:
+            raise ValueError("hash_size must be 32 or 64")
+        
+        if expected_cardinality is not None:
+            # Adjust precision based on expected cardinality
+            if expected_cardinality < 1000:
+                precision = 8  # For small sets, use lower precision
+            elif expected_cardinality < 10000:
+                precision = 12  # For medium sets
+            elif expected_cardinality < 100000:
+                precision = 18  # For larger sets
+            else:
+                precision = 22  # For very large sets
+        
+        if precision < 4:
+            raise ValueError(f"Precision must be at least 4")
+        if precision >= hash_size:
+            raise ValueError(f"Precision must be less than hash_size ({hash_size})")
         
         if kmer_size < 0:
             raise ValueError("k-mer size must be non-negative")
@@ -40,6 +59,7 @@ class HyperLogLog(AbstractSketch):
         self.window_size = window_size if window_size else kmer_size
         self.debug = debug
         self.seed = seed if seed is not None else 42
+        self.hash_size = hash_size
 
         self.item_count = 0
         
@@ -89,21 +109,33 @@ class HyperLogLog(AbstractSketch):
     #     return self._hash64_int(x, seed=self.seed)
 
     @staticmethod
-    def _hash_str(s: bytes, seed: int = 0) -> int:
-        """Hash a string using xxhash."""
-        hasher = xxhash.xxh32(seed=seed) if MAXBIT == 32 else xxhash.xxh64(seed=seed)
+    def _hash_str(s: bytes, seed: int = 0, hash_size: int = 32) -> int:
+        """Hash a string using xxhash.
+        
+        Args:
+            s: String to hash
+            seed: Random seed for hashing
+            hash_size: Size of hash in bits (32 or 64)
+            
+        Returns:
+            Hash value as integer
+        """
+        if hash_size == 32:
+            hasher = xxhash.xxh32(seed=seed)
+        else:
+            hasher = xxhash.xxh64(seed=seed)
         hasher.update(s)
         return hasher.intdigest()
 
     def hash_str(self, s: bytes) -> int:
         """Instance method to hash a string using the instance's seed."""
-        return self._hash_str(s, seed=self.seed)
+        return self._hash_str(s, seed=self.seed, hash_size=self.hash_size)
 
     def _rho(self, hash_val: int) -> int:
         """Calculate position of leftmost 1-bit."""
         hash_val >>= self.precision
         pos = 1
-        while (hash_val & 1) == 0 and pos <= MAXBIT:
+        while (hash_val & 1) == 0 and pos <= self.hash_size - self.precision:
             pos += 1
             hash_val >>= 1
         return pos
@@ -117,7 +149,7 @@ class HyperLogLog(AbstractSketch):
     
     def _register_counts(self) -> np.ndarray:
         """Get counts of registers."""
-        return np.bincount(self.registers, minlength=MAXBIT)
+        return np.bincount(self.registers, minlength=self.hash_size - self.precision + 1)
 
     def add_string_with_minimizers(self, s: str) -> None:
         """Add a string to the sketch using minimizer windowing scheme.
@@ -155,7 +187,7 @@ class HyperLogLog(AbstractSketch):
             # Find minimum hash in this window
             for j in range(self.window_size - self.kmer_size + 1):
                 kmer = window[j:j + self.kmer_size]
-                h = self._hash_str(kmer.encode(), seed=self.seed)
+                h = self._hash_str(kmer.encode(), seed=self.seed, hash_size=self.hash_size)
                 if h < min_hash:
                     min_hash = h
                     min_pos = j
@@ -186,6 +218,15 @@ class HyperLogLog(AbstractSketch):
         for i in range(len(s) - self.kmer_size + 1):
             self._process_kmer(s[i:i + self.kmer_size])
 
+    def add_batch(self, strings: List[str]) -> None:
+        """Add multiple strings to the sketch.
+        
+        Args:
+            strings: List of strings to add to the sketch
+        """
+        for s in strings:
+            self.add_string(s)
+
     def hash64_int(self, x: int) -> int:
         """Instance method to hash an integer using the instance's seed."""
         return self._hash64_int(x, seed=self.seed)
@@ -197,7 +238,10 @@ class HyperLogLog(AbstractSketch):
     def add_int(self, value: int) -> None:
         """Add an integer to the sketch."""
         self.item_count += 1
-        hash_val = self.hash32_int(value) if MAXBIT == 32 else self.hash64_int(value)
+        if self.hash_size == 32:
+            hash_val = self._hash32_int(value, self.seed)
+        else:
+            hash_val = self._hash64_int(value, self.seed)
         idx = hash_val & (self.num_registers - 1)
         rank = self._rho(hash_val)
         self.registers[idx] = max(self.registers[idx], rank)
@@ -217,7 +261,6 @@ class HyperLogLog(AbstractSketch):
             raise ValueError(f"Invalid method: {method}")
         
     def original_estimate(self) -> float:
-        # NOTE: This is using 32-bit registers, but the rest of the code is using 64-bit registers...
         m = float(self.num_registers)
         alpha = self._get_alpha(m)
         
@@ -225,15 +268,23 @@ class HyperLogLog(AbstractSketch):
         raw_estimate = alpha * m * m / np.sum(register_harmonics)
         
         # Small range correction
-        if raw_estimate <= 2.5 * m:  # Back to 2.5*m
+        if raw_estimate <= 2.5 * m:
             v = np.sum(self.registers == 0)
             if v > 0:
                 raw_estimate = m * np.log(m / float(v))
                 return raw_estimate
         
         # Large range correction
-        if raw_estimate > pow(2, MAXBIT) / 32.0:  # Adjusted from 35.0
-            raw_estimate = -pow(2, MAXBIT) * np.log(1.0 - raw_estimate / pow(2, MAXBIT))
+        max_value = pow(2, self.hash_size - self.precision)
+        if raw_estimate > max_value / 32.0:
+            # Calculate the argument for logarithm with safety check
+            log_arg = 1.0 - raw_estimate / max_value
+            # If the argument is close to or less than zero, cap the estimate
+            if log_arg <= 0.000001:  # Small epsilon to avoid numerical issues
+                return 0.9 * max_value  # Return slightly less than max_value
+            
+            # Safe to calculate the logarithm now
+            raw_estimate = -max_value * np.log(log_arg)
         
         return raw_estimate
 
@@ -270,7 +321,7 @@ class HyperLogLog(AbstractSketch):
         # counts = self.register_counts()
     
         # Get counts of maxed registers
-        n_maxed_registers = self.register_counts[MAXBIT-self.precision + 1]
+        n_maxed_registers = self.register_counts[self.hash_size - self.precision + 1]
         non_maxreg_frac = (m - n_maxed_registers)/m
          # Get counts of zero registers
         zero_reg_frac = self.register_counts[0]/m
@@ -279,7 +330,7 @@ class HyperLogLog(AbstractSketch):
         tau = self._get_tau(non_maxreg_frac)
         z = m * tau
         # Process intermediate registers
-        for i in range(MAXBIT - self.precision, 0, -1):
+        for i in range(self.hash_size - self.precision, 0, -1):
             z += self.register_counts[i]  # Add count for this register value
             z *= 0.5 # geometric scaling
         
@@ -312,10 +363,10 @@ class HyperLogLog(AbstractSketch):
         # k_max: Find last non-zero register count to skip empty high registers
         # This avoids unnecessary computation for register values that can't occur
         # given our precision parameter
-        k_max = MAXBIT - self.precision
+        k_max = self.hash_size - self.precision
         while k_max > 0 and self.register_counts[k_max] == 0:
             k_max -= 1
-        k_max = min(MAXBIT - self.precision, k_max)  # Ensure we don't exceed maximum possible value
+        k_max = min(self.hash_size - self.precision, k_max)  # Ensure we don't exceed maximum possible value
         
         # Only calculate probabilities for non-zero register counts within our bounds
         # This optimization:
@@ -334,19 +385,20 @@ class HyperLogLog(AbstractSketch):
     def ertl_mle_estimate(self, relative_error: float = 1e-2) -> float:
         """Estimate cardinality using Ertl's Maximum Likelihood Estimation method."""
         num_registers = 1 << self.precision
-        max_register_value = MAXBIT - self.precision
+        max_register_value = self.hash_size - self.precision
         
-        # Check if all registers are maxed out
-        if self.register_counts[max_register_value + 1] == num_registers:
+        # Check if all registers are maxed out - fix potential index out of bounds
+        register_counts_size = len(self.register_counts)
+        if max_register_value + 1 < register_counts_size and self.register_counts[max_register_value + 1] == num_registers:
             return float('inf')
         
         # Find bounds for non-zero register values
         min_nonzero_value = 0
-        while min_nonzero_value < MAXBIT and self.register_counts[min_nonzero_value] == 0:
+        while min_nonzero_value < self.hash_size and self.register_counts[min_nonzero_value] == 0:
             min_nonzero_value += 1
         min_value_bound = max(1, min_nonzero_value)  # Ensure minimum of 1 for numerical stability
         
-        max_nonzero_value = max_register_value + 1
+        max_nonzero_value = min(max_register_value, register_counts_size - 1)
         while max_nonzero_value > 0 and self.register_counts[max_nonzero_value] == 0:
             max_nonzero_value -= 1
         max_value_bound = min(max_register_value, max_nonzero_value)
@@ -358,15 +410,20 @@ class HyperLogLog(AbstractSketch):
         harmonic_mean = harmonic_mean * (2.0 ** -min_value_bound)  # Scale by power of 2
         
         # Initialize estimation parameters
-        maxed_register_count = self.register_counts[max_register_value + 1]
-        if max_register_value:
+        maxed_register_count = 0
+        if max_register_value + 1 < register_counts_size:
+            maxed_register_count = self.register_counts[max_register_value + 1]
+        if max_register_value < register_counts_size and max_value_bound < register_counts_size:
             maxed_register_count += self.register_counts[max_value_bound]
         
         zero_correction = harmonic_mean + self.register_counts[0]
         active_registers = num_registers - self.register_counts[0]
         
         # Initial estimate using improved bound
-        prev_estimate = harmonic_mean + self.register_counts[max_register_value + 1] * (2.0 ** -max_register_value)
+        prev_estimate = harmonic_mean
+        if max_register_value + 1 < register_counts_size:
+            prev_estimate += self.register_counts[max_register_value + 1] * (2.0 ** -max_register_value)
+        
         if prev_estimate <= 1.5 * zero_correction:
             cardinality_estimate = active_registers / (0.5 * prev_estimate + zero_correction)
         else:
@@ -392,12 +449,19 @@ class HyperLogLog(AbstractSketch):
             # Update probability estimate for each register value
             total_probability = maxed_register_count * prob_estimate
             for register_value in range(max_value_bound - 1, min_value_bound - 1, -1):
-                prob_complement = 1.0 - prob_estimate
-                prob_estimate = ((scaled_estimate + prob_estimate * prob_complement) / 
-                               (scaled_estimate + prob_complement))
-                scaled_estimate *= 2
-                if self.register_counts[register_value] > 0:
-                    total_probability += self.register_counts[register_value] * prob_estimate
+                if register_value < register_counts_size:  # Check bounds
+                    prob_complement = 1.0 - prob_estimate
+                    prob_estimate = ((scaled_estimate + prob_estimate * prob_complement) / 
+                                   (scaled_estimate + prob_complement))
+                    scaled_estimate *= 2
+                    if self.register_counts[register_value] > 0:
+                        total_probability += self.register_counts[register_value] * prob_estimate
+                else:
+                    # Skip this iteration if register_value is out of bounds
+                    prob_complement = 1.0 - prob_estimate
+                    prob_estimate = ((scaled_estimate + prob_estimate * prob_complement) / 
+                                   (scaled_estimate + prob_complement))
+                    scaled_estimate *= 2
             
             total_probability += cardinality_estimate * zero_correction
             
@@ -408,10 +472,9 @@ class HyperLogLog(AbstractSketch):
             else:
                 estimate_change = 0
             
-            cardinality_estimate += estimate_change
-            prev_estimate = total_probability
+            prev_estimate += estimate_change
         
-        return cardinality_estimate * num_registers
+        return prev_estimate * num_registers
 
  
     def _get_sigma(self, x: float) -> float:
@@ -461,7 +524,7 @@ class HyperLogLog(AbstractSketch):
         """
         # Sum 2^(-max(register)) for each register
         # sum_inv = sum(math.pow(2.0, -max(0, x)) for x in self.registers)
-        registers = np.array(self.registers, dtype=(np.float32 if MAXBIT == 32 else np.float64))
+        registers = np.array(self.registers, dtype=(np.float32 if self.hash_size == 32 else np.float64))
         sum_inv = np.sum(np.exp2(-registers))
         
         # Calculate alpha_m * m^2 / sum
@@ -650,7 +713,8 @@ class HyperLogLog(AbstractSketch):
             precision=np.array([self.precision]),
             kmer_size=np.array([self.kmer_size]),
             window_size=np.array([self.window_size]),
-            seed=np.array([self.seed])
+            seed=np.array([self.seed]),
+            hash_size=np.array([self.hash_size])
         )
 
     @classmethod
@@ -668,7 +732,8 @@ class HyperLogLog(AbstractSketch):
             precision=int(data['precision'][0]),
             kmer_size=int(data['kmer_size'][0]),
             window_size=int(data['window_size'][0]),
-            seed=int(data['seed'][0])
+            seed=int(data['seed'][0]),
+            hash_size=int(data['hash_size'][0])
         )
         sketch.registers = data['registers']
         return sketch
