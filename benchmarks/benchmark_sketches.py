@@ -9,8 +9,8 @@ from hammock.lib.minimizer import MinimizerSketch
 from hammock.lib.exact import ExactCounter
 from hammock.lib.setsketch import SetSketch
 import random
-import numpy as np
-import matplotlib.pyplot as plt
+import numpy as np # type: ignore
+import matplotlib.pyplot as plt # type: ignore
 
 # Create results directory if it doesn't exist
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), 'results')
@@ -127,20 +127,75 @@ def plot_results(title, x_data, y_data, x_label, y_label, legend_loc='upper left
     
     plt.close()
 
+def plot_accuracy_results(results, base_filename):
+    """Create a single figure with accuracy subplots for different item counts."""
+    # Create a figure with subplots
+    fig = plt.figure(figsize=(20, 15))
+    
+    # Get the number of item counts and create a grid of subplots
+    num_items = len(NUM_ITEMS)
+    num_cols = 3  # Number of columns in the grid
+    num_rows = (num_items + num_cols - 1) // num_cols  # Calculate number of rows needed
+    
+    for idx, num in enumerate(NUM_ITEMS):
+        ax = fig.add_subplot(num_rows, num_cols, idx + 1)
+        
+        # Plot accuracy for each sketch type
+        for sketch_name, data in results.items():
+            precisions = []
+            errors = []
+            for p in PRECISION_VALUES:
+                if p in data and num in data[p]:
+                    precisions.append(p)
+                    errors.append(data[p][num]['error'])
+            
+            if precisions and errors:  # Only plot if we have data
+                ax.plot(precisions, errors, marker='o', label=sketch_name)
+        
+        ax.set_title(f'Accuracy at {num:,} Items')
+        ax.set_xlabel('Precision')
+        ax.set_ylabel('Error (%)')
+        ax.grid(True)
+        ax.legend(loc='upper right')
+    
+    # Adjust layout to prevent overlap
+    plt.tight_layout()
+    
+    # Save the figure
+    plt.savefig(os.path.join(RESULTS_DIR, f'{base_filename}_accuracy.png'))
+    plt.close()
+
 def run_benchmarks():
-    """Run all benchmarks and return the results."""
+    """Run all benchmarks and save results."""
+    # Define sketch classes to benchmark
     sketch_classes = [HyperLogLog, MinHash, SetSketch]
     
-    results = {
-        'add': benchmark_add(sketch_classes),
-        'merge': benchmark_merge(sketch_classes),
-        'accuracy': benchmark_accuracy(sketch_classes)
-    }
+    # Run benchmarks
+    add_results = benchmark_add(sketch_classes)
+    batch_results = benchmark_add_batch(sketch_classes)
+    cardinality_results = benchmark_cardinality(sketch_classes)
+    merge_results = benchmark_merge(sketch_classes)
+    accuracy_results = benchmark_accuracy(sketch_classes)
+    
+    # Generate timestamp once for both outputs
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    script_name = os.path.splitext(os.path.basename(__file__))[0]
+    base_filename = f'{script_name}_{timestamp}'
     
     # Save results to file
-    save_results_to_file(results, 'sketch_comparison_results.txt')
+    save_results_to_file({
+        'ADD': add_results,
+        'ADD_BATCH': batch_results,
+        'CARDINALITY': cardinality_results,
+        'MERGE': merge_results,
+        'ACCURACY': accuracy_results
+    }, os.path.join(RESULTS_DIR, f'{base_filename}.txt'))
     
-    return results
+    # Plot all results in a single figure
+    plot_all_results(add_results, batch_results, cardinality_results, merge_results, accuracy_results, base_filename)
+    
+    # Plot accuracy results in a separate figure with subplots
+    plot_accuracy_results(accuracy_results, base_filename)
 
 if __name__ == "__main__":
     run_benchmarks() 
