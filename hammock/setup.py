@@ -22,6 +22,10 @@ setup(
             "black>=21.0",
             "mypy>=0.800",
             "flake8>=3.9",
+            "sphinx>=4.0.0",
+            "sphinx-rtd-theme>=1.0.0",
+            "sphinx-autodoc-typehints>=1.12.0",
+            "sphinx-copybutton>=0.5.0",
         ],
     },
     classifiers=[
