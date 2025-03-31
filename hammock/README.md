@@ -79,13 +79,12 @@ print(results)  # {'jaccard': 0.65, 'containment': 0.7, ...}
 results = compare_files(
     "file1.txt",
     "file2.txt",
-    mode='A',  # Compare intervals only
+    mode='C',  # Compare intervals and points
     sketch_type="hyperloglog",
-    precision=12,
-    num_hashes=64,
+    precision=14,
     subA=1.0,
     subB=1.0,
-    expA=0.5,
+    expA=3, # weight exact interval matches 10^3
     use_rust=True
 )
 print(results)
@@ -102,10 +101,9 @@ hammock files_to_compare.txt reference_files.txt
 # With options
 hammock files_to_compare.txt reference_files.txt \
     --mode A \
-    --precision 12 \
+    --minhash \
     --num_hashes 128 \
-    --threads 4 \
-    --outprefix results
+    --outprefix resultsname
 ```
 
 #### Input Files

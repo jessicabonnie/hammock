@@ -4,8 +4,8 @@ import os
 import time
 import random
 import subprocess
-import numpy as np
-import matplotlib.pyplot as plt
+import numpy as np # type: ignore
+import matplotlib.pyplot as plt # type: ignore
 from datetime import datetime
 import tempfile
 from typing import List
@@ -50,9 +50,16 @@ def run_hammock_benchmark(file1_list_path: str, file2_list_path: str, mode='A', 
         cmd.append('--rust')
     
     start_time = time.time()
-    subprocess.run(cmd, check=True, capture_output=True)
-    end_time = time.time()
-    return end_time - start_time
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        end_time = time.time()
+        return end_time - start_time
+    except subprocess.CalledProcessError as e:
+        print(f"\nError running hammock command: {' '.join(cmd)}")
+        print(f"Return code: {e.returncode}")
+        print(f"Error output: {e.stderr}")
+        print(f"Standard output: {e.stdout}")
+        raise
 
 def run_benchmark(num_files_list: List[int] = NUM_FILES_LIST, num_runs: int = NUM_RUNS):
     """Run benchmarks with different numbers of files."""
@@ -99,36 +106,62 @@ def run_benchmark(num_files_list: List[int] = NUM_FILES_LIST, num_runs: int = NU
                         key = f"hammock_{mode}_{sketch_type}_p{precision}"
                         times = []
                         for run in range(num_runs):
-                            time_taken = run_hammock_benchmark(
-                                file1_list_path, file2_list_path,
-                                mode=mode, sketch_type=sketch_type,
-                                precision=precision, use_rust=False
-                            )
-                            times.append(time_taken)
-                        hammock_results[key] = {
-                            'mean_time': np.mean(times),
-                            'std_time': np.std(times),
-                            'min_time': np.min(times),
-                            'max_time': np.max(times)
-                        }
+                            try:
+                                time_taken = run_hammock_benchmark(
+                                    file1_list_path, file2_list_path,
+                                    mode=mode, sketch_type=sketch_type,
+                                    precision=precision, use_rust=False
+                                )
+                                times.append(time_taken)
+                            except Exception as e:
+                                print(f"Skipping {key} run {run+1} due to error: {e}")
+                        
+                        if times:
+                            hammock_results[key] = {
+                                'mean_time': np.mean(times),
+                                'std_time': np.std(times) if len(times) > 1 else 0,
+                                'min_time': np.min(times),
+                                'max_time': np.max(times)
+                            }
+                        else:
+                            print(f"All runs failed for {key}, skipping this configuration")
+                            hammock_results[key] = {
+                                'mean_time': float('nan'),
+                                'std_time': float('nan'),
+                                'min_time': float('nan'),
+                                'max_time': float('nan')
+                            }
                         
                         # Run with Rust implementation for HyperLogLog
                         if sketch_type == 'hyperloglog':
                             key = f"hammock_{mode}_{sketch_type}_rust_p{precision}"
                             times = []
                             for run in range(num_runs):
-                                time_taken = run_hammock_benchmark(
-                                    file1_list_path, file2_list_path,
-                                    mode=mode, sketch_type=sketch_type,
-                                    precision=precision, use_rust=True
-                                )
-                                times.append(time_taken)
-                            hammock_results[key] = {
-                                'mean_time': np.mean(times),
-                                'std_time': np.std(times),
-                                'min_time': np.min(times),
-                                'max_time': np.max(times)
-                            }
+                                try:
+                                    time_taken = run_hammock_benchmark(
+                                        file1_list_path, file2_list_path,
+                                        mode=mode, sketch_type=sketch_type,
+                                        precision=precision, use_rust=True
+                                    )
+                                    times.append(time_taken)
+                                except Exception as e:
+                                    print(f"Skipping {key} run {run+1} due to error: {e}")
+                            
+                            if times:
+                                hammock_results[key] = {
+                                    'mean_time': np.mean(times),
+                                    'std_time': np.std(times) if len(times) > 1 else 0,
+                                    'min_time': np.min(times),
+                                    'max_time': np.max(times)
+                                }
+                            else:
+                                print(f"All runs failed for {key}, skipping this configuration")
+                                hammock_results[key] = {
+                                    'mean_time': float('nan'),
+                                    'std_time': float('nan'),
+                                    'min_time': float('nan'),
+                                    'max_time': float('nan')
+                                }
             
             # Store results
             result = {
@@ -168,23 +201,29 @@ def plot_results(results):
                                               ('B', 'minhash'), ('C', 'minhash')]):
         for precision in [8, 12, 16]:
             key = f"hammock_{mode}_{sketch_type}_p{precision}"
-            mean_times = [r[key]['mean_time'] for r in results]
-            std_times = [r[key]['std_time'] for r in results]
-            label = f"{key} (p={precision})"
-            ax2.errorbar(num_files, mean_times, yerr=std_times,
-                        fmt=f'{markers[idx]}-', capsize=5, color=colors[idx],
-                        label=label)
+            if all(key in r and not np.isnan(r[key]['mean_time']) for r in results):
+                mean_times = [r[key]['mean_time'] for r in results]
+                std_times = [r[key]['std_time'] for r in results]
+                label = f"{key} (p={precision})"
+                ax2.errorbar(num_files, mean_times, yerr=std_times,
+                            fmt=f'{markers[idx]}-', capsize=5, color=colors[idx],
+                            label=label)
+            else:
+                print(f"Skipping plot for {key} due to missing or NaN results")
     
     # Plot Rust implementation results
     for idx, mode in enumerate(['A', 'B', 'C']):
         for precision in [8, 12, 16]:
             key = f"hammock_{mode}_hyperloglog_rust_p{precision}"
-            mean_times = [r[key]['mean_time'] for r in results]
-            std_times = [r[key]['std_time'] for r in results]
-            label = f"{key} (p={precision})"
-            ax2.errorbar(num_files, mean_times, yerr=std_times,
-                        fmt=f'{markers[idx]}--', capsize=5, color=colors[idx],
-                        label=label)
+            if all(key in r and not np.isnan(r[key]['mean_time']) for r in results):
+                mean_times = [r[key]['mean_time'] for r in results]
+                std_times = [r[key]['std_time'] for r in results]
+                label = f"{key} (p={precision})"
+                ax2.errorbar(num_files, mean_times, yerr=std_times,
+                            fmt=f'{markers[idx]}--', capsize=5, color=colors[idx],
+                            label=label)
+            else:
+                print(f"Skipping plot for {key} due to missing or NaN results")
     
     # Customize plots
     for ax in [ax1, ax2]:

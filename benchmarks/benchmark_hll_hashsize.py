@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 import time
 import random
-import numpy as np
+import numpy as np # type: ignore
 from typing import List, Tuple, Dict
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt # type: ignore
 from datetime import datetime
 import os
 import sys
@@ -32,10 +32,10 @@ random.seed(42)
 np.random.seed(42)
 
 # Constants for benchmarking
-PRECISION_VALUES = [6, 8, 10, 12, 14, 16, 20, 24, 28, 30]
-DATA_SIZES = [1000, 10000, 100000, 1000000]
-BATCH_SIZES = [100, 1000, 10000]
-NUM_RUNS = 5
+PRECISION_VALUES = [8, 12, 16, 20]  # Most commonly used precision values
+DATA_SIZES = [10000, 100000]   # Most common data sizes
+BATCH_SIZES = [1000]           # Most common batch size
+NUM_RUNS = 3                   # Reduced number of runs
 
 def generate_test_data(size: int) -> List[str]:
     """Generate test data of specified size."""
@@ -214,63 +214,67 @@ def plot_results(results: Dict):
     # Plot add_string times
     ax = axes[0, 0]
     for impl in ['py_32', 'py_64', 'rust_32', 'rust_64']:
-        data = [r for r in results['add_string'] if r['implementation'] == impl and r['precision'] == 14]
+        data = [r for r in results['add_string'] if r['implementation'] == impl and r['precision'] == 12]
         sizes = [r['size'] for r in data]
         times = [r['mean_time'] for r in data]
         stds = [r['std_time'] for r in data]
         ax.errorbar(sizes, times, yerr=stds, label=impl)
     ax.set_xlabel('Number of Items')
     ax.set_ylabel('Time (seconds)')
-    ax.set_title('Add Value Performance (precision=14)')
+    ax.set_title('Add Value Performance (precision=12)')
     ax.legend()
     ax.set_xscale('log')
-    ax.set_yscale('log')
+    if min(times) > 0:  # Only use log scale if all values are positive
+        ax.set_yscale('log')
     
     # Plot add_batch times for largest batch size
     ax = axes[0, 1]
     batch_size = max(r['batch_size'] for r in results['add_batch'])
     for impl in ['py_32', 'py_64', 'rust_32', 'rust_64']:
         data = [r for r in results['add_batch'] 
-                if r['implementation'] == impl and r['batch_size'] == batch_size and r['precision'] == 14]
+                if r['implementation'] == impl and r['batch_size'] == batch_size and r['precision'] == 12]
         sizes = [r['size'] for r in data]
         times = [r['mean_time'] for r in data]
         stds = [r['std_time'] for r in data]
         ax.errorbar(sizes, times, yerr=stds, label=impl)
     ax.set_xlabel('Number of Items')
     ax.set_ylabel('Time (seconds)')
-    ax.set_title(f'Add Batch Performance (precision=14, batch_size={batch_size})')
+    ax.set_title(f'Add Batch Performance (precision=12, batch_size={batch_size})')
     ax.legend()
     ax.set_xscale('log')
-    ax.set_yscale('log')
+    if min(times) > 0:  # Only use log scale if all values are positive
+        ax.set_yscale('log')
     
     # Plot merge times
     ax = axes[1, 0]
     for impl in ['py_32', 'py_64', 'rust_32', 'rust_64']:
-        data = [r for r in results['merge'] if r['implementation'] == impl and r['precision'] == 14]
+        data = [r for r in results['merge'] if r['implementation'] == impl and r['precision'] == 12]
         sizes = [r['size'] for r in data]
         times = [r['mean_time'] for r in data]
         stds = [r['std_time'] for r in data]
         ax.errorbar(sizes, times, yerr=stds, label=impl)
     ax.set_xlabel('Number of Items')
     ax.set_ylabel('Time (seconds)')
-    ax.set_title('Merge Performance (precision=14)')
+    ax.set_title('Merge Performance (precision=12)')
     ax.legend()
     ax.set_xscale('log')
-    ax.set_yscale('log')
+    if min(times) > 0:  # Only use log scale if all values are positive
+        ax.set_yscale('log')
     
     # Plot relative errors
     ax = axes[1, 1]
     for impl in ['py_32', 'py_64', 'rust_32', 'rust_64']:
-        data = [r for r in results['accuracy'] if r['implementation'] == impl and r['precision'] == 14]
+        data = [r for r in results['accuracy'] if r['implementation'] == impl and r['precision'] == 12]
         sizes = [r['size'] for r in data]
         errors = [r['relative_error'] for r in data]
         ax.plot(sizes, errors, label=impl)
     ax.set_xlabel('Number of Items')
     ax.set_ylabel('Relative Error')
-    ax.set_title('Estimation Accuracy (precision=14)')
+    ax.set_title('Estimation Accuracy (precision=12)')
     ax.legend()
     ax.set_xscale('log')
-    ax.set_yscale('log')
+    if min(errors) > 0:  # Only use log scale if all values are positive
+        ax.set_yscale('log')
     
     plt.tight_layout()
     plt.savefig(RESULTS_PNG)
@@ -293,6 +297,8 @@ def plot_results(results: Dict):
     ax.set_ylabel('Time (seconds)')
     ax.set_title(f'Add Value Performance (size={size})')
     ax.legend()
+    if min(times) > 0:  # Only use log scale if all values are positive
+        ax.set_yscale('log')
     
     # Plot add_batch times by precision
     ax = axes[0, 1]
@@ -308,6 +314,8 @@ def plot_results(results: Dict):
     ax.set_ylabel('Time (seconds)')
     ax.set_title(f'Add Batch Performance (size={size}, batch_size={batch_size})')
     ax.legend()
+    if min(times) > 0:  # Only use log scale if all values are positive
+        ax.set_yscale('log')
     
     # Plot merge times by precision
     ax = axes[1, 0]
@@ -321,6 +329,8 @@ def plot_results(results: Dict):
     ax.set_ylabel('Time (seconds)')
     ax.set_title(f'Merge Performance (size={size})')
     ax.legend()
+    if min(times) > 0:  # Only use log scale if all values are positive
+        ax.set_yscale('log')
     
     # Plot relative errors by precision
     ax = axes[1, 1]
@@ -333,6 +343,8 @@ def plot_results(results: Dict):
     ax.set_ylabel('Relative Error')
     ax.set_title(f'Estimation Accuracy (size={size})')
     ax.legend()
+    if min(errors) > 0:  # Only use log scale if all values are positive
+        ax.set_yscale('log')
     
     plt.tight_layout()
     plt.savefig(RESULTS_PNG_PRECISION)
