@@ -6,6 +6,9 @@ from typing import Dict, Iterator, List, Optional, Union, TYPE_CHECKING
 
 from hammock.lib.abstractsketch import AbstractSketch
 from hammock.lib.utils import read_sequences
+from hammock.lib.minimizer import MinimizerSketch
+from hammock.lib.hyperloglog import HyperLogLog
+from hammock.lib.minhash import MinHash
 
 # Use TYPE_CHECKING to avoid circular imports
 if TYPE_CHECKING:
@@ -45,7 +48,6 @@ class SequenceSketch(AbstractSketch):
         
         # Create the appropriate sketch based on sketch_type
         if sketch_type == "minimizer":
-            from hammock.lib.minimizer import MinimizerSketch
             self.sketch = MinimizerSketch(
                 kmer_size=kmer_size,
                 window_size=window_size,
@@ -54,7 +56,6 @@ class SequenceSketch(AbstractSketch):
                 debug=debug
             )
         elif sketch_type == "hyperloglog":
-            from hammock.lib.hyperloglog import HyperLogLog
             self.sketch = HyperLogLog(
                 precision=precision,
                 kmer_size=kmer_size,
@@ -63,7 +64,6 @@ class SequenceSketch(AbstractSketch):
                 debug=debug
             )
         elif sketch_type == "minhash":
-            from hammock.lib.minhash import MinHash
             self.sketch = MinHash(
                 num_hashes=num_hashes,
                 kmer_size=kmer_size,
@@ -77,6 +77,15 @@ class SequenceSketch(AbstractSketch):
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
         self.sketch.add_string(s)
+    
+    def add_batch(self, strings: List[str]) -> None:
+        """Add multiple strings to the sketch.
+        
+        Args:
+            strings: List of strings to add to the sketch
+        """
+        for s in strings:
+            self.sketch.add_string(s)
     
     def estimate_jaccard(self, other: 'AbstractSketch') -> float:
         """Estimate Jaccard similarity with another sketch."""
@@ -142,29 +151,29 @@ class SequenceSketch(AbstractSketch):
     @classmethod
     def load(cls, filepath: str) -> 'SequenceSketch':
         """Load sketch from file."""
-        # First try loading as HyperLogLog
+        # Try each sketch type and catch specific exceptions
         try:
             sketch = HyperLogLog.load(filepath)
             seq_sketch = cls(sketch_type="hyperloglog")
             seq_sketch.sketch = sketch
             return seq_sketch
-        except:
+        except (ValueError, OSError):
             pass
 
-        # Then try as MinHash
         try:
             sketch = MinHash.load(filepath)
             seq_sketch = cls(sketch_type="minhash")
             seq_sketch.sketch = sketch
             return seq_sketch
-        except:
+        except (ValueError, OSError):
             pass
 
-        # Finally try as Minimizer
         try:
             sketch = MinimizerSketch.load(filepath)
             seq_sketch = cls(sketch_type="minimizer")
             seq_sketch.sketch = sketch
             return seq_sketch
-        except:
-            raise ValueError("Could not load sketch from file")
+        except (ValueError, OSError):
+            pass
+
+        raise ValueError(f"Could not load sketch from file: {filepath}")

@@ -147,3 +147,64 @@ python -m pytest hammock/tests/test_minhash.py
 # Run benchmarks
 python -m pytest hammock/tests/benchmark_sketches.py
 ```
+
+## Fast HyperLogLog with Rust
+
+For maximum performance, Hammock includes a native Rust implementation of HyperLogLog called `RustHLLWrapper`. This implementation provides significant speed improvements, especially for large datasets.
+
+### Installation
+
+The Rust implementation requires building the Rust extension:
+
+```bash
+cd rust_hll
+python -m maturin develop
+```
+
+### Usage
+
+```python
+from hammock import RustHLLWrapper
+
+# Create a sketch with precision 12 (2^12 = 4096 registers)
+sketch = RustHLLWrapper(precision=12)
+
+# Add values
+sketch.add("item1")
+sketch.add("item2")
+
+# Add in batch (much faster)
+sketch.add_batch(["item3", "item4", "item5", "item6"])
+
+# Get cardinality estimate
+estimate = sketch.cardinality()
+print(f"Estimated cardinality: {estimate}")
+
+# Merge with another sketch
+sketch2 = RustHLLWrapper(precision=12)
+sketch2.add_batch(["item5", "item6", "item7", "item8"])
+sketch.merge(sketch2)
+
+# Calculate Jaccard similarity
+jaccard = sketch.jaccard(sketch2)
+print(f"Jaccard similarity: {jaccard}")
+```
+
+### Performance Features
+
+The Rust implementation includes several performance optimizations:
+
+- Multi-threaded batch processing for large datasets
+- SIMD-style vectorized operations
+- Optimized hashing and register access
+- Fast Maximum Likelihood Estimation
+
+You can control threading with:
+
+```python
+# Disable threading
+sketch = RustHLLWrapper(precision=12, use_threading=False)
+
+# Enable threading with custom batch size threshold
+sketch = RustHLLWrapper(precision=12, use_threading=True, min_thread_batch=100000)
+```

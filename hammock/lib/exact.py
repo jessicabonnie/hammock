@@ -45,6 +45,14 @@ class ExactCounter(AbstractSketch):
             raise TypeError("Can only merge with another ExactCounter")
         self.elements.update(other.elements)
 
+    def add_batch(self, strings: List[str]) -> None:
+        """Add multiple strings to the counter.
+        
+        Args:
+            strings: List of strings to add to the counter
+        """
+        self.elements.update(strings)
+
     def write(self, filepath: str) -> None:
         """Write operation not supported for ExactCounter."""
         raise NotImplementedError("ExactCounter does not support writing to file")

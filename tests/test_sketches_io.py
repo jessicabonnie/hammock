@@ -7,6 +7,8 @@ from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
 from hammock.lib.exact import ExactCounter
 from hammock.lib.sequences import SequenceSketch
+import gzip
+from hammock.lib.intervals import IntervalSketch
 
 @pytest.fixture
 def temp_dir():
@@ -36,6 +38,48 @@ class TestSketchesIOQuick:
         assert hll.window_size == hll2.window_size
         assert hll.seed == hll2.seed
         np.testing.assert_array_equal(hll.registers, hll2.registers)
+
+    def test_hyperloglog_hash_size_io(self, temp_dir):
+        """Test HyperLogLog read/write functionality with different hash sizes."""
+        # Test with 32-bit hash
+        hll_32 = HyperLogLog(precision=8, hash_size=32)
+        hll_32.add_string("ACGTACGT")
+        
+        # Test with 64-bit hash
+        hll_64 = HyperLogLog(precision=8, hash_size=64)
+        hll_64.add_string("ACGTACGT")
+        
+        # Write to files
+        filepath_32 = os.path.join(temp_dir, "test_hll_32.npz")
+        filepath_64 = os.path.join(temp_dir, "test_hll_64.npz")
+        hll_32.write(filepath_32)
+        hll_64.write(filepath_64)
+        
+        # Read back and compare
+        hll_32_loaded = HyperLogLog.load(filepath_32)
+        hll_64_loaded = HyperLogLog.load(filepath_64)
+        
+        # Check hash sizes are preserved
+        assert hll_32.hash_size == hll_32_loaded.hash_size == 32
+        assert hll_64.hash_size == hll_64_loaded.hash_size == 64
+        
+        # Check other parameters are preserved
+        assert hll_32.precision == hll_32_loaded.precision
+        assert hll_64.precision == hll_64_loaded.precision
+        assert hll_32.kmer_size == hll_32_loaded.kmer_size
+        assert hll_64.kmer_size == hll_64_loaded.kmer_size
+        assert hll_32.window_size == hll_32_loaded.window_size
+        assert hll_64.window_size == hll_64_loaded.window_size
+        assert hll_32.seed == hll_32_loaded.seed
+        assert hll_64.seed == hll_64_loaded.seed
+        
+        # Check registers are preserved
+        np.testing.assert_array_equal(hll_32.registers, hll_32_loaded.registers)
+        np.testing.assert_array_equal(hll_64.registers, hll_64_loaded.registers)
+        
+        # Check cardinality estimates are reasonable
+        assert abs(hll_32.estimate_cardinality() - hll_32_loaded.estimate_cardinality()) < 1e-10
+        assert abs(hll_64.estimate_cardinality() - hll_64_loaded.estimate_cardinality()) < 1e-10
     
     def test_minhash_io(self, temp_dir):
         """Test MinHash read/write functionality."""
@@ -54,7 +98,7 @@ class TestSketchesIOQuick:
         assert mh.kmer_size == mh2.kmer_size
         assert mh.window_size == mh2.window_size
         assert mh.seed == mh2.seed
-        np.testing.assert_array_equal(mh.signatures, mh2.signatures)
+        np.testing.assert_array_equal(mh.hashers, mh2.hashers)
     
     # def test_exact_io(self, temp_dir):
     #     """Test ExactCounter read/write functionality."""
@@ -88,7 +132,7 @@ class TestSketchesIOFull:
         )
         # Use a longer sequence that's at least a few windows long
         test_seq = "ACGTACGTACGTACGT" * 8  # 128 bp sequence, longer than window size
-        seq.add_sequence(test_seq)
+        seq.add_string(test_seq)
         
         # Write to file
         filepath = os.path.join(temp_dir, "test_seq.npz")
@@ -135,6 +179,71 @@ class TestSketchesIOFull:
             counter.write("test.txt")
         with pytest.raises(NotImplementedError):
             ExactCounter.load("test.txt")
+
+    def test_gff_file_processing(self, temp_dir):
+        """Test processing of GFF format files."""
+        filepath = os.path.join(temp_dir, "test.gff")
+        with open(filepath, 'w') as f:
+            f.write("""##gff-version 3
+#!genome-build GRCh38.p13
+chr1\tHAVANA\tgene\t11869\t14409\t.\t+\t.\tID=ENSG00000223972.5
+chr1\tHAVANA\texon\t11869\t12227\t.\t+\t.\tParent=ENSG00000223972.5
+chr1\tHAVANA\tCDS\t12010\t12057\t.\t+\t0\tParent=ENSG00000223972.5
+chr1\tHAVANA\tgene\t14404\t29570\t.\t-\t.\tID=ENSG00000227232.5
+""")
+        
+        # Test basic GFF processing
+        sketch = IntervalSketch.from_file(filepath, mode="A")
+        assert sketch is not None
+        assert sketch.num_intervals == 4
+        
+        # Test feature filtering
+        sketch_genes = IntervalSketch.from_file(filepath, mode="A", feature_types=['gene'])
+        assert sketch_genes is not None
+        assert sketch_genes.num_intervals == 2
+
+    def test_gff_gz_processing(self, temp_dir):
+        """Test processing of gzipped GFF files."""
+        filepath = os.path.join(temp_dir, "test.gff.gz")
+        with gzip.open(filepath, 'wt') as f:
+            f.write("""##gff-version 3
+chr1\tHAVANA\tgene\t11869\t14409\t.\t+\t.\tID=ENSG00000223972.5
+""")
+        
+        sketch = IntervalSketch.from_file(filepath, mode="A")
+        assert sketch is not None
+        assert sketch.num_intervals == 1
+
+    def test_gff_coordinate_conversion(self, temp_dir):
+        """Test conversion from 1-based GFF coordinates to 0-based internal coordinates."""
+        gff_path = os.path.join(temp_dir, "test.gff")
+        bed_path = os.path.join(temp_dir, "test.bed")
+        
+        # Write equivalent GFF and BED files
+        with open(gff_path, 'w') as f:
+            f.write("""##gff-version 3
+chr1\ttest\tgene\t1\t100\t.\t+\t.\tID=test1
+""")
+        
+        with open(bed_path, 'w') as f:
+            f.write("chr1\t0\t100\n")  # BED coordinates are 0-based
+        
+        sketch_gff = IntervalSketch.from_file(gff_path, mode="A")
+        sketch_bed = IntervalSketch.from_file(bed_path, mode="A")
+        
+        assert sketch_gff is not None
+        assert sketch_bed is not None
+        assert sketch_gff.estimate_jaccard(sketch_bed) == 1.0
+
+    def test_invalid_gff(self, temp_dir):
+        """Test handling of invalid GFF files."""
+        filepath = os.path.join(temp_dir, "invalid.gff")
+        with open(filepath, 'w') as f:
+            f.write("invalid\tgff\tdata\n")
+        
+        sketch = IntervalSketch.from_file(filepath, mode="A")
+        assert sketch is not None
+        assert sketch.num_intervals == 0
 
 if __name__ == "__main__":
     pytest.main([__file__])
