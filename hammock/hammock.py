@@ -11,7 +11,7 @@ from typing import Optional, Dict, List, Tuple, Any
 from hammock.lib.abstractsketch import AbstractSketch
 from hammock.lib.intervals import IntervalSketch
 from hammock.lib.sequences import SequenceSketch
-from hammock.lib.minimizer import MinimizerSketch
+# from hammock.lib.minimizer import MinimizerSketch
 # from hammock.lib.exact import ExactCounter
 
 # Maximum precision for HyperLogLog sketches
@@ -360,8 +360,10 @@ def main():
     if args.mode != "C":
         if args.expA > 0:
             raise ValueError("--expA parameter is invalid outside of mode C")
-        if args.subA != 1.0 or args.subB != 1.0:
-            raise ValueError("Mode C is the only mode that allows subsampling. Please change mode to C or remove --subA and --subB from your command.")
+        if args.subA != 1.0:
+            raise ValueError("--subA parameter is only allowed in mode C")
+        if args.subB != 1.0 and args.mode != "B":
+            raise ValueError("--subB parameter is only allowed in modes B and C")
     else:
         if args.expA < 0:
             raise ValueError("--expA parameter must be non-negative for mode C")

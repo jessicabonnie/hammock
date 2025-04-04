@@ -16,7 +16,7 @@ from itertools import islice
 import os
 import xxhash  # type: ignore
 import numpy as np  # type: ignore
-
+import mmh3  # type: ignore
 def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], expA: float = 0, sep: str = "-", precision: int = 12, debug: bool = False) -> Tuple[List[str], List[str], List[int]]:
     """Process a chunk of lines in parallel.
     
@@ -32,6 +32,11 @@ def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], 
     Returns:
         Tuple of (intervals, points, sizes)
     """
+    subsample_rateB = subsample[1]
+    # maxB = int(subsample_rateB * 100)
+    maximumB = int(min(1, subsample_rateB) * (2**32))
+    subsample_rateA = subsample[0] if mode == "C" else 1.0
+    maximumA = int(min(1, subsample_rateA) * (2**32))
     try:
         intervals = []
         points = []
@@ -58,8 +63,8 @@ def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], 
                         interval = sep.join([chrval, str(start), str(end), "A"])
                         # Only apply interval subsampling in mode C
                         if mode == "C":
-                            hashv = xxhash.xxh64(interval.encode('utf-8'), seed=777).intdigest()
-                            if hashv % (2**32) > int(subsample[0] * (2**32)):
+                            hashv = mmh3.hash(interval.encode('utf-8'), seed=23)
+                            if hashv % (2**32) > maximumA:
                                 interval = None
                         if interval:
                             intervals.append(interval)
@@ -70,13 +75,14 @@ def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], 
                     # Process points
                     if mode in ["B", "C"]:
                         # Only apply point subsampling in mode C
-                        subsample_rate = subsample[1] if mode == "C" else 1.0
-                        maximum = int(min(1, subsample_rate) * (2**32))
+                        # subsample_rate = subsample[1] if mode == "C" else 1.0
+                        # maximum = int(min(1, subsample_rate) * (2**32))
                         for x in range(start, end):
-                            outstr = sep.join([str(chrval), str(x), str(x+1)])
-                            hashv = xxhash.xxh64(outstr.encode('utf-8'), seed=23).intdigest()
-                            if hashv % (2**32) <= maximum:
-                                points.append(outstr)
+                            if x % 100 < 1:
+                                outstr = sep.join([str(chrval), str(x), str(x+1)])
+                                hashv = mmh3.hash(outstr.encode('utf-8'), seed=23)
+                                if hashv % (2**32) <= maximumB:
+                                    points.append(outstr)
                     
                     if interval_size is not None:
                         sizes.append(interval_size)
@@ -442,8 +448,8 @@ class IntervalSketch(AbstractSketch):
                     interval = None
             
         if mode in ["B", "C"]:
-            # Only apply point subsampling in mode C
-            subsample_rate = subsample[1] if mode == "C" else 1.0
+            # Apply point subsampling in both modes B and C
+            subsample_rate = subsample[1]
             points = self.generate_points(chrval, start, end, sep=sep, subsample=subsample_rate)
         
         return interval, points, interval_size
