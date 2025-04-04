@@ -1,9 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
-#[allow(unused_imports)]
-use std::collections::hash_map::DefaultHasher;
-#[allow(unused_imports)]
-use std::hash::{Hash, Hasher};
+use ahash::{AHasher, RandomState};
+use std::hash::{Hash, Hasher, BuildHasher};
 use std::cmp;
 use std::thread;
 use std::sync::{Arc, Mutex};
@@ -26,6 +24,7 @@ struct RustHLL {
     compacted: bool,
     // Track hash size (32 or 64 bits)
     hash_size: u8,
+    hasher: RandomState,
 }
 
 // Internal implementation
@@ -33,7 +32,7 @@ impl RustHLL {
     /// Process a batch of hashes in chunks for better cache locality
     fn process_hash_batch(&mut self, hashes: &[u64]) {
         // We use a threshold to decide when to use vectorization
-        if hashes.len() > 128 {
+        if hashes.len() > 32 {  // Lowered from 128 to 32
             // For large batches, we can use SIMD-like processing
             // by separating index calculation and register updates
             
@@ -195,9 +194,10 @@ impl RustHLL {
             mask: (1 << precision) - 1,
             alpha_mm,
             use_threading: use_threading.unwrap_or(true),
-            min_thread_batch: min_thread_batch.unwrap_or(10000),
+            min_thread_batch: min_thread_batch.unwrap_or(1000),
             compacted: false,
             hash_size,
+            hasher: RandomState::new(),
         })
     }
 
@@ -220,7 +220,7 @@ impl RustHLL {
     }
 
     pub fn add_value(&mut self, value: &str) -> PyResult<()> {
-        let mut hasher = DefaultHasher::new();
+        let mut hasher = self.hasher.build_hasher();
         value.hash(&mut hasher);
         let hash = if self.hash_size == 32 {
             hasher.finish() as u32 as u64
@@ -238,7 +238,7 @@ impl RustHLL {
         
         // First pass: compute all hashes
         for value in values {
-            let mut hasher = DefaultHasher::new();
+            let mut hasher = self.hasher.build_hasher();
             value.hash(&mut hasher);
             let hash = if self.hash_size == 32 {
                 hasher.finish() as u32 as u64
@@ -260,7 +260,8 @@ impl RustHLL {
         let values_arc = Arc::new(values);
         let registers_arc = Arc::new(Mutex::new(vec![0u8; self.registers.len()]));
         let precision = self.precision;
-        let hash_size = self.hash_size;  // Clone hash_size before the loop
+        let hash_size = self.hash_size;
+        let hasher = self.hasher.clone();
         
         let mut handles = vec![];
         
@@ -274,12 +275,13 @@ impl RustHLL {
             
             let values_clone = Arc::clone(&values_arc);
             let registers_clone = Arc::clone(&registers_arc);
+            let hasher_clone = hasher.clone();
             
             let handle = thread::spawn(move || {
                 let mut local_registers = vec![0u8; 1 << precision];
                 
                 for value in &values_clone[start..end] {
-                    let mut hasher = DefaultHasher::new();
+                    let mut hasher = hasher_clone.build_hasher();
                     value.hash(&mut hasher);
                     let hash = if hash_size == 32 {
                         hasher.finish() as u32 as u64
@@ -467,6 +469,7 @@ impl RustHLL {
             min_thread_batch: data.min_thread_batch,
             compacted: data.compacted,
             hash_size: data.hash_size,
+            hasher: RandomState::new(),
         })
     }
 }
