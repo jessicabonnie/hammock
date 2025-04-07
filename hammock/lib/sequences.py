@@ -2,6 +2,7 @@
 from __future__ import annotations
 import gc
 import gzip
+import os
 from typing import Dict, Iterator, List, Optional, Union, TYPE_CHECKING
 
 from hammock.lib.abstractsketch import AbstractSketch
@@ -26,7 +27,8 @@ class SequenceSketch(AbstractSketch):
                  precision: int = 12,
                  num_hashes: int = 128,
                  seed: int = 42,
-                 debug: bool = False):
+                 debug: bool = False,
+                 hash_size: int = 32):
         """Initialize a SequenceSketch.
         
         Args:
@@ -38,6 +40,7 @@ class SequenceSketch(AbstractSketch):
             num_hashes: Number of hash functions for MinHash
             seed: Random seed for hashing
             debug: Whether to print debug information
+            hash_size: Size of hash in bits (32 or 64)
         """
         super().__init__()
         self.sketch_type = sketch_type
@@ -45,6 +48,7 @@ class SequenceSketch(AbstractSketch):
         self.window_size = window_size
         self.seed = seed
         self.debug = debug
+        self.hash_size = hash_size
         
         # Create the appropriate sketch based on sketch_type
         if sketch_type == "minimizer":
@@ -61,7 +65,8 @@ class SequenceSketch(AbstractSketch):
                 kmer_size=kmer_size,
                 window_size=window_size,
                 seed=seed,
-                debug=debug
+                debug=debug,
+                hash_size=hash_size
             )
         elif sketch_type == "minhash":
             self.sketch = MinHash(
@@ -117,6 +122,11 @@ class SequenceSketch(AbstractSketch):
     @classmethod
     def from_file(cls, filename: str, **kwargs) -> Optional['SequenceSketch']:
         """Create a sketch from a FASTA/FASTQ file."""
+        # Check if the file exists
+        if not os.path.exists(filename):
+            print(f"Error: File {filename} does not exist")
+            return None
+            
         try:
             # Create a SequenceSketch with the appropriate sketch type
             sketch = cls(
@@ -127,7 +137,8 @@ class SequenceSketch(AbstractSketch):
                 precision=kwargs.get('precision', 12),
                 num_hashes=kwargs.get('num_hashes', 128),
                 seed=kwargs.get('seed', 42),
-                debug=kwargs.get('debug', False)
+                debug=kwargs.get('debug', False),
+                hash_size=kwargs.get('hash_size', 32)
             )
             
             # Process the file
@@ -146,15 +157,29 @@ class SequenceSketch(AbstractSketch):
 
     def write(self, filepath: str) -> None:
         """Write sketch to file."""
+        # Ensure the file has the .npz extension
+        if not filepath.endswith('.npz'):
+            filepath = filepath + '.npz'
         self.sketch.write(filepath)
 
     @classmethod
     def load(cls, filepath: str) -> 'SequenceSketch':
         """Load sketch from file."""
+        # Check if the file exists
+        if not os.path.exists(filepath):
+            raise ValueError(f"File {filepath} does not exist")
+            
         # Try each sketch type and catch specific exceptions
         try:
             sketch = HyperLogLog.load(filepath)
-            seq_sketch = cls(sketch_type="hyperloglog")
+            seq_sketch = cls(
+                sketch_type="hyperloglog",
+                kmer_size=sketch.kmer_size,
+                window_size=sketch.window_size,
+                precision=sketch.precision,
+                seed=sketch.seed,
+                hash_size=sketch.hash_size
+            )
             seq_sketch.sketch = sketch
             return seq_sketch
         except (ValueError, OSError):
@@ -162,7 +187,13 @@ class SequenceSketch(AbstractSketch):
 
         try:
             sketch = MinHash.load(filepath)
-            seq_sketch = cls(sketch_type="minhash")
+            seq_sketch = cls(
+                sketch_type="minhash",
+                kmer_size=sketch.kmer_size,
+                window_size=sketch.window_size,
+                num_hashes=sketch.num_hashes,
+                seed=sketch.seed
+            )
             seq_sketch.sketch = sketch
             return seq_sketch
         except (ValueError, OSError):
@@ -170,7 +201,14 @@ class SequenceSketch(AbstractSketch):
 
         try:
             sketch = MinimizerSketch.load(filepath)
-            seq_sketch = cls(sketch_type="minimizer")
+            seq_sketch = cls(
+                sketch_type="minimizer",
+                kmer_size=sketch.kmer_size,
+                window_size=sketch.window_size,
+                gapn=sketch.gapn,
+                seed=sketch.seed,
+                debug=sketch.debug
+            )
             seq_sketch.sketch = sketch
             return seq_sketch
         except (ValueError, OSError):
