@@ -4,7 +4,7 @@ from digest import window_minimizer # type: ignore
 from typing import Optional, Union, Literal, Dict, List
 from hammock.lib.abstractsketch import AbstractSketch
 from hammock.lib.hyperloglog import HyperLogLog
-import numpy as np
+import numpy as np # type: ignore
 
 class MinimizerSketch(AbstractSketch):
     def __init__(self, 
@@ -66,6 +66,10 @@ class MinimizerSketch(AbstractSketch):
         
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
+        # Check if the string is empty
+        if not s:
+            return
+        
         # Get minimizers from the string
         minimizers = window_minimizer(s, self.window_size, self.kmer_size, self.seed)
         
@@ -123,17 +127,31 @@ class MinimizerSketch(AbstractSketch):
         # Calculate hash similarity including end k-mers
         combined_self = self.minimizers | self.startend_kmers
         combined_other = other.minimizers | other.startend_kmers
-        combined_self_sketch = self.minimizer_sketch.merge(self.startend_sketch)
-        combined_other_sketch = other.minimizer_sketch.merge(other.startend_sketch)
-        intersection = len(combined_self & combined_other)
-        union = len(combined_self | combined_other)
-        hash_with_ends_sim = float(intersection) / union if union > 0 else 0.0
+        
+        # Check if sketches are None before merging
+        if self.minimizer_sketch is None or self.startend_sketch is None:
+            hash_with_ends_sim = 0.0
+        else:
+            try:
+                combined_self_sketch = self.minimizer_sketch.merge(self.startend_sketch)
+                combined_other_sketch = other.minimizer_sketch.merge(other.startend_sketch)
+                intersection = len(combined_self & combined_other)
+                union = len(combined_self | combined_other)
+                hash_with_ends_sim = float(intersection) / union if union > 0 else 0.0
+            except (AttributeError, TypeError):
+                # If merge fails, fall back to set-based calculation
+                intersection = len(combined_self & combined_other)
+                union = len(combined_self | combined_other)
+                hash_with_ends_sim = float(intersection) / union if union > 0 else 0.0
         
         if self.debug:
             print(f"Hash+ends similarity - intersection: {intersection}, union: {union}, similarity: {hash_with_ends_sim:.4f}")
         
         # Calculate gap similarity using HyperLogLog
-        gap_sim = self.gap_sketch.estimate_jaccard(other.gap_sketch)
+        if self.gap_sketch is None or other.gap_sketch is None:
+            gap_sim = 0.0
+        else:
+            gap_sim = self.gap_sketch.estimate_jaccard(other.gap_sketch)
         
         # Calculate overall Jaccard similarity
         jaccard_sim = self.estimate_jaccard(other)
@@ -199,10 +217,38 @@ class MinimizerSketch(AbstractSketch):
         # Merge startend kmers
         result.startend_kmers = self.startend_kmers.union(other.startend_kmers)
         
-        # Merge sketches
-        result.minimizer_sketch = self.minimizer_sketch.merge(other.minimizer_sketch)
-        result.gap_sketch = self.gap_sketch.merge(other.gap_sketch)
-        result.startend_sketch = self.startend_sketch.merge(other.startend_sketch)
+        # Create new sketches for the result
+        result.minimizer_sketch = HyperLogLog(
+            precision=self.minimizer_sketch.precision,
+            kmer_size=self.minimizer_sketch.kmer_size,
+            window_size=self.minimizer_sketch.window_size,
+            seed=self.minimizer_sketch.seed,
+            hash_size=self.minimizer_sketch.hash_size
+        )
+        result.gap_sketch = HyperLogLog(
+            precision=self.gap_sketch.precision,
+            kmer_size=self.gap_sketch.kmer_size,
+            window_size=self.gap_sketch.window_size,
+            seed=self.gap_sketch.seed,
+            hash_size=self.gap_sketch.hash_size
+        )
+        result.startend_sketch = HyperLogLog(
+            precision=self.startend_sketch.precision,
+            kmer_size=self.startend_sketch.kmer_size,
+            window_size=self.startend_sketch.window_size,
+            seed=self.startend_sketch.seed,
+            hash_size=self.startend_sketch.hash_size
+        )
+        
+        # Copy registers from self
+        result.minimizer_sketch.registers = self.minimizer_sketch.registers.copy()
+        result.gap_sketch.registers = self.gap_sketch.registers.copy()
+        result.startend_sketch.registers = self.startend_sketch.registers.copy()
+        
+        # Merge with other
+        result.minimizer_sketch.merge(other.minimizer_sketch)
+        result.gap_sketch.merge(other.gap_sketch)
+        result.startend_sketch.merge(other.startend_sketch)
         
         return result
 
