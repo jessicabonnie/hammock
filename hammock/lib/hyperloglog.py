@@ -600,9 +600,9 @@ class HyperLogLog(AbstractSketch):
 
     def estimate_jaccard_registers(self, other: 'HyperLogLog') -> float:
         """Estimate Jaccard similarity with another HyperLogLog using register min/max."""
-        
         # Return 0 if either sketch is empty
-
+        if self.is_empty() or other.is_empty():
+            return 0.0
         
         # Get non-zero masks for both register sets
         nonzero1 = self.registers != 0
@@ -614,33 +614,45 @@ class HyperLogLog(AbstractSketch):
             return 0.0
         
         # Count matching non-zero registers
-        matching_nonzero = (self.registers[active_registers] == other.registers
-        [active_registers]).sum()
+        matching_nonzero = (self.registers[active_registers] == other.registers[active_registers]).sum()
         total_active = active_registers.sum()
         
-        # Jaccard is the proportion of matching registers among active ones
-        return matching_nonzero / total_active
+        # Apply bias correction based on register value distribution
+        bias_correction = self._get_jaccard_bias_correction(other)
         
-        # Create union and intersection sketches with same seed
-        #union = HyperLogLog(precision=self.precision, seed=self.seed)
-        intersection = HyperLogLog(precision=self.precision, seed=self.seed)
-        # intersection = self.estimate_intersection(other)
-        # union = self.estimate_union(other)
-        # # Compute register-wise max (union) and min (intersection)
-        # np.maximum(self.registers, other.registers, out=union.registers)
-        # np.minimum(self.registers, other.registers, out=intersection.registers)
-        # # for i in range(self.num_registers):
-        # #     union.registers[i] = max(self.registers[i], other.registers[i])
-        # #     intersection.registers[i] = min(self.registers[i], other.registers
-        # #     [i])
+        # Jaccard is the proportion of matching registers among active ones, with bias correction
+        return (matching_nonzero / total_active) * bias_correction
+
+    def _get_jaccard_bias_correction(self, other: 'HyperLogLog') -> float:
+        """Calculate bias correction factor for Jaccard estimation.
         
-        # # Estimate Jaccard similarity
-        # union_card = union.estimate_cardinality()
-        # if union_card == 0:
-        #     return 0.0
+        This correction helps account for the fact that register-level comparison
+        can be biased when the sketches have very different cardinalities.
         
-        # intersection_card = intersection.estimate_cardinality()
-        # return intersection_card / union_card
+        Args:
+            other: Another HyperLogLog sketch to compare with
+            
+        Returns:
+            Bias correction factor as a float
+        """
+        # Get cardinality estimates
+        card_a = self.estimate_cardinality()
+        card_b = other.estimate_cardinality()
+        
+        # Calculate ratio of cardinalities
+        if card_b == 0:
+            return 1.0
+        ratio = card_a / card_b
+        
+        # Apply correction based on ratio
+        # When ratio is close to 1, minimal correction needed
+        # When ratio is very different, apply stronger correction
+        if ratio < 0.1 or ratio > 10:
+            return 0.8  # Strong correction for very different cardinalities
+        elif ratio < 0.5 or ratio > 2:
+            return 0.9  # Moderate correction for somewhat different cardinalities
+        else:
+            return 1.0  # No correction needed for similar cardinalities
 
     def estimate_jaccard_iep(self, other: 'HyperLogLog') -> float:
         """Estimate Jaccard similarity using inclusion-exclusion principle."""
