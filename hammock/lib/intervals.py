@@ -32,11 +32,6 @@ def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], 
     Returns:
         Tuple of (intervals, points, sizes)
     """
-    subsample_rateB = subsample[1]
-    # maxB = int(subsample_rateB * 100)
-    maximumB = int(min(1, subsample_rateB) * (2**32))
-    subsample_rateA = subsample[0] if mode == "C" else 1.0
-    maximumA = int(min(1, subsample_rateA) * (2**32))
     try:
         intervals = []
         points = []
@@ -54,38 +49,27 @@ def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], 
         for line in chunk:
             if not line.startswith('#'):
                 try:
-                    # Use basic_bedline directly to avoid using the sketch's methods
-                    chrval, start, end = temp_sketch.basic_bedline(line)
-                    interval_size = end - start
+                    # Use bedline to process the line
+                    interval, point_list, size = temp_sketch.bedline(
+                        line, 
+                        mode=mode, 
+                        sep=sep, 
+                        subsample=subsample
+                    )
                     
                     # Process interval
-                    if mode in ["A", "C"]:
-                        interval = sep.join([chrval, str(start), str(end), "A"])
-                        # Only apply interval subsampling in mode C
-                        if mode == "C":
-                            hashv = mmh3.hash(interval.encode('utf-8'), seed=23)
-                            if hashv % (2**32) > maximumA:
-                                interval = None
-                        if interval:
-                            intervals.append(interval)
-                            if expA > 0:
-                                for i in range(1, int(10**expA)+1):
-                                    intervals.append(interval + str(i))
+                    if interval:
+                        intervals.append(interval)
+                        if expA > 0:
+                            for i in range(1, int(10**expA)+1):
+                                intervals.append(interval + str(i))
                     
                     # Process points
-                    if mode in ["B", "C"]:
-                        # Only apply point subsampling in mode C
-                        # subsample_rate = subsample[1] if mode == "C" else 1.0
-                        # maximum = int(min(1, subsample_rate) * (2**32))
-                        for x in range(start, end):
-                            if x % 100 < 1:
-                                outstr = sep.join([str(chrval), str(x), str(x+1)])
-                                hashv = mmh3.hash(outstr.encode('utf-8'), seed=23)
-                                if hashv % (2**32) <= maximumB:
-                                    points.append(outstr)
+                    if point_list:
+                        points.extend([p for p in point_list if p is not None])
                     
-                    if interval_size is not None:
-                        sizes.append(interval_size)
+                    if size is not None:
+                        sizes.append(size)
                 except Exception as e:
                     print(f"Error processing line: {str(e)}")
                     continue
@@ -104,7 +88,6 @@ class IntervalSketch(AbstractSketch):
         precision = kwargs.get('precision', 12)
         debug = kwargs.get('debug', False)
         use_rust = kwargs.get('use_rust', False)
-        
         # Store mode and validation
         self.mode = kwargs.get('mode', 'A')
         if self.mode not in ['A', 'B', 'C', 'D']:
@@ -155,80 +138,48 @@ class IntervalSketch(AbstractSketch):
             # Split on '.' and get all extensions (handles multiple extensions like .gff.gz)
             extensions = filename.lower().split('.')
             
-            # Handle GFF files (both plain and gzipped)
-            if any(ext in ['gff', 'gff3'] for ext in extensions):
-                result = cls._from_gff(filename, **kwargs)
-                return result if result is not None else None
+            # Define supported extensions
+            supported_extensions = {
+                'gff': cls._from_gff,
+                'gff3': cls._from_gff,
+                'bb': cls._from_bigbed,
+                'bigbed': cls._from_bigbed,
+                'bed': cls._from_bed,
+                'gz': None  # Special case for gzipped files
+            }
             
-            # Handle BigBed files
-            elif extensions[-1] in ['bb', 'bigbed']:
-                result = cls._from_bigbed(filename, **kwargs)
-                return result if result is not None else None
+            # Handle gzipped files
+            if extensions[-1] == 'gz' and len(extensions) >= 2:
+                base_ext = extensions[-2]
+                if base_ext in supported_extensions:
+                    if base_ext == 'bed':
+                        return cls._from_bed(filename, **kwargs)
+                    elif base_ext in ['gff', 'gff3']:
+                        return cls._from_gff(filename, **kwargs)
+                    elif base_ext in ['bb', 'bigbed']:
+                        return cls._from_bigbed(filename, **kwargs)
+                else:
+                    print(f"Skipping unsupported gzipped file format: {filename}")
+                    return None
+            
+            # Handle non-gzipped files
+            elif extensions[-1] in supported_extensions:
+                handler = supported_extensions[extensions[-1]]
+                if handler:
+                    return handler(filename, **kwargs)
+                else:
+                    print(f"Skipping unsupported file format: {filename}")
+                    return None
             
             # Skip other unsupported binary formats
-            elif extensions[-1] in ['cram', 'sam']:
+            elif extensions[-1] in ['cram', 'sam', 'bam', 'bw', 'bigwig']:
                 print(f"Skipping unsupported file format: {filename}")
                 return None
             
-            # Handle regular BED files (including gzipped)
-            elif extensions[-1] in ["bed"] or (len(extensions) >= 2 and extensions[-2:] == ["bed", "gz"]):
-                try:
-                    # Handle gzipped files
-                    if filename.endswith('.gz'):
-                        opener = gzip.open
-                    else:
-                        opener = open
-                    
-                    # Determine number of processes to use
-                    num_processes = kwargs.get('num_processes', max(1, cpu_count() - 1))
-                    chunk_size = kwargs.get('chunk_size', 10000)  # Number of lines per chunk
-                    sep = kwargs.get('sep', '-')  # Get separator from kwargs
-                    precision = kwargs.get('precision', 12)  # Get precision from kwargs
-                    debug = kwargs.get('debug', False)  # Get debug mode from kwargs
-                    
-                    with opener(filename, 'rt') as f:
-                        # Create a pool of workers
-                        with Pool(processes=num_processes) as pool:
-                            while True:
-                                # Read a chunk of lines
-                                chunk = list(islice(f, chunk_size))
-                                if not chunk:
-                                    break
-                                
-                                # Process chunk in parallel
-                                result = pool.apply(
-                                    _process_chunk,
-                                    (chunk, kwargs.get('mode', 'A'), kwargs.get('subsample', (1.0, 1.0)), kwargs.get('expA', 0), sep, precision, debug)
-                                )
-                                
-                                # If we got empty lists and there was an error, return None
-                                if not result or (not result[0] and not result[1] and not result[2]):
-                                    return None
-                                
-                                intervals, points, sizes = result
-                                
-                                # Add intervals to sketch
-                                for interval in intervals:
-                                    sketch.sketch.add_string(interval)
-                                    sketch.num_intervals += 1
-                                
-                                # Add points to sketch
-                                sketch.add_batch(points)
-                                
-                                # Update total size
-                                sketch.total_interval_size += sum(sizes)
-                    
-                    # If we processed no data at all, return None
-                    if sketch.num_intervals == 0 and sketch.total_interval_size == 0:
-                        return None
-                    
-                    return sketch
-                    
-                except Exception as e:
-                    print(f"Error processing file {filename}: {str(e)}")
-                    return None
             else:
-                raise ValueError(f"Unsupported file extension: {extensions[-1]}")
+                print(f"Skipping unsupported file format: {filename}")
+                return None
+                
         except Exception as e:
             print(f"Error in from_file: {str(e)}")
             return None
@@ -246,7 +197,6 @@ class IntervalSketch(AbstractSketch):
             subsample = kwargs.get('subsample', (1.0, 1.0))
             expA = kwargs.get('expA', 0)
             sketch = kwargs['sketch']
-            
             # Use pysam to read BigBed file
             with pysam.TabixFile(filename) as bb:
                 for line in bb.fetch():
@@ -274,10 +224,28 @@ class IntervalSketch(AbstractSketch):
             return None
 
     @classmethod
-    def _from_bed(cls, filename: str, mode: str, sep: str, 
-                  subsample: Tuple[float, float], expA: float, sketch: 'IntervalSketch') -> Optional['IntervalSketch']:
-        """Process BED format file."""
+    def _from_bed(cls, filename: str, **kwargs) -> Optional['IntervalSketch']:
+        """Process BED format file.
+        
+        Args:
+            filename: Path to BED file
+            **kwargs: Additional arguments including:
+                - mode: Sketch mode (A/B/C)
+                - sep: Separator for string representation
+                - subsample: Tuple of sampling rates
+                - expA: Exponential scaling factor
+                - sketch: IntervalSketch instance
+        """
+        if 'sketch' not in kwargs:
+            return None
+            
         try:
+            # Get parameters from kwargs
+            mode = kwargs.get('mode', 'A')
+            sep = kwargs.get('sep', '-')
+            subsample = kwargs.get('subsample', (1.0, 1.0))
+            expA = kwargs.get('expA', 0)
+            sketch = kwargs['sketch']
             # Open file with gzip if it ends in .gz, otherwise normal open
             opener = gzip.open if filename.endswith('.gz') else open
             with opener(filename, 'rt') as f:  # 'rt' mode for text reading from gzip
@@ -443,7 +411,7 @@ class IntervalSketch(AbstractSketch):
             interval = sep.join([chrval, str(start), str(end), "A"])
             # Only apply interval subsampling in mode C
             if mode == "C":
-                hashv = xxhash.xxh64(interval.encode('utf-8'), seed=777).intdigest()
+                hashv = xxhash.xxh32(interval.encode('utf-8'), seed=777).intdigest()
                 if hashv % (2**32) > int(subsample[0] * (2**32)):
                     interval = None
             
@@ -475,8 +443,8 @@ class IntervalSketch(AbstractSketch):
         """
         maximum = int(min(1, subsample) * (2**32))
         def gp(x):
-            outstr = sep.join([str(chrval), str(x), str(x+1)])
-            hashv = xxhash.xxh64(outstr.encode('utf-8'), seed=seed).intdigest()
+            outstr = sep.join([str(chrval), str(x)])#, str(x+1)])
+            hashv = xxhash.xxh32(outstr.encode('utf-8'), seed=seed).intdigest()
             if hashv % (2**32) <= maximum:
                 return outstr
             return None
