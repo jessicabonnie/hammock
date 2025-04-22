@@ -17,6 +17,7 @@ import os
 import xxhash  # type: ignore
 import numpy as np  # type: ignore
 import mmh3  # type: ignore
+
 def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], expA: float = 0, sep: str = "-", precision: int = 12, debug: bool = False) -> Tuple[List[str], List[str], List[int]]:
     """Process a chunk of lines in parallel.
     
@@ -37,7 +38,10 @@ def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], 
         points = []
         sizes = []
         
-        # Create a temporary sketch to use its bedline method with all required parameters
+        if debug:
+            print(f"Processing chunk of {len(chunk)} lines")
+        
+        # Create a temporary sketch to use its bedline method
         temp_sketch = IntervalSketch(
             mode=mode,
             subsample=subsample,
@@ -54,8 +58,14 @@ def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], 
                         line, 
                         mode=mode, 
                         sep=sep, 
-                        subsample=subsample
+                        subsample=subsample,
+                        debug=debug
                     )
+                    
+                    if debug:
+                        print(f"Processed line: {line.strip()}")
+                        print(f"Got interval: {interval}")
+                        print(f"Got {len(point_list)} points")
                     
                     # Process interval
                     if interval:
@@ -64,19 +74,26 @@ def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], 
                             for i in range(1, int(10**expA)+1):
                                 intervals.append(interval + str(i))
                     
-                    # Process points
-                    if point_list:
-                        points.extend([p for p in point_list if p is not None])
+                    # Process points - always extend points list in mode B or C
+                    if mode in ["B", "C"] and point_list:
+                        points.extend(point_list)
+                        if debug:
+                            print(f"Added {len(point_list)} points from interval, total points now {len(points)}")
                     
                     if size is not None:
                         sizes.append(size)
                 except Exception as e:
-                    print(f"Error processing line: {str(e)}")
+                    if debug:
+                        print(f"Error processing line: {str(e)}")
                     continue
+        
+        if debug:
+            print(f"Chunk processing complete: {len(intervals)} intervals, {len(points)} points")
         
         return intervals, points, sizes
     except Exception as e:
-        print(f"Error in _process_chunk: {str(e)}")
+        if debug:
+            print(f"Error in _process_chunk: {str(e)}")
         return [], [], []
 
 class IntervalSketch(AbstractSketch):
@@ -135,13 +152,11 @@ class IntervalSketch(AbstractSketch):
             kwargs['sketch'] = sketch
             
             # Check file extension and process accordingly
-            # Split on '.' and get all extensions (handles multiple extensions like .gff.gz)
+            # Split on '.' and get all extensions (handles multiple extensions like .bed.gz)
             extensions = filename.lower().split('.')
             
             # Define supported extensions
             supported_extensions = {
-                'gff': cls._from_gff,
-                'gff3': cls._from_gff,
                 'bb': cls._from_bigbed,
                 'bigbed': cls._from_bigbed,
                 'bed': cls._from_bed,
@@ -154,8 +169,6 @@ class IntervalSketch(AbstractSketch):
                 if base_ext in supported_extensions:
                     if base_ext == 'bed':
                         return cls._from_bed(filename, **kwargs)
-                    elif base_ext in ['gff', 'gff3']:
-                        return cls._from_gff(filename, **kwargs)
                     elif base_ext in ['bb', 'bigbed']:
                         return cls._from_bigbed(filename, **kwargs)
                 else:
@@ -235,6 +248,7 @@ class IntervalSketch(AbstractSketch):
                 - subsample: Tuple of sampling rates
                 - expA: Exponential scaling factor
                 - sketch: IntervalSketch instance
+                - num_threads: Number of threads to use (default: cpu_count())
         """
         if 'sketch' not in kwargs:
             return None
@@ -246,115 +260,102 @@ class IntervalSketch(AbstractSketch):
             subsample = kwargs.get('subsample', (1.0, 1.0))
             expA = kwargs.get('expA', 0)
             sketch = kwargs['sketch']
+            debug = kwargs.get('debug', False)
+            num_threads = kwargs.get('num_threads', cpu_count())
+            
+            if debug:
+                print(f"Processing BED file {filename} with mode={mode}, subsample={subsample}, debug={debug}")
+            
             # Open file with gzip if it ends in .gz, otherwise normal open
             opener = gzip.open if filename.endswith('.gz') else open
-            with opener(filename, 'rt') as f:  # 'rt' mode for text reading from gzip
-                for line in f:
-                    interval, points, size = sketch.bedline(line, mode=mode, sep=sep, subsample=subsample)
-                    
-                    # Add interval if present and in mode A or C
-                    if interval and mode in ["A", "C"]:
-                        sketch.sketch.add_string(interval)
-                        
-                        if expA > 0:
-                            num_copies = int(10**expA) - 1
-                            for i in range(1, num_copies + 1):
-                                sketch.sketch.add_string(interval + str(i))
-                        
-                        sketch.num_intervals += 1
-                        sketch.total_interval_size += size
-                    
-                    # Add points if present and in mode B or C
-                    if points and mode in ["B", "C"]:
-                        for point in points:
-                            if point is not None:
-                                sketch.sketch.add_string(point)
-            if mode in ["B"]:
-                sketch.num_intervals += 1
-            return sketch
-        except Exception as e:
-            print(f"Error processing BED file {filename}: {e}")
-            return None
-
-    @classmethod
-    def _from_gff(cls, filename: str, **kwargs) -> Optional['IntervalSketch']:
-        """Process GFF format file.
-        
-        Args:
-            filename: Path to GFF file
-            **kwargs: Additional arguments including:
-                - mode: Sketch mode (A/B/C)
-                - sep: Separator for string representation
-                - subsample: Tuple of sampling rates
-                - expA: Exponential scaling factor
-                - feature_types: List of feature types to include (optional)
-        """
-        if 'sketch' not in kwargs:
-            return None
-        
-        try:
-            # Get parameters from kwargs
-            mode = kwargs.get('mode', 'A')
-            sep = kwargs.get('sep', '-')
-            subsample = kwargs.get('subsample', (1.0, 1.0))
-            expA = kwargs.get('expA', 0)
-            sketch = kwargs['sketch']
-            feature_types = kwargs.get('feature_types', None)  # Optional filter for specific features
             
-            opener = gzip.open if filename.endswith('.gz') else open
+            # Read all lines into memory for parallel processing
             with opener(filename, 'rt') as f:
+                lines = []
                 for line in f:
-                    # Skip comments and empty lines
-                    if line.startswith('#') or not line.strip():
-                        continue
-                    
-                    # Parse GFF fields
-                    fields = line.strip().split('\t')
-                    if len(fields) != 9:
-                        continue
-                    
-                    seqid, source, ftype, start, end, score, strand, phase, attrs = fields
-                    
-                    # Skip if feature type filtering is enabled and type doesn't match
-                    if feature_types and ftype not in feature_types:
-                        continue
-                    
-                    try:
-                        start_pos = int(start) - 1  # Convert to 0-based coordinates
-                        end_pos = int(end)
-                    except ValueError:
-                        continue
-                    
-                    # Create BED-style line and process using existing bedline method
-                    bed_line = f"{seqid}\t{start_pos}\t{end_pos}"
-                    interval, points, size = sketch.bedline(
-                        bed_line, 
-                        mode=mode, 
-                        sep=sep, 
-                        subsample=subsample
-                    )
-                    
-                    # Add interval if present and in mode A or C
-                    if interval and mode in ["A", "C"]:
-                        sketch.sketch.add_string(interval)
-                        if expA > 0:
-                            for i in range(1, int(10**expA)+1):
-                                sketch.sketch.add_string(interval + str(i))
-                        sketch.num_intervals += 1
-                        sketch.total_interval_size += size
-                    
-                    # Add points if present and in mode B or C
-                    if points and mode in ["B", "C"]:
-                        for point in points:
-                            if point is not None:
-                                sketch.sketch.add_string(point)
-                        if mode == "B":
-                            sketch.num_intervals += 1
+                    if not line.startswith('#'):
+                        try:
+                            # Validate line format
+                            sketch.basic_bedline(line)
+                            lines.append(line)
+                        except ValueError as e:
+                            if debug:
+                                print(f"Error processing line: {str(e)}")
+                            continue
+            
+            if not lines:
+                print(f"No valid lines found in file: {filename}")
+                return None
+            
+            if debug:
+                print(f"Found {len(lines)} valid lines to process")
+            
+            # Calculate chunk size for parallel processing
+            chunk_size = max(1, len(lines) // num_threads)
+            
+            if debug:
+                print(f"Using {num_threads} threads with chunk size {chunk_size}")
+            
+            # Create process pool
+            with Pool(processes=num_threads) as pool:
+                # Prepare arguments for each chunk
+                chunk_args = []
+                for i in range(0, len(lines), chunk_size):
+                    chunk = lines[i:i + chunk_size]
+                    args = (chunk, mode, subsample, expA, sep, sketch.sketch.precision, debug)
+                    chunk_args.append(args)
+                
+                # Process chunks in parallel
+                results = pool.starmap(_process_chunk, chunk_args)
+            
+            # Combine results from all chunks
+            all_intervals = []
+            all_points = []
+            all_sizes = []
+            
+            for intervals, points, sizes in results:
+                all_intervals.extend(intervals)
+                all_points.extend(points)
+                all_sizes.extend(sizes)
+            
+            if debug:
+                print(f"Total points collected: {len(all_points)}")
+                print(f"Total intervals collected: {len(all_intervals)}")
+                if len(all_points) > 0:
+                    print(f"Sample points (first 5): {all_points[:5]}")
+            
+            # Add intervals to sketch
+            if all_intervals and mode in ["A", "C"]:
+                sketch.sketch.add_batch(all_intervals)
+                sketch.num_intervals += len(all_intervals)
+                sketch.total_interval_size += sum(all_sizes)
+                if debug:
+                    print(f"Added {len(all_intervals)} intervals to sketch")
+                    print(f"Sketch cardinality after adding intervals: {sketch.sketch.estimate_cardinality()}")
+            
+            # Add points to sketch
+            if all_points and mode in ["B", "C"]:
+                if debug:
+                    print(f"Adding {len(all_points)} points to sketch")
+                    # Create a new sketch just for points to see their cardinality
+                    if len(all_points) > 0:
+                        from hammock.lib.hyperloglog import HyperLogLog
+                        point_sketch = HyperLogLog(precision=sketch.sketch.precision)
+                        point_sketch.add_batch(all_points)
+                        print(f"Point-only sketch cardinality: {point_sketch.estimate_cardinality()}")
+                
+                sketch.sketch.add_batch(all_points)
+                if debug:
+                    print(f"Sketch cardinality after adding points: {sketch.sketch.estimate_cardinality()}")
+                
+                if mode == "B":
+                    sketch.num_intervals = len(lines)  # Count number of intervals processed
             
             return sketch
             
         except Exception as e:
-            print(f"Error processing GFF file {filename}: {e}")
+            if debug:
+                print(f"Error processing BED file {filename}: {e}")
             return None
 
     @staticmethod
@@ -366,59 +367,66 @@ class IntervalSketch(AbstractSketch):
             
         Returns:
             Tuple of (chrom, start, end) where:
-                chrom: Chromosome name (preserves 'chr' prefix if present)
+                chrom: Chromosome name (any string)
                 start: Integer start coordinate
                 end: Integer end coordinate
                 
         Raises:
             ValueError: If line has fewer than 3 tab or space-separated columns
+            ValueError: If start or end coordinates cannot be converted to integers
         """
-        columns = line.strip().split('\t')
-        if len(columns) < 2:
-            columns = line.strip().split(" ")
-            if len(columns) < 2:
-                raise ValueError("bedline: one of the lines in malformed")
-        # Ensure chromosome has 'chr' prefix
-        chrval = columns[0][3:] if columns[0].startswith('chr') else columns[0]
-        # if not (chrval.isnumeric() or chrval in ["X","Y","M"]):
-        #     raise ValueError("bedline: chromosome is not numeric")
-        return chrval, int(columns[1]), int(columns[2])
+        # Split on either tab or space
+        columns = line.strip().split()
+        if len(columns) < 3:
+            raise ValueError("bedline: line must have at least 3 columns")
+        
+        # Allow any string for chromosome name
+        chrval = columns[0]
+        
+        try:
+            start = int(columns[1])
+            end = int(columns[2])
+        except ValueError:
+            raise ValueError("bedline: start and end coordinates must be integers")
+        
+        # Validate coordinates
+        if start < 0 or end < 0:
+            raise ValueError("bedline: coordinates must be non-negative")
+        if start >= end:
+            raise ValueError("bedline: start coordinate must be less than end coordinate")
+        
+        return chrval, start, end
 
     def bedline(self, line: str, 
                 mode: str, 
                 sep: str, 
-                subsample: tuple[float, float] = (1.0, 1.0)) -> tuple[Optional[str], list[Optional[bytes]], int]:
-        """Process a single BED line.
-        
-        Args:
-            line: BED file line
-            mode: Processing mode (A/B/C)
-            sep: Separator for string representation
-            subsample: Tuple of (interval_rate, point_rate) between 0 and 1
-            
-        Returns:
-            Tuple of (interval, points, interval_size) where:
-                interval: String representation of interval (or None if subsampled)
-                points: List of point strings as bytes (some may be None if subsampled)
-                interval_size: Size of the interval
-        """
+                subsample: tuple[float, float] = (1.0, 1.0),
+                debug: bool = False) -> tuple[Optional[str], list[Optional[str]], int]:
+        """Process a single BED line."""
         interval = None
         points = []
         chrval, start, end = self.basic_bedline(line)
         interval_size = end - start
         
         if mode in ["A", "C"]:
-            interval = sep.join([chrval, str(start), str(end), "A"])
-            # Only apply interval subsampling in mode C
+            # For mode C, use integer hashing for subsampling
             if mode == "C":
-                hashv = xxhash.xxh32(interval.encode('utf-8'), seed=777).intdigest()
-                if hashv % (2**32) > int(subsample[0] * (2**32)):
+                # Create the full interval string and hash it
+                interval_str = sep.join([chrval, str(start), str(end), "A"])
+                interval_hash = xxhash.xxh32(interval_str, seed=31337).intdigest()
+                if interval_hash < 0:
+                    interval_hash += 2**32
+                threshold = int(subsample[0] * (2**32 - 1))
+                if interval_hash > threshold:
                     interval = None
-            
+                else:
+                    interval = interval_str
+            else:
+                interval = sep.join([chrval, str(start), str(end), "A"])
+        
         if mode in ["B", "C"]:
             # Apply point subsampling in both modes B and C
-            subsample_rate = subsample[1]
-            points = self.generate_points(chrval, start, end, sep=sep, subsample=subsample_rate)
+            points = self.generate_points(chrval, start, end, sep=sep, subsample=subsample[1], debug=debug)
         
         return interval, points, interval_size
 
@@ -427,29 +435,50 @@ class IntervalSketch(AbstractSketch):
                        end: int, 
                        sep: str = "-", 
                        subsample: float = 1, 
-                       seed: int = 23) -> list[Optional[str]]:
-        """Generate point strings for a given interval.
-        
-        Args:
-            chrval: Chromosome value
-            start: Start position
-            end: End position
-            sep: Separator for string representation
-            subsample: Subsampling rate between 0 and 1
-            seed: Random seed for subsampling
+                       seed: int = 31337,
+                       debug: bool = False) -> list[Optional[str]]:
+        """Generate point strings for a given interval."""
+        points = []
+        if subsample >= 1.0:
+            # No subsampling needed, generate all points
+            for x in range(start, end):
+                points.append(sep.join([chrval, str(x)]))
+        else:
+            # Apply subsampling
+            if debug:
+                print(f"Subsampling with rate={subsample} for {end-start} points")
             
-        Returns:
-            List of point strings (some may be None if subsampled)
-        """
-        maximum = int(min(1, subsample) * (2**32))
-        def gp(x):
-            outstr = sep.join([str(chrval), str(x)])#, str(x+1)])
-            hashv = xxhash.xxh32(outstr.encode('utf-8'), seed=seed).intdigest()
-            if hashv % (2**32) <= maximum:
-                return outstr
-            return None
-        # Recall that bed files are 0-indexed, so the final point should have it's start coordinate at end-1
-        return [gp(x) for x in range(start, end)]
+            # Generate hashes for all points using the full point string
+            if debug:
+                print("Generating hashes...")
+            hashes = []
+            for x in range(start, end):
+                point_str = sep.join([chrval, str(x)])
+                # Get hash value and convert to unsigned 32-bit
+                hash_val = xxhash.xxh32(point_str, seed=seed).intdigest()
+                if hash_val < 0:
+                    hash_val += 2**32
+                hashes.append(hash_val)
+            if debug:
+                print(f"Generated {len(hashes)} hashes")
+            
+            hashes = np.array(hashes, dtype=np.uint32)
+            if debug:
+                print("Converted to numpy array")
+            
+            # Calculate threshold for subsampling
+            # Use the full range of hash values [0, 2^32-1]
+            threshold = int(subsample * (2**32 - 1))
+            mask = hashes <= threshold
+            if debug:
+                print(f"Number of points passing subsampling: {np.sum(mask)}")
+            
+            # Generate strings only for points that pass subsampling
+            for i, x in enumerate(range(start, end)):
+                if mask[i]:
+                    points.append(sep.join([chrval, str(x)]))
+        
+        return points
 
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
