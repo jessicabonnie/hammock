@@ -28,7 +28,9 @@ def limit_memory():
     that may be taken by the process.
     """
     soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+    # Set soft limit to 28GB, preserve hard limit
     resource.setrlimit(resource.RLIMIT_AS, (28 * 1024 * 1024 * 1024, hard))
+    print(f"Set memory limit to 28GB (soft limit)")
 
 def process_file(filepath: str, primary_files: List[str], mode: str = 'A',
                 num_hashes: int = 64, precision: int = 12, kmer_size: int = 0,
@@ -36,6 +38,9 @@ def process_file(filepath: str, primary_files: List[str], mode: str = 'A',
                 expA: float = 0.5, use_rust: bool = False, sketch_type: str = "hyperloglog",
                 hash_size: int = 32) -> Dict[str, float]:
     """Process a file and calculate similarity against primary sets."""
+    # Set memory limit before processing
+    limit_memory()
+    
     if not os.path.exists(filepath):
         print(f"Error: File {filepath} does not exist", file=sys.stderr)
         sys.exit(2)
