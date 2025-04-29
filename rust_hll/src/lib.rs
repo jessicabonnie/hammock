@@ -8,6 +8,8 @@ use std::sync::{Arc, Mutex};
 use num_cpus;
 use bincode;
 use serde::{Serialize, Deserialize};
+use std::cell::RefCell;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 /// A fast HyperLogLog implementation in Rust
 #[pyclass]
@@ -25,44 +27,30 @@ struct RustHLL {
     // Track hash size (32 or 64 bits)
     hash_size: u8,
     hasher: RandomState,
+    memory_limit: Option<usize>,  // Add memory limit field
 }
 
 // Internal implementation
 impl RustHLL {
-    /// Process a batch of hashes in chunks for better cache locality
+    /// Process a batch of hashes in chunks for better cache locality and memory efficiency
     fn process_hash_batch(&mut self, hashes: &[u64]) {
-        // We use a threshold to decide when to use vectorization
-        if hashes.len() > 32 {  // Lowered from 128 to 32
-            // For large batches, we can use SIMD-like processing
-            // by separating index calculation and register updates
+        // Process in smaller chunks to limit memory usage
+        const CHUNK_SIZE: usize = 256;  // Reduced from 1024 to 256
+        
+        // Pre-allocate hash vector with fixed capacity
+        let mut hash_buffer = Vec::with_capacity(CHUNK_SIZE);
+        
+        for chunk in hashes.chunks(CHUNK_SIZE) {
+            // Clear and reuse the buffer
+            hash_buffer.clear();
+            hash_buffer.extend_from_slice(chunk);
             
-            // First pass: calculate indices and values for all hashes
-            let mut indices = vec![0usize; hashes.len()];
-            let mut values = vec![0u8; hashes.len()];
-            
-            for i in 0..hashes.len() {
-                let (idx, val) = get_index_and_count(hashes[i], self.precision, self.hash_size);
-                indices[i] = idx;
-                values[i] = val;
-            }
-            
-            // Second pass: update registers in sorted order for better cache locality
-            let mut idx_val_pairs: Vec<(usize, u8)> = indices.into_iter()
-                .zip(values.into_iter())
-                .collect();
-            
-            // Sort by index for better cache locality
-            idx_val_pairs.sort_by_key(|&(idx, _)| idx);
-            
-            // Update registers in sorted order
-            for (idx, val) in idx_val_pairs {
-                self.update_register(idx, val);
-            }
-        } else {
-            // For small batches, process directly
-            for &hash in hashes {
+            // Process each chunk directly without creating temporary arrays
+            for &hash in &hash_buffer {
                 let (idx, val) = get_index_and_count(hash, self.precision, self.hash_size);
-                self.update_register(idx, val);
+                if self.registers[idx] < val {
+                    self.registers[idx] = val;
+                }
             }
         }
     }
@@ -87,11 +75,12 @@ impl RustHLL {
     fn optimize_registers(&mut self) {
         if !self.compacted {
             let max_val = self.max_register_value();
-            if max_val > 30 {
+            // More aggressive compaction strategy
+            if max_val > 20 {  // Reduced from 30 to 20
                 // Compact registers if max value is too large
                 for r in &mut self.registers {
-                    if *r > 30 {
-                        *r = 30;
+                    if *r > 20 {
+                        *r = 20;
                     }
                 }
                 self.compacted = true;
@@ -167,10 +156,10 @@ impl RustHLL {
 #[pymethods]
 impl RustHLL {
     #[new]
-    #[pyo3(signature = (precision, use_threading=None, min_thread_batch=None, hash_size=None))]
-    pub fn new(precision: u8, use_threading: Option<bool>, min_thread_batch: Option<usize>, hash_size: Option<u8>) -> PyResult<Self> {
+    #[pyo3(signature = (precision, use_threading=None, min_thread_batch=None, hash_size=None, memory_limit=None))]
+    pub fn new(precision: u8, use_threading: Option<bool>, min_thread_batch: Option<usize>, hash_size: Option<u8>, memory_limit: Option<usize>) -> PyResult<Self> {
         // Validate hash_size
-        let hash_size = hash_size.unwrap_or(32);  // Default to 32-bit hashing
+        let hash_size = hash_size.unwrap_or(32);
         if hash_size != 32 && hash_size != 64 {
             return Err(PyValueError::new_err("hash_size must be 32 or 64"));
         }
@@ -181,6 +170,19 @@ impl RustHLL {
         }
 
         let m = 1 << precision;
+        
+        // Check memory usage against limit
+        let estimated_memory = m * std::mem::size_of::<u8>();
+        if let Some(limit) = memory_limit {
+            if estimated_memory > limit {
+                return Err(PyValueError::new_err(format!(
+                    "Estimated memory usage ({:.2} GB) exceeds limit ({:.2} GB)",
+                    estimated_memory as f64 / (1024.0 * 1024.0 * 1024.0),
+                    limit as f64 / (1024.0 * 1024.0 * 1024.0)
+                )));
+            }
+        }
+
         let alpha_mm = match precision {
             4 => 0.673,
             5 => 0.697,
@@ -198,6 +200,7 @@ impl RustHLL {
             compacted: false,
             hash_size,
             hasher: RandomState::new(),
+            memory_limit,
         })
     }
 
@@ -254,64 +257,89 @@ impl RustHLL {
     }
 
     fn add_batch_threaded_py(&mut self, values: Vec<String>) -> PyResult<()> {
-        let num_threads = num_cpus::get();
+        // Limit the number of threads to avoid system resource issues
+        let num_threads = cmp::min(num_cpus::get(), 8);  // Cap at 8 threads
         let chunk_size = (values.len() + num_threads - 1) / num_threads;
         
-        let values_arc = Arc::new(values);
-        let registers_arc = Arc::new(Mutex::new(vec![0u8; self.registers.len()]));
+        // Create a shared register array with atomic operations
+        let registers: Vec<AtomicU8> = self.registers.iter()
+            .map(|&x| AtomicU8::new(x))
+            .collect();
+        let registers_arc = Arc::new(registers);
+        
         let precision = self.precision;
         let hash_size = self.hash_size;
         let hasher = self.hasher.clone();
         
         let mut handles = vec![];
+        let mut thread_creation_failed = false;
         
         for i in 0..num_threads {
             let start = i * chunk_size;
-            let end = cmp::min(start + chunk_size, values_arc.len());
+            let end = cmp::min(start + chunk_size, values.len());
             
             if start >= end {
                 break;
             }
             
-            let values_clone = Arc::clone(&values_arc);
+            let values_clone = values[start..end].to_vec();
             let registers_clone = Arc::clone(&registers_arc);
             let hasher_clone = hasher.clone();
             
-            let handle = thread::spawn(move || {
-                let mut local_registers = vec![0u8; 1 << precision];
-                
-                for value in &values_clone[start..end] {
-                    let mut hasher = hasher_clone.build_hasher();
-                    value.hash(&mut hasher);
-                    let hash = if hash_size == 32 {
-                        hasher.finish() as u32 as u64
-                    } else {
-                        hasher.finish()
-                    };
+            match thread::Builder::new()
+                .name(format!("hll_worker_{}", i))
+                .spawn(move || {
+                    // Process in smaller chunks to limit memory usage
+                    const CHUNK_SIZE: usize = 256;
+                    let mut hash_buffer = Vec::with_capacity(CHUNK_SIZE);
                     
-                    let (idx, val) = get_index_and_count(hash, precision, hash_size);
-                    if local_registers[idx] < val {
-                        local_registers[idx] = val;
+                    for chunk in values_clone.chunks(CHUNK_SIZE) {
+                        hash_buffer.clear();
+                        hash_buffer.extend_from_slice(chunk);
+                        
+                        for value in &hash_buffer {
+                            let mut hasher = hasher_clone.build_hasher();
+                            value.hash(&mut hasher);
+                            let hash = if hash_size == 32 {
+                                hasher.finish() as u32 as u64
+                            } else {
+                                hasher.finish()
+                            };
+                            
+                            let (idx, val) = get_index_and_count(hash, precision, hash_size);
+                            let current = registers_clone[idx].load(Ordering::Relaxed);
+                            if current < val {
+                                registers_clone[idx].store(val, Ordering::Relaxed);
+                            }
+                        }
                     }
+                }) {
+                Ok(handle) => handles.push(handle),
+                Err(e) => {
+                    println!("Warning: Failed to create thread {}: {}", i, e);
+                    thread_creation_failed = true;
+                    break;
                 }
-                
-                let mut registers = registers_clone.lock().unwrap();
-                for i in 0..registers.len() {
-                    if registers[i] < local_registers[i] {
-                        registers[i] = local_registers[i];
-                    }
-                }
-            });
-            
-            handles.push(handle);
+            }
+        }
+        
+        // If thread creation failed, fall back to single-threaded processing
+        if thread_creation_failed {
+            println!("Falling back to single-threaded processing");
+            return self.add_batch_single_py(values.iter().map(|s| s.as_str()).collect());
         }
         
         for handle in handles {
-            handle.join().unwrap();
+            if let Err(e) = handle.join() {
+                println!("Warning: Thread join failed: {:?}", e);
+            }
         }
         
-        let final_registers = registers_arc.lock().unwrap();
-        self.registers.copy_from_slice(&final_registers);
+        // Copy the atomic values back to the registers
+        for (i, atomic) in registers_arc.iter().enumerate() {
+            self.registers[i] = atomic.load(Ordering::Relaxed);
+        }
+        
         Ok(())
     }
 
@@ -372,11 +400,11 @@ impl RustHLL {
             union_registers[i] = cmp::max(self.registers[i], other.registers[i]);
         }
         
-        let mut intersection_sketch = RustHLL::new(self.precision, None, None, None)?;
+        let mut intersection_sketch = RustHLL::new(self.precision, None, None, None, None)?;
         intersection_sketch.registers = intersection_registers;
         intersection_sketch.alpha_mm = self.alpha_mm;
         
-        let mut union_sketch = RustHLL::new(self.precision, None, None, None)?;
+        let mut union_sketch = RustHLL::new(self.precision, None, None, None, None)?;
         union_sketch.registers = union_registers;
         union_sketch.alpha_mm = self.alpha_mm;
         
@@ -470,7 +498,27 @@ impl RustHLL {
             compacted: data.compacted,
             hash_size: data.hash_size,
             hasher: RandomState::new(),
+            memory_limit: None,
         })
+    }
+
+    pub fn set_memory_limit(&mut self, limit: Option<usize>) -> PyResult<()> {
+        if let Some(limit) = limit {
+            let current_memory = self.registers.len() * std::mem::size_of::<u8>();
+            if current_memory > limit {
+                return Err(PyValueError::new_err(format!(
+                    "Current memory usage ({:.2} GB) exceeds new limit ({:.2} GB)",
+                    current_memory as f64 / (1024.0 * 1024.0 * 1024.0),
+                    limit as f64 / (1024.0 * 1024.0 * 1024.0)
+                )));
+            }
+        }
+        self.memory_limit = limit;
+        Ok(())
+    }
+
+    pub fn get_memory_usage(&self) -> PyResult<usize> {
+        Ok(self.registers.len() * std::mem::size_of::<u8>())
     }
 }
 

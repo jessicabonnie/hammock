@@ -34,20 +34,31 @@ except ImportError:
 class RustHLL:
     """Rust implementation of HyperLogLog."""
     
-    def __init__(self, precision: int = 12, hash_size: int = 32):
+    def __init__(self, precision: int = 12, hash_size: int = 32, memory_limit: Optional[int] = None):
         """Initialize the sketch.
         
         Args:
             precision: Number of bits to use for register addressing.
             hash_size: Size of hash in bits (32 or 64)
+            memory_limit: Maximum memory usage in bytes (optional)
         """
         self.precision = precision
         self.num_registers = 1 << precision
         self.hash_size = hash_size
         
         if RUST_HLL_AVAILABLE:
-            self._sketch = RustHLLClass(precision, hash_size=hash_size)
-            self._using_rust = True
+            try:
+                # Convert memory limit to bytes if provided in GB
+                if memory_limit is not None and memory_limit < 1024:
+                    memory_limit = memory_limit * 1024 * 1024 * 1024
+                
+                self._sketch = RustHLLClass(precision, hash_size=hash_size, memory_limit=memory_limit)
+                self._using_rust = True
+            except ValueError as e:
+                print(f"Warning: Failed to initialize Rust HLL: {e}")
+                print("Falling back to Python implementation")
+                self._using_rust = False
+                self.registers = np.zeros(self.num_registers, dtype=np.float64)
         else:
             self.registers = np.zeros(self.num_registers, dtype=np.float64)
             self._using_rust = False
@@ -215,3 +226,17 @@ class RustHLL:
             sketch.registers = registers
             sketch._using_rust = False
             return sketch 
+
+    def set_memory_limit(self, limit: Optional[int]) -> None:
+        """Set memory usage limit in bytes."""
+        if self._using_rust:
+            if limit is not None and limit < 1024:
+                limit = limit * 1024 * 1024 * 1024
+            self._sketch.set_memory_limit(limit)
+    
+    def get_memory_usage(self) -> int:
+        """Get current memory usage in bytes."""
+        if self._using_rust:
+            return self._sketch.get_memory_usage()
+        else:
+            return self.registers.nbytes 
