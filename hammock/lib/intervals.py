@@ -238,18 +238,7 @@ class IntervalSketch(AbstractSketch):
 
     @classmethod
     def _from_bed(cls, filename: str, **kwargs) -> Optional['IntervalSketch']:
-        """Process BED format file.
-        
-        Args:
-            filename: Path to BED file
-            **kwargs: Additional arguments including:
-                - mode: Sketch mode (A/B/C)
-                - sep: Separator for string representation
-                - subsample: Tuple of sampling rates
-                - expA: Exponential scaling factor
-                - sketch: IntervalSketch instance
-                - num_threads: Number of threads to use (default: cpu_count())
-        """
+        """Process BED format file."""
         if 'sketch' not in kwargs:
             return None
             
@@ -261,10 +250,17 @@ class IntervalSketch(AbstractSketch):
             expA = kwargs.get('expA', 0)
             sketch = kwargs['sketch']
             debug = kwargs.get('debug', False)
-            num_threads = kwargs.get('num_threads', cpu_count())
+            use_rust = kwargs.get('use_rust', False)
+            
+            # If using Rust implementation, be more conservative with Python-level threading
+            if use_rust:
+                num_threads = 1  # Let Rust handle the threading
+            else:
+                num_threads = min(cpu_count(), 4)  # Limit Python threads
             
             if debug:
                 print(f"Processing BED file {filename} with mode={mode}, subsample={subsample}, debug={debug}")
+                print(f"Using {num_threads} Python threads (Rust threading: {use_rust})")
             
             # Open file with gzip if it ends in .gz, otherwise normal open
             opener = gzip.open if filename.endswith('.gz') else open
@@ -296,17 +292,23 @@ class IntervalSketch(AbstractSketch):
             if debug:
                 print(f"Using {num_threads} threads with chunk size {chunk_size}")
             
-            # Create process pool
-            with Pool(processes=num_threads) as pool:
+            # If using Rust, process in a single chunk to let Rust handle threading
+            if use_rust:
+                chunk_args = [(lines, mode, subsample, expA, sep, sketch.sketch.precision, debug)]
+            else:
                 # Prepare arguments for each chunk
                 chunk_args = []
                 for i in range(0, len(lines), chunk_size):
                     chunk = lines[i:i + chunk_size]
                     args = (chunk, mode, subsample, expA, sep, sketch.sketch.precision, debug)
                     chunk_args.append(args)
-                
-                # Process chunks in parallel
-                results = pool.starmap(_process_chunk, chunk_args)
+            
+            # Process chunks
+            if num_threads > 1:
+                with Pool(processes=num_threads) as pool:
+                    results = pool.starmap(_process_chunk, chunk_args)
+            else:
+                results = [_process_chunk(*args) for args in chunk_args]
             
             # Combine results from all chunks
             all_intervals = []

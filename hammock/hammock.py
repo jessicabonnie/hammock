@@ -295,6 +295,48 @@ def process_sketches(sketches: List[Tuple[str, AbstractSketch]],
     
     write_results(results, output)
 
+def process_files(files: List[str], **kwargs) -> Dict[str, IntervalSketch]:
+    """Process multiple files in parallel."""
+    mode = kwargs.get('mode', 'A')
+    sep = kwargs.get('sep', '-')
+    subsample = kwargs.get('subsample', (1.0, 1.0))
+    expA = kwargs.get('expA', 0)
+    debug = kwargs.get('debug', False)
+    use_rust = kwargs.get('use_rust', False)
+    
+    # If using Rust, be more conservative with Python-level threading
+    if use_rust:
+        num_threads = 1  # Let Rust handle the threading
+    else:
+        num_threads = min(cpu_count(), 4)  # Limit Python threads
+    
+    if debug:
+        print(f"Processing {len(files)} files with mode={mode}, subsample={subsample}, debug={debug}")
+        print(f"Using {num_threads} Python threads (Rust threading: {use_rust})")
+    
+    # Create a sketch for each file
+    sketches = {}
+    for filename in files:
+        try:
+            sketch = IntervalSketch.from_bed(
+                filename,
+                mode=mode,
+                sep=sep,
+                subsample=subsample,
+                expA=expA,
+                debug=debug,
+                use_rust=use_rust,
+                num_threads=num_threads
+            )
+            if sketch is not None:
+                sketches[filename] = sketch
+        except Exception as e:
+            if debug:
+                print(f"Error processing {filename}: {str(e)}")
+            continue
+    
+    return sketches
+
 def main():
     """Main entry point for hammock."""
     import warnings
