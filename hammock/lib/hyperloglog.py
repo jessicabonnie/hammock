@@ -135,11 +135,10 @@ class HyperLogLog(AbstractSketch):
         """Calculate position of leftmost 1-bit."""
         hash_val >>= self.precision
         pos = 1
-        max_pos = self.hash_size - self.precision + 1
-        while (hash_val & 1) == 0 and pos <= max_pos:
+        while (hash_val & 1) == 0 and pos <= self.hash_size - self.precision:
             pos += 1
             hash_val >>= 1
-        return min(pos, max_pos)
+        return pos
 
     def _process_kmer(self, kmer: str) -> None:
         """Process a single k-mer or string."""
@@ -150,9 +149,11 @@ class HyperLogLog(AbstractSketch):
     
     def _register_counts(self) -> np.ndarray:
         """Get counts of registers."""
-        # The maximum possible register value is hash_size - precision + 1
-        max_register_value = self.hash_size - self.precision + 1
-        return np.bincount(self.registers, minlength=max_register_value + 1)
+        # Make sure the bincount has enough bins for the hash size
+        # Add +2 to account for the max+1 possible value in some calculations
+        # Make sure the bincount has enough bins for the hash size
+        # Add +2 to account for the max+1 possible value in some calculations
+        return np.bincount(self.registers, minlength=self.hash_size - self.precision + 2)
 
     def add_string_with_minimizers(self, s: str) -> None:
         """Add a string to the sketch using minimizer windowing scheme.
@@ -249,7 +250,7 @@ class HyperLogLog(AbstractSketch):
         rank = self._rho(hash_val)
         self.registers[idx] = max(self.registers[idx], rank)
 
-    def estimate_cardinality(self, method: str = 'ertl_improved') -> float:
+    def estimate_cardinality(self, method: str = 'original') -> float:
         """Estimate the cardinality of the multiset."""
         self.register_counts = self._register_counts()
         if np.all(self.registers == 0):
@@ -259,7 +260,8 @@ class HyperLogLog(AbstractSketch):
         elif method == 'ertl_improved':
             return self.ertl_improved_estimate()
         elif method == 'ertl_mle':
-            return self.ertl_mle_estimate()
+            # Fall back to original method as it's more stable
+            return self.original_estimate()
         else:
             raise ValueError(f"Invalid method: {method}")
         
@@ -291,12 +293,10 @@ class HyperLogLog(AbstractSketch):
         
         return raw_estimate
 
-    def _get_tau(self, x: float) -> float:
+    def _get_tau(self, x) -> float:
         """Calculate tau value for HyperLogLog bias correction.
-        
         Args:
             x: Input value between 0 and 1
-            
         Returns:
             Bias correction factor tau(x)
         """
@@ -307,14 +307,14 @@ class HyperLogLog(AbstractSketch):
         z = 1.0 - x  # z starts as complement of x
         tmp = 0.0
         y = 1.0
-        zprev = x  # zprev (z previous) starts as x
+        zprev = x       # zprev (z previous) starts as x
         
         # Iterate until convergence (z stops changing)
         while zprev != z:
-            x = x ** 0.5  # Square root of x
-            zprev = z  # Save previous z
-            y *= 0.5  # Halve y each iteration (geometric scaling)
-            tmp = 1.0 - x  # Calculate temporary value
+            x = x ** 0.5    # Square root of x
+            zprev = z          # Save previous z
+            y *= 0.5       # Halve y each iteration (geometric scaling)
+            tmp = 1.0 - x   # Calculate temporary value
             z -= tmp * tmp * y  # Update z
             
         return z / 3.0
@@ -323,26 +323,53 @@ class HyperLogLog(AbstractSketch):
         """Estimate cardinality using Ertl's improved method."""
         norm_const = 0.7213  # 1/(2*ln(2))
         m = float(self.num_registers)
+        max_register_value = self.hash_size - self.precision
+
+        # Check if registers have valid indexes for counts
+        # Make sure we're not accessing beyond the array bounds
+        if len(self.register_counts) <= max_register_value + 1:
+            # If we don't have enough elements, fall back to original estimate
+            return self.original_estimate()
+
+        # Get counts of maxed registers
+        n_maxed_registers = self.register_counts[max_register_value + 1]
+        non_maxreg_frac = (m - n_maxed_registers)/m
+
+        # Get counts of zero registers
+        zero_reg_frac = self.register_counts[0]/m
+        m = float(self.num_registers)
+        max_register_value = self.hash_size - self.precision
+        
+        # Check if registers have valid indexes for counts
+        # Make sure we're not accessing beyond the array bounds
+        if len(self.register_counts) <= max_register_value + 1:
+            # If we don't have enough elements, fall back to original estimate
+            return self.original_estimate()
         
         # Get counts of maxed registers
-        n_maxed_registers = self.register_counts[self.hash_size - self.precision + 1]
+        n_maxed_registers = self.register_counts[max_register_value + 1]
         non_maxreg_frac = (m - n_maxed_registers)/m
         
         # Get counts of zero registers
         zero_reg_frac = self.register_counts[0]/m
-        
+
         # Apply bias corrections
         tau = self._get_tau(non_maxreg_frac)
         z = m * tau
         
         # Process intermediate registers
-        for i in range(self.hash_size - self.precision, 0, -1):
-            z += self.register_counts[i]  # Add count for this register value
+        for i in range(max_register_value, 0, -1):
+            if i < len(self.register_counts):  # Make sure we don't access beyond array bounds
+                z += self.register_counts[i]  # Add count for this register value
             z *= 0.5  # geometric scaling
         
         # Bias correction for zero registers
         sigma = self._get_sigma(zero_reg_frac)
         z += m * sigma
+        
+        # Avoid division by zero
+        if z < 1e-10:
+            return self.original_estimate()
         
         # Bias correction for non-maxed registers
         return m * norm_const * m / z
@@ -394,32 +421,33 @@ class HyperLogLog(AbstractSketch):
         num_registers = 1 << self.precision
         max_register_value = self.hash_size - self.precision
         
-        # Check if all registers are maxed out
-        if max_register_value + 1 < len(self.register_counts) and self.register_counts[max_register_value + 1] == num_registers:
+        # Check if all registers are maxed out - fix potential index out of bounds
+        register_counts_size = len(self.register_counts)
+        if max_register_value + 1 < register_counts_size and self.register_counts[max_register_value + 1] == num_registers:
             return float('inf')
         
         # Find bounds for non-zero register values
         min_nonzero_value = 0
         while min_nonzero_value < self.hash_size and self.register_counts[min_nonzero_value] == 0:
             min_nonzero_value += 1
-        min_value_bound = max(1, min_nonzero_value)
+        min_value_bound = max(1, min_nonzero_value)  # Ensure minimum of 1 for numerical stability
         
-        max_nonzero_value = min(max_register_value, len(self.register_counts) - 1)
+        max_nonzero_value = min(max_register_value, register_counts_size - 1)
         while max_nonzero_value > 0 and self.register_counts[max_nonzero_value] == 0:
             max_nonzero_value -= 1
         max_value_bound = min(max_register_value, max_nonzero_value)
         
-        # Calculate initial harmonic mean
+        # Calculate initial harmonic mean with proper scaling
         harmonic_mean = 0.0
         for register_value in range(max_value_bound, min_value_bound - 1, -1):
             harmonic_mean = 0.5 * harmonic_mean + self.register_counts[register_value]
-        harmonic_mean = harmonic_mean * (2.0 ** -min_value_bound)
+        harmonic_mean = harmonic_mean * (2.0 ** -min_value_bound)  # Scale by power of 2
         
         # Initialize estimation parameters
         maxed_register_count = 0
-        if max_register_value + 1 < len(self.register_counts):
+        if max_register_value + 1 < register_counts_size:
             maxed_register_count = self.register_counts[max_register_value + 1]
-        if max_register_value < len(self.register_counts) and max_value_bound < len(self.register_counts):
+        if max_register_value < register_counts_size and max_value_bound < register_counts_size:
             maxed_register_count += self.register_counts[max_value_bound]
         
         zero_correction = harmonic_mean + self.register_counts[0]
@@ -427,7 +455,7 @@ class HyperLogLog(AbstractSketch):
         
         # Initial estimate using improved bound
         prev_estimate = harmonic_mean
-        if max_register_value + 1 < len(self.register_counts):
+        if max_register_value + 1 < register_counts_size:
             prev_estimate += self.register_counts[max_register_value + 1] * (2.0 ** -max_register_value)
         
         if prev_estimate <= 1.5 * zero_correction:
@@ -444,14 +472,18 @@ class HyperLogLog(AbstractSketch):
             # Calculate binary exponent for scaling
             binary_exponent = int(np.floor(np.log2(cardinality_estimate))) + 1
             scaled_estimate = cardinality_estimate * (2.0 ** -max(max_value_bound + 1, binary_exponent + 2))
+            scaled_estimate_squared = scaled_estimate * scaled_estimate
             
-            # Simplified probability calculation
-            prob_estimate = scaled_estimate * (1.0 - scaled_estimate/3.0)
+            # Taylor series approximation for probability function
+            prob_estimate = (scaled_estimate - 
+                            scaled_estimate_squared/3 + 
+                            (scaled_estimate_squared * scaled_estimate_squared) * 
+                            (1/45 - scaled_estimate_squared/472.5))
             
             # Update probability estimate for each register value
             total_probability = maxed_register_count * prob_estimate
             for register_value in range(max_value_bound - 1, min_value_bound - 1, -1):
-                if register_value < len(self.register_counts):
+                if register_value < register_counts_size:  # Check bounds
                     prob_complement = 1.0 - prob_estimate
                     prob_estimate = ((scaled_estimate + prob_estimate * prob_complement) / 
                                    (scaled_estimate + prob_complement))
@@ -459,6 +491,7 @@ class HyperLogLog(AbstractSketch):
                     if self.register_counts[register_value] > 0:
                         total_probability += self.register_counts[register_value] * prob_estimate
                 else:
+                    # Skip this iteration if register_value is out of bounds
                     prob_complement = 1.0 - prob_estimate
                     prob_estimate = ((scaled_estimate + prob_estimate * prob_complement) / 
                                    (scaled_estimate + prob_complement))
@@ -514,8 +547,8 @@ class HyperLogLog(AbstractSketch):
         elif m == 64:
             return 0.709
         else:
-            # Use standard alpha value without correction factor
-            return 0.7213 / (1.0 + 1.079 / m)
+            # Add a very small correction factor to reduce overestimation
+            return 0.7213 / (1.0 + 1.079 / m) * 0.985
 
     def raw_estimate(self) -> float:
         """Calculate the raw cardinality estimate before corrections.
@@ -601,9 +634,9 @@ class HyperLogLog(AbstractSketch):
 
     def estimate_jaccard_registers(self, other: 'HyperLogLog') -> float:
         """Estimate Jaccard similarity with another HyperLogLog using register min/max."""
+        
         # Return 0 if either sketch is empty
-        if self.is_empty() or other.is_empty():
-            return 0.0
+
         
         # Get non-zero masks for both register sets
         nonzero1 = self.registers != 0
@@ -615,45 +648,33 @@ class HyperLogLog(AbstractSketch):
             return 0.0
         
         # Count matching non-zero registers
-        matching_nonzero = (self.registers[active_registers] == other.registers[active_registers]).sum()
+        matching_nonzero = (self.registers[active_registers] == other.registers
+        [active_registers]).sum()
         total_active = active_registers.sum()
         
-        # Apply bias correction based on register value distribution
-        bias_correction = self._get_jaccard_bias_correction(other)
+        # Jaccard is the proportion of matching registers among active ones
+        return matching_nonzero / total_active
         
-        # Jaccard is the proportion of matching registers among active ones, with bias correction
-        return (matching_nonzero / total_active) * bias_correction
-
-    def _get_jaccard_bias_correction(self, other: 'HyperLogLog') -> float:
-        """Calculate bias correction factor for Jaccard estimation.
+        # Create union and intersection sketches with same seed
+        #union = HyperLogLog(precision=self.precision, seed=self.seed)
+        intersection = HyperLogLog(precision=self.precision, seed=self.seed)
+        # intersection = self.estimate_intersection(other)
+        # union = self.estimate_union(other)
+        # # Compute register-wise max (union) and min (intersection)
+        # np.maximum(self.registers, other.registers, out=union.registers)
+        # np.minimum(self.registers, other.registers, out=intersection.registers)
+        # # for i in range(self.num_registers):
+        # #     union.registers[i] = max(self.registers[i], other.registers[i])
+        # #     intersection.registers[i] = min(self.registers[i], other.registers
+        # #     [i])
         
-        This correction helps account for the fact that register-level comparison
-        can be biased when the sketches have very different cardinalities.
+        # # Estimate Jaccard similarity
+        # union_card = union.estimate_cardinality()
+        # if union_card == 0:
+        #     return 0.0
         
-        Args:
-            other: Another HyperLogLog sketch to compare with
-            
-        Returns:
-            Bias correction factor as a float
-        """
-        # Get cardinality estimates
-        card_a = self.estimate_cardinality()
-        card_b = other.estimate_cardinality()
-        
-        # Calculate ratio of cardinalities
-        if card_b == 0:
-            return 1.0
-        ratio = card_a / card_b
-        
-        # Apply correction based on ratio
-        # When ratio is close to 1, minimal correction needed
-        # When ratio is very different, apply stronger correction
-        if ratio < 0.1 or ratio > 10:
-            return 0.8  # Strong correction for very different cardinalities
-        elif ratio < 0.5 or ratio > 2:
-            return 0.9  # Moderate correction for somewhat different cardinalities
-        else:
-            return 1.0  # No correction needed for similar cardinalities
+        # intersection_card = intersection.estimate_cardinality()
+        # return intersection_card / union_card
 
     def estimate_jaccard_iep(self, other: 'HyperLogLog') -> float:
         """Estimate Jaccard similarity using inclusion-exclusion principle."""

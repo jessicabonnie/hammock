@@ -302,11 +302,11 @@ class IntervalSketch(AbstractSketch):
                     chunk = lines[i:i + chunk_size]
                     args = (chunk, mode, subsample, expA, sep, sketch.sketch.precision, debug)
                     chunk_args.append(args)
-            
+                
             # Process chunks
             if num_threads > 1:
                 with Pool(processes=num_threads) as pool:
-                    results = pool.starmap(_process_chunk, chunk_args)
+                results = pool.starmap(_process_chunk, chunk_args)
             else:
                 results = [_process_chunk(*args) for args in chunk_args]
             

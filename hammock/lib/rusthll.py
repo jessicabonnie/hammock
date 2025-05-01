@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional, Dict, Any, List, Set, Tuple, Union
 import sys
 import os
+import resource
 
 from hammock.lib.abstractsketch import AbstractSketch
 import numpy as np  # type: ignore
@@ -48,37 +49,15 @@ class RustHyperLogLog(AbstractSketch):
         
         Args:
             precision: Number of bits to use for register addressing.
-            kmer_size: Size of k-mers (0 for whole string mode)
-            window_size: Size of sliding window (0 or == kmer_size for no windowing)
-            seed: Random seed for hashing
-            expected_cardinality: Expected number of unique items. If provided, precision will be adjusted.
-            hash_size: Size of hash in bits (32 or 64)
-            debug: Debug flag (not used, provided for backward compatibility)
+            kmer_size: Size of k-mers (0 for whole string mode).
+            window_size: Size of sliding window (0 or == kmer_size for no windowing).
+            seed: Random seed for hashing.
+            expected_cardinality: Expected number of unique elements.
+            hash_size: Size of hash in bits (32 or 64).
+            debug: Whether to enable debug mode.
         """
-        super().__init__()
-        
-        if hash_size not in [32, 64]:
-            raise ValueError("hash_size must be 32 or 64")
-            
-        if expected_cardinality is not None:
-            # Adjust precision based on expected cardinality
-            if expected_cardinality < 1000:
-                precision = 8  # For small sets, use lower precision
-            elif expected_cardinality < 10000:
-                precision = 12  # For medium sets
-            elif expected_cardinality < 100000:
-                precision = 18  # For larger sets
-            else:
-                precision = 22  # For very large sets
-        
-        # Enforce only theoretical limits
-        if precision < 4:
-            raise ValueError(f"Precision must be at least 4")
-        if precision >= hash_size:
-            raise ValueError(f"Precision must be less than hash_size ({hash_size})")
-            
-        if kmer_size < 0:
-            raise ValueError("k-mer size must be non-negative")
+        if precision < 4 or precision >= hash_size:
+            raise ValueError(f"Precision must be between 4 and {hash_size-1}")
             
         if window_size and window_size < kmer_size:
             raise ValueError("Window size must be >= kmer size")
@@ -91,8 +70,49 @@ class RustHyperLogLog(AbstractSketch):
         
         if RUST_AVAILABLE:
             try:
-                # Try to create the Rust HLL - no arbitrary precision limit
-                self._sketch = rust_hll.RustHLL(precision, None, None, hash_size)
+                # Calculate memory usage and set conservative limit
+                num_registers = 1 << precision
+                register_size = 1  # bytes per register
+                estimated_memory = num_registers * register_size
+                
+                # Calculate additional memory needed for batch processing
+                # More generous batch overhead - assume larger strings
+                batch_overhead = 1024 * 1024 * 10  # 10MB for batch processing
+                
+                # Ensure minimum memory limit of 32MB
+                min_memory = 32 * 1024 * 1024  # 32MB
+                
+                # Calculate memory limit as max of:
+                # 1. Minimum memory (32MB)
+                # 2. 1GB maximum
+                # 3. 3x estimated usage + batch overhead
+                memory_limit = max(
+                    min_memory,
+                    min(
+                        1024 * 1024 * 1024,  # 1GB
+                        int(estimated_memory * 3.0) + batch_overhead
+                    )
+                )
+                
+                # Print detailed memory information
+                print(f"Memory calculation details:")
+                print(f"  - Precision: {precision}")
+                print(f"  - Number of registers: {num_registers}")
+                print(f"  - Register size: {register_size} bytes")
+                print(f"  - Estimated memory: {estimated_memory} bytes")
+                print(f"  - Batch overhead: {batch_overhead} bytes")
+                print(f"  - Total memory limit: {memory_limit} bytes")
+                print(f"  - Memory limit in GB: {memory_limit / (1024*1024*1024):.6f}GB")
+                print(f"  - System memory limit: {resource.getrlimit(resource.RLIMIT_AS)[0]} bytes")
+                
+                # Try to create the Rust HLL with memory limit
+                self._sketch = rust_hll.RustHLL(
+                    precision, 
+                    use_threading=True,  # Keep threading enabled
+                    min_thread_batch=5000,  # Increased batch size for better performance
+                    hash_size=hash_size,
+                    memory_limit=memory_limit
+                )
                 self._using_rust = True
             except ValueError as e:
                 # Fallback to Python implementation if Rust fails
@@ -179,7 +199,27 @@ class RustHyperLogLog(AbstractSketch):
         """Add multiple strings to the sketch."""
         # Convert any non-string values to strings
         string_values = [str(s) if not isinstance(s, str) else s for s in strings]
-        self._sketch.add_batch(string_values)
+        
+        # Process in chunks to prevent memory issues
+        chunk_size = 5000  # Increased chunk size for better performance
+        total_chunks = (len(string_values) + chunk_size - 1) // chunk_size
+        
+        # Only report progress for large batches
+        report_progress = len(string_values) > 100000
+        
+        for i in range(0, len(string_values), chunk_size):
+            chunk = string_values[i:i + chunk_size]
+            if report_progress and i % (chunk_size * 10) == 0:  # Report every 10 chunks
+                print(f"Processing batch chunk {i//chunk_size + 1}/{total_chunks}")
+            
+            # Track memory usage before and after processing chunk
+            if report_progress and i % (chunk_size * 10) == 0:
+                before_mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                self._sketch.add_batch(chunk)
+                after_mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                print(f"  Memory usage: {before_mem/1024:.1f}MB -> {after_mem/1024:.1f}MB")
+            else:
+                self._sketch.add_batch(chunk)
         
     def estimate_cardinality(self, method: str = "fast_mle") -> float:
         """Estimate the cardinality of the set.
