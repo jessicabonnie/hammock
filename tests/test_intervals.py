@@ -101,7 +101,7 @@ def test_bed_file_processing():
             sketch_a = IntervalSketch.from_file(
                 filename=f.name,
                 mode="A",
-                precision=16,  # Increased precision
+                precision=12,  # 2^12 = 4096 registers, sufficient for ~200 points
                 debug=True
             )
             assert sketch_a is not None
@@ -112,13 +112,13 @@ def test_bed_file_processing():
             sketch_b = IntervalSketch.from_file(
                 filename=f.name,
                 mode="B",
-                precision=16,  # Increased precision
+                precision=12,  # 2^12 = 4096 registers, sufficient for ~200 points
                 debug=True
             )
             assert sketch_b is not None
             # Total points should be sum of interval lengths
             expected_points = (200-100) + (250-150) + (400-300)
-            tolerance = expected_points * 0.05  # Reduced tolerance to 5% due to higher precision
+            tolerance = expected_points * 0.05  # 5% tolerance
             actual_points = sketch_b.sketch.estimate_cardinality()
             print(f"Mode B: Expected ~{expected_points} points (±{tolerance}), got {actual_points}")
             assert abs(actual_points - expected_points) <= tolerance, \
@@ -128,7 +128,7 @@ def test_bed_file_processing():
             sketch_c = IntervalSketch.from_file(
                 filename=f.name,
                 mode="C",
-                precision=16,  # Increased precision
+                precision=12,  # 2^12 = 4096 registers, sufficient for ~200 points
                 subsample=(0.5, 0.5),  # 50% sampling for both intervals and points
                 debug=True
             )
@@ -142,7 +142,7 @@ def test_bed_file_processing():
             sketch_c_exp = IntervalSketch.from_file(
                 filename=f.name,
                 mode="C",
-                precision=16,  # Increased precision
+                precision=12,  # 2^12 = 4096 registers, sufficient for ~200 points
                 expA=1.0,  # Add copies of intervals
                 debug=True
             )
@@ -161,7 +161,7 @@ def test_bed_file_processing():
                     sketch_gz = IntervalSketch.from_file(
                         filename=gz_f.name, 
                         mode="A", 
-                        precision=16,  # Increased precision
+                        precision=12,  # 2^12 = 4096 registers, sufficient for ~200 points
                         debug=True
                     )
                     assert sketch_gz is not None
@@ -258,7 +258,7 @@ def test_subsampling():
                 filename=f.name,
                 mode="A",
                 subsample=(1.0, 1.0),  # No subsampling in mode A
-                precision=18,  # Increased precision
+                precision=17,  # 2^17 = 131,072 registers, sufficient for ~100,000 points with better accuracy
                 debug=True
             )
             assert sketch_a is not None
@@ -269,7 +269,7 @@ def test_subsampling():
                 filename=f.name,
                 mode="B",
                 subsample=(1.0, subsample_ratio),  # Only subsample points
-                precision=18,  # Increased precision
+                precision=17,  # 2^17 = 131,072 registers, sufficient for ~100,000 points with better accuracy
                 debug=True
             )
             assert sketch_b is not None
@@ -277,8 +277,9 @@ def test_subsampling():
             expected_points = sum((i+1)*100 - i*100 for i in range(total_intervals))
             # With subsampling, we expect roughly half the points
             expected_sampled = expected_points * subsample_ratio
-            tolerance = expected_sampled * 0.2  # Allow 20% variation
+            tolerance = expected_sampled * 0.15  # Reduced tolerance to 15% for better accuracy
             actual_points = sketch_b.sketch.estimate_cardinality()
+            print(f"Mode B: Expected ~{expected_sampled} points (±{tolerance}), got {actual_points}")
             assert abs(actual_points - expected_sampled) <= tolerance, \
                 f"Expected ~{expected_sampled} points (±{tolerance}), got {actual_points}"
             
@@ -287,7 +288,7 @@ def test_subsampling():
                 filename=f.name,
                 mode="C",
                 subsample=(subsample_ratio, subsample_ratio),  # Sample both intervals and points
-                precision=18,  # Increased precision
+                precision=17,  # 2^17 = 131,072 registers, sufficient for ~100,000 points with better accuracy
                 debug=True
             )
             assert sketch_c is not None
@@ -389,7 +390,8 @@ def test_parallel_file_reading():
                     filename=f.name,
                     mode="A",
                     num_processes=num_processes,
-                    chunk_size=10000
+                    chunk_size=10000,
+                    precision=20  # 2^20 = 1,048,576 registers, sufficient for ~10,000,000 points
                 )
                 end_time = time.time()
                 
@@ -408,7 +410,8 @@ def test_parallel_file_reading():
                         filename=f.name,
                         mode="A",
                         num_processes=4,
-                        chunk_size=chunk_size
+                        chunk_size=chunk_size,
+                        precision=20  # 2^20 = 1,048,576 registers, sufficient for ~10,000,000 points
                     )
                     end_time = time.time()
                     
@@ -423,7 +426,8 @@ def test_parallel_file_reading():
                     filename=f.name,
                     mode=mode,
                     num_processes=4,
-                    chunk_size=10000
+                    chunk_size=10000,
+                    precision=20  # 2^20 = 1,048,576 registers, sufficient for ~10,000,000 points
                 )
                 end_time = time.time()
                 
@@ -439,7 +443,8 @@ def test_parallel_file_reading():
                 mode="C",
                 num_processes=4,
                 chunk_size=10000,
-                subsample=(0.5, 0.5)
+                subsample=(0.5, 0.5),
+                precision=20  # 2^20 = 1,048,576 registers, sufficient for ~10,000,000 points
             )
             end_time = time.time()
             

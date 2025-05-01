@@ -17,6 +17,7 @@ import os
 import xxhash  # type: ignore
 import numpy as np  # type: ignore
 import mmh3  # type: ignore
+import sys
 
 def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], expA: float = 0, sep: str = "-", precision: int = 12, debug: bool = False) -> Tuple[List[str], List[str], List[int]]:
     """Process a chunk of lines in parallel.
@@ -128,7 +129,7 @@ class IntervalSketch(AbstractSketch):
         
         # Choose sketch implementation based on use_rust flag
         if use_rust:
-            self.sketch = RustHLL(precision=precision, debug=debug)
+            self.sketch = RustHLL(precision=precision)
         else:
             self.sketch = HyperLogLog(precision=precision, debug=debug)
         
@@ -138,63 +139,82 @@ class IntervalSketch(AbstractSketch):
 
     @classmethod
     def from_file(cls, filename: str, **kwargs) -> Optional['IntervalSketch']:
-        """Create a sketch from a file."""
+        """Create a sketch from a file.
+        
+        Args:
+            filename: Path to the file to read
+            **kwargs: Additional parameters to pass to the sketch constructor
+                - mode: Mode for comparison (A/B/C/D)
+                - precision: Precision for HyperLogLog sketch
+                - num_hashes: Number of hashes for MinHash sketch
+                - kmer_size: Size of k-mers
+                - window_size: Size of sliding window
+                - sketch_type: Type of sketch to use
+                - subsample: Subsampling rate for points
+                - expA: Power of 10 exponent to use to multiply contribution of A-type intervals
+                - debug: Whether to enable debug mode
+                - use_rust: Whether to use Rust implementation
+        """
+        # Check if file exists
+        if not os.path.exists(filename):
+            if kwargs.get('debug', False):
+                print(f"Error: File {filename} does not exist", file=sys.stderr)
+            return None
+            
+        # Check file extension
+        supported_extensions = ['.bed', '.bed.gz']
+        file_ext = os.path.splitext(filename)[1].lower()
+        if file_ext.endswith('.gz'):
+            base_ext = os.path.splitext(os.path.splitext(filename)[0])[1].lower()
+            if base_ext not in ['.bed']:
+                print(f"Skipping unsupported gzipped file format: {filename}")
+                return None
+        elif file_ext not in supported_extensions:
+            print(f"Skipping unsupported file format: {filename}")
+            return None
+            
+        # Print start of file processing
+        print(f"Processing file: {filename}")
+            
+        # Create sketch with appropriate parameters
+        sketch = cls(**kwargs)
+        
+        # Get separator from kwargs, default to tab
+        sep = kwargs.get('sep', '\t')
+        
+        # Read file and add intervals
         try:
-            # Check if file exists first
-            if not os.path.exists(filename):
-                print(f"Error: File not found: {filename}")
-                return None
+            opener = gzip.open if file_ext.endswith('.gz') else open
+            mode = 'rt' if file_ext.endswith('.gz') else 'r'
             
-            # Initialize sketch
-            sketch = cls(**kwargs)
+            with opener(filename, mode) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    interval, points, size = sketch.bedline(line, mode=kwargs.get('mode', 'A'), sep=sep, subsample=kwargs.get('subsample', (1.0, 1.0)))
+                    if interval:
+                        sketch.sketch.add_string(interval)
+                        sketch.num_intervals += 1
+                        sketch.total_interval_size += size
+                    if points:
+                        for point in points:
+                            if point is not None:
+                                sketch.sketch.add_string(point)
+                        if kwargs.get('mode', 'A') == 'B':
+                            sketch.num_intervals += 1
             
-            # Add sketch to kwargs for helper methods
-            kwargs['sketch'] = sketch
+            # Print completion of file processing
+            print(f"Completed processing file: {filename}")
+            print(f"  - Number of intervals: {sketch.num_intervals}")
+            print(f"  - Total interval size: {sketch.total_interval_size}")
+            if kwargs.get('mode', 'A') in ['B', 'C']:
+                print(f"  - Estimated cardinality: {sketch.sketch.estimate_cardinality():.2f}")
             
-            # Check file extension and process accordingly
-            # Split on '.' and get all extensions (handles multiple extensions like .bed.gz)
-            extensions = filename.lower().split('.')
-            
-            # Define supported extensions
-            supported_extensions = {
-                'bb': cls._from_bigbed,
-                'bigbed': cls._from_bigbed,
-                'bed': cls._from_bed,
-                'gz': None  # Special case for gzipped files
-            }
-            
-            # Handle gzipped files
-            if extensions[-1] == 'gz' and len(extensions) >= 2:
-                base_ext = extensions[-2]
-                if base_ext in supported_extensions:
-                    if base_ext == 'bed':
-                        return cls._from_bed(filename, **kwargs)
-                    elif base_ext in ['bb', 'bigbed']:
-                        return cls._from_bigbed(filename, **kwargs)
-                else:
-                    print(f"Skipping unsupported gzipped file format: {filename}")
-                    return None
-            
-            # Handle non-gzipped files
-            elif extensions[-1] in supported_extensions:
-                handler = supported_extensions[extensions[-1]]
-                if handler:
-                    return handler(filename, **kwargs)
-                else:
-                    print(f"Skipping unsupported file format: {filename}")
-                    return None
-            
-            # Skip other unsupported binary formats
-            elif extensions[-1] in ['cram', 'sam', 'bam', 'bw', 'bigwig']:
-                print(f"Skipping unsupported file format: {filename}")
-                return None
-            
-            else:
-                print(f"Skipping unsupported file format: {filename}")
-                return None
-                
+            return sketch
         except Exception as e:
-            print(f"Error in from_file: {str(e)}")
+            if kwargs.get('debug', False):
+                print(f"Error reading file {filename}: {e}", file=sys.stderr)
             return None
 
     @classmethod
@@ -408,7 +428,7 @@ class IntervalSketch(AbstractSketch):
         interval = None
         points = []
         chrval, start, end = self.basic_bedline(line)
-        interval_size = end - start
+        interval_size = end - start  # Don't include end point for BED format
         
         if mode in ["A", "C"]:
             # For mode C, use integer hashing for subsampling
@@ -439,10 +459,23 @@ class IntervalSketch(AbstractSketch):
                        subsample: float = 1, 
                        seed: int = 31337,
                        debug: bool = False) -> list[Optional[str]]:
-        """Generate point strings for a given interval."""
+        """Generate point strings for a given interval.
+        
+        Args:
+            chrval: Chromosome name
+            start: Start position (inclusive)
+            end: End position (exclusive)
+            sep: Separator for string representation
+            subsample: Subsampling rate
+            seed: Random seed for hashing
+            debug: Whether to enable debug mode
+            
+        Returns:
+            List of point strings in BED format's half-open interval [start, end)
+        """
         points = []
         if subsample >= 1.0:
-            # No subsampling needed, generate all points
+            # No subsampling needed, generate all points in [start, end)
             for x in range(start, end):
                 points.append(sep.join([chrval, str(x)]))
         else:
@@ -450,7 +483,7 @@ class IntervalSketch(AbstractSketch):
             if debug:
                 print(f"Subsampling with rate={subsample} for {end-start} points")
             
-            # Generate hashes for all points using the full point string
+            # Generate hashes for all points in [start, end)
             if debug:
                 print("Generating hashes...")
             hashes = []
