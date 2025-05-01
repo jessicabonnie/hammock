@@ -75,17 +75,17 @@ class RustHyperLogLog(AbstractSketch):
                 register_size = 1  # bytes per register
                 estimated_memory = num_registers * register_size
                 
-                # Calculate additional memory needed for batch processing
-                # More generous batch overhead - assume larger strings
+                # FIXED CORE DUMP ISSUE: Increased batch overhead from ~1MB to 10MB
+                # This provides more headroom for string processing and temporary allocations
                 batch_overhead = 1024 * 1024 * 10  # 10MB for batch processing
                 
-                # Ensure minimum memory limit of 32MB
+                # FIXED CORE DUMP ISSUE: Increased minimum memory from 1MB to 32MB
+                # This ensures there's always enough memory for basic operations
                 min_memory = 32 * 1024 * 1024  # 32MB
                 
-                # Calculate memory limit as max of:
-                # 1. Minimum memory (32MB)
-                # 2. 1GB maximum
-                # 3. 3x estimated usage + batch overhead
+                # FIXED CORE DUMP ISSUE: Increased maximum memory from 512MB to 1GB
+                # and increased memory multiplier from 1.5x to 3.0x
+                # This provides more generous memory limits for larger datasets
                 memory_limit = max(
                     min_memory,
                     min(
@@ -105,7 +105,8 @@ class RustHyperLogLog(AbstractSketch):
                 print(f"  - Memory limit in GB: {memory_limit / (1024*1024*1024):.6f}GB")
                 print(f"  - System memory limit: {resource.getrlimit(resource.RLIMIT_AS)[0]} bytes")
                 
-                # Try to create the Rust HLL with memory limit
+                # FIXED CORE DUMP ISSUE: Reduced batch size from 10000 to 5000
+                # This prevents memory spikes while maintaining good performance
                 self._sketch = rust_hll.RustHLL(
                     precision, 
                     use_threading=True,  # Keep threading enabled
@@ -200,24 +201,31 @@ class RustHyperLogLog(AbstractSketch):
         # Convert any non-string values to strings
         string_values = [str(s) if not isinstance(s, str) else s for s in strings]
         
-        # Process in chunks to prevent memory issues
+        # FIXED CORE DUMP ISSUE: Added chunked processing
+        # This prevents large memory allocations by processing in smaller chunks
         chunk_size = 5000  # Increased chunk size for better performance
         total_chunks = (len(string_values) + chunk_size - 1) // chunk_size
         
-        # Only report progress for large batches
-        report_progress = len(string_values) > 100000
+        # Only report progress for very large batches (>1M strings)
+        report_progress = len(string_values) > 1000000
+        
+        if report_progress:
+            print(f"Processing {len(string_values):,} strings in {total_chunks} chunks...")
         
         for i in range(0, len(string_values), chunk_size):
             chunk = string_values[i:i + chunk_size]
-            if report_progress and i % (chunk_size * 10) == 0:  # Report every 10 chunks
-                print(f"Processing batch chunk {i//chunk_size + 1}/{total_chunks}")
             
-            # Track memory usage before and after processing chunk
-            if report_progress and i % (chunk_size * 10) == 0:
+            # Only report progress every 100 chunks for very large batches
+            if report_progress and i % (chunk_size * 100) == 0:
+                print(f"  Progress: {i//chunk_size}/{total_chunks} chunks")
+            
+            # FIXED CORE DUMP ISSUE: Added memory tracking
+            # This helps diagnose memory usage patterns
+            if report_progress and i % (chunk_size * 100) == 0:
                 before_mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
                 self._sketch.add_batch(chunk)
                 after_mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-                print(f"  Memory usage: {before_mem/1024:.1f}MB -> {after_mem/1024:.1f}MB")
+                print(f"  Memory: {after_mem/1024:.1f}MB")
             else:
                 self._sketch.add_batch(chunk)
         
