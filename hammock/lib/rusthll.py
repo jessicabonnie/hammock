@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any, List, Set, Tuple, Union
 import sys
 import os
 import resource
+import math
 
 from hammock.lib.abstractsketch import AbstractSketch
 import numpy as np  # type: ignore
@@ -56,6 +57,15 @@ class RustHyperLogLog(AbstractSketch):
             hash_size: Size of hash in bits (32 or 64).
             debug: Whether to enable debug mode.
         """
+        # Adjust precision based on expected cardinality if provided
+        if expected_cardinality is not None:
+            if expected_cardinality <= 100:
+                precision = 4  # Minimum precision for small sets
+            elif expected_cardinality <= 1000:
+                precision = 8  # Medium precision for medium sets
+            else:
+                precision = max(12, (expected_cardinality.bit_length() + 1) // 2)
+        
         if precision < 4 or precision >= hash_size:
             raise ValueError(f"Precision must be between 4 and {hash_size-1}")
             
@@ -75,111 +85,161 @@ class RustHyperLogLog(AbstractSketch):
                 register_size = 1  # bytes per register
                 estimated_memory = num_registers * register_size
                 
-                # FIXED CORE DUMP ISSUE: Increased batch overhead from ~1MB to 10MB
-                # This provides more headroom for string processing and temporary allocations
-                batch_overhead = 1024 * 1024 * 10  # 10MB for batch processing
-                
-                # FIXED CORE DUMP ISSUE: Increased minimum memory from 1MB to 32MB
-                # This ensures there's always enough memory for basic operations
-                min_memory = 32 * 1024 * 1024  # 32MB
-                
-                # FIXED CORE DUMP ISSUE: Increased maximum memory from 512MB to 1GB
-                # and increased memory multiplier from 1.5x to 3.0x
-                # This provides more generous memory limits for larger datasets
+                # More conservative memory limits
+                batch_overhead = 1024 * 1024 * 5  # 5MB for batch processing
+                min_memory = 16 * 1024 * 1024  # 16MB
                 memory_limit = max(
                     min_memory,
                     min(
-                        1024 * 1024 * 1024,  # 1GB
-                        int(estimated_memory * 3.0) + batch_overhead
+                        512 * 1024 * 1024,  # 512MB
+                        int(estimated_memory * 2.0) + batch_overhead
                     )
                 )
                 
-                # Print detailed memory information
-                print(f"Memory calculation details:")
-                print(f"  - Precision: {precision}")
-                print(f"  - Number of registers: {num_registers}")
-                print(f"  - Register size: {register_size} bytes")
-                print(f"  - Estimated memory: {estimated_memory} bytes")
-                print(f"  - Batch overhead: {batch_overhead} bytes")
-                print(f"  - Total memory limit: {memory_limit} bytes")
-                print(f"  - Memory limit in GB: {memory_limit / (1024*1024*1024):.6f}GB")
-                print(f"  - System memory limit: {resource.getrlimit(resource.RLIMIT_AS)[0]} bytes")
+                if debug:
+                    print(f"Memory calculation details:")
+                    print(f"  - Precision: {precision}")
+                    print(f"  - Number of registers: {num_registers}")
+                    print(f"  - Register size: {register_size} bytes")
+                    print(f"  - Estimated memory: {estimated_memory} bytes")
+                    print(f"  - Batch overhead: {batch_overhead} bytes")
+                    print(f"  - Total memory limit: {memory_limit} bytes")
+                    print(f"  - Memory limit in GB: {memory_limit / (1024*1024*1024):.6f}GB")
+                    print(f"  - System memory limit: {resource.getrlimit(resource.RLIMIT_AS)[0]} bytes")
                 
-                # FIXED CORE DUMP ISSUE: Reduced batch size from 10000 to 5000
-                # This prevents memory spikes while maintaining good performance
-                self._sketch = rust_hll.RustHLL(
+                self._rust_sketch = rust_hll.RustHLL(
                     precision, 
-                    use_threading=True,  # Keep threading enabled
-                    min_thread_batch=5000,  # Increased batch size for better performance
+                    use_threading=True,
+                    min_thread_batch=10000,
                     hash_size=hash_size,
-                    memory_limit=memory_limit
+                    memory_limit=memory_limit,
+                    debug=debug
                 )
                 self._using_rust = True
             except ValueError as e:
-                # Fallback to Python implementation if Rust fails
                 print(f"Warning: Rust implementation rejected precision={precision}: {e}")
                 print(f"Falling back to Python implementation")
                 self._using_rust = False
                 self.registers = np.zeros(1 << precision, dtype=np.float64)
-                
-                # Create a wrapper object that redirects calls to fallback methods
-                class FallbackWrapper:
-                    def __init__(self, parent):
-                        self.parent = parent
-                    
-                    def add_value(self, value):
-                        return self.parent.add_value(value)
-                    
-                    def add_batch(self, values):
-                        return self.parent.add_batch_fallback(values)
-                    
-                    def merge(self, other):
-                        if hasattr(other, '_sketch'):
-                            other = other._sketch
-                        return self.parent.merge_fallback(other)
-                    
-                    def estimate_cardinality(self):
-                        return self.parent.estimate_cardinality_fallback()
-                    
-                    def is_empty(self):
-                        return self.parent.is_empty_fallback()
-                    
-                    def debug_info(self):
-                        return f"FallbackWrapper(precision={self.parent.precision}, using_rust=False)"
-                
-                self._sketch = FallbackWrapper(self)
-                return
+            except Exception as e:
+                print(f"Warning: Unexpected error initializing Rust implementation: {e}")
+                print(f"Falling back to Python implementation")
+                self._using_rust = False
+                self.registers = np.zeros(1 << precision, dtype=np.float64)
         else:
             print(f"Rust HLL not available, using Python implementation with precision={precision}")
             self.registers = np.zeros(1 << precision, dtype=np.float64)
             self._using_rust = False
+        
+        # Create a wrapper object that redirects calls to appropriate implementation
+        class SketchWrapper:
+            def __init__(self, parent):
+                self.parent = parent
             
-            # Create a wrapper object that redirects calls to fallback methods
-            class FallbackWrapper:
-                def __init__(self, parent):
-                    self.parent = parent
-                
-                def add_value(self, value):
+            def add_value(self, value):
+                if self.parent._using_rust:
+                    return self.parent._rust_sketch.add_value(value)
+                else:
                     return self.parent.add_value(value)
-                
-                def add_batch(self, values):
+            
+            def add_batch(self, values):
+                if self.parent._using_rust:
+                    return self.parent._rust_sketch.add_batch(values)
+                else:
                     return self.parent.add_batch_fallback(values)
-                
-                def merge(self, other):
+            
+            def merge(self, other):
+                if self.parent._using_rust:
+                    if hasattr(other, '_rust_sketch'):
+                        return self.parent._rust_sketch.merge(other._rust_sketch)
+                    elif hasattr(other, '_sketch') and hasattr(other._sketch, 'parent') and hasattr(other._sketch.parent, '_rust_sketch'):
+                        return self.parent._rust_sketch.merge(other._sketch.parent._rust_sketch)
+                    elif isinstance(other, rust_hll.RustHLL):
+                        return self.parent._rust_sketch.merge(other)
+                    else:
+                        raise ValueError("Cannot merge with incompatible sketch type")
+                else:
                     if hasattr(other, '_sketch'):
                         other = other._sketch
                     return self.parent.merge_fallback(other)
-                
-                def estimate_cardinality(self):
-                    return self.parent.estimate_cardinality_fallback()
-                
-                def is_empty(self):
-                    return self.parent.is_empty_fallback()
-                
-                def debug_info(self):
-                    return f"FallbackWrapper(precision={self.parent.precision}, using_rust=False)"
             
-            self._sketch = FallbackWrapper(self)
+            def estimate_cardinality(self):
+                if self.parent._using_rust:
+                    return self.parent._rust_sketch.estimate_cardinality()
+                else:
+                    return self.parent.estimate_cardinality_fallback()
+            
+            def is_empty(self):
+                if self.parent._using_rust:
+                    return self.parent._rust_sketch.is_empty()
+                else:
+                    return self.parent.is_empty_fallback()
+            
+            def debug_info(self):
+                return f"SketchWrapper(precision={self.parent.precision}, using_rust={self.parent._using_rust})"
+            
+            def similarity_values(self, other):
+                if self.parent._using_rust:
+                    if hasattr(other, '_sketch'):
+                        other = other._sketch
+                    return self.parent._rust_sketch.similarity_values(other)
+                else:
+                    if hasattr(other, '_sketch'):
+                        other = other._sketch
+                    return {"jaccard": self.parent.estimate_jaccard(other)}
+            
+            def estimate_union(self, other):
+                if self.parent._using_rust:
+                    if hasattr(other, '_rust_sketch'):
+                        return self.parent._rust_sketch.estimate_union(other._rust_sketch)
+                    elif hasattr(other, '_sketch') and hasattr(other._sketch, 'parent') and hasattr(other._sketch.parent, '_rust_sketch'):
+                        return self.parent._rust_sketch.estimate_union(other._sketch.parent._rust_sketch)
+                    elif isinstance(other, rust_hll.RustHLL):
+                        return self.parent._rust_sketch.estimate_union(other)
+                    else:
+                        raise ValueError("Cannot compute union with incompatible sketch type")
+                else:
+                    if hasattr(other, '_sketch'):
+                        other = other._sketch
+                    return self.parent.estimate_union_fallback(other)
+            
+            def estimate_intersection(self, other):
+                if self.parent._using_rust:
+                    if hasattr(other, '_rust_sketch'):
+                        return self.parent._rust_sketch.estimate_intersection(other._rust_sketch)
+                    elif hasattr(other, '_sketch') and hasattr(other._sketch, 'parent') and hasattr(other._sketch.parent, '_rust_sketch'):
+                        return self.parent._rust_sketch.estimate_intersection(other._sketch.parent._rust_sketch)
+                    elif isinstance(other, rust_hll.RustHLL):
+                        return self.parent._rust_sketch.estimate_intersection(other)
+                    else:
+                        raise ValueError("Cannot compute intersection with incompatible sketch type")
+                else:
+                    if hasattr(other, '_sketch'):
+                        other = other._sketch
+                    return self.parent.estimate_intersection_fallback(other)
+            
+            def estimate_jaccard(self, other):
+                if self.parent._using_rust:
+                    if hasattr(other, '_rust_sketch'):
+                        return self.parent._rust_sketch.estimate_jaccard(other._rust_sketch)
+                    elif hasattr(other, '_sketch') and hasattr(other._sketch, 'parent') and hasattr(other._sketch.parent, '_rust_sketch'):
+                        return self.parent._rust_sketch.estimate_jaccard(other._sketch.parent._rust_sketch)
+                    elif isinstance(other, rust_hll.RustHLL):
+                        return self.parent._rust_sketch.estimate_jaccard(other)
+                    else:
+                        raise ValueError("Cannot compute Jaccard similarity with incompatible sketch type")
+                else:
+                    if hasattr(other, '_sketch'):
+                        other = other._sketch
+                    return self.parent.estimate_jaccard_fallback(other)
+            
+            def write(self, filepath):
+                if self.parent._using_rust:
+                    return self.parent._rust_sketch.write(filepath)
+                else:
+                    return self.parent.write_fallback(filepath)
+        
+        self._sketch = SketchWrapper(self)
         
     def is_using_rust(self) -> bool:
         """Check if using Rust implementation."""
@@ -190,44 +250,64 @@ class RustHyperLogLog(AbstractSketch):
         # Convert to string and use add for Rust implementation
         if isinstance(value, (int, float)):
             value = str(value)
-        self._sketch.add_value(value)
+        if self._using_rust:
+            self._sketch.add_value(value)
+        else:
+            self.add_value(value)
         
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
-        self._sketch.add_value(s)
+        if self._using_rust:
+            self._sketch.add_value(s)
+        else:
+            self.add_value(s)
         
     def add_batch(self, strings: List[str]) -> None:
         """Add multiple strings to the sketch."""
-        # Convert any non-string values to strings
-        string_values = [str(s) if not isinstance(s, str) else s for s in strings]
-        
-        # FIXED CORE DUMP ISSUE: Added chunked processing
-        # This prevents large memory allocations by processing in smaller chunks
-        chunk_size = 5000  # Increased chunk size for better performance
-        total_chunks = (len(string_values) + chunk_size - 1) // chunk_size
-        
-        # Only report progress for very large batches (>1M strings)
-        report_progress = len(string_values) > 1000000
-        
-        if report_progress:
-            print(f"Processing {len(string_values):,} strings in {total_chunks} chunks...")
-        
-        for i in range(0, len(string_values), chunk_size):
-            chunk = string_values[i:i + chunk_size]
-            
-            # Only report progress every 100 chunks for very large batches
-            if report_progress and i % (chunk_size * 100) == 0:
-                print(f"  Progress: {i//chunk_size}/{total_chunks} chunks")
-            
-            # FIXED CORE DUMP ISSUE: Added memory tracking
-            # This helps diagnose memory usage patterns
-            if report_progress and i % (chunk_size * 100) == 0:
-                before_mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-                self._sketch.add_batch(chunk)
-                after_mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-                print(f"  Memory: {after_mem/1024:.1f}MB")
-            else:
-                self._sketch.add_batch(chunk)
+        if self._using_rust:
+            try:
+                # Convert any non-string values to strings
+                string_values = [str(s) if not isinstance(s, str) else s for s in strings]
+                
+                # Process in chunks to prevent memory issues
+                chunk_size = 5000
+                total_chunks = (len(string_values) + chunk_size - 1) // chunk_size
+                
+                # Only report progress for very large batches (>1M strings)
+                report_progress = len(string_values) > 1000000
+                
+                if report_progress:
+                    print(f"Processing {len(string_values):,} strings in {total_chunks} chunks...", file=sys.stderr)
+                
+                for i in range(0, len(string_values), chunk_size):
+                    chunk = string_values[i:i + chunk_size]
+                    
+                    # Only report progress every 100 chunks for very large batches
+                    if report_progress and i % (chunk_size * 100) == 0:
+                        print(f"  Progress: {i//chunk_size}/{total_chunks} chunks", file=sys.stderr)
+                    
+                    try:
+                        self._sketch.add_batch(chunk)
+                    except Exception as e:
+                        print(f"Warning: Failed to process chunk {i//chunk_size + 1}/{total_chunks}: {str(e)}", file=sys.stderr)
+                        # Fall back to single-threaded processing for this chunk
+                        for s in chunk:
+                            try:
+                                self._sketch.add_value(s)
+                            except Exception as e2:
+                                print(f"Warning: Failed to process string in fallback mode: {str(e2)}", file=sys.stderr)
+                                continue
+            except Exception as e:
+                print(f"Warning: Error in add_batch: {str(e)}", file=sys.stderr)
+                # Try to process strings one at a time as a last resort
+                for s in strings:
+                    try:
+                        self._sketch.add_value(s)
+                    except Exception as e2:
+                        print(f"Warning: Failed to process string: {str(e2)}", file=sys.stderr)
+                        continue
+        else:
+            self.add_batch_fallback(strings)
         
     def estimate_cardinality(self, method: str = "fast_mle") -> float:
         """Estimate the cardinality of the set.
@@ -242,51 +322,63 @@ class RustHyperLogLog(AbstractSketch):
             raise ValueError("Method must be one of: original, ertl_mle, fast_mle")
         return float(self._sketch.estimate_cardinality())
         
-    def estimate_intersection(self, other: 'RustHyperLogLog') -> float:
+    def _convert_to_rusthll(self, other: Union['RustHLL', 'HyperLogLog']) -> 'RustHLL':
+        """Convert a HyperLogLog sketch to RustHLL."""
+        from hammock.lib.hyperloglog import HyperLogLog
+        if isinstance(other, RustHLL):
+            return other
+        elif isinstance(other, HyperLogLog):
+            # Create a new RustHLL with same parameters
+            rust_hll = RustHLL(precision=other.precision, seed=other.seed)
+            # Add all strings from the HyperLogLog sketch
+            for i in range(len(other.registers)):
+                if other.registers[i] > 0:
+                    rust_hll.add_int(i)
+            return rust_hll
+        else:
+            raise ValueError("Can only compare with RustHLL or HyperLogLog")
+
+    def estimate_intersection(self, other: Union['RustHLL', 'HyperLogLog']) -> float:
         """Estimate intersection cardinality with another sketch."""
-        if not isinstance(other, RustHyperLogLog):
-            raise ValueError("Can only compare with another RustHyperLogLog")
-        if self.precision != other.precision:
-            raise ValueError("Cannot compute intersection of HLLs with different precision")
-        
-        # Basic inclusion-exclusion
-        a = self.estimate_cardinality()
-        b = other.estimate_cardinality()
-        union = self.estimate_union(other)
-        intersection = max(0.0, a + b - union)
-        
-        return float(intersection)
-        
-    def estimate_union(self, other: 'RustHyperLogLog') -> float:
+        from hammock.lib.hyperloglog import HyperLogLog
+        if isinstance(other, HyperLogLog):
+            # Use inclusion-exclusion principle
+            union = self.estimate_union(other)
+            self_card = self.estimate_cardinality()
+            other_card = other.estimate_cardinality()
+            intersection = self_card + other_card - union
+            return max(0.0, intersection)
+        elif isinstance(other, RustHLL):
+            return self._estimate_intersection(other)
+        else:
+            raise ValueError("Can only compare with RustHLL or HyperLogLog")
+
+    def estimate_union(self, other: Union['RustHLL', 'HyperLogLog']) -> float:
         """Estimate union cardinality with another sketch."""
-        if not isinstance(other, RustHyperLogLog):
-            raise ValueError("Can only compare with another RustHyperLogLog")
-        if self.precision != other.precision:
-            raise ValueError("Cannot compute union of HLLs with different precision")
-        
-        # Create a temporary sketch for the union
-        temp_sketch = rust_hll.RustHLL(self.precision, None, None, self.hash_size)
-        temp_sketch.merge(self._sketch)
-        temp_sketch.merge(other._sketch)
-        return float(temp_sketch.estimate_cardinality())
-        
-    def estimate_jaccard(self, other: 'RustHyperLogLog') -> float:
+        from hammock.lib.hyperloglog import HyperLogLog
+        if isinstance(other, HyperLogLog):
+            # Use inclusion-exclusion principle
+            self_card = self.estimate_cardinality()
+            other_card = other.estimate_cardinality()
+            intersection = self.estimate_intersection(other)
+            return self_card + other_card - intersection
+        elif isinstance(other, RustHLL):
+            return self._estimate_union(other)
+        else:
+            raise ValueError("Can only compare with RustHLL or HyperLogLog")
+
+    def estimate_jaccard(self, other: Union['RustHLL', 'HyperLogLog']) -> float:
         """Estimate Jaccard similarity with another sketch."""
-        if not isinstance(other, RustHyperLogLog):
-            raise ValueError("Can only compare with another RustHyperLogLog")
-        if self.precision != other.precision:
-            raise ValueError("Cannot compare HLLs with different precision")
-        
-        if self.is_empty() or other.is_empty():
-            return 0.0
-        
+        from hammock.lib.hyperloglog import HyperLogLog
+        if not isinstance(other, (RustHLL, HyperLogLog)):
+            raise ValueError("Can only compare with RustHLL or HyperLogLog")
+
         intersection = self.estimate_intersection(other)
         union = self.estimate_union(other)
-        
+
         if union == 0:
             return 0.0
-            
-        return float(intersection / union)
+        return intersection / union
         
     def is_empty(self) -> bool:
         """Check if the sketch is empty."""
@@ -299,8 +391,24 @@ class RustHyperLogLog(AbstractSketch):
         if self.precision != other.precision:
             raise ValueError("Cannot merge HLLs with different precision")
         
-        self._sketch.merge(other._sketch)
+        if self._using_rust:
+            if hasattr(other, '_rust_sketch'):
+                self._rust_sketch.merge(other._rust_sketch)
+            else:
+                raise ValueError("Cannot merge with incompatible sketch type")
+        else:
+            return self.merge_fallback(other)
+
+    def merge_fallback(self, other: 'RustHyperLogLog') -> None:
+        """Merge another sketch into this one using Python implementation."""
+        if not isinstance(other, RustHyperLogLog):
+            raise ValueError("Can only merge with another RustHyperLogLog")
+        if self.precision != other.precision:
+            raise ValueError("Cannot merge HLLs with different precision")
         
+        # Take element-wise maximum
+        np.maximum(self.registers, other.registers, out=self.registers)
+
     def save(self, filepath: str) -> None:
         """Write sketch to file."""
         # Convert to absolute path and ensure directory exists
@@ -389,14 +497,6 @@ class RustHyperLogLog(AbstractSketch):
         for value in values:
             self.add_value(value)
     
-    def merge_fallback(self, other) -> None:
-        """Merge another sketch (Python fallback)."""
-        if self._using_rust:
-            raise RuntimeError("This method should not be called when using Rust")
-        if hasattr(other, 'registers'):
-            # Take element-wise maximum
-            np.maximum(self.registers, other.registers, out=self.registers)
-    
     def estimate_cardinality_fallback(self) -> float:
         """Estimate cardinality (Python fallback)."""
         if self._using_rust:
@@ -439,5 +539,162 @@ class RustHyperLogLog(AbstractSketch):
             value >>= 1
         return rank
 
+    def estimate_union_fallback(self, other) -> float:
+        """Estimate union cardinality with another sketch."""
+        if not isinstance(other, RustHyperLogLog):
+            raise ValueError("Can only compare with another RustHyperLogLog")
+        if self.precision != other.precision:
+            raise ValueError("Cannot compute union of HLLs with different precision")
+        
+        # Create a temporary sketch for the union
+        temp_sketch = RustHyperLogLog(self.precision)
+        temp_sketch.merge(self)
+        temp_sketch.merge(other)
+        return temp_sketch.estimate_cardinality()
+    
+    def estimate_intersection_fallback(self, other) -> float:
+        """Estimate intersection cardinality with another sketch."""
+        if not isinstance(other, RustHyperLogLog):
+            raise ValueError("Can only compare with another RustHyperLogLog")
+        if self.precision != other.precision:
+            raise ValueError("Cannot compute intersection of HLLs with different precision")
+        
+        # Use inclusion-exclusion principle
+        union = self.estimate_union(other)
+        card1 = self.estimate_cardinality()
+        card2 = other.estimate_cardinality()
+        intersection = card1 + card2 - union
+        return max(0.0, intersection)  # Ensure non-negative
+    
+    def estimate_jaccard_fallback(self, other) -> float:
+        """Estimate Jaccard similarity with another sketch."""
+        if not isinstance(other, RustHyperLogLog):
+            raise ValueError("Can only compare with another RustHyperLogLog")
+        if self.precision != other.precision:
+            raise ValueError("Cannot compute Jaccard similarity of HLLs with different precision")
+        
+        intersection = self.estimate_intersection(other)
+        union = self.estimate_union(other)
+        if union == 0:
+            return 1.0 if intersection == 0 else 0.0
+        return intersection / union
+    
+    def write_fallback(self, filepath: str) -> None:
+        """Write sketch to file."""
+        # Convert to absolute path and ensure directory exists
+        filepath = os.path.abspath(filepath)
+        dir_path = os.path.dirname(filepath)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        try:
+            np.save(filepath, self.registers)
+        except Exception as e:
+            print(f"Error saving sketch to {filepath}: {e}", file=sys.stderr)
+            raise
+
+class RustHLL(RustHyperLogLog):
+    """Alias for RustHyperLogLog with a simpler name."""
+    def __init__(self, precision: Optional[int] = None, kmer_size: Optional[int] = None,
+                 window_size: Optional[int] = None, hash_size: int = 32,
+                 expected_cardinality: Optional[int] = None):
+        """Initialize RustHLL with given precision."""
+        if precision is None and expected_cardinality is not None:
+            # Calculate precision based on expected cardinality
+            # We want 2^p registers where p is precision
+            # For good accuracy, we want about 1.5 * expected_cardinality registers
+            # So: 2^p ≈ 1.5 * expected_cardinality
+            # Therefore: p ≈ log2(1.5 * expected_cardinality)
+            precision = max(4, min(16, int(math.log2(1.5 * expected_cardinality))))
+        elif precision is None:
+            precision = 12  # Default precision
+        super().__init__(precision=precision, kmer_size=kmer_size,
+                        window_size=window_size, hash_size=hash_size)
+
+    def merge(self, other: 'RustHLL') -> None:
+        """Merge another sketch into this one."""
+        if not isinstance(other, RustHLL):
+            raise ValueError("Can only merge with another RustHLL")
+        if self.precision != other.precision:
+            raise ValueError("Cannot merge HLLs with different precision")
+        
+        if self._using_rust:
+            if hasattr(other, '_rust_sketch'):
+                self._rust_sketch.merge(other._rust_sketch)
+            else:
+                raise ValueError("Cannot merge with incompatible sketch type")
+        else:
+            return self.merge_fallback(other)
+
+    def estimate_union(self, other: 'RustHLL') -> float:
+        """Estimate union cardinality with another sketch."""
+        if not isinstance(other, RustHLL):
+            raise ValueError("Can only compare with another RustHLL")
+        if self.precision != other.precision:
+            raise ValueError("Cannot compute union of HLLs with different precision")
+        
+        if self._using_rust:
+            if hasattr(other, '_rust_sketch'):
+                # Create a temporary sketch for the union
+                temp_sketch = rust_hll.RustHLL(self.precision)
+                temp_sketch.merge(self._rust_sketch)
+                temp_sketch.merge(other._rust_sketch)
+                return float(temp_sketch.estimate_cardinality())
+            else:
+                raise ValueError("Cannot compute union with incompatible sketch type")
+        else:
+            return self.estimate_union_fallback(other)
+
+    def estimate_intersection(self, other: 'RustHLL') -> float:
+        """Estimate intersection cardinality with another sketch."""
+        if not isinstance(other, RustHLL):
+            raise ValueError("Can only compare with another RustHLL")
+        if self.precision != other.precision:
+            raise ValueError("Cannot compute intersection of HLLs with different precision")
+        
+        if self._using_rust:
+            if hasattr(other, '_rust_sketch'):
+                # Get individual cardinalities
+                card1 = self.estimate_cardinality()
+                card2 = other.estimate_cardinality()
+                
+                # Create a temporary sketch for the union
+                temp_sketch = rust_hll.RustHLL(self.precision)
+                temp_sketch.merge(self._rust_sketch)
+                temp_sketch.merge(other._rust_sketch)
+                union = temp_sketch.estimate_cardinality()
+                
+                # Use inclusion-exclusion principle
+                intersection = card1 + card2 - union
+                return max(0.0, intersection)  # Ensure non-negative
+            else:
+                raise ValueError("Cannot compute intersection with incompatible sketch type")
+        else:
+            return self.estimate_intersection_fallback(other)
+
+    def estimate_jaccard(self, other: 'RustHLL') -> float:
+        """Estimate Jaccard similarity with another sketch."""
+        if not isinstance(other, RustHLL):
+            raise ValueError("Can only compare with another RustHLL")
+        if self.precision != other.precision:
+            raise ValueError("Cannot compute Jaccard similarity of HLLs with different precision")
+        
+        if self._using_rust:
+            if hasattr(other, '_rust_sketch'):
+                # Get intersection and union
+                intersection = self.estimate_intersection(other)
+                union = self.estimate_union(other)
+                
+                # Handle edge cases
+                if union == 0:
+                    return 1.0 if intersection == 0 else 0.0
+                
+                # Calculate Jaccard similarity
+                jaccard = intersection / union
+                return max(0.0, min(1.0, jaccard))  # Ensure result is between 0 and 1
+            else:
+                raise ValueError("Cannot compute Jaccard similarity with incompatible sketch type")
+        else:
+            return self.estimate_jaccard_fallback(other)
+
 # Alias for backward compatibility
-RustHLL = RustHyperLogLog 
+RustHLL = RustHLL 

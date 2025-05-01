@@ -28,6 +28,7 @@ struct RustHLL {
     hash_size: u8,
     hasher: RandomState,
     memory_limit: Option<usize>,  // Add memory limit field
+    debug: bool,  // Add debug field
 }
 
 // Internal implementation
@@ -35,7 +36,7 @@ impl RustHLL {
     /// Process a batch of hashes in chunks for better cache locality and memory efficiency
     fn process_hash_batch(&mut self, hashes: &[u64]) {
         // Process in smaller chunks to limit memory usage
-        const CHUNK_SIZE: usize = 128;  // Reduced from 256 to 128
+        const CHUNK_SIZE: usize = 256;  // Increased back to original value
         
         // Pre-allocate hash vector with fixed capacity
         let mut hash_buffer = Vec::with_capacity(CHUNK_SIZE);
@@ -156,8 +157,8 @@ impl RustHLL {
 #[pymethods]
 impl RustHLL {
     #[new]
-    #[pyo3(signature = (precision, use_threading=None, min_thread_batch=None, hash_size=None, memory_limit=None))]
-    pub fn new(precision: u8, use_threading: Option<bool>, min_thread_batch: Option<usize>, hash_size: Option<u8>, memory_limit: Option<usize>) -> PyResult<Self> {
+    #[pyo3(signature = (precision, use_threading=None, min_thread_batch=None, hash_size=None, memory_limit=None, debug=None))]
+    pub fn new(precision: u8, use_threading: Option<bool>, min_thread_batch: Option<usize>, hash_size: Option<u8>, memory_limit: Option<usize>, debug: Option<bool>) -> PyResult<Self> {
         // Validate hash_size
         let hash_size = hash_size.unwrap_or(32);
         if hash_size != 32 && hash_size != 64 {
@@ -180,10 +181,12 @@ impl RustHLL {
         // If memory limit is provided, ensure it's at least the minimum
         let memory_limit = memory_limit.map(|limit| {
             let adjusted_limit = std::cmp::max(limit, min_memory);
-            println!("Rust memory limit adjustment:");
-            println!("  - Original limit: {} bytes", limit);
-            println!("  - Minimum memory: {} bytes", min_memory);
-            println!("  - Adjusted limit: {} bytes", adjusted_limit);
+            if debug.unwrap_or(false) {
+                println!("Rust memory limit adjustment:");
+                println!("  - Original limit: {} bytes", limit);
+                println!("  - Minimum memory: {} bytes", min_memory);
+                println!("  - Adjusted limit: {} bytes", adjusted_limit);
+            }
             adjusted_limit
         });
         
@@ -191,10 +194,12 @@ impl RustHLL {
             // Add 10% buffer to estimated memory for safety
             let estimated_memory_with_buffer = (estimated_memory as f64 * 1.1) as usize;
             
-            println!("Rust memory check:");
-            println!("  - Estimated memory: {} bytes", estimated_memory);
-            println!("  - Estimated with buffer: {} bytes", estimated_memory_with_buffer);
-            println!("  - Memory limit: {} bytes", limit);
+            if debug.unwrap_or(false) {
+                println!("Rust memory check:");
+                println!("  - Estimated memory: {} bytes", estimated_memory);
+                println!("  - Estimated with buffer: {} bytes", estimated_memory_with_buffer);
+                println!("  - Memory limit: {} bytes", limit);
+            }
             
             if estimated_memory_with_buffer > limit {
                 return Err(PyValueError::new_err(format!(
@@ -223,6 +228,7 @@ impl RustHLL {
             hash_size,
             hasher: RandomState::new(),
             memory_limit,
+            debug: debug.unwrap_or(false),
         })
     }
 
@@ -283,37 +289,49 @@ impl RustHLL {
         if let Some(limit) = self.memory_limit {
             let current_usage = self.registers.len() * std::mem::size_of::<u8>();
             let estimated_batch_usage = values.len() * std::mem::size_of::<String>();
-            if current_usage + estimated_batch_usage > limit {
+            let total_estimated = current_usage + estimated_batch_usage;
+            
+            if self.debug {
+                println!("Memory usage check:");
+                println!("  - Current usage: {} bytes", current_usage);
+                println!("  - Batch usage: {} bytes", estimated_batch_usage);
+                println!("  - Total estimated: {} bytes", total_estimated);
+                println!("  - Memory limit: {} bytes", limit);
+            }
+            
+            if total_estimated > limit {
                 return Err(PyValueError::new_err(format!(
-                    "Memory limit would be exceeded. Current: {} bytes, Batch: {} bytes, Limit: {} bytes",
-                    current_usage, estimated_batch_usage, limit
+                    "Memory limit would be exceeded. Current: {} bytes, Batch: {} bytes, Total: {} bytes, Limit: {} bytes",
+                    current_usage, estimated_batch_usage, total_estimated, limit
                 )));
             }
         }
 
         // For small batches, use single-threaded processing
-        if values.len() < 10000 {
+        if values.len() < self.min_thread_batch {
             return self.add_batch_single_py(values.iter().map(|s| s.as_str()).collect());
         }
 
-        // Process in small chunks without threading
-        const CHUNK_SIZE: usize = 16;  // Very small chunk size
+        // Process in chunks without threading
+        const CHUNK_SIZE: usize = 256;  // Increased back to original value
         
         for chunk in values.chunks(CHUNK_SIZE) {
+            let mut hashes = Vec::with_capacity(chunk.len());
+            
+            // Compute hashes for the chunk
             for value in chunk {
                 let mut hasher = self.hasher.build_hasher();
-                    value.hash(&mut hasher);
+                value.hash(&mut hasher);
                 let hash = if self.hash_size == 32 {
-                        hasher.finish() as u32 as u64
-                    } else {
-                        hasher.finish()
-                    };
-                    
-                let (idx, val) = get_index_and_count(hash, self.precision, self.hash_size);
-                if self.registers[idx] < val {
-                    self.registers[idx] = val;
-                    }
-                }
+                    hasher.finish() as u32 as u64
+                } else {
+                    hasher.finish()
+                };
+                hashes.push(hash);
+            }
+            
+            // Process the chunk of hashes
+            self.process_hash_batch(&hashes);
         }
         
         Ok(())
@@ -376,11 +394,11 @@ impl RustHLL {
             union_registers[i] = cmp::max(self.registers[i], other.registers[i]);
         }
         
-        let mut intersection_sketch = RustHLL::new(self.precision, None, None, None, None)?;
+        let mut intersection_sketch = RustHLL::new(self.precision, None, None, None, None, None)?;
         intersection_sketch.registers = intersection_registers;
         intersection_sketch.alpha_mm = self.alpha_mm;
         
-        let mut union_sketch = RustHLL::new(self.precision, None, None, None, None)?;
+        let mut union_sketch = RustHLL::new(self.precision, None, None, None, None, None)?;
         union_sketch.registers = union_registers;
         union_sketch.alpha_mm = self.alpha_mm;
         
@@ -475,6 +493,7 @@ impl RustHLL {
             hash_size: data.hash_size,
             hasher: RandomState::new(),
             memory_limit: None,
+            debug: false,
         })
     }
 
