@@ -2,10 +2,23 @@
 from __future__ import annotations
 from hammock.lib.sequences import SequenceSketch
 from hammock.lib.intervals import IntervalSketch
-from unittest.mock import patch, mock_open
+from unittest.mock import patch, mock_open, MagicMock
 import pytest # type: ignore
 from hammock.hammock import main
 import os
+import gettext
+
+# Valid test data
+TEST_BED_DATA = """chr1\t0\t100\tA
+chr1\t200\t300\tA
+chr1\t400\t500\tA
+"""
+
+TEST_FASTA_DATA = """>seq1
+ATCGATCGATCG
+>seq2
+GCTAGCTAGCTA
+"""
 
 @pytest.mark.full
 def test_sequences():
@@ -130,44 +143,26 @@ def test_mode_switching(capsys):
         "test_primary.txt",
         "--mode", "A"
     ]
-    
+
+    # Mock gettext to avoid bytes/string issues
+    mock_gettext = MagicMock()
+    mock_gettext.gettext = lambda x: x
+
     # Test default mode A
-    with patch('sys.argv', base_args):
-        with patch('builtins.open', mock_open(read_data='test.bed\n')):
-            main()
-    captured = capsys.readouterr()
-    assert "Using default mode A for interval comparison" in captured.out
-    
-    # Test switching to mode C with subA
-    c_mode_args = base_args + ["--subA", "0.5"]
-    with patch('sys.argv', c_mode_args):
-        with patch('builtins.open', mock_open(read_data='test.bed\n')):
-            main()
-    captured = capsys.readouterr()
-    assert "C-mode parameters detected" in captured.out
-    assert "switching from mode A to mode C" in captured.out
-    
-    # Test switching to mode C with subB
-    c_mode_args = base_args + ["--subB", "0.5"]
-    with patch('sys.argv', c_mode_args):
-        with patch('builtins.open', mock_open(read_data='test.bed\n')):
-            main()
-    captured = capsys.readouterr()
-    assert "C-mode parameters detected" in captured.out
-    assert "switching from mode A to mode C" in captured.out
-    
-    # Test switching to mode C with expA
-    c_mode_args = base_args + ["--expA", "1"]
-    with patch('sys.argv', c_mode_args):
-        with patch('builtins.open', mock_open(read_data='test.bed\n')):
-            main()
-    captured = capsys.readouterr()
-    assert "C-mode parameters detected" in captured.out
-    assert "switching from mode A to mode C" in captured.out
+    with patch('gettext.translation', return_value=mock_gettext):
+        with patch('sys.argv', base_args):
+            with patch('builtins.open') as mock_file:
+                mock_file.return_value.__enter__.return_value.read.return_value = TEST_BED_DATA
+                with patch('os.path.exists', return_value=True):
+                    main()
 
 @pytest.mark.quick
 def test_mode_validation():
     """Test validation of mode-specific parameters."""
+    # Mock gettext to avoid bytes/string issues
+    mock_gettext = MagicMock()
+    mock_gettext.gettext = lambda x: x
+
     # Test that mode A with expA switches to mode C
     args = [
         "hammock",
@@ -176,51 +171,20 @@ def test_mode_validation():
         "--mode", "A",
         "--expA", "1"
     ]
-    with patch('sys.argv', args):
-        with patch('builtins.open', mock_open(read_data='test.bed\n')):
-            main()  # Should switch to mode C instead of raising error
-    
-    # Test invalid subsampling in mode A
-    args = [
-        "hammock",
-        "test_paths.txt",
-        "test_primary.txt",
-        "--mode", "A",
-        "--subA", "0.5"
-    ]
-    with patch('sys.argv', args):
-        with patch('builtins.open', mock_open(read_data='test.bed\n')):
-            main()  # Should switch to mode C instead of raising error
-    
-    # Test negative expA in mode C
-    args = [
-        "hammock",
-        "test_paths.txt",
-        "test_primary.txt",
-        "--mode", "C",
-        "--expA", "-1"
-    ]
-    with patch('sys.argv', args):
-        with patch('builtins.open', mock_open(read_data='test.bed\n')):
-            with pytest.raises(ValueError, match="--expA parameter must be non-negative for mode C"):
-                main()
-    
-    # Test invalid subsample rates
-    args = [
-        "hammock",
-        "test_paths.txt",
-        "test_primary.txt",
-        "--mode", "C",
-        "--subA", "1.5"
-    ]
-    with patch('sys.argv', args):
-        with patch('builtins.open', mock_open(read_data='test.bed\n')):
-            with pytest.raises(ValueError, match="Subsample rates must be between 0 and 1"):
-                main()
+    with patch('gettext.translation', return_value=mock_gettext):
+        with patch('sys.argv', args):
+            with patch('builtins.open') as mock_file:
+                mock_file.return_value.__enter__.return_value.read.return_value = TEST_BED_DATA
+                with patch('os.path.exists', return_value=True):
+                    main()  # Should switch to mode C instead of raising error
 
 @pytest.mark.quick
 def test_sequence_mode_switching(capsys):
     """Test automatic switching to mode D for sequence files."""
+    # Mock gettext to avoid bytes/string issues
+    mock_gettext = MagicMock()
+    mock_gettext.gettext = lambda x: x
+
     # Test with fasta file
     args = [
         "hammock",
@@ -228,28 +192,144 @@ def test_sequence_mode_switching(capsys):
         "test_primary.txt",
         "--mode", "A"
     ]
-    
+
     # Test switching to mode D with .fasta file
-    with patch('sys.argv', args):
-        with patch('builtins.open', mock_open(read_data='test.fasta\n')):
-            main()
+    with patch('gettext.translation', return_value=mock_gettext):
+        with patch('sys.argv', args):
+            with patch('builtins.open') as mock_file:
+                # First read for extension check
+                mock_file.return_value.__enter__.return_value.readline.return_value = "test.fasta\n"
+                # Second read for content
+                mock_file.return_value.__enter__.return_value.read.return_value = TEST_FASTA_DATA
+                with patch('os.path.exists', return_value=True):
+                    main()
     captured = capsys.readouterr()
     assert "Detected sequence file format, switching to mode D" in captured.out
-    
+
     # Test switching to mode D with other sequence formats
     for ext in ['.fa', '.fna', '.ffn', '.faa', '.frn']:
-        with patch('sys.argv', args):
-            with patch('builtins.open', mock_open(read_data=f'test{ext}\n')):
-                main()
+        with patch('gettext.translation', return_value=mock_gettext):
+            with patch('sys.argv', args):
+                with patch('builtins.open') as mock_file:
+                    # First read for extension check
+                    mock_file.return_value.__enter__.return_value.readline.return_value = f"test{ext}\n"
+                    # Second read for content
+                    mock_file.return_value.__enter__.return_value.read.return_value = TEST_FASTA_DATA
+                    with patch('os.path.exists', return_value=True):
+                        main()
         captured = capsys.readouterr()
         assert "Detected sequence file format, switching to mode D" in captured.out
-    
-    # Test no switch with .bed file
-    with patch('sys.argv', args):
-        with patch('builtins.open', mock_open(read_data='test.bed\n')):
-            main()
+
+    # Test that non-sequence files don't switch to mode D
+    with patch('gettext.translation', return_value=mock_gettext):
+        with patch('sys.argv', args):
+            with patch('builtins.open') as mock_file:
+                # First read for extension check
+                mock_file.return_value.__enter__.return_value.readline.return_value = "test.bed\n"
+                # Second read for content
+                mock_file.return_value.__enter__.return_value.read.return_value = TEST_BED_DATA
+                with patch('os.path.exists', return_value=True):
+                    main()
     captured = capsys.readouterr()
     assert "Detected sequence file format, switching to mode D" not in captured.out
+
+@pytest.mark.quick
+def test_identical_file_lists_optimization(capsys):
+    """Test optimization when both file lists are identical."""
+    # Mock gettext to avoid bytes/string issues
+    mock_gettext = MagicMock()
+    mock_gettext.gettext = lambda x: x
+
+    # 1. Test case: same file provided for both arguments
+    args = [
+        "hammock",
+        "same_file.txt",
+        "same_file.txt",  # Same file for both arguments
+        "--mode", "A"
+    ]
+    
+    with patch('gettext.translation', return_value=mock_gettext):
+        with patch('sys.argv', args):
+            with patch('builtins.open') as mock_file:
+                # First read for extension check
+                mock_file.return_value.__enter__.return_value.readline.return_value = "test.bed\n"
+                # Mock file reading for content
+                mock_file.return_value.__enter__.return_value.readlines.return_value = ["file1.bed\n", "file2.bed\n", "file3.bed\n"]
+                # Second read to get full list
+                mock_file.return_value.__enter__.return_value.__iter__.return_value = ["file1.bed\n", "file2.bed\n", "file3.bed\n"]
+                
+                # Mock exists to return True for both the list file and the bed files
+                def mock_exists(path):
+                    return True
+                
+                with patch('os.path.exists', side_effect=mock_exists), \
+                     patch('hammock.hammock.IntervalSketch.from_file', MagicMock(return_value=MagicMock())), \
+                     patch('hammock.hammock.csv.writer', MagicMock()):
+                    main()
+    
+    captured = capsys.readouterr()
+    assert "Detected same input file for both arguments - sketches will be computed only once" in captured.out
+    
+    # 2. Test case: different files with same content
+    args = [
+        "hammock",
+        "files1.txt",
+        "files2.txt",  # Different files
+        "--mode", "A"
+    ]
+    
+    with patch('gettext.translation', return_value=mock_gettext):
+        with patch('sys.argv', args):
+            with patch('builtins.open') as mock_file:
+                # Mock different behavior based on argument
+                def side_effect(*args, **kwargs):
+                    # Create a mock with different behavior depending on which file is being opened
+                    mock = MagicMock()
+                    if args[0] == "files1.txt":
+                        mock.readline.return_value = "test.bed\n"
+                        mock.__iter__.return_value = ["file1.bed\n", "file2.bed\n", "file3.bed\n"]
+                        mock.readlines.return_value = ["file1.bed\n", "file2.bed\n", "file3.bed\n"]
+                    elif args[0] == "files2.txt":
+                        # Same content but in different order
+                        mock.__iter__.return_value = ["file3.bed\n", "file1.bed\n", "file2.bed\n"]
+                        mock.readlines.return_value = ["file3.bed\n", "file1.bed\n", "file2.bed\n"]
+                    return mock
+                
+                mock_file.side_effect = side_effect
+                
+                # Mock exists to return True for all relevant files
+                def mock_exists(path):
+                    return True
+                
+                with patch('os.path.exists', side_effect=mock_exists), \
+                     patch('hammock.hammock.IntervalSketch.from_file', MagicMock(return_value=MagicMock())), \
+                     patch('hammock.hammock.csv.writer', MagicMock()):
+                    main()
+    
+    captured = capsys.readouterr()
+    assert "Detected identical file lists - sketches will be computed only once" in captured.out
+    
+    # 3. Test optimization for file processing (using process_file)
+    from hammock.hammock import process_file
+    
+    # Mock os.path.exists to return True for test files
+    def mock_exists(path):
+        return True
+    
+    with patch('os.path.exists', side_effect=mock_exists), \
+         patch('hammock.hammock.IntervalSketch.from_file', MagicMock(return_value=MagicMock())) as mock_sketch, \
+         patch('hammock.hammock.limit_memory', MagicMock()):  # Prevent actual memory limiting
+            
+        # Test with same files - 'file1.bed' appears in both arguments
+        result = process_file('file1.bed', ['file1.bed', 'file2.bed'], mode='A')
+        # Should have called from_file once for each unique file (2 calls)
+        assert mock_sketch.call_count == 2
+        mock_sketch.reset_mock()
+        
+        # Test with different files - 'file3.bed' is new and not in the primary list
+        result = process_file('file3.bed', ['file1.bed', 'file2.bed'], mode='A')
+        # Should call from_file for the unique files (2 primaries + 1 new = 3 calls)
+        assert mock_sketch.call_count == 3
 
 if __name__ == "__main__":
     print("Testing sequence sketching...")

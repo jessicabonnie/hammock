@@ -58,6 +58,11 @@ def process_file(filepath: str, primary_files: List[str], mode: str = 'A',
     elif sketch_type == "exact":
         print("Using Exact implementation")
         
+    # Force kmer_size to 0 for mode B
+    if mode == "B":
+        kmer_size = 0
+        window_size = 0
+        
     # Create primary sketches
     primary_sets = {}
     for primary_file in primary_files:
@@ -90,30 +95,35 @@ def process_file(filepath: str, primary_files: List[str], mode: str = 'A',
             )
                         
         primary_sets[os.path.basename(primary_file)] = sketch
-        
-    # Create comparator sketch from file
-    if mode == "D":
-        sketch = SequenceSketch.from_file(
-            filename=filepath,
-            sketch_type=sketch_type,
-            kmer_size=kmer_size,
-            window_size=window_size,
-            precision=precision,
-            num_hashes=num_hashes
-        )
+    
+    # Check if the current file is already in primary_sets to avoid recreating sketch
+    current_basename = os.path.basename(filepath)
+    if current_basename in primary_sets:
+        sketch = primary_sets[current_basename]
     else:
-        sketch = IntervalSketch.from_file(
-            filename=filepath,
-            mode=mode,
-            precision=precision,
-            num_hashes=num_hashes,
-            kmer_size=kmer_size,
-            window_size=window_size,
-            sketch_type=sketch_type,
-            subsample=(subA, subB),
-            expA=expA,
-            use_rust=use_rust
-        )
+        # Create comparator sketch from file
+        if mode == "D":
+            sketch = SequenceSketch.from_file(
+                filename=filepath,
+                sketch_type=sketch_type,
+                kmer_size=kmer_size,
+                window_size=window_size,
+                precision=precision,
+                num_hashes=num_hashes
+            )
+        else:
+            sketch = IntervalSketch.from_file(
+                filename=filepath,
+                mode=mode,
+                precision=precision,
+                num_hashes=num_hashes,
+                kmer_size=kmer_size,
+                window_size=window_size,
+                sketch_type=sketch_type,
+                subsample=(subA, subB),
+                expA=expA,
+                use_rust=use_rust
+            )
                     
     # Calculate similarity values
     similarity_values = {}
@@ -249,52 +259,6 @@ def write_results(results: List[Dict[str, Any]], output: str) -> None:
                 row.append(result['metadata'])
             f.write('\t'.join(row) + '\n')
 
-def process_sketches(sketches: List[Tuple[str, AbstractSketch]], 
-                    output: str,
-                    metadata: Optional[Dict[str, str]] = None) -> None:
-    """Process all sketch comparisons and write results.
-    
-    Args:
-        sketches: List of (name, sketch) tuples
-        output: Output file path
-        metadata: Optional metadata dictionary
-    """
-    results = []
-    
-    for i, (query_name, query_sketch) in enumerate(sketches):
-        for ref_name, ref_sketch in sketches[i:]:
-            if query_name == ref_name:
-                continue
-                
-            # Get similarity measures as dictionary
-            similarity = query_sketch.similarity_values(ref_sketch)
-            
-            # Create result entry
-            result = {
-                'query': query_name,
-                'reference': ref_name,
-                'similarity': similarity
-            }
-            
-            # Add metadata if provided
-            if metadata and query_name in metadata:
-                result['metadata'] = metadata[query_name]
-                
-            results.append(result)
-            
-            # Add reverse comparison if needed
-            if query_name != ref_name:
-                reverse_result = {
-                    'query': ref_name,
-                    'reference': query_name,
-                    'similarity': similarity
-                }
-                if metadata and ref_name in metadata:
-                    reverse_result['metadata'] = metadata[ref_name]
-                results.append(reverse_result)
-    
-    write_results(results, output)
-
 def process_files(files: List[str], **kwargs) -> Dict[str, IntervalSketch]:
     """Process multiple files in parallel."""
     mode = kwargs.get('mode', 'A')
@@ -402,21 +366,19 @@ def main():
         args.mode = "C"
     elif args.mode == "A":
         print("Using default mode A for interval comparison")
-            
+
     # Validate expA is only used with mode C
-    if args.mode != "C":
-        if args.expA > 0:
-            raise ValueError("--expA parameter is invalid outside of mode C")
-        if args.subA != 1.0:
-            raise ValueError("--subA parameter is only allowed in mode C")
-        if args.subB != 1.0 and args.mode != "B":
-            raise ValueError("--subB parameter is only allowed in modes B and C")
-    else:
-        if args.expA < 0:
-            raise ValueError("--expA parameter must be non-negative for mode C")
-        # Validate subsample rates
-        if not (0 <= args.subA <= 1 and 0 <= args.subB <= 1):
-            raise ValueError("Subsample rates must be between 0 and 1")
+    if args.mode != "C" and args.expA > 0:
+        print(f"C-mode parameters detected (subA={args.subA}, subB={args.subB}, expA={args.expA}), switching from mode A to mode C")
+        args.mode = "C"
+
+    # Validate subsample rates
+    if args.subA < 0 or args.subA > 1 or args.subB < 0 or args.subB > 1:
+        raise ValueError("Subsample rates must be between 0 and 1")
+
+    # Validate expA is non-negative for mode C
+    if args.mode == "C" and args.expA < 0:
+        raise ValueError("--expA parameter must be non-negative for mode C")
 
     # Package subA and subB into a tuple for processing
     subsample = (args.subA, args.subB)
@@ -426,6 +388,17 @@ def main():
         filepaths = [line.strip() for line in f if line.strip()]
     with open(args.primary_file) as f:
         primary_paths = [line.strip() for line in f if line.strip()]
+    
+    # Check if both input files are the same
+    same_input_lists = False
+    if args.filepaths_file == args.primary_file:
+        same_input_lists = True
+        print("Detected same input file for both arguments - sketches will be computed only once")
+    else:
+        # Check if the contents match
+        if set(filepaths) == set(primary_paths):
+            same_input_lists = True
+            print("Detected identical file lists - sketches will be computed only once")
         
     # Process primary files first
     primary_sets = {}
@@ -473,17 +446,58 @@ def main():
     num_threads = args.threads if args.threads is not None else os.cpu_count()
     
     # Process remaining files in parallel
-    pool_args = [
-        (filepath, primary_paths, args.mode, args.num_hashes, args.precision, args.kmer_size, args.window_size, args.subA, args.subB, args.expA, args.rust, args.sketch_type, args.hash_size)
-        for filepath in filepaths
-    ]
+    pool_args = []
     
-    # Process files sequentially instead of in parallel to avoid pickling issues
-    results = []
-    for pool_arg in pool_args:
-        filepath, primary_paths, mode, num_hashes, precision, kmer_size, window_size, subA, subB, expA, use_rust, sketch_type, hash_size = pool_arg
-        result = process_file(filepath, primary_paths, mode, num_hashes, precision, kmer_size, window_size, subA, subB, expA, use_rust, sketch_type, hash_size)
-        results.append((os.path.basename(filepath), result))
+    # If using the same input lists, compute pairwise comparisons more efficiently
+    if same_input_lists:
+        print("Computing all pairwise comparisons directly")
+        
+        # Create a cache to store already computed similarities
+        similarity_cache = {}
+        
+        # We already have all the sketches in primary_sets
+        # For each file, we need to compute the similarity with every other file
+        results = []
+        for filepath in filepaths:
+            basename = os.path.basename(filepath)
+            if basename in primary_sets:
+                # Get the sketch for this file
+                sketch = primary_sets[basename]
+                
+                # Calculate similarity with all other primary files
+                similarity_values = {}
+                for primary_name, primary_sketch in primary_sets.items():
+                    # Skip self-comparisons
+                    if primary_name == basename:
+                        continue
+                    
+                    # Create a cache key that's consistent regardless of order
+                    cache_key = tuple(sorted([basename, primary_name]))
+                    
+                    # Check if we've already computed this similarity
+                    if cache_key in similarity_cache:
+                        similarity_values[primary_name] = similarity_cache[cache_key]
+                    else:
+                        # Compute the similarity and cache it
+                        similarity_result = sketch.similarity_values(primary_sketch)
+                        similarity_values[primary_name] = similarity_result
+                        similarity_cache[cache_key] = similarity_result
+                
+                # Add to results
+                results.append((basename, similarity_values))
+    else:
+        # Standard processing for different file lists
+        pool_args = [
+            (filepath, primary_paths, args.mode, args.num_hashes, args.precision, args.kmer_size, args.window_size, args.subA, args.subB, args.expA, args.rust, args.sketch_type, args.hash_size)
+            for filepath in filepaths
+        ]
+        
+        # Process files sequentially instead of in parallel to avoid pickling issues
+        results = []
+        for pool_arg in pool_args:
+            filepath, primary_paths, mode, num_hashes, precision, kmer_size, window_size, subA, subB, expA, use_rust, sketch_type, hash_size = pool_arg
+            result = process_file(filepath, primary_paths, mode, num_hashes, precision, kmer_size, window_size, subA, subB, expA, use_rust, sketch_type, hash_size)
+            results.append((os.path.basename(filepath), result))
     
     # Write results
     outprefix = get_new_prefix(args.outprefix, args.sketch_type, args.mode, args.num_hashes, args.precision, args.subA, args.subB, args.expA)
@@ -518,8 +532,11 @@ def main():
                         if args.sketch_type in ["hyperloglog", "minhash"]:
                             precision = args.precision if args.sketch_type == "hyperloglog" else "NA"
                             num_hashes = args.num_hashes if args.sketch_type == "minhash" else "NA"
-                            window_size = "NA" if args.kmer_size == 0 else args.window_size
-                            row.extend([precision, num_hashes, args.kmer_size, window_size])
+                            # Only include kmer size and window size if they are relevant
+                            if args.mode == "D" or args.kmer_size > 0:
+                                row.extend([precision, num_hashes, args.kmer_size, args.window_size])
+                            else:
+                                row.extend([precision, num_hashes, "NA", "NA"])
                         if args.mode == "C":
                             row.extend([args.subA, args.subB, args.expA])  # C-mode parameters
                         # Add similarity values
