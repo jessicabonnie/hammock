@@ -250,7 +250,7 @@ class HyperLogLog(AbstractSketch):
         rank = self._rho(hash_val)
         self.registers[idx] = max(self.registers[idx], rank)
 
-    def estimate_cardinality(self, method: str = 'original') -> float:
+    def estimate_cardinality(self, method: str = 'ertl_improved') -> float:
         """Estimate the cardinality of the multiset."""
         self.register_counts = self._register_counts()
         if np.all(self.registers == 0):
