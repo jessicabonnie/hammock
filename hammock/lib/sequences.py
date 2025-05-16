@@ -22,7 +22,7 @@ class SequenceSketch(AbstractSketch):
                  sketch_type: str = "minimizer",
                  kmer_size: int = 8,
                  window_size: int = 40,
-                 gapn: int = 0,
+                #  gapn: int = 0,
                  precision: int = 12,
                  num_hashes: int = 128,
                  seed: int = 42,
@@ -51,7 +51,7 @@ class SequenceSketch(AbstractSketch):
             self.sketch = MinimizerSketch(
                 kmer_size=kmer_size,
                 window_size=window_size,
-                gapn=gapn,
+                #  gapn=gapn,
                 seed=seed,
                 debug=debug
             )
@@ -123,7 +123,7 @@ class SequenceSketch(AbstractSketch):
                 sketch_type=kwargs.get('sketch_type', 'minimizer'),
                 kmer_size=kwargs.get('kmer_size', 8),
                 window_size=kwargs.get('window_size', 40),
-                gapn=kwargs.get('gapn', 0),
+                #  gapn=kwargs.get('gapn', 0),
                 precision=kwargs.get('precision', 12),
                 num_hashes=kwargs.get('num_hashes', 128),
                 seed=kwargs.get('seed', 42),
