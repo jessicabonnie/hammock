@@ -2,7 +2,7 @@
 from __future__ import annotations
 import sys
 import os
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 import argparse
 import resource
 import csv
@@ -159,14 +159,14 @@ def parse_args():
                        D: Compare sequences (auto-detected for sequence files)''')
     
     arg_parser.add_argument('--outprefix', '-o', type=str, default="hammock", help='The output file prefix')
-    arg_parser.add_argument("--precision", "-p", type=int, help="Precision for HyperLogLog sketching", default=12)
+    arg_parser.add_argument("--precision", "-p", type=int, help="Precision for HyperLogLog sketching", default=18)
     arg_parser.add_argument("--num_hashes", "-n", type=int, help="Number of hashes for MinHash sketching", default=128)
     arg_parser.add_argument("--subA", type=float, default=1.0, help="Subsampling rate for intervals (0 to 1)")
     arg_parser.add_argument("--subB", type=float, default=1.0, help="Subsampling rate for points (0 to 1)")
     arg_parser.add_argument("--expA", type=float, default=0, help="Power of 10 exponent to multiply contribution of A-type intervals")
     arg_parser.add_argument("--threads", type=int, help="Number of threads to use", default=None)
-    arg_parser.add_argument("--kmer_size", type=int, default=8, help="Size of k-mers for sequence sketching")
-    arg_parser.add_argument("--window_size", type=int, default=40, help="Size of sliding window for sequence sketching")
+    arg_parser.add_argument("--kmer_size", '-k', type=int, default=8, help="Size of k-mers for sequence sketching")
+    arg_parser.add_argument("--window_size", '-w', type=int, default=40, help="Size of sliding window for sequence sketching")
     arg_parser.add_argument("--seed", type=int, default=42, help="Random seed for hashing")
     arg_parser.add_argument("--verbose", action="store_true", help="Print verbose output")
     arg_parser.add_argument("--debug", action="store_true", help="Enable debug mode")
@@ -464,13 +464,9 @@ def main():
                 # Get the sketch for this file
                 sketch = primary_sets[basename]
                 
-                # Calculate similarity with all other primary files
+                # Calculate similarity with all primary files (including self)
                 similarity_values = {}
                 for primary_name, primary_sketch in primary_sets.items():
-                    # Skip self-comparisons
-                    if primary_name == basename:
-                        continue
-                    
                     # Create a cache key that's consistent regardless of order
                     cache_key = tuple(sorted([basename, primary_name]))
                     
@@ -478,7 +474,7 @@ def main():
                     if cache_key in similarity_cache:
                         similarity_values[primary_name] = similarity_cache[cache_key]
                     else:
-                        # Compute the similarity and cache it
+                        # Compute the similarity and cache it, including for self-comparison
                         similarity_result = sketch.similarity_values(primary_sketch)
                         similarity_values[primary_name] = similarity_result
                         similarity_cache[cache_key] = similarity_result
@@ -539,9 +535,11 @@ def main():
                                 row.extend([precision, num_hashes, "NA", "NA"])
                         if args.mode == "C":
                             row.extend([args.subA, args.subB, args.expA])  # C-mode parameters
-                        # Add similarity values
+                        # Add similarity values in the same order as similarity_measures
                         if isinstance(output[key], dict):
-                            row.extend(output[key].values())
+                            # Ensure order matches similarity_measures order
+                            for measure in similarity_measures:
+                                row.append(output[key].get(measure, 0.0))
                         else:
                             row.append(output[key])
                         writer.writerow(row)
