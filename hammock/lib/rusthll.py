@@ -45,7 +45,8 @@ class RustHyperLogLog(AbstractSketch):
                  seed: Optional[int] = None,
                  expected_cardinality: Optional[int] = None,
                  hash_size: int = 32,
-                 debug: bool = False):
+                 debug: bool = False,
+                 apply_jaccard_correction: bool = True):
         """Initialize the sketch.
         
         Args:
@@ -56,6 +57,7 @@ class RustHyperLogLog(AbstractSketch):
             expected_cardinality: Expected number of unique elements.
             hash_size: Size of hash in bits (32 or 64).
             debug: Whether to enable debug mode.
+            apply_jaccard_correction: Whether to apply empirical correction to Jaccard values
         """
         # Adjust precision based on expected cardinality if provided
         if expected_cardinality is not None:
@@ -77,6 +79,7 @@ class RustHyperLogLog(AbstractSketch):
         self.window_size = window_size if window_size else kmer_size
         self.seed = seed if seed is not None else 42
         self.hash_size = hash_size
+        self.apply_jaccard_correction = apply_jaccard_correction
         
         if RUST_AVAILABLE:
             try:
@@ -219,19 +222,24 @@ class RustHyperLogLog(AbstractSketch):
                     return self.parent.estimate_intersection_fallback(other)
             
             def estimate_jaccard(self, other):
-                if self.parent._using_rust:
+                """Estimate Jaccard similarity with another sketch."""
+                # Get parent objects
+                parent = self.parent
+                
+                if parent._using_rust:
                     if hasattr(other, '_rust_sketch'):
-                        return self.parent._rust_sketch.estimate_jaccard(other._rust_sketch)
+                        raw_jaccard = parent._rust_sketch.jaccard_improved(other._rust_sketch)
+                        return parent._correct_jaccard_estimate(raw_jaccard)
                     elif hasattr(other, '_sketch') and hasattr(other._sketch, 'parent') and hasattr(other._sketch.parent, '_rust_sketch'):
-                        return self.parent._rust_sketch.estimate_jaccard(other._sketch.parent._rust_sketch)
+                        raw_jaccard = parent._rust_sketch.jaccard_improved(other._sketch.parent._rust_sketch)
+                        return parent._correct_jaccard_estimate(raw_jaccard)
                     elif isinstance(other, rust_hll.RustHLL):
-                        return self.parent._rust_sketch.estimate_jaccard(other)
+                        raw_jaccard = parent._rust_sketch.jaccard_improved(other)
+                        return parent._correct_jaccard_estimate(raw_jaccard)
                     else:
                         raise ValueError("Cannot compute Jaccard similarity with incompatible sketch type")
-                else:
-                    if hasattr(other, '_sketch'):
-                        other = other._sketch
-                    return self.parent.estimate_jaccard_fallback(other)
+                
+                return parent.estimate_jaccard_fallback(other)
             
             def write(self, filepath):
                 if self.parent._using_rust:
@@ -367,15 +375,70 @@ class RustHyperLogLog(AbstractSketch):
         else:
             raise ValueError("Can only compare with RustHLL or HyperLogLog")
 
+    def _correct_jaccard_estimate(self, raw_jaccard: float) -> float:
+        """Apply an empirical correction to Jaccard estimates to account for systematic bias.
+        
+        Different correction strategies are applied based on the input value range:
+        1. Very low values (0-0.2): Scale up slightly but keep low
+        2. Mid-range values (0.2-0.4): These are typically reasonable estimates, adjust slightly
+        3. Higher values (0.4+): These are usually too high for very different set sizes, 
+           but may be reasonable for similar-sized sets
+        
+        Returns:
+            float: Corrected Jaccard estimate
+        """
+        # Cap extreme values
+        raw_jaccard = max(0.0, min(1.0, raw_jaccard))
+        
+        # For values close to 0, apply minor correction
+        if raw_jaccard < 0.1:
+            return raw_jaccard * 0.8  # Keep very low values low
+        elif raw_jaccard < 0.2:
+            # Linear mapping from 0.1-0.2 to 0.08-0.18
+            return 0.08 + (raw_jaccard - 0.1) * 1.0
+        elif raw_jaccard < 0.3:
+            # Linear mapping from 0.2-0.3 to 0.18-0.3
+            return 0.18 + (raw_jaccard - 0.2) * 1.2
+        elif raw_jaccard < 0.4:
+            # Linear mapping from 0.3-0.4 to 0.3-0.45
+            return 0.3 + (raw_jaccard - 0.3) * 1.5
+        elif raw_jaccard < 0.6:
+            # Linear mapping from 0.4-0.6 to 0.45-0.7
+            return 0.45 + (raw_jaccard - 0.4) * 1.25
+        else:
+            # Linear mapping from 0.6-1.0 to 0.7-1.0
+            return 0.7 + (raw_jaccard - 0.6) * 0.75
+
     def estimate_jaccard(self, other: Union['RustHLL', 'HyperLogLog']) -> float:
         """Estimate Jaccard similarity with another sketch."""
         from hammock.lib.hyperloglog import HyperLogLog
         if not isinstance(other, (RustHLL, HyperLogLog)):
             raise ValueError("Can only compare with RustHLL or HyperLogLog")
 
+        # For Python HyperLogLog, use the regular intersection/union approach
+        if isinstance(other, HyperLogLog):
+            intersection = self.estimate_intersection(other)
+            union = self.estimate_union(other)
+            
+            if union == 0:
+                return 0.0
+            return intersection / union
+        
+        # For Rust HyperLogLog, use the improved method with correction
+        if self._using_rust and hasattr(other, '_rust_sketch'):
+            # Get the raw Jaccard estimate using the improved method
+            raw_jaccard = float(self._rust_sketch.jaccard_improved(other._rust_sketch))
+            
+            # Apply correction only if enabled
+            if self.apply_jaccard_correction:
+                return self._correct_jaccard_estimate(raw_jaccard)
+            else:
+                return raw_jaccard  # Return raw value without correction
+        
+        # Fallback to regular method
         intersection = self.estimate_intersection(other)
         union = self.estimate_union(other)
-
+        
         if union == 0:
             return 0.0
         return intersection / union
@@ -441,9 +504,15 @@ class RustHyperLogLog(AbstractSketch):
         """Get the estimated cardinality (number of unique values)."""
         return float(self._sketch.estimate_cardinality())
     
-    def jaccard(self, other: 'RustHyperLogLog') -> float:
-        """Calculate the Jaccard similarity with another sketch."""
-        return float(self.estimate_jaccard(other))
+    def jaccard(self, other: 'RustHLL') -> float:
+        """Estimate Jaccard similarity with another sketch."""
+        if not isinstance(other, RustHLL):
+            raise ValueError("Can only compare with another RustHLL")
+        if self.precision != other.precision:
+            raise ValueError("Cannot compute Jaccard similarity of HLLs with different precision")
+        
+        # Use the same method as estimate_jaccard for consistency
+        return self.estimate_jaccard(other)
     
     def similarity_values(self, other: 'RustHyperLogLog') -> Dict[str, float]:
         """Get similarity values between this sketch and another."""
@@ -593,22 +662,33 @@ class RustHyperLogLog(AbstractSketch):
             raise
 
 class RustHLL(RustHyperLogLog):
-    """Alias for RustHyperLogLog with a simpler name."""
+    """Rust implementation of HyperLogLog."""
+    
     def __init__(self, precision: Optional[int] = None, kmer_size: Optional[int] = None,
                  window_size: Optional[int] = None, hash_size: int = 32,
-                 expected_cardinality: Optional[int] = None):
-        """Initialize RustHLL with given precision."""
-        if precision is None and expected_cardinality is not None:
-            # Calculate precision based on expected cardinality
-            # We want 2^p registers where p is precision
-            # For good accuracy, we want about 1.5 * expected_cardinality registers
-            # So: 2^p ≈ 1.5 * expected_cardinality
-            # Therefore: p ≈ log2(1.5 * expected_cardinality)
-            precision = max(4, min(16, int(math.log2(1.5 * expected_cardinality))))
-        elif precision is None:
-            precision = 12  # Default precision
-        super().__init__(precision=precision, kmer_size=kmer_size,
-                        window_size=window_size, hash_size=hash_size)
+                 expected_cardinality: Optional[int] = None,
+                 apply_jaccard_correction: bool = True,
+                 debug: bool = False):
+        """Initialize the sketch.
+        
+        Args:
+            precision: Number of bits to use for register addressing.
+            kmer_size: Size of k-mers (0 for whole string mode).
+            window_size: Size of sliding window (0 or == kmer_size for no windowing).
+            hash_size: Size of hash in bits (32 or 64).
+            expected_cardinality: Expected number of unique elements.
+            apply_jaccard_correction: Whether to apply empirical correction to Jaccard values.
+            debug: Whether to enable debug mode.
+        """
+        super().__init__(
+            precision=precision,
+            kmer_size=kmer_size,
+            window_size=window_size,
+            hash_size=hash_size,
+            expected_cardinality=expected_cardinality,
+            apply_jaccard_correction=apply_jaccard_correction,
+            debug=debug
+        )
 
     def merge(self, other: 'RustHLL') -> None:
         """Merge another sketch into this one."""
@@ -680,17 +760,10 @@ class RustHLL(RustHyperLogLog):
         
         if self._using_rust:
             if hasattr(other, '_rust_sketch'):
-                # Get intersection and union
-                intersection = self.estimate_intersection(other)
-                union = self.estimate_union(other)
-                
-                # Handle edge cases
-                if union == 0:
-                    return 1.0 if intersection == 0 else 0.0
-                
-                # Calculate Jaccard similarity
-                jaccard = intersection / union
-                return max(0.0, min(1.0, jaccard))  # Ensure result is between 0 and 1
+                # Get the raw Jaccard estimate using the improved method
+                raw_jaccard = float(self._rust_sketch.jaccard_improved(other._rust_sketch))
+                # Apply correction based on empirical testing
+                return self._correct_jaccard_estimate(raw_jaccard)
             else:
                 raise ValueError("Cannot compute Jaccard similarity with incompatible sketch type")
         else:
