@@ -12,7 +12,8 @@ class MinimizerSketch(AbstractSketch):
                  window_size: int = 8, 
                  seed: int = 42,
                  precision: int = 16,
-                 debug: bool = False):
+                 debug: bool = False,
+                 use_sets: bool = False):
         """Initialize minimizer sketch.
         
         Args:
@@ -21,6 +22,7 @@ class MinimizerSketch(AbstractSketch):
             seed: Random seed for hashing
             precision: Precision of the HyperLogLog sketchs
             debug: Whether to print debug information
+            use_sets: Whether to store minimizers in sets (exact) in addition to sketches
         """
         super().__init__()
         self.window_size = window_size
@@ -28,11 +30,14 @@ class MinimizerSketch(AbstractSketch):
         self.seed = seed
         self.precision = precision
         self.debug = debug
+        self.use_sets = use_sets
         # Initialize HyperLogLog sketches with proper parameters
         self.minimizer_sketch = HyperLogLog(precision=precision, kmer_size=kmer_size, window_size=window_size, seed=seed)
         self.startend_sketch = HyperLogLog(precision=precision, kmer_size=kmer_size, window_size=window_size, seed=seed)
-        # self.startend_kmers = set()
-        # self.minimizers = set()
+        # Initialize sets only if use_sets is True
+        if self.use_sets:
+            self.startend_kmers = set()
+            self.minimizers = set()
     
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
@@ -41,7 +46,8 @@ class MinimizerSketch(AbstractSketch):
         
         # Add minimizers to the sketch
         for _, hash_val in minimizers:
-            # self.minimizers.add(hash_val)
+            if self.use_sets:
+                self.minimizers.add(hash_val)
             self.minimizer_sketch.add_string(str(hash_val))
         
         # Add start and end k-mers
@@ -49,8 +55,9 @@ class MinimizerSketch(AbstractSketch):
             start_kmer = s[:self.kmer_size]
             end_kmer = s[-self.kmer_size:]
             self.startend_sketch.add_string(start_kmer + end_kmer)
-            # self.startend_kmers.add(start_kmer)
-            # self.startend_kmers.add(end_kmer)
+            if self.use_sets:
+                self.startend_kmers.add(start_kmer)
+                self.startend_kmers.add(end_kmer)
     
     def add_batch(self, strings: List[str]) -> None:
         """Add multiple strings to the sketch.
@@ -83,25 +90,32 @@ class MinimizerSketch(AbstractSketch):
         if self.kmer_size != other.kmer_size or self.window_size != other.window_size:
             raise ValueError("Cannot compare sketches with different parameters")
             
-        # Calculate hash similarity using minimizer sets only
-        # intersection = len(self.minimizers & other.minimizers)
-        # union = len(self.minimizers | other.minimizers)
-        # hash_sim = float(intersection) / union if union > 0 else 0.0
+        # Calculate set similarity using minimizer sets only (if using sets)
+        if self.use_sets and other.use_sets:
+            intersection = len(self.minimizers & other.minimizers)
+            union = len(self.minimizers | other.minimizers)
+            set_sim = float(intersection) / union if union > 0 else 0.0
+            
+            if self.debug:
+                print(f"Set similarity - intersection: {intersection}, union: {union}, similarity: {set_sim:.4f}")
+        else:
+            set_sim = None
         
-        # if self.debug:
-        #     print(f"Hash similarity - intersection: {intersection}, union: {union}, similarity: {hash_sim:.4f}")
-        
-        # Calculate hash similarity including end k-mers
-        # combined_self = self.minimizers | self.startend_kmers
-        # combined_other = other.minimizers | other.startend_kmers
+        # Calculate set similarity including end k-mers (if using sets)
+        if self.use_sets and other.use_sets:
+            combined_self = self.minimizers | self.startend_kmers
+            combined_other = other.minimizers | other.startend_kmers
+            intersection = len(combined_self & combined_other)
+            union = len(combined_self | combined_other)
+            set_with_ends_sim = float(intersection) / union if union > 0 else 0.0
+            
+            if self.debug:
+                print(f"Set+ends similarity - intersection: {intersection}, union: {union}, similarity: {set_with_ends_sim:.4f}")
+        else:
+            set_with_ends_sim = None
+        # Calculate sketch-based similarity (always available)
         combined_self_sketch = self.minimizer_sketch.merge_new(self.startend_sketch)
         combined_other_sketch = other.minimizer_sketch.merge_new(other.startend_sketch)
-        # intersection = len(combined_self & combined_other)
-        # union = len(combined_self | combined_other)
-        # hash_with_ends_sim = float(intersection) / union if union > 0 else 0.0
-        
-        # if self.debug:
-        #     print(f"Hash+ends similarity - intersection: {intersection}, union: {union}, similarity: {hash_with_ends_sim:.4f}")
         
         # Calculate overall Jaccard similarity
         jaccard_sim = self.estimate_jaccard(other)
@@ -109,22 +123,32 @@ class MinimizerSketch(AbstractSketch):
         
         if self.debug:
             print(f"\nSimilarity metrics:")
-            # print(f"Hash similarity: {hash_sim:.4f}")
-            # print(f"Hash+ends similarity: {hash_with_ends_sim:.4f}")
+            if set_sim is not None:
+                print(f"Set similarity: {set_sim:.4f}")
+            if set_with_ends_sim is not None:
+                print(f"Set+ends similarity: {set_with_ends_sim:.4f}")
             print(f"Jaccard similarity: {jaccard_sim:.4f}")
             print(f"Jaccard similarity with ends: {jaccard_sim_with_ends:.4f}")
         
-        return {
-            # 'hash_similarity': hash_sim,
-            # 'hash_with_ends_similarity': hash_with_ends_sim,
+        # Build return dictionary - include set-based metrics only if available
+        result = {
             'jaccard_similarity': jaccard_sim,
             'jaccard_similarity_with_ends': jaccard_sim_with_ends
         }
         
+        if set_sim is not None:
+            result['set_similarity'] = set_sim
+        if set_with_ends_sim is not None:
+            result['set_with_ends_similarity'] = set_with_ends_sim
+            
+        return result
+        
     def estimate_cardinality(self) -> float:
         """Estimate the number of unique minimizers in the sequences."""
-        return self.minimizer_sketch.estimate_cardinality()
-        # return float(len(self.minimizers))
+        if self.use_sets:
+            return float(len(self.minimizers))
+        else:
+            return self.minimizer_sketch.estimate_cardinality()
     
     def merge(self, other: 'MinimizerSketch') -> 'MinimizerSketch':
         """Merge another minimizer sketch into this one."""
@@ -136,14 +160,14 @@ class MinimizerSketch(AbstractSketch):
             window_size=self.window_size,
             seed=self.seed,
             precision=self.precision,
-            debug=self.debug
+            debug=self.debug,
+            use_sets=self.use_sets
         )
         
-        # Merge minimizer sets
-        # result.minimizers = self.minimizers.union(other.minimizers)
-        
-        # Merge startend kmers
-        # result.startend_kmers = self.startend_kmers.union(other.startend_kmers)
+        # Merge minimizer sets (if using sets)
+        if self.use_sets and other.use_sets:
+            result.minimizers = self.minimizers.union(other.minimizers)
+            result.startend_kmers = self.startend_kmers.union(other.startend_kmers)
         
         # Merge sketches
         print(f"Merging {self.minimizer_sketch.estimate_cardinality()} and {other.minimizer_sketch.estimate_cardinality()} cardinality sketches")
@@ -155,21 +179,26 @@ class MinimizerSketch(AbstractSketch):
     def write(self, filepath: str) -> None:
         """Write sketch to file."""
         # Save the sketches to a single npz file
-        np.savez(filepath,
-                 # Save HyperLogLog sketches
-                 minimizer_sketch_registers=self.minimizer_sketch.registers,
-                 startend_sketch_registers=self.startend_sketch.registers,
-                 
-                 # Save sets
-                 # minimizers=list(self.minimizers),
-                 # startend_kmers=list(self.startend_kmers),
-                 
-                 # Save parameters
-                 kmer_size=self.kmer_size,
-                 window_size=self.window_size,
-                 seed=self.seed,
-                 precision=self.precision,
-                 debug=self.debug)
+        save_data = {
+            # Save HyperLogLog sketches
+            'minimizer_sketch_registers': self.minimizer_sketch.registers,
+            'startend_sketch_registers': self.startend_sketch.registers,
+            
+            # Save parameters
+            'kmer_size': self.kmer_size,
+            'window_size': self.window_size,
+            'seed': self.seed,
+            'precision': self.precision,
+            'debug': self.debug,
+            'use_sets': self.use_sets
+        }
+        
+        # Save sets only if using sets
+        if self.use_sets:
+            save_data['minimizers'] = list(self.minimizers)
+            save_data['startend_kmers'] = list(self.startend_kmers)
+        
+        np.savez(filepath, **save_data)
 
     @classmethod
     def load(cls, filepath: str) -> 'MinimizerSketch':
@@ -184,12 +213,14 @@ class MinimizerSketch(AbstractSketch):
                 window_size=int(data['window_size']),
                 seed=int(data['seed']),
                 precision=int(data['precision']) if 'precision' in data else 16,
-                debug=bool(data['debug'])
+                debug=bool(data['debug']),
+                use_sets=bool(data['use_sets']) if 'use_sets' in data else False
             )
             
-            # Restore the sets
-            # sketch.minimizers = set(data['minimizers'])
-            # sketch.startend_kmers = set(data['startend_kmers'])
+            # Restore the sets (if they were saved)
+            if 'minimizers' in data and 'startend_kmers' in data:
+                sketch.minimizers = set(data['minimizers'])
+                sketch.startend_kmers = set(data['startend_kmers'])
             
             # Restore the registers for each sketch
             sketch.minimizer_sketch.registers = data['minimizer_sketch_registers']
