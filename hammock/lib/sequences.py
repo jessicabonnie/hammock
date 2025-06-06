@@ -53,6 +53,7 @@ class SequenceSketch(AbstractSketch):
                 window_size=window_size,
                 #  gapn=gapn,
                 seed=seed,
+                precision=precision,
                 debug=debug
             )
         elif sketch_type == "hyperloglog":

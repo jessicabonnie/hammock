@@ -26,6 +26,7 @@ class MinimizerSketch(AbstractSketch):
         self.window_size = window_size
         self.kmer_size = kmer_size
         self.seed = seed
+        self.precision = precision
         self.debug = debug
         # Initialize HyperLogLog sketches with proper parameters
         self.minimizer_sketch = HyperLogLog(precision=precision, kmer_size=kmer_size, window_size=window_size, seed=seed)
@@ -134,6 +135,7 @@ class MinimizerSketch(AbstractSketch):
             kmer_size=self.kmer_size,
             window_size=self.window_size,
             seed=self.seed,
+            precision=self.precision,
             debug=self.debug
         )
         
@@ -166,6 +168,7 @@ class MinimizerSketch(AbstractSketch):
                  kmer_size=self.kmer_size,
                  window_size=self.window_size,
                  seed=self.seed,
+                 precision=self.precision,
                  debug=self.debug)
 
     @classmethod
@@ -180,6 +183,7 @@ class MinimizerSketch(AbstractSketch):
                 kmer_size=int(data['kmer_size']),
                 window_size=int(data['window_size']),
                 seed=int(data['seed']),
+                precision=int(data['precision']) if 'precision' in data else 16,
                 debug=bool(data['debug'])
             )
             
