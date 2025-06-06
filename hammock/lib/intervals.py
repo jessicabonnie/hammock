@@ -155,9 +155,12 @@ class IntervalSketch(AbstractSketch):
                 - debug: Whether to enable debug mode
                 - use_rust: Whether to use Rust implementation
         """
+        debug = kwargs.get('debug', False)
+        expA = kwargs.get('expA', 0)
+        
         # Check if file exists
         if not os.path.exists(filename):
-            if kwargs.get('debug', False):
+            if debug:
                 print(f"Error: File {filename} does not exist", file=sys.stderr)
             return None
             
@@ -167,14 +170,17 @@ class IntervalSketch(AbstractSketch):
         if file_ext.endswith('.gz'):
             base_ext = os.path.splitext(os.path.splitext(filename)[0])[1].lower()
             if base_ext not in ['.bed']:
-                print(f"Skipping unsupported gzipped file format: {filename}")
+                if debug:
+                    print(f"Skipping unsupported gzipped file format: {filename}")
                 return None
         elif file_ext not in supported_extensions:
-            print(f"Skipping unsupported file format: {filename}")
+            if debug:
+                print(f"Skipping unsupported file format: {filename}")
             return None
             
-        # Print start of file processing
-        print(f"Processing file: {filename}")
+        # Print start of file processing only in debug mode
+        if debug:
+            print(f"Processing file: {filename}")
             
         # Create sketch with appropriate parameters
         sketch = cls(**kwargs)
@@ -195,25 +201,28 @@ class IntervalSketch(AbstractSketch):
                     interval, points, size = sketch.bedline(line, mode=kwargs.get('mode', 'A'), sep=sep, subsample=kwargs.get('subsample', (1.0, 1.0)))
                     if interval:
                         sketch.sketch.add_string(interval)
-                        sketch.num_intervals += 1
+                        # Add multiple copies of the interval if expA is set
+                        if expA > 0:
+                            for i in range(1, int(10**expA) + 1):
+                                sketch.sketch.add_string(interval + str(i))
+                        sketch.num_intervals += 1  # Increment counter for each interval
                         sketch.total_interval_size += size
                     if points:
                         for point in points:
                             if point is not None:
                                 sketch.sketch.add_string(point)
-                        if kwargs.get('mode', 'A') == 'B':
-                            sketch.num_intervals += 1
             
-            # Print completion of file processing
-            print(f"Completed processing file: {filename}")
-            print(f"  - Number of intervals: {sketch.num_intervals}")
-            print(f"  - Total interval size: {sketch.total_interval_size}")
-            if kwargs.get('mode', 'A') in ['B', 'C']:
-                print(f"  - Estimated cardinality: {sketch.sketch.estimate_cardinality():.2f}")
+            # Print completion of file processing only in debug mode
+            if debug:
+                print(f"Completed processing file: {filename}")
+                print(f"  - Number of intervals: {sketch.num_intervals}")
+                print(f"  - Total interval size: {sketch.total_interval_size}")
+                if kwargs.get('mode', 'A') in ['B', 'C']:
+                    print(f"  - Estimated cardinality: {sketch.sketch.estimate_cardinality():.2f}")
             
             return sketch
         except Exception as e:
-            if kwargs.get('debug', False):
+            if debug:
                 print(f"Error reading file {filename}: {e}", file=sys.stderr)
             return None
 
@@ -241,16 +250,16 @@ class IntervalSketch(AbstractSketch):
                         if expA > 0:
                             for i in range(1, int(10**expA)+1):
                                 sketch.sketch.add_string(interval + str(i))
-                        sketch.num_intervals += 1
-                        sketch.total_interval_size += size
+                        # sketch.num_intervals += 1
+                        # sketch.total_interval_size += size
                     
                     # Add points if present and in mode B or C
                     if points and mode in ["B", "C"]:
                         for point in points:
                             if point is not None:
                                 sketch.sketch.add_string(point)
-                        if mode == "B":
-                            sketch.num_intervals += 1
+                        # if mode == "B":
+                        #     sketch.num_intervals += 1
             return sketch
         except Exception as e:
             print(f"Error processing BigBed file {filename}: {e}")
@@ -370,8 +379,8 @@ class IntervalSketch(AbstractSketch):
                 if debug:
                     print(f"Sketch cardinality after adding points: {sketch.sketch.estimate_cardinality()}")
                 
-                if mode == "B":
-                    sketch.num_intervals = len(lines)  # Count number of intervals processed
+                # if mode == "B":
+                #     sketch.num_intervals = len(lines)  # Count number of intervals processed
             
             return sketch
             
