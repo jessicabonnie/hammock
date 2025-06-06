@@ -11,6 +11,7 @@ class MinimizerSketch(AbstractSketch):
                  kmer_size: int = 4, 
                  window_size: int = 8, 
                  seed: int = 42,
+                 precision: int = 16,
                  debug: bool = False):
         """Initialize minimizer sketch.
         
@@ -18,6 +19,7 @@ class MinimizerSketch(AbstractSketch):
             window_size: Size of sliding window
             kmer_size: Size of k-mers
             seed: Random seed for hashing
+            precision: Precision of the HyperLogLog sketchs
             debug: Whether to print debug information
         """
         super().__init__()
@@ -26,10 +28,10 @@ class MinimizerSketch(AbstractSketch):
         self.seed = seed
         self.debug = debug
         # Initialize HyperLogLog sketches with proper parameters
-        self.minimizer_sketch = HyperLogLog(kmer_size=kmer_size, window_size=window_size, seed=seed)
-        self.startend_sketch = HyperLogLog(kmer_size=kmer_size, window_size=window_size, seed=seed)
-        self.startend_kmers = set()
-        self.minimizers = set()
+        self.minimizer_sketch = HyperLogLog(precision=precision, kmer_size=kmer_size, window_size=window_size, seed=seed)
+        self.startend_sketch = HyperLogLog(precision=precision, kmer_size=kmer_size, window_size=window_size, seed=seed)
+        # self.startend_kmers = set()
+        # self.minimizers = set()
     
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
@@ -38,14 +40,16 @@ class MinimizerSketch(AbstractSketch):
         
         # Add minimizers to the sketch
         for _, hash_val in minimizers:
-            self.minimizers.add(hash_val)
+            # self.minimizers.add(hash_val)
+            self.minimizer_sketch.add_string(str(hash_val))
         
         # Add start and end k-mers
         if len(s) >= self.kmer_size:
             start_kmer = s[:self.kmer_size]
             end_kmer = s[-self.kmer_size:]
-            self.startend_kmers.add(start_kmer)
-            self.startend_kmers.add(end_kmer)
+            self.startend_sketch.add_string(start_kmer + end_kmer)
+            # self.startend_kmers.add(start_kmer)
+            # self.startend_kmers.add(end_kmer)
     
     def add_batch(self, strings: List[str]) -> None:
         """Add multiple strings to the sketch.
@@ -79,43 +83,47 @@ class MinimizerSketch(AbstractSketch):
             raise ValueError("Cannot compare sketches with different parameters")
             
         # Calculate hash similarity using minimizer sets only
-        intersection = len(self.minimizers & other.minimizers)
-        union = len(self.minimizers | other.minimizers)
-        hash_sim = float(intersection) / union if union > 0 else 0.0
+        # intersection = len(self.minimizers & other.minimizers)
+        # union = len(self.minimizers | other.minimizers)
+        # hash_sim = float(intersection) / union if union > 0 else 0.0
         
-        if self.debug:
-            print(f"Hash similarity - intersection: {intersection}, union: {union}, similarity: {hash_sim:.4f}")
+        # if self.debug:
+        #     print(f"Hash similarity - intersection: {intersection}, union: {union}, similarity: {hash_sim:.4f}")
         
         # Calculate hash similarity including end k-mers
-        combined_self = self.minimizers | self.startend_kmers
-        combined_other = other.minimizers | other.startend_kmers
-        combined_self_sketch = self.minimizer_sketch.merge(self.startend_sketch)
-        combined_other_sketch = other.minimizer_sketch.merge(other.startend_sketch)
-        intersection = len(combined_self & combined_other)
-        union = len(combined_self | combined_other)
-        hash_with_ends_sim = float(intersection) / union if union > 0 else 0.0
+        # combined_self = self.minimizers | self.startend_kmers
+        # combined_other = other.minimizers | other.startend_kmers
+        combined_self_sketch = self.minimizer_sketch.merge_new(self.startend_sketch)
+        combined_other_sketch = other.minimizer_sketch.merge_new(other.startend_sketch)
+        # intersection = len(combined_self & combined_other)
+        # union = len(combined_self | combined_other)
+        # hash_with_ends_sim = float(intersection) / union if union > 0 else 0.0
         
-        if self.debug:
-            print(f"Hash+ends similarity - intersection: {intersection}, union: {union}, similarity: {hash_with_ends_sim:.4f}")
+        # if self.debug:
+        #     print(f"Hash+ends similarity - intersection: {intersection}, union: {union}, similarity: {hash_with_ends_sim:.4f}")
         
         # Calculate overall Jaccard similarity
         jaccard_sim = self.estimate_jaccard(other)
+        jaccard_sim_with_ends = combined_self_sketch.estimate_jaccard(combined_other_sketch)
         
         if self.debug:
             print(f"\nSimilarity metrics:")
-            print(f"Hash similarity: {hash_sim:.4f}")
-            print(f"Hash+ends similarity: {hash_with_ends_sim:.4f}")
+            # print(f"Hash similarity: {hash_sim:.4f}")
+            # print(f"Hash+ends similarity: {hash_with_ends_sim:.4f}")
             print(f"Jaccard similarity: {jaccard_sim:.4f}")
+            print(f"Jaccard similarity with ends: {jaccard_sim_with_ends:.4f}")
         
         return {
-            'hash_similarity': hash_sim,
-            'hash_with_ends_similarity': hash_with_ends_sim,
-            'jaccard_similarity': jaccard_sim
+            # 'hash_similarity': hash_sim,
+            # 'hash_with_ends_similarity': hash_with_ends_sim,
+            'jaccard_similarity': jaccard_sim,
+            'jaccard_similarity_with_ends': jaccard_sim_with_ends
         }
         
     def estimate_cardinality(self) -> float:
         """Estimate the number of unique minimizers in the sequences."""
-        return float(len(self.minimizers))
+        return self.minimizer_sketch.estimate_cardinality()
+        # return float(len(self.minimizers))
     
     def merge(self, other: 'MinimizerSketch') -> 'MinimizerSketch':
         """Merge another minimizer sketch into this one."""
@@ -130,14 +138,15 @@ class MinimizerSketch(AbstractSketch):
         )
         
         # Merge minimizer sets
-        result.minimizers = self.minimizers.union(other.minimizers)
+        # result.minimizers = self.minimizers.union(other.minimizers)
         
         # Merge startend kmers
-        result.startend_kmers = self.startend_kmers.union(other.startend_kmers)
+        # result.startend_kmers = self.startend_kmers.union(other.startend_kmers)
         
         # Merge sketches
-        result.minimizer_sketch = self.minimizer_sketch.merge(other.minimizer_sketch)
-        result.startend_sketch = self.startend_sketch.merge(other.startend_sketch)
+        print(f"Merging {self.minimizer_sketch.estimate_cardinality()} and {other.minimizer_sketch.estimate_cardinality()} cardinality sketches")
+        result.minimizer_sketch = self.minimizer_sketch.merge_new(other.minimizer_sketch)
+        result.startend_sketch = self.startend_sketch.merge_new(other.startend_sketch)
         
         return result
 
@@ -150,8 +159,8 @@ class MinimizerSketch(AbstractSketch):
                  startend_sketch_registers=self.startend_sketch.registers,
                  
                  # Save sets
-                 minimizers=list(self.minimizers),
-                 startend_kmers=list(self.startend_kmers),
+                 # minimizers=list(self.minimizers),
+                 # startend_kmers=list(self.startend_kmers),
                  
                  # Save parameters
                  kmer_size=self.kmer_size,
@@ -175,8 +184,8 @@ class MinimizerSketch(AbstractSketch):
             )
             
             # Restore the sets
-            sketch.minimizers = set(data['minimizers'])
-            sketch.startend_kmers = set(data['startend_kmers'])
+            # sketch.minimizers = set(data['minimizers'])
+            # sketch.startend_kmers = set(data['startend_kmers'])
             
             # Restore the registers for each sketch
             sketch.minimizer_sketch.registers = data['minimizer_sketch_registers']

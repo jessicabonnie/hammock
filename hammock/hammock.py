@@ -158,7 +158,7 @@ def parse_args():
                        C: Compare both intervals and points
                        D: Compare sequences (auto-detected for sequence files)''')
     
-    arg_parser.add_argument('--outprefix', '-o', type=str, default="hammock", help='The output file prefix')
+    arg_parser.add_argument('--outprefix', '-o','--out', type=str, default="hammock", help='The output file prefix')
     arg_parser.add_argument("--precision", "-p", type=int, help="Precision for HyperLogLog sketching", default=18)
     arg_parser.add_argument("--num_hashes", "-n", type=int, help="Number of hashes for MinHash sketching", default=128)
     arg_parser.add_argument("--subA", type=float, default=1.0, help="Subsampling rate for intervals (0 to 1)")
@@ -190,7 +190,9 @@ def get_new_prefix(outprefix: str,
                    precision: Optional[int] = None,
                    subA: Optional[float] = None,
                    subB: Optional[float] = None,
-                   expA: Optional[float] = None) -> str:
+                   expA: Optional[float] = None,
+                   kmer_size: Optional[int] = None,
+                   window_size: Optional[int] = None) -> str:
     """Get output prefix with appropriate suffix based on sketch type.
     
     Args:
@@ -199,6 +201,11 @@ def get_new_prefix(outprefix: str,
         mode: Mode (A/B/C/D)
         num_hashes: Number of hashes for MinHash
         precision: Precision for HyperLogLog
+        subA: Subsampling rate for intervals
+        subB: Subsampling rate for points
+        expA: Power of 10 exponent for A-type intervals
+        kmer_size: Size of k-mers for sequence sketching
+        window_size: Size of sliding window for sequence sketching
         
     Returns:
         String with appropriate suffix for sketch type and mode
@@ -222,6 +229,10 @@ def get_new_prefix(outprefix: str,
     # Add subB if present
     if subB is not None and subB != 1.0:
         outprefix = f"{outprefix}_B{subB:.2f}"
+        
+    # Add kmer_size and window_size for mode D
+    if mode == "D" and kmer_size is not None and window_size is not None:
+        outprefix = f"{outprefix}_k{kmer_size}_w{window_size}"
         
     return outprefix
 
@@ -496,7 +507,7 @@ def main():
             results.append((os.path.basename(filepath), result))
     
     # Write results
-    outprefix = get_new_prefix(args.outprefix, args.sketch_type, args.mode, args.num_hashes, args.precision, args.subA, args.subB, args.expA)
+    outprefix = get_new_prefix(args.outprefix, args.sketch_type, args.mode, args.num_hashes, args.precision, args.subA, args.subB, args.expA, args.kmer_size, args.window_size)
     with open(f"{outprefix}.csv", "w", newline='') as f:
         writer = csv.writer(f)
         
@@ -525,7 +536,7 @@ def main():
                 for key in primary_keys:
                     if key in output:
                         row = [basename, key, args.sketch_type, args.mode]  # files and sketch info
-                        if args.sketch_type in ["hyperloglog", "minhash"]:
+                        if args.sketch_type in ["hyperloglog", "minhash", "minimizer"]:
                             precision = args.precision if args.sketch_type == "hyperloglog" else "NA"
                             num_hashes = args.num_hashes if args.sketch_type == "minhash" else "NA"
                             # Only include kmer size and window size if they are relevant
