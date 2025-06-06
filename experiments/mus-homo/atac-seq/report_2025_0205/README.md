@@ -12,6 +12,12 @@ tag=""
 cd ..
 ls processed${tag}/* | xargs realpath > processed_paths${tag}.txt
 
+
+# HUMAN
+#wget https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_48/GRCh38.p14.genome.fa.gz
+#lab location: /data/blangme2/fasta/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna
+
+
 ```
 
 ### Make File Path Lists
@@ -79,29 +85,19 @@ while read -r bedfile; do
     # Remove both .bed.gz extensions
     outfile=$(basename "$bedfile" .bed.gz)
     bedtools getfasta -fi $mm10 -bed "$bedfile" -fo "data/fastas${tag}/${outfile}.fa"
-done < data/processed_paths${tag}/Mus_musculus_paths_beds.txt
-cd data/fastas${tag}
-realpath * > ../Mus_musculus_fastas.txt
+    echo $(realpath fastas${tag}/${outfile}.fa)
+done < data/processed_paths${tag}/Mus_musculus_paths_beds.txt > data/Mus_musculus_fastas.txt
 
+
+grc38=/data/blangme2/fasta/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna
 
 
 # Process human files using hg38 reference  
 while read -r bedfile; do
-    outfile=$(basename "$bedfile" .bed)
-    bedtools getfasta -fi /path/to/hg38/genome.fa -bed "$bedfile" -fo "fasta${tag}/${outfile}.fa"
-done < processed_paths${tag}/Homo_sapiens_paths_beds.txt
-
-# Create lists of fasta file paths
-mkdir -p fasta_paths${tag}
-
-<!-- # Create mouse fasta paths list
-find fasta${tag} -type f -name "*$(cat processed_paths${tag}/Mus_musculus_paths.txt | xargs -I {} basename {} .bed)*.fa" \
-    -exec realpath {} \; > fasta_paths${tag}/Mus_musculus_paths_fasta.txt -->
-
-# Create human fasta paths list  
-find fasta${tag} -type f -name "*$(cat processed_paths${tag}/Homo_sapiens_paths.txt | xargs -I {} basename {} .bed)*.fa" \
-    -exec realpath {} \; > fasta_paths${tag}/Homo_sapiens_paths_fasta.txt
-
+    outfile=$(basename "$bedfile" .bed.gz)
+    bedtools getfasta -fi $grc38 -bed "$bedfile" -fo "data/fastas${tag}/${outfile}.fa";
+    echo $(realpath data/fastas${tag}/${outfile}.fa)
+done < processed_paths${tag}/Homo_sapiens_paths_beds.txt > data/Homo_sapiens_fastas.txt
 
 
 
@@ -120,6 +116,6 @@ hammock data/Mus_musculus_paths_beds.txt data/Mus_musculus_paths_beds.txt --mode
 ## Mode D
 
 ```
-hammock data/Mus_musculus_fastas.txt data/Mus_musculus_fastas.txt --outprefix results/mouseonly
+hammock data/Mus_musculus_fastas.txt data/Mus_musculus_fastas.txt --outprefix results/mouseonly -k 20 -w 200 --precision 20
 
 ```
