@@ -5,7 +5,7 @@ import numpy as np  # type: ignore
 import matplotlib.pyplot as plt  # type: ignore
 import os
 import sys
-from hammock.lib.rusthll import RustHLL
+from hammock.lib.rusthll_compat import RustHLLWrapper
 from hammock.lib.hyperloglog import HyperLogLog
 from datetime import datetime
 
@@ -15,7 +15,8 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 
 # Try importing the rust_hll module
 try:
-    from hammock.lib.rusthll_compat import RustHLLWrapper, RUST_AVAILABLE
+    import rust_hll
+    from hammock.lib.rusthll_compat import RUST_AVAILABLE, RustHLLWrapper
     RUST_HLL_AVAILABLE = True
 except ImportError:
     RUST_HLL_AVAILABLE = False
@@ -27,7 +28,7 @@ np.random.seed(42)
 # Constants
 PRECISION_VALUES = [8, 10, 12, 14, 16, 18, 20]
 NUM_ITEMS = [1000, 10000, 100000, 1000000, 10000000]
-METHODS = ["original", "ertl_improved", "ertl_mle"]
+METHODS = ["original", "ertl_mle", "fast_mle"]
 
 # Create a debug log file
 DEBUG_LOG = os.path.join(os.path.dirname(__file__), 'benchmark_debug.log')
@@ -63,7 +64,7 @@ def benchmark_add(sketch_classes, precision=14):
     
     for sketch_class in sketch_classes:
         sketch_name = sketch_class.__name__
-        sketch = sketch_class(precision, hash_size=32)
+        sketch = sketch_class(precision=precision, hash_size=32, debug=False)
         results[sketch_name] = {}
         
         for num in NUM_ITEMS:
@@ -74,7 +75,9 @@ def benchmark_add(sketch_classes, precision=14):
                     sketch.add_string(str(item))
                 elif sketch_name == "RustHLLWrapper":
                     sketch.add(str(item))
-                else:  # RustHyperLogLog
+                elif sketch_name == "RustHLL":
+                    sketch.add_value(str(item))
+                else:  # Fallback
                     sketch.add(str(item))
             end_time = time.time()
             
@@ -94,7 +97,7 @@ def benchmark_add_batch(sketch_classes, precision=14):
     
     for sketch_class in sketch_classes:
         sketch_name = sketch_class.__name__
-        sketch = sketch_class(precision, hash_size=32)
+        sketch = sketch_class(precision, hash_size=32, debug=False)
         results[sketch_name] = {}
         
         for num in NUM_ITEMS:
@@ -119,7 +122,7 @@ def benchmark_add_batch(sketch_classes, precision=14):
     
     return results
 
-def benchmark_cardinality(sketch_classes, precision=14):
+def benchmark_cardinality(sketch_classes, precision=14, num_runs=5):
     """Benchmark cardinality estimation using different methods."""
     results = {}
     
@@ -132,63 +135,103 @@ def benchmark_cardinality(sketch_classes, precision=14):
             if num < 100000:
                 continue
                 
-            items = list(range(num))
-            sketch = sketch_class(precision, hash_size=32)
-            
-            # Check if using native or fallback implementation
-            using_native = False
-            if hasattr(sketch, 'is_using_rust'):
-                using_native = sketch.is_using_rust()
-            elif hasattr(sketch, 'using_rust'):
-                using_native = sketch.using_rust
-            implementation = "native" if using_native else "fallback"
-            
-            # Add items
-            if hasattr(sketch, 'add_batch'):
-                sketch.add_batch([str(item) for item in items])
-            else:
-                for item in items:
-                    if sketch_name == "HyperLogLog":
-                        sketch.add_string(str(item))
-                    elif sketch_name == "RustHLLWrapper":
-                        sketch.add_string(str(item))
-                    else:  # FastHyperLogLog or RustHLL
-                        sketch.add_string(str(item))
-            
-            times = {}
-            estimates = {}
-            
-            # For Rust implementation, we only have one estimation method
-            if sketch_name == "RustHLLWrapper":
-                start_time = time.time()
-                estimates["fast_mle"] = sketch.estimate_cardinality()
-                end_time = time.time()
-                times["fast_mle"] = end_time - start_time
-            else:
-                # For other implementations, test all methods
-                for method in METHODS:
-                    try:
-                        start_time = time.time()
-                        estimates[method] = sketch.estimate_cardinality(method=method)
-                        end_time = time.time()
-                        times[method] = end_time - start_time
-                    except ValueError as e:
-                        # Skip methods not supported by this implementation
-                        print(f"Skipping method {method} for {sketch_name}: {e}")
-                        continue
-                    except TypeError:
-                        # Some implementations might not accept the method parameter
-                        start_time = time.time()
-                        estimates[method] = sketch.estimate_cardinality()
-                        end_time = time.time()
-                        times[method] = end_time - start_time
-            
+            # Initialize results for this size
             results[sketch_name][num] = {
-                'times': times,
-                'estimates': estimates,
+                'times': {},
+                'estimates': {},
                 'actual': num,
-                'implementation': implementation
+                'implementation': None,
+                'errors': {}
             }
+            
+            # Run multiple times with different seeds
+            for run in range(num_runs):
+                seed = run + 1  # Use different seeds for each run
+                items = list(range(num))
+                sketch = sketch_class(precision=precision, hash_size=32, seed=seed, debug=False)
+                
+                # Check if using native or fallback implementation
+                using_native = False
+                if hasattr(sketch, 'is_using_rust'):
+                    using_native = sketch.is_using_rust()
+                elif hasattr(sketch, 'using_rust'):
+                    using_native = sketch.using_rust
+                elif sketch_name == "RustHLL":
+                    using_native = True
+                implementation = "native" if using_native else "fallback"
+                
+                # Store implementation type (should be same for all runs)
+                if results[sketch_name][num]['implementation'] is None:
+                    results[sketch_name][num]['implementation'] = implementation
+                
+                # Add items
+                if hasattr(sketch, 'add_batch'):
+                    sketch.add_batch([str(item) for item in items])
+                else:
+                    for item in items:
+                        if sketch_name == "HyperLogLog":
+                            sketch.add_string(str(item))
+                        elif sketch_name == "RustHLLWrapper":
+                            sketch.add_string(str(item))
+                        elif sketch_name == "RustHLL":
+                            sketch.add_value(str(item))
+                        else:  # Fallback
+                            sketch.add_string(str(item))
+                
+                # For Rust implementations, we only have one estimation method
+                if sketch_name == "RustHLL":
+                    start_time = time.time()
+                    estimate = sketch.estimate_cardinality()
+                    end_time = time.time()
+                    time_taken = end_time - start_time
+                    
+                    # Store results under 'fast_mle' method for consistency
+                    if 'fast_mle' not in results[sketch_name][num]['times']:
+                        results[sketch_name][num]['times']['fast_mle'] = []
+                        results[sketch_name][num]['estimates']['fast_mle'] = []
+                        results[sketch_name][num]['errors']['fast_mle'] = []
+                    
+                    results[sketch_name][num]['times']['fast_mle'].append(time_taken)
+                    results[sketch_name][num]['estimates']['fast_mle'].append(estimate)
+                    results[sketch_name][num]['errors']['fast_mle'].append(abs(estimate - num) / num)
+                
+                # For RustHLLWrapper, store in fast_mle slot
+                elif sketch_name == "RustHLLWrapper":
+                    start_time = time.time()
+                    estimate = sketch.estimate_cardinality()
+                    end_time = time.time()
+                    time_taken = end_time - start_time
+                    
+                    if 'fast_mle' not in results[sketch_name][num]['times']:
+                        results[sketch_name][num]['times']['fast_mle'] = []
+                        results[sketch_name][num]['estimates']['fast_mle'] = []
+                        results[sketch_name][num]['errors']['fast_mle'] = []
+                    
+                    results[sketch_name][num]['times']['fast_mle'].append(time_taken)
+                    results[sketch_name][num]['estimates']['fast_mle'].append(estimate)
+                    results[sketch_name][num]['errors']['fast_mle'].append(abs(estimate - num) / num)
+                
+                # For Python implementation, test all methods
+                else:
+                    for method in METHODS:
+                        try:
+                            start_time = time.time()
+                            estimate = sketch.estimate_cardinality(method=method)
+                            end_time = time.time()
+                            time_taken = end_time - start_time
+                            
+                            if method not in results[sketch_name][num]['times']:
+                                results[sketch_name][num]['times'][method] = []
+                                results[sketch_name][num]['estimates'][method] = []
+                                results[sketch_name][num]['errors'][method] = []
+                            
+                            results[sketch_name][num]['times'][method].append(time_taken)
+                            results[sketch_name][num]['estimates'][method].append(estimate)
+                            results[sketch_name][num]['errors'][method].append(abs(estimate - num) / num)
+                        except (ValueError, TypeError) as e:
+                            # Skip methods not supported by this implementation
+                            print(f"Skipping method {method} for {sketch_name}: {e}")
+                            continue
     
     return results
 
@@ -202,8 +245,8 @@ def benchmark_merge(sketch_classes, precision=14):
         
         for num in NUM_ITEMS:
             # Create two sketches with some overlap
-            sketch1 = sketch_class(precision, hash_size=32)
-            sketch2 = sketch_class(precision, hash_size=32)
+            sketch1 = sketch_class(precision, hash_size=32, debug=False)
+            sketch2 = sketch_class(precision, hash_size=32, debug=False)
             
             overlap = num // 2
             items1 = list(range(num))
@@ -272,7 +315,7 @@ def benchmark_accuracy(sketch_classes, precision_values=None):
                 print(f"  {sketch_name} with {num} items...", end="", flush=True)
                 try:
                     items = list(range(num))
-                    sketch = sketch_class(precision, hash_size=32)
+                    sketch = sketch_class(precision, hash_size=32, debug=False)
                     
                     # Check if using native or fallback implementation
                     using_native = False
@@ -361,7 +404,7 @@ def plot_results(title, x_data, y_data, x_label, y_label, legend_loc='upper left
     plt.yscale('log')
     return plt.gcf()
 
-def plot_all_results(add_results, batch_results, cardinality_results, merge_results, accuracy_results, base_filename):
+def plot_all_results(add_results, batch_results, cardinality_results, merge_results, accuracy_results, run_dir):
     """Create a single figure with all benchmark plots."""
     # Create a figure with subplots
     fig = plt.figure(figsize=(20, 15))
@@ -414,25 +457,26 @@ def plot_all_results(add_results, batch_results, cardinality_results, merge_resu
     ax3 = fig.add_subplot(233)
     has_data3 = False
     for name, data in cardinality_results.items():
-        x = []
-        y = []
         for num in NUM_ITEMS:
             if num >= 100000 and num in data:
-                if 'fast_mle' in data[num]['times']:
+                # Plot each estimation method separately
+                for method in data[num]['times'].keys():
+                    x = []
+                    y = []
                     x.append(num)
-                    y.append(data[num]['times']['fast_mle'])
-                elif 'ertl_mle' in data[num]['times']:
-                    x.append(num)
-                    y.append(data[num]['times']['ertl_mle'])
-        if x and y:  # Only plot if we have data
-            ax3.plot(x, y, marker='o', label=name)
-            has_data3 = True
+                    if isinstance(data[num]['times'][method], (list, np.ndarray)):
+                        y.append(np.mean(data[num]['times'][method]))
+                    else:
+                        y.append(data[num]['times'][method])
+                    if x and y:  # Only plot if we have data
+                        ax3.plot(x, y, marker='o', label=f"{name} ({method})")
+                        has_data3 = True
     ax3.set_title('Cardinality Estimation Time')
     ax3.set_xlabel('Number of Items')
     ax3.set_ylabel('Time (seconds)')
     ax3.grid(True)
     if has_data3:
-        ax3.legend(loc='upper left')
+        ax3.legend(loc='upper left', fontsize='small')
     ax3.set_xscale('log')
     ax3.set_yscale('log')
     
@@ -503,10 +547,10 @@ def plot_all_results(add_results, batch_results, cardinality_results, merge_resu
     plt.tight_layout()
     
     # Save the figure
-    plt.savefig(os.path.join(RESULTS_DIR, f'{base_filename}_results.png'))
+    plt.savefig(os.path.join(run_dir, 'results.png'))
     plt.close()
 
-def plot_accuracy_results(results, base_filename):
+def plot_accuracy_results(results, run_dir):
     """Create a single figure with accuracy subplots for different item counts."""
     # First check if we have valid results
     print("\nPreparing accuracy plots...")
@@ -577,10 +621,10 @@ def plot_accuracy_results(results, base_filename):
     plt.tight_layout()
     
     # Save the figure
-    plt.savefig(os.path.join(RESULTS_DIR, f'{base_filename}_accuracy.png'))
+    plt.savefig(os.path.join(run_dir, 'accuracy.png'))
     plt.close()
 
-def plot_estimation_methods(cardinality_results, base_filename):
+def plot_estimation_methods(cardinality_results, run_dir):
     """Plot the performance of different estimation methods for cardinality estimation."""
     print("\nPreparing estimation methods plots...")
     
@@ -610,154 +654,71 @@ def plot_estimation_methods(cardinality_results, base_filename):
             result = cardinality_results[sketch_name][size]
             actual = result['actual']
             
-            for method, estimate in result['estimates'].items():
+            # Calculate mean and std of errors across runs
+            for method in result['estimates'].keys():
                 # Initialize method in dictionaries if not present
                 if method not in method_data['errors']:
                     method_data['errors'][method] = []
                     method_data['times'][method] = []
                 
-                # Calculate error
-                if isinstance(estimate, (int, float, np.number)):
-                    error_pct = abs(float(estimate) - actual) / actual * 100
-                    method_data['errors'][method].append((sketch_name, size, error_pct))
+                # Calculate mean error across runs
+                errors = result['errors'][method]
+                if isinstance(errors, (list, np.ndarray)):
+                    mean_error = np.mean(errors)
+                    std_error = np.std(errors)
+                else:
+                    # If we have a scalar error value
+                    mean_error = errors
+                    std_error = 0
                 
-                # Get time
-                if method in result['times']:
-                    time_taken = result['times'][method] * 1000  # Convert to milliseconds
-                    method_data['times'][method].append((sketch_name, size, time_taken))
+                method_data['errors'][method].append((sketch_name, size, mean_error, std_error))
+                
+                # Calculate mean time across runs
+                times = result['times'][method]
+                if isinstance(times, (list, np.ndarray)):
+                    mean_time = np.mean(times) * 1000  # Convert to milliseconds
+                else:
+                    mean_time = times * 1000  # Convert scalar time to milliseconds
+                method_data['times'][method].append((sketch_name, size, mean_time))
     
-    # Plot accuracy (error percentage)
-    markers = ['o', 's', '^', 'v', 'D', '*']
-    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
-    
-    # Group by method
-    for i, (method, data_points) in enumerate(method_data['errors'].items()):
-        # Group by sketch name
-        sketch_dict = {}
-        for sketch_name, size, error in data_points:
-            if sketch_name not in sketch_dict:
-                sketch_dict[sketch_name] = {'sizes': [], 'errors': []}
-            sketch_dict[sketch_name]['sizes'].append(size)
-            sketch_dict[sketch_name]['errors'].append(error)
+    # Plot error rates with error bars
+    for method in method_data['errors']:
+        data = method_data['errors'][method]
+        sizes = [d[1] for d in data]
+        errors = [d[2] for d in data]
+        stds = [d[3] for d in data]
         
-        # Plot each sketch as a separate line
-        for j, (sketch_name, data) in enumerate(sketch_dict.items()):
-            marker_idx = j % len(markers)
-            color_idx = i % len(colors)
-            label = f"{sketch_name} ({method})"
-            
-            if data['sizes'] and data['errors']:
-                # Sort by size to ensure correct line order
-                points = sorted(zip(data['sizes'], data['errors']))
-                sizes, errors = zip(*points)
-                
-                ax1.plot(sizes, errors, marker=markers[marker_idx], color=colors[color_idx], 
-                          label=label, linestyle='-')
+        ax1.errorbar(sizes, errors, yerr=stds, label=f"{method}", marker='o')
     
-    ax1.set_title('Estimation Method Accuracy')
-    ax1.set_xlabel('Dataset Size')
-    ax1.set_ylabel('Error (%)')
     ax1.set_xscale('log')
     ax1.set_yscale('log')
+    ax1.set_xlabel('Dataset Size')
+    ax1.set_ylabel('Mean Error (%)')
+    ax1.set_title('Cardinality Estimation Error by Method')
     ax1.grid(True)
-    ax1.legend(loc='upper right', fontsize='small')
+    ax1.legend()
     
-    # Plot speed (time taken)
-    for i, (method, data_points) in enumerate(method_data['times'].items()):
-        # Group by sketch name
-        sketch_dict = {}
-        for sketch_name, size, time_taken in data_points:
-            if sketch_name not in sketch_dict:
-                sketch_dict[sketch_name] = {'sizes': [], 'times': []}
-            sketch_dict[sketch_name]['sizes'].append(size)
-            sketch_dict[sketch_name]['times'].append(time_taken)
+    # Plot execution times
+    for method in method_data['times']:
+        data = method_data['times'][method]
+        sizes = [d[1] for d in data]
+        times = [d[2] for d in data]
         
-        # Plot each sketch as a separate line
-        for j, (sketch_name, data) in enumerate(sketch_dict.items()):
-            marker_idx = j % len(markers)
-            color_idx = i % len(colors)
-            label = f"{sketch_name} ({method})"
-            
-            if data['sizes'] and data['times']:
-                # Sort by size to ensure correct line order
-                points = sorted(zip(data['sizes'], data['times']))
-                sizes, times = zip(*points)
-                
-                ax2.plot(sizes, times, marker=markers[marker_idx], color=colors[color_idx], 
-                          label=label, linestyle='-')
+        ax2.plot(sizes, times, label=f"{method}", marker='o')
     
-    ax2.set_title('Estimation Method Performance')
-    ax2.set_xlabel('Dataset Size')
-    ax2.set_ylabel('Execution Time (ms)')
     ax2.set_xscale('log')
     ax2.set_yscale('log')
+    ax2.set_xlabel('Dataset Size')
+    ax2.set_ylabel('Mean Time (ms)')
+    ax2.set_title('Cardinality Estimation Time by Method')
     ax2.grid(True)
-    ax2.legend(loc='upper left', fontsize='small')
-    
-    # Adjust layout and save
-    plt.tight_layout()
-    plt.savefig(os.path.join(RESULTS_DIR, f'{base_filename}_estimation_methods.png'))
-    plt.close()
-    
-    # Create a more detailed plot showing actual vs estimated values
-    fig, ax = plt.subplots(figsize=(15, 10))
-    
-    bar_width = 0.15
-    opacity = 0.8
-    index = np.arange(len(dataset_sizes))
-    
-    # Plot actual values as a line
-    ax.plot(index, dataset_sizes, 'k--', linewidth=2, label='Actual')
-    
-    # Plot estimated values as bars grouped by sketch
-    offset = -bar_width * (len(method_data['errors']) / 2)
-    
-    for i, (method, data_points) in enumerate(method_data['errors'].items()):
-        # Group by sketch name
-        sketch_dict = {}
-        for sketch_name, size, _ in data_points:
-            if sketch_name not in sketch_dict:
-                sketch_dict[sketch_name] = {'sizes': [], 'estimates': []}
-            
-            # Find the estimate value from the original results
-            if size in cardinality_results[sketch_name]:
-                estimate = cardinality_results[sketch_name][size]['estimates'].get(method)
-                if estimate is not None:
-                    sketch_dict[sketch_name]['sizes'].append(size)
-                    sketch_dict[sketch_name]['estimates'].append(float(estimate))
-        
-        # Plot each sketch as a separate set of bars
-        for j, (sketch_name, data) in enumerate(sketch_dict.items()):
-            if not data['sizes'] or not data['estimates']:
-                continue
-                
-            # Create mapping from size to index position
-            size_to_idx = {size: idx for idx, size in enumerate(dataset_sizes)}
-            
-            # Create arrays for positions and values
-            positions = [size_to_idx[size] for size in data['sizes']]
-            values = data['estimates']
-            
-            color_idx = i % len(colors)
-            label = f"{sketch_name} ({method})"
-            
-            current_offset = offset + i * bar_width
-            ax.bar(index[positions] + current_offset, values, bar_width,
-                   alpha=opacity, color=colors[color_idx], label=label)
-    
-    ax.set_xlabel('Dataset Size')
-    ax.set_ylabel('Cardinality Estimate')
-    ax.set_title('Actual vs Estimated Cardinality by Method')
-    ax.set_xticks(index)
-    ax.set_xticklabels([f"{size:,}" for size in dataset_sizes], rotation=45)
-    ax.set_yscale('log')
-    ax.legend(loc='upper left', fontsize='small')
+    ax2.legend()
     
     plt.tight_layout()
-    plt.savefig(os.path.join(RESULTS_DIR, f'{base_filename}_cardinality_estimates.png'))
+    plt.savefig(os.path.join(run_dir, 'cardinality_estimates.png'))
     plt.close()
 
-def plot_estimation_bias(cardinality_results, base_filename):
+def plot_estimation_bias(cardinality_results, run_dir):
     """Plot bias of different estimation methods by analyzing their estimated-to-actual ratio."""
     print("\nPreparing estimation bias plots...")
     
@@ -784,22 +745,35 @@ def plot_estimation_bias(cardinality_results, base_filename):
             result = cardinality_results[sketch_name][size]
             actual = result['actual']
             
-            for method, estimate in result['estimates'].items():
+            # For each method that has data
+            for method in result['estimates'].keys():
                 # Initialize method in dictionary if not present
                 if method not in method_data:
                     method_data[method] = []
                 
-                # Calculate bias ratio (> 1 means overestimation, < 1 means underestimation)
-                if isinstance(estimate, (int, float, np.number)):
+                # Get the estimate (might be a list for multiple runs)
+                estimates = result['estimates'][method]
+                if isinstance(estimates, (list, np.ndarray)) and len(estimates) > 0:
+                    estimate = np.mean(estimates)
                     ratio = float(estimate) / actual
                     method_data[method].append((sketch_name, size, ratio))
+    
+    # Check if we have any data to plot
+    if not method_data:
+        print("No valid data available for estimation bias plot")
+        plt.close()
+        return
     
     # Plot bias ratio (logarithmic, so 0 means unbiased, > 0 means overestimation, < 0 means underestimation)
     markers = ['o', 's', '^', 'v', 'D', '*']
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
     
     # Plot a horizontal line at y=1 (unbiased)
-    ax.axhline(y=1.0, color='k', linestyle='--', alpha=0.3, label="Unbiased (ratio=1)")
+    unbiased_line = ax.axhline(y=1.0, color='k', linestyle='--', alpha=0.3, label="Unbiased (ratio=1)")
+    
+    has_data = False  # Track if we've plotted any data
+    all_ratios = []  # Collect all ratios for y-axis limits
+    plotted_lines = [unbiased_line]  # Keep track of plotted lines for legend
     
     # Group by method
     for i, (method, data_points) in enumerate(method_data.items()):
@@ -810,20 +784,28 @@ def plot_estimation_bias(cardinality_results, base_filename):
                 sketch_dict[sketch_name] = {'sizes': [], 'ratios': []}
             sketch_dict[sketch_name]['sizes'].append(size)
             sketch_dict[sketch_name]['ratios'].append(ratio)
+            all_ratios.append(ratio)
         
         # Plot each sketch as a separate line
         for j, (sketch_name, data) in enumerate(sketch_dict.items()):
-            marker_idx = j % len(markers)
-            color_idx = i % len(colors)
-            label = f"{sketch_name} ({method})"
-            
             if data['sizes'] and data['ratios']:
+                marker_idx = j % len(markers)
+                color_idx = i % len(colors)
+                label = f"{sketch_name} ({method})"
+                
                 # Sort by size to ensure correct line order
                 points = sorted(zip(data['sizes'], data['ratios']))
                 sizes, ratios = zip(*points)
                 
-                ax.plot(sizes, ratios, marker=markers[marker_idx], color=colors[color_idx], 
-                          label=label, linestyle='-')
+                line = ax.plot(sizes, ratios, marker=markers[marker_idx], color=colors[color_idx], 
+                             label=label, linestyle='-')[0]
+                plotted_lines.append(line)
+                has_data = True
+    
+    if not has_data:
+        print("No valid data to plot in estimation bias plot")
+        plt.close()
+        return
     
     ax.set_title('Estimation Method Bias (Estimate/Actual Ratio)')
     ax.set_xlabel('Dataset Size')
@@ -832,25 +814,29 @@ def plot_estimation_bias(cardinality_results, base_filename):
     ax.grid(True)
     
     # Add region highlighting the 0.95-1.05 range (5% error margin)
-    ax.axhspan(0.95, 1.05, alpha=0.2, color='green', label="±5% error band")
+    error_band = ax.axhspan(0.95, 1.05, alpha=0.2, color='green', label="±5% error band")
+    plotted_lines.append(error_band)
     
-    # Refine y-axis limits to focus on the relevant range
-    y_min = min([min(d['ratios']) for d in [data for data in sketch_dict.values() 
-                                           for sketch_dict in method_data.values()]])
-    y_max = max([max(d['ratios']) for d in [data for data in sketch_dict.values() 
-                                           for sketch_dict in method_data.values()]])
+    # Calculate y-axis limits from actual data
+    if all_ratios:
+        y_min = min(all_ratios)
+        y_max = max(all_ratios)
+        padding = (y_max - y_min) * 0.1
+        ax.set_ylim([max(0, y_min - padding), y_max + padding])
     
-    # Add some padding to the limits
-    padding = (y_max - y_min) * 0.1
-    ax.set_ylim([max(0, y_min - padding), y_max + padding])
-    
-    ax.legend(loc='upper right', fontsize='small')
+    # Only add legend if we have plotted lines
+    if plotted_lines:
+        ax.legend(handles=plotted_lines, loc='upper right', fontsize='small')
     
     plt.tight_layout()
-    plt.savefig(os.path.join(RESULTS_DIR, f'{base_filename}_estimation_bias.png'))
+    plt.savefig(os.path.join(run_dir, 'estimation_bias.png'))
     plt.close()
     
     # Create a boxplot to show the distribution of bias across all dataset sizes
+    if not all_ratios:
+        print("No data available for boxplot")
+        return
+        
     fig, ax = plt.subplots(figsize=(15, 8))
     
     # Prepare data for boxplot
@@ -871,6 +857,11 @@ def plot_estimation_bias(cardinality_results, base_filename):
                 boxplot_data.append(ratios)
                 boxplot_labels.append(label)
     
+    if not boxplot_data:
+        print("No data available for boxplot")
+        plt.close()
+        return
+    
     # Create the boxplot
     bp = ax.boxplot(boxplot_data, patch_artist=True, showfliers=True)
     
@@ -888,7 +879,7 @@ def plot_estimation_bias(cardinality_results, base_filename):
     ax.axhline(y=1.0, color='k', linestyle='--', alpha=0.7)
     
     # Add region highlighting the 0.95-1.05 range (5% error margin)
-    ax.axhspan(0.95, 1.05, alpha=0.2, color='green')
+    ax.axhspan(0.95, 1.05, alpha=0.2, color='green', label="±5% error band")
     
     ax.set_title('Distribution of Estimation Bias by Method and Implementation')
     ax.set_ylabel('Estimate/Actual Ratio')
@@ -896,10 +887,10 @@ def plot_estimation_bias(cardinality_results, base_filename):
     ax.grid(True, axis='y')
     
     plt.tight_layout()
-    plt.savefig(os.path.join(RESULTS_DIR, f'{base_filename}_estimation_bias_boxplot.png'))
+    plt.savefig(os.path.join(run_dir, 'estimation_bias_boxplot.png'))
     plt.close()
 
-def plot_performance_vs_accuracy(cardinality_results, base_filename):
+def plot_performance_vs_accuracy(cardinality_results, run_dir):
     """Create a scatter plot showing the trade-off between performance and accuracy for different methods."""
     print("\nPreparing performance vs accuracy tradeoff plots...")
     
@@ -926,15 +917,24 @@ def plot_performance_vs_accuracy(cardinality_results, base_filename):
             result = cardinality_results[sketch_name][size]
             actual = result['actual']
             
-            for method, estimate in result['estimates'].items():
-                # Skip if not a valid estimate or time
-                if not isinstance(estimate, (int, float, np.number)) or method not in result['times']:
+            # For each method that has data
+            for method in result['estimates'].keys():
+                # Get the estimates and times (might be lists for multiple runs)
+                estimates = result['estimates'][method]
+                times = result['times'][method]
+                
+                # Skip if not valid data
+                if not isinstance(estimates, (list, np.ndarray)) or not isinstance(times, (list, np.ndarray)):
                     continue
                 
-                # Calculate error percentage and performance (ops per second)
-                error_pct = abs(float(estimate) - actual) / actual * 100
-                time_ms = result['times'][method] * 1000  # Convert to milliseconds
-                ops_per_second = 1 / result['times'][method] if result['times'][method] > 0 else float('inf')
+                # Calculate mean values
+                mean_estimate = np.mean(estimates)
+                mean_time = np.mean(times)
+                
+                # Calculate error percentage
+                error_pct = abs(float(mean_estimate) - actual) / actual * 100
+                time_ms = mean_time * 1000  # Convert to milliseconds
+                ops_per_second = 1 / mean_time if mean_time > 0 else float('inf')
                 
                 # Add to plot data
                 plot_data.append({
@@ -1034,7 +1034,7 @@ def plot_performance_vs_accuracy(cardinality_results, base_filename):
                                 facecolor='gray', edgecolor='gray', alpha=0.5))
     
     plt.tight_layout()
-    plt.savefig(os.path.join(RESULTS_DIR, f'{base_filename}_performance_vs_accuracy.png'))
+    plt.savefig(os.path.join(run_dir, 'performance_vs_accuracy.png'))
     plt.close()
 
 def run_benchmarks():
@@ -1048,7 +1048,7 @@ def run_benchmarks():
     # Define sketch classes to benchmark
     sketch_classes = [HyperLogLog]
     if RUST_HLL_AVAILABLE:
-        sketch_classes.extend([RustHLL, RustHLLWrapper])
+        sketch_classes.extend([RustHLLWrapper, rust_hll.RustHLL])
         print(f"Benchmarking {len(sketch_classes)} sketch implementations")
     else:
         print("Benchmarking Python HyperLogLog implementation only")
@@ -1089,10 +1089,12 @@ def run_benchmarks():
     
     print("Benchmarks completed")
     
-    # Generate timestamp once for both outputs
+    # Generate timestamp and create results subdirectory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     script_name = os.path.splitext(os.path.basename(__file__))[0]
-    base_filename = f'{script_name}_{timestamp}'
+    run_dir = os.path.join(RESULTS_DIR, f'{script_name}_{timestamp}')
+    os.makedirs(run_dir, exist_ok=True)
+    print(f"\nSaving results to: {run_dir}")
     
     # Save results to file
     save_results_to_file({
@@ -1101,22 +1103,22 @@ def run_benchmarks():
         'CARDINALITY': cardinality_results,
         'MERGE': merge_results,
         'ACCURACY': accuracy_results
-    }, os.path.join(RESULTS_DIR, f'{base_filename}.txt'))
+    }, os.path.join(run_dir, 'results.txt'))
     
     # Plot all results in a single figure
-    plot_all_results(add_results, batch_results, cardinality_results, merge_results, accuracy_results, base_filename)
+    plot_all_results(add_results, batch_results, cardinality_results, merge_results, accuracy_results, run_dir)
     
     # Plot accuracy results in a separate figure with subplots
-    plot_accuracy_results(accuracy_results, base_filename)
+    plot_accuracy_results(accuracy_results, run_dir)
     
     # Plot estimation methods comparison
-    plot_estimation_methods(cardinality_results, base_filename)
+    plot_estimation_methods(cardinality_results, run_dir)
     
     # Plot estimation bias
-    plot_estimation_bias(cardinality_results, base_filename)
+    plot_estimation_bias(cardinality_results, run_dir)
     
     # Plot performance vs accuracy tradeoff
-    plot_performance_vs_accuracy(cardinality_results, base_filename)
+    plot_performance_vs_accuracy(cardinality_results, run_dir)
 
 if __name__ == "__main__":
     run_benchmarks() 

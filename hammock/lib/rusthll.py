@@ -139,6 +139,29 @@ class RustHyperLogLog(AbstractSketch):
             def __init__(self, parent):
                 self.parent = parent
             
+            @property
+            def debug(self):
+                if self.parent._using_rust:
+                    return self.parent._rust_sketch.debug
+                return False
+            
+            @debug.setter
+            def debug(self, value):
+                if self.parent._using_rust:
+                    self.parent._rust_sketch.debug = value
+
+            @property
+            def hash_size(self):
+                if self.parent._using_rust:
+                    return self.parent._rust_sketch.hash_size
+                return self.parent.hash_size
+
+            @property
+            def seed(self):
+                if self.parent._using_rust:
+                    return self.parent._rust_sketch.seed
+                return self.parent.seed
+            
             def add_value(self, value):
                 if self.parent._using_rust:
                     return self.parent._rust_sketch.add_value(value)
@@ -291,7 +314,7 @@ class RustHyperLogLog(AbstractSketch):
                     chunk = string_values[i:i + chunk_size]
                     
                     # Only report progress every 100 chunks for very large batches
-                    if report_progress and i % (chunk_size * 100) == 0:
+                    if report_progress and i % (chunk_size * 500) == 0 and self.debug:
                         print(f"  Progress: {i//chunk_size}/{total_chunks} chunks", file=sys.stderr)
                     
                     try:

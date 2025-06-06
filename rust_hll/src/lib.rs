@@ -29,19 +29,28 @@ struct RustHLL {
     hasher: RandomState,
     memory_limit: Option<usize>,  // Add memory limit field
     debug: bool,  // Add debug field
+    seed: Option<u64>,  // Add seed field
 }
 
 // Internal implementation
 impl RustHLL {
     /// Process a batch of hashes in chunks for better cache locality and memory efficiency
     fn process_hash_batch(&mut self, hashes: &[u64]) {
+        if self.debug {
+            println!("Processing batch of {} hashes", hashes.len());
+        }
+        
         // Process in smaller chunks to limit memory usage
         const CHUNK_SIZE: usize = 256;  // Increased back to original value
         
         // Pre-allocate hash vector with fixed capacity
         let mut hash_buffer = Vec::with_capacity(CHUNK_SIZE);
             
-        for chunk in hashes.chunks(CHUNK_SIZE) {
+        for (i, chunk) in hashes.chunks(CHUNK_SIZE).enumerate() {
+            if self.debug && i % 100 == 0 {
+                println!("Processing chunk {}", i);
+            }
+            
             // Clear and reuse the buffer
             hash_buffer.clear();
             hash_buffer.extend_from_slice(chunk);
@@ -53,6 +62,10 @@ impl RustHLL {
                     self.registers[idx] = val;
                 }
             }
+        }
+        
+        if self.debug {
+            println!("Finished processing batch");
         }
     }
 
@@ -157,8 +170,21 @@ impl RustHLL {
 #[pymethods]
 impl RustHLL {
     #[new]
-    #[pyo3(signature = (precision, use_threading=None, min_thread_batch=None, hash_size=None, memory_limit=None, debug=None))]
-    pub fn new(precision: u8, use_threading: Option<bool>, min_thread_batch: Option<usize>, hash_size: Option<u8>, memory_limit: Option<usize>, debug: Option<bool>) -> PyResult<Self> {
+    #[pyo3(signature = (precision, use_threading=None, min_thread_batch=None, hash_size=None, memory_limit=None, debug=None, seed=None))]
+    pub fn new(precision: u8, use_threading: Option<bool>, min_thread_batch: Option<usize>, hash_size: Option<u8>, memory_limit: Option<usize>, debug: Option<bool>, seed: Option<u64>) -> PyResult<Self> {
+        let debug = debug.unwrap_or(false);
+        
+        if debug {
+            println!("Creating new RustHLL with parameters:");
+            println!("  - Precision: {}", precision);
+            println!("  - Use threading: {:?}", use_threading);
+            println!("  - Min thread batch: {:?}", min_thread_batch);
+            println!("  - Hash size: {:?}", hash_size);
+            println!("  - Memory limit: {:?}", memory_limit);
+            println!("  - Debug: {}", debug);
+            println!("  - Seed: {:?}", seed);
+        }
+        
         // Validate hash_size
         let hash_size = hash_size.unwrap_or(32);
         if hash_size != 32 && hash_size != 64 {
@@ -181,7 +207,7 @@ impl RustHLL {
         // If memory limit is provided, ensure it's at least the minimum
         let memory_limit = memory_limit.map(|limit| {
             let adjusted_limit = std::cmp::max(limit, min_memory);
-            if debug.unwrap_or(false) {
+            if debug {
                 println!("Rust memory limit adjustment:");
                 println!("  - Original limit: {} bytes", limit);
                 println!("  - Minimum memory: {} bytes", min_memory);
@@ -194,41 +220,57 @@ impl RustHLL {
             // Add 10% buffer to estimated memory for safety
             let estimated_memory_with_buffer = (estimated_memory as f64 * 1.1) as usize;
             
-            if debug.unwrap_or(false) {
+            if debug {
                 println!("Rust memory check:");
                 println!("  - Estimated memory: {} bytes", estimated_memory);
                 println!("  - Estimated with buffer: {} bytes", estimated_memory_with_buffer);
-                println!("  - Memory limit: {} bytes", limit);
             }
             
             if estimated_memory_with_buffer > limit {
                 return Err(PyValueError::new_err(format!(
-                    "Estimated memory usage with buffer ({:.2} GB) exceeds limit ({:.2} GB)",
-                    estimated_memory_with_buffer as f64 / (1024.0 * 1024.0 * 1024.0),
-                    limit as f64 / (1024.0 * 1024.0 * 1024.0)
+                    "Memory limit exceeded: {} bytes needed, {} bytes limit",
+                    estimated_memory_with_buffer, limit
                 )));
             }
         }
-
-        let alpha_mm = match precision {
-            4 => 0.673,
-            5 => 0.697,
-            6 => 0.709,
-            _ => 0.7213 / (1.0 + 1.079 / m as f64),
+        
+        // Calculate alpha_mm
+        let alpha_mm = match hash_size {
+            32 => match m {
+                16384 => 0.673,  // 2^14
+                32768 => 0.697,  // 2^15
+                65536 => 0.709,  // 2^16
+                _ => 0.7213 / (1.0 + 1.079 / m as f64),
+            },
+            64 => match m {
+                16384 => 0.351,  // 2^14
+                32768 => 0.532,  // 2^15
+                65536 => 0.625,  // 2^16
+                _ => 0.7213 / (1.0 + 1.079 / m as f64) * 0.85,  // Additional scaling for 64-bit
+            },
+            _ => return Err(PyValueError::new_err("hash_size must be 32 or 64")),
         };
-
+        
+        // Create hasher with seed if provided
+        let hasher = if let Some(seed) = seed {
+            RandomState::with_seeds(seed, seed + 1, seed + 2, seed + 3)
+        } else {
+            RandomState::new()
+        };
+        
         Ok(RustHLL {
             registers: vec![0; m],
             precision,
             mask: (1 << precision) - 1,
             alpha_mm,
             use_threading: use_threading.unwrap_or(true),
-            min_thread_batch: min_thread_batch.unwrap_or(1000),
+            min_thread_batch: min_thread_batch.unwrap_or(10000),
             compacted: false,
             hash_size,
-            hasher: RandomState::new(),
+            hasher,
             memory_limit,
-            debug: debug.unwrap_or(false),
+            debug,
+            seed,
         })
     }
 
@@ -394,11 +436,11 @@ impl RustHLL {
             union_registers[i] = cmp::max(self.registers[i], other.registers[i]);
         }
         
-        let mut intersection_sketch = RustHLL::new(self.precision, None, None, None, None, None)?;
+        let mut intersection_sketch = RustHLL::new(self.precision, None, None, None, None, None, None)?;
         intersection_sketch.registers = intersection_registers;
         intersection_sketch.alpha_mm = self.alpha_mm;
         
-        let mut union_sketch = RustHLL::new(self.precision, None, None, None, None, None)?;
+        let mut union_sketch = RustHLL::new(self.precision, None, None, None, None, None, None)?;
         union_sketch.registers = union_registers;
         union_sketch.alpha_mm = self.alpha_mm;
         
@@ -494,6 +536,7 @@ impl RustHLL {
             hasher: RandomState::new(),
             memory_limit: None,
             debug: false,
+            seed: None,
         })
     }
 
@@ -514,6 +557,190 @@ impl RustHLL {
 
     pub fn get_memory_usage(&self) -> PyResult<usize> {
         Ok(self.registers.len() * std::mem::size_of::<u8>())
+    }
+
+    pub fn jaccard_register_match(&self, other: &RustHLL) -> PyResult<f64> {
+        if self.precision != other.precision {
+            return Err(PyValueError::new_err("Cannot compare sketches with different precisions"));
+        }
+        
+        // Count matching and active registers
+        let mut matching_count = 0;
+        let mut active_count = 0;
+        
+        for i in 0..self.registers.len() {
+            let val1 = self.registers[i];
+            let val2 = other.registers[i];
+            
+            // Only consider registers where at least one sketch has a non-zero value
+            if val1 > 0 || val2 > 0 {
+                active_count += 1;
+                if val1 == val2 {
+                    matching_count += 1;
+                }
+            }
+        }
+        
+        // If there are no active registers, return 0
+        if active_count == 0 {
+            return Ok(0.0);
+        }
+        
+        // Jaccard is the proportion of matching registers among active ones
+        Ok(matching_count as f64 / active_count as f64)
+    }
+
+    pub fn jaccard_minmax(&self, other: &RustHLL) -> PyResult<f64> {
+        if self.precision != other.precision {
+            return Err(PyValueError::new_err("Cannot compare sketches with different precisions"));
+        }
+        
+        // Get cardinality estimates for both sketches
+        let card_a = self.fast_mle_estimate();
+        let card_b = other.fast_mle_estimate();
+        
+        // If either cardinality is 0, return 0 for Jaccard
+        if card_a == 0.0 || card_b == 0.0 {
+            return Ok(0.0);
+        }
+        
+        // First get the register-based Jaccard estimate
+        let register_jaccard = self.jaccard_register_match(other)?;
+        
+        // Calculate a weighted version using cardinality estimates
+        // This helps correct for biases in the register-based approach
+        let min_card = if card_a < card_b { card_a } else { card_b };
+        let max_card = if card_a > card_b { card_a } else { card_b };
+        
+        // Scale the register Jaccard by cardinality ratio
+        // This gives better estimates when sets have very different sizes
+        let card_ratio = min_card / max_card;
+        let weighted_jaccard = register_jaccard * (0.5 + 0.5 * card_ratio);
+        
+        // Ensure result is in [0,1]
+        Ok(if weighted_jaccard > 1.0 { 1.0 } else { weighted_jaccard })
+    }
+    
+    // Allow user to specify which Jaccard method to use
+    pub fn jaccard_with_method(&self, other: &RustHLL, method: &str) -> PyResult<f64> {
+        match method {
+            "standard" => self.jaccard(other),
+            "register_match" => self.jaccard_register_match(other),
+            "minmax" => self.jaccard_minmax(other),
+            "improved" => self.jaccard_improved(other),
+            "minhash" => {
+                // MinHash-like approach uses register encoding as hash value
+                let mut matching_min_values = 0;
+                let total_registers = self.registers.len() as f64;
+                
+                for i in 0..self.registers.len() {
+                    if self.registers[i] > 0 && self.registers[i] == other.registers[i] {
+                        matching_min_values += 1;
+                    }
+                }
+                
+                // Adjust for empty registers
+                let empty_ratio = 1.0 - (matching_min_values as f64 / total_registers);
+                Ok(1.0 - empty_ratio)
+            },
+            _ => Err(PyValueError::new_err(format!("Unknown Jaccard method: {}", method)))
+        }
+    }
+
+    pub fn jaccard_improved(&self, other: &RustHLL) -> PyResult<f64> {
+        if self.precision != other.precision {
+            return Err(PyValueError::new_err("Cannot compare sketches with different precisions"));
+        }
+        
+        // Get cardinality estimates
+        let card_a = self.fast_mle_estimate();
+        let card_b = other.fast_mle_estimate();
+        
+        // If either set is empty, Jaccard is 0
+        if card_a == 0.0 || card_b == 0.0 {
+            return Ok(0.0);
+        }
+        
+        // First approach: Min/max registers (original)
+        let mut intersection_registers = vec![0u8; self.registers.len()];
+        let mut union_registers = vec![0u8; self.registers.len()];
+        
+        for i in 0..self.registers.len() {
+            intersection_registers[i] = cmp::min(self.registers[i], other.registers[i]);
+            union_registers[i] = cmp::max(self.registers[i], other.registers[i]);
+        }
+        
+        let mut intersection_sketch = RustHLL::new(self.precision, None, None, None, None, None, None)?;
+        intersection_sketch.registers = intersection_registers;
+        intersection_sketch.alpha_mm = self.alpha_mm;
+        
+        let mut union_sketch = RustHLL::new(self.precision, None, None, None, None, None, None)?;
+        union_sketch.registers = union_registers;
+        union_sketch.alpha_mm = self.alpha_mm;
+        
+        let intersection_card = intersection_sketch.fast_mle_estimate();
+        let union_card = union_sketch.fast_mle_estimate();
+        
+        // Second approach: register matching
+        let mut matching_count = 0;
+        let mut active_count = 0;
+        
+        for i in 0..self.registers.len() {
+            let val1 = self.registers[i];
+            let val2 = other.registers[i];
+            
+            if val1 > 0 || val2 > 0 {
+                active_count += 1;
+                if val1 == val2 {
+                    matching_count += 1;
+                }
+            }
+        }
+        
+        // Ensure we don't divide by zero
+        let register_jaccard = if active_count > 0 {
+            matching_count as f64 / active_count as f64
+        } else {
+            0.0
+        };
+        
+        // Calculate set size difference
+        let min_card = if card_a < card_b { card_a } else { card_b };
+        let max_card = if card_a > card_b { card_a } else { card_b };
+        let card_ratio = min_card / max_card;
+        
+        // Calculate the standard HLL Jaccard
+        let jaccard_hll = if union_card > 0.0 { intersection_card / union_card } else { 0.0 };
+        
+        // Use different strategies based on the size ratio
+        let jaccard = if card_ratio > 0.8 {
+            // For similar size sets, traditional Jaccard works better
+            jaccard_hll 
+        } else if card_ratio > 0.5 {
+            // For moderately different sizes, a mix of methods works best
+            0.6 * jaccard_hll + 0.4 * register_jaccard
+        } else {
+            // For very different sized sets, register method is more reliable
+            0.3 * jaccard_hll + 0.7 * register_jaccard
+        };
+        
+        // Ensure result is in [0,1]
+        Ok(jaccard)
+    }
+
+    #[getter]
+    pub fn debug(&self) -> bool {
+        self.debug
+    }
+
+    #[setter]
+    pub fn set_debug(&mut self, value: bool) {
+        self.debug = value;
+    }
+
+    #[getter]
+    pub fn seed(&self) -> Option<u64> {
+        self.seed
     }
 }
 

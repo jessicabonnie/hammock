@@ -19,23 +19,30 @@ except ImportError:
 class RustHLLWrapper:
     """Wrapper for native RustHLL to make it API-compatible with the benchmark scripts."""
     
-    def __init__(self, precision=16, hash_size=32, debug=False):
+    def __init__(self, precision=16, hash_size=32, debug=False, seed=None):
         """Initialize RustHLL with specified precision and hash size.
         
         Args:
             precision: Precision parameter for the HLL sketch
             hash_size: Size of the hash in bits (32 or 64)
             debug: Debug flag (not used, provided for backward compatibility)
+            seed: Random seed for hashing
         """
         self._precision = precision
         self._hash_size = hash_size
+        self._seed = seed if seed is not None else 42
         
         try:
             self._using_rust = True
             # Import rust_hll inside the method to ensure it's available in this scope
             import rust_hll
-            # Create RustHLL with the correct parameter order (precision only, not using hash_size)
-            self._sketch = rust_hll.RustHLL(precision)
+            # Create RustHLL with the correct parameters
+            self._sketch = rust_hll.RustHLL(
+                precision=precision,
+                hash_size=hash_size,
+                debug=debug,
+                seed=self._seed
+            )
         except (ImportError, ValueError) as e:
             self._using_rust = False
             if isinstance(e, ValueError) and "Precision must be between" in str(e):
