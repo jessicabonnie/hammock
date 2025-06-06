@@ -72,8 +72,9 @@ class TestMinimizerSimilarity(unittest.TestCase):
     def _write_csv_header(self, writer: csv.writer) -> None:
         """Write the CSV header."""
         writer.writerow(['k', 'w', 'trial', 
-                        'hash_similarity', 'hash_with_ends_similarity', 
+                        # 'hash_similarity', 'hash_with_ends_similarity', 
                         'jaccard_similarity',
+                        'jaccard_similarity_with_ends',
                         'char_similarity', 'edit_similarity', 
                         'expected_similarity'])
 
@@ -118,23 +119,24 @@ class TestMinimizerSimilarity(unittest.TestCase):
             self._print_debug_results(char_sim, edit_sim, sim, expected_sim)
 
         # Add assertions to verify similarity values
-        assert 0 <= sim['hash_similarity'] <= 1, f"Hash similarity {sim['hash_similarity']} out of range [0,1]"
-        assert 0 <= sim['hash_with_ends_similarity'] <= 1, f"Hash+ends similarity {sim['hash_with_ends_similarity']} out of range [0,1]"
+        # assert 0 <= sim['hash_similarity'] <= 1, f"Hash similarity {sim['hash_similarity']} out of range [0,1]"
+        # assert 0 <= sim['hash_with_ends_similarity'] <= 1, f"Hash+ends similarity {sim['hash_with_ends_similarity']} out of range [0,1]"
         assert 0 <= sim['jaccard_similarity'] <= 1, f"Jaccard similarity {sim['jaccard_similarity']} out of range [0,1]"
-        
+        assert 0 <= sim['jaccard_similarity_with_ends'] <= 1, f"Jaccard+ends similarity {sim['jaccard_similarity_with_ends']} out of range [0,1]"
         # Verify character similarity matches expected similarity within tolerance
         tolerance = 0.1
         assert abs(char_sim - expected_sim) < tolerance, \
             f"Character similarity {char_sim} too far from expected {expected_sim}"
         
         # Verify similarity metrics are correlated
-        # Hash similarity should be roughly similar to character similarity
-        assert abs(sim['hash_similarity'] - char_sim) < 0.3, \
-            f"Hash similarity {sim['hash_similarity']} too different from char similarity {char_sim}"
+        # Jaccard similarity should be roughly similar to character similarity
+        assert abs(sim['jaccard_similarity'] - char_sim) < 0.3, \
+            f"Jaccard similarity {sim['jaccard_similarity']} too different from char similarity {char_sim}"
         
         # Hash with ends similarity should be at least as high as hash similarity
-        assert sim['hash_with_ends_similarity'] >= sim['hash_similarity'], \
-            f"Hash+ends similarity {sim['hash_with_ends_similarity']} should be >= hash similarity {sim['hash_similarity']}"
+        tolerance = 0.1
+        assert abs(sim['jaccard_similarity_with_ends'] - sim['jaccard_similarity']) < tolerance, \
+            f"Jaccard+ends similarity {sim['jaccard_similarity_with_ends']} too different from jaccard similarity {sim['jaccard_similarity']}"
 
         # Record results
         self._write_results(writer, k, w, trial, sim, char_sim, edit_sim, expected_sim)
@@ -155,9 +157,10 @@ class TestMinimizerSimilarity(unittest.TestCase):
         print(f"\nSimilarity Results:")
         print(f"Character-wise: {char_sim:.4f}")
         print(f"Edit Distance:  {edit_sim:.4f}")
-        print(f"Hash:          {sim['hash_similarity']:.4f}")
-        print(f"Hash+Ends:     {sim['hash_with_ends_similarity']:.4f}")
+        # print(f"Hash:          {sim['hash_similarity']:.4f}")
+        # print(f"Hash+Ends:     {sim['hash_with_ends_similarity']:.4f}")
         print(f"Jaccard:       {sim['jaccard_similarity']:.4f}")
+        print(f"Jaccard+Ends:  {sim['jaccard_similarity_with_ends']:.4f}")
         print(f"Expected:      {expected_sim:.4f}")
         print(f"{'='*80}\n")
 
@@ -165,8 +168,9 @@ class TestMinimizerSimilarity(unittest.TestCase):
                       sim: dict, char_sim: float, edit_sim: float, expected_sim: float) -> None:
         """Write results to CSV file."""
         writer.writerow([k, w, trial + 1, 
-                        f"{sim['hash_similarity']:.4f}", f"{sim['hash_with_ends_similarity']:.4f}",
+                        # f"{sim['hash_similarity']:.4f}", f"{sim['hash_with_ends_similarity']:.4f}",
                         f"{sim['jaccard_similarity']:.4f}",
+                        f"{sim['jaccard_similarity_with_ends']:.4f}",
                         f"{char_sim:.4f}", f"{edit_sim:.4f}",
                         f"{expected_sim:.4f}"])
 
@@ -244,8 +248,10 @@ class TestMinimizerSimilarity(unittest.TestCase):
                 sketch2.add_string(case['seq2'])
                 
                 sim = sketch1.similarity_values(sketch2)
-                self.assertAlmostEqual(sim['hash_similarity'], case['expected_hash'], delta=0.2)
-                self.assertAlmostEqual(sim['hash_with_ends_similarity'], case['expected_hash_ends'], delta=0.2)
+                # self.assertAlmostEqual(sim['hash_similarity'], case['expected_hash'], delta=0.2)
+                # self.assertAlmostEqual(sim['hash_with_ends_similarity'], case['expected_hash_ends'], delta=0.2)
+                self.assertAlmostEqual(sim['jaccard_similarity'], case['expected_hash'], delta=0.2)
+                self.assertAlmostEqual(sim['jaccard_similarity_with_ends'], case['expected_hash_ends'], delta=0.2)
 
     def test_simple_similarity(self):
         """Test basic similarity calculation with simple sequences."""
@@ -258,10 +264,11 @@ class TestMinimizerSimilarity(unittest.TestCase):
         sketch2.add_string(seq)
         
         sim = sketch1.similarity_values(sketch2)
-        self.assertAlmostEqual(sim['hash_similarity'], 1.0)
-        self.assertAlmostEqual(sim['hash_with_ends_similarity'], 1.0)
+        # self.assertAlmostEqual(sim['hash_similarity'], 1.0)
+        # self.assertAlmostEqual(sim['hash_with_ends_similarity'], 1.0)
         self.assertAlmostEqual(sim['jaccard_similarity'], 1.0)
-        
+        self.assertAlmostEqual(sim['jaccard_similarity_with_ends'], 1.0)
+
         # Test completely different sequences
         sketch1 = MinimizerSketch(kmer_size=4, window_size=5)
         sketch2 = MinimizerSketch(kmer_size=4, window_size=5)
@@ -270,9 +277,10 @@ class TestMinimizerSimilarity(unittest.TestCase):
         sketch2.add_string("CCCCCCCCCCCC")
         
         sim = sketch1.similarity_values(sketch2)
-        self.assertAlmostEqual(sim['hash_similarity'], 0.0, delta=0.1)
-        self.assertAlmostEqual(sim['hash_with_ends_similarity'], 0.0, delta=0.1)
+        # self.assertAlmostEqual(sim['hash_similarity'], 0.0, delta=0.1)
+        # self.assertAlmostEqual(sim['hash_with_ends_similarity'], 0.0, delta=0.1)
         self.assertAlmostEqual(sim['jaccard_similarity'], 0.0, delta=0.1)
+        self.assertAlmostEqual(sim['jaccard_similarity_with_ends'], 0.0, delta=0.1)
 
     def _test_pair(self, seq1: str, seq2: str, desc: str):
         """Test a pair of sequences with different similarity metrics."""
@@ -288,9 +296,10 @@ class TestMinimizerSimilarity(unittest.TestCase):
         print(f"\nTest case: {desc}")
         print(f"Sequence 1: {seq1}")
         print(f"Sequence 2: {seq2}")
-        print(f"Hash similarity: {sim['hash_similarity']:.4f}")
-        print(f"Hash+ends similarity: {sim['hash_with_ends_similarity']:.4f}")
+        # print(f"Hash similarity: {sim['hash_similarity']:.4f}")
+        # print(f"Hash+ends similarity: {sim['hash_with_ends_similarity']:.4f}")
         print(f"Jaccard similarity: {sim['jaccard_similarity']:.4f}")
+        print(f"Jaccard+ends similarity: {sim['jaccard_similarity_with_ends']:.4f}")
 
 if __name__ == '__main__':
     unittest.main() 

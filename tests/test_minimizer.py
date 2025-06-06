@@ -15,9 +15,10 @@ def test_add_string():
     sketch2.add_string(sequence)
     
     sim = sketch1.similarity_values(sketch2)
-    assert abs(1.0 - sim['hash_similarity']) < 0.1
-    assert abs(1.0 - sim['hash_with_ends_similarity']) < 0.1
+    # assert abs(1.0 - sim['hash_similarity']) < 0.1
+    # assert abs(1.0 - sim['hash_with_ends_similarity']) < 0.1
     assert abs(1.0 - sim['jaccard_similarity']) < 0.1
+    assert abs(1.0 - sim['jaccard_similarity_with_ends']) < 0.1
 
 def test_compare_different_sequences():
     sketch1 = MinimizerSketch(kmer_size=4, window_size=6)
@@ -27,9 +28,10 @@ def test_compare_different_sequences():
     sketch2.add_string("TGCATGCATGCA")
     
     sim = sketch1.similarity_values(sketch2)
-    assert 0 <= sim['hash_similarity'] <= 1
-    assert 0 <= sim['hash_with_ends_similarity'] <= 1
+    # assert 0 <= sim['hash_similarity'] <= 1
+    # assert 0 <= sim['hash_with_ends_similarity'] <= 1
     assert 0 <= sim['jaccard_similarity'] <= 1
+    assert 0 <= sim['jaccard_similarity_with_ends'] <= 1
 
 def test_empty_sequence():
     sketch1 = MinimizerSketch(kmer_size=4, window_size=6)
@@ -37,9 +39,10 @@ def test_empty_sequence():
     
     sketch2 = MinimizerSketch(kmer_size=4, window_size=6)
     sim = sketch1.similarity_values(sketch2)
-    assert sim['hash_similarity'] == 0
-    assert sim['hash_with_ends_similarity'] == 0
+    # assert sim['hash_similarity'] == 0
+    # assert sim['hash_with_ends_similarity'] == 0
     assert sim['jaccard_similarity'] == 0
+    assert sim['jaccard_similarity_with_ends'] == 0
 
 def test_sequence_shorter_than_k():
     sketch1 = MinimizerSketch(kmer_size=5, window_size=10)
@@ -47,9 +50,10 @@ def test_sequence_shorter_than_k():
     
     sketch2 = MinimizerSketch(kmer_size=5, window_size=10)
     sim = sketch1.similarity_values(sketch2)
-    assert sim['hash_similarity'] == 0
-    assert sim['hash_with_ends_similarity'] == 0
+    # assert sim['hash_similarity'] == 0
+    # assert sim['hash_with_ends_similarity'] == 0
     assert sim['jaccard_similarity'] == 0
+    assert sim['jaccard_similarity_with_ends'] == 0
 
 def test_different_parameters():
     sketch1 = MinimizerSketch(kmer_size=4, window_size=6)
@@ -72,7 +76,7 @@ def test_end_kmers():
     sketch2.add_string(modified_sequence)
     
     sim = sketch.similarity_values(sketch2)
-    assert sim['hash_with_ends_similarity'] > sim['hash_similarity']  # End k-mer similarity should increase the score
+    assert sim['jaccard_similarity_with_ends'] > sim['jaccard_similarity']  # End k-mer similarity should increase the score
 
 class TestMinimizerSketchQuick:
     """Quick tests for minimizer sketching functionality."""
@@ -104,4 +108,4 @@ def test_basic_similarity():
     sketch2.add_string(sequence)
     
     sim = sketch1.similarity_values(sketch2)
-    assert abs(1.0 - sim['hash_similarity']) < 0.1 
+    assert abs(1.0 - sim['jaccard_similarity']) < 0.1 
