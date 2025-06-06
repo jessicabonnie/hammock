@@ -64,14 +64,26 @@ class HyperLogLog(AbstractSketch):
         self.item_count = 0
         
         # Calculate alpha_mm (bias correction factor)
-        if self.num_registers == 16:
-            self.alpha_mm = 0.673
-        elif self.num_registers == 32:
-            self.alpha_mm = 0.697
-        elif self.num_registers == 64:
-            self.alpha_mm = 0.709
+        if self.hash_size == 32:
+            if self.num_registers == 16384:  # 2^14
+                self.alpha_mm = 0.673
+            elif self.num_registers == 32768:  # 2^15
+                self.alpha_mm = 0.697
+            elif self.num_registers == 65536:  # 2^16
+                self.alpha_mm = 0.709
+            else:
+                self.alpha_mm = 0.7213 / (1 + 1.079 / self.num_registers)
+        elif self.hash_size == 64:
+            if self.num_registers == 16384:  # 2^14
+                self.alpha_mm = 0.351
+            elif self.num_registers == 32768:  # 2^15
+                self.alpha_mm = 0.532
+            elif self.num_registers == 65536:  # 2^16
+                self.alpha_mm = 0.625
+            else:
+                self.alpha_mm = 0.7213 / (1 + 1.079 / self.num_registers) * 0.85  # Additional scaling for 64-bit
         else:
-            self.alpha_mm = 0.7213 / (1 + 1.079 / self.num_registers)
+            raise ValueError("hash_size must be 32 or 64")
 
 
     @staticmethod
@@ -539,16 +551,27 @@ class HyperLogLog(AbstractSketch):
         return z
 
     def _get_alpha(self, m: float) -> float:
-        """Get alpha constant based on number of registers."""
-        if m == 16:
-            return 0.673
-        elif m == 32:
-            return 0.697
-        elif m == 64:
-            return 0.709
+        """Get alpha constant based on number of registers and hash size."""
+        if self.hash_size == 32:
+            if m == 16384:  # 2^14
+                return 0.673
+            elif m == 32768:  # 2^15
+                return 0.697
+            elif m == 65536:  # 2^16
+                return 0.709
+            else:
+                return 0.7213 / (1.0 + 1.079 / m)
+        elif self.hash_size == 64:
+            if m == 16384:  # 2^14
+                return 0.351
+            elif m == 32768:  # 2^15
+                return 0.532
+            elif m == 65536:  # 2^16
+                return 0.625
+            else:
+                return 0.7213 / (1.0 + 1.079 / m) * 0.85  # Additional scaling for 64-bit
         else:
-            # Add a very small correction factor to reduce overestimation
-            return 0.7213 / (1.0 + 1.079 / m) * 0.985
+            raise ValueError("hash_size must be 32 or 64")
 
     def raw_estimate(self) -> float:
         """Calculate the raw cardinality estimate before corrections.
@@ -567,16 +590,18 @@ class HyperLogLog(AbstractSketch):
         
         return estimate
 
-    def merge(self, other: 'HyperLogLog') -> None:
+    def merge(self, other: 'HyperLogLog') -> 'HyperLogLog':
         """Merge another HLL sketch into this one.
         
         This modifies the current sketch by taking the element-wise maximum of 
-        its registers
-        with the other sketch's registers, effectively combining their 
+        its registers with the other sketch's registers, effectively combining their 
         cardinality estimates.
         
         Args:
             other: Another HyperLogLog sketch to merge into this one
+            
+        Returns:
+            Self, to allow for method chaining
             
         Raises:
             ValueError: If the sketches have different precision values
@@ -590,6 +615,46 @@ class HyperLogLog(AbstractSketch):
         
         # Take element-wise maximum and modify self.registers in-place
         np.maximum(self.registers, other.registers, out=self.registers)
+        
+        # Return self for method chaining
+        return self
+        
+    def merge_new(self, other: 'HyperLogLog') -> 'HyperLogLog':
+        """Create a new HLL sketch by merging this sketch with another.
+        
+        Creates a new sketch by taking the element-wise maximum of both
+        sketches' registers, effectively combining their cardinality estimates.
+        
+        Args:
+            other: Another HyperLogLog sketch to merge with this one
+            
+        Returns:
+            A new HyperLogLog instance containing the merged registers
+            
+        Raises:
+            ValueError: If the sketches have different precision values
+        """
+        if not isinstance(other, HyperLogLog):
+            raise TypeError("Can only merge with another HyperLogLog sketch")
+        if self.precision != other.precision:
+            raise ValueError("Cannot merge HyperLogLog sketches with different precisions")
+        if self.kmer_size != other.kmer_size:
+            raise ValueError("Cannot merge HyperLogLog sketches with different k-mer sizes")
+        
+        # Create a new sketch with the same parameters
+        result = HyperLogLog(
+            precision=self.precision,
+            kmer_size=self.kmer_size,
+            window_size=self.window_size,
+            seed=self.seed,
+            debug=self.debug,
+            hash_size=self.hash_size
+        )
+        
+        # Take element-wise maximum
+        result.registers = np.maximum(self.registers, other.registers)
+        
+        return result
 
     def estimate_intersection(self, other: 'HyperLogLog') -> float:
         """Estimate intersection cardinality with another HLL.
