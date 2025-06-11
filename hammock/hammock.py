@@ -166,7 +166,7 @@ def parse_args():
     arg_parser.add_argument("--expA", type=float, default=0, help="Power of 10 exponent to multiply contribution of A-type intervals")
     arg_parser.add_argument("--threads", type=int, help="Number of threads to use", default=None)
     arg_parser.add_argument("--kmer_size", '-k', type=int, default=8, help="Size of k-mers for sequence sketching")
-    arg_parser.add_argument("--window_size", '-w', type=int, default=40, help="Size of sliding window for sequence sketching")
+    arg_parser.add_argument("--window_size", '-w', '--window',type=int, default=40, help="Size of sliding window for sequence sketching")
     arg_parser.add_argument("--seed", type=int, default=42, help="Random seed for hashing")
     arg_parser.add_argument("--verbose", action="store_true", help="Print verbose output")
     arg_parser.add_argument("--debug", action="store_true", help="Enable debug mode")
@@ -216,7 +216,7 @@ def get_new_prefix(outprefix: str,
     elif sketch_type == "hyperloglog":
         outprefix = f"{outprefix}_hll_p{precision}_jacc{mode}"
     elif sketch_type == "minimizer":
-        outprefix = f"{outprefix}_mnmzr_jacc{mode}"
+        outprefix = f"{outprefix}_mnmzr_p{precision}_jacc{mode}"
     else:
         outprefix = f"{outprefix}_exact_jacc{mode}"
         
