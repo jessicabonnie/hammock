@@ -131,6 +131,37 @@ hammock files.txt primary.txt --rust --hashsize 32
 hammock files.txt primary.txt --rust --hashsize 64
 ```
 
+## Visualization (Experimental)
+
+**⚠️ Note: This is an experimental feature and is not fully supported. Use at your own discretion.**
+
+Hammock includes an R script for generating heatmaps from comparison results, particularly useful for visualizing ENCODE ChIP-seq data comparisons. After installation, the script is available as a system command:
+
+```bash
+# Generate heatmaps with default "encode" prefix
+encode_heatmap.R encode.report hammock.results
+
+# Generate heatmaps with custom prefix
+encode_heatmap.R encode.report hammock.results my_experiment
+```
+
+### Requirements
+- R must be installed and available in your system PATH
+- R packages: `tidyr`, `dplyr`, `tibble`, `gplots`, `RColorBrewer`, `readr`, `stringr`
+
+### Input Files
+- `encode.report`: Tab-delimited ENCODE metadata file with columns for accession, biosample, organism, and target
+- `hammock.results`: CSV output from hammock comparison
+
+### Output
+Three PDF heatmaps showing Jaccard similarities with border colors indicating:
+- `*_biosample.pdf`: Colored by biosample type
+- `*_organism.pdf`: Colored by organism
+- `*_target.pdf`: Colored by target of assay
+
+### Customization
+The R script is located at `scripts/encode_heatmap.R` in the hammock installation directory. Advanced users can modify this script to customize heatmap generation, color schemes, or add additional visualizations.
+
 ## Testing
 
 In order to run the tests requiring BigBed files, you need to have `bedToBigBed` installed and in your PATH.

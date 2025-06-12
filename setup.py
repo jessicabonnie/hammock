@@ -7,19 +7,20 @@ with open("README.md", "r") as fh:
 
 setup(
     name="hammock",
-    version="0.2.0",
+    version="0.2.1",
     author="Jessica Bonnie",
-    author_email="jbonnie@msu.edu",
+    author_email="jbonnie@jhu.edu",
     description="Cardinality Estimation and Interval Sketches",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/langmead-lab/hammock",
+    url="https://github.com/jessicabonnie/hammock",
     packages=find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
+    scripts=['scripts/encode_heatmap.R'],
     python_requires='>=3.6',
     install_requires=[
         "numpy", 
