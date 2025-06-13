@@ -20,7 +20,7 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    scripts=['scripts/encode_heatmap.R'],
+    scripts=['scripts/encode_heatmap.R', 'scripts/compare_sim_matrices.py'],
     python_requires='>=3.6',
     install_requires=[
         "numpy", 
