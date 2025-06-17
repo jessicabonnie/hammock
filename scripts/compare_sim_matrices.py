@@ -26,17 +26,18 @@ def detect_file_format(filepath):
         with open(filepath, 'r') as f:
             first_line = f.readline().strip()
             
-        # Check for bedtools format (has specific column names)
-        if first_line.startswith('file1 file2 intersection union jaccard'):
+        # Check for bedtools format (has specific column names, tab or space separated)
+        if (first_line.startswith('file1\tfile2\tintersection\tunion\tjaccard') or 
+            first_line.startswith('file1 file2 intersection union jaccard')):
             return 'bedtools'
-        elif first_line.startswith('file1,file2') and 'jaccard_similarity' in first_line:
+        elif first_line.startswith('file1,file2') and ('jaccard_similarity' in first_line or 'jaccard_similarity_with_ends' in first_line):
             return 'hammock'
         else:
             # Try to determine by content
             df = pd.read_csv(filepath, nrows=5)
             if 'jaccard' in df.columns and 'intersection' in df.columns:
                 return 'bedtools'
-            elif 'jaccard_similarity' in df.columns:
+            elif 'jaccard_similarity' in df.columns or 'jaccard_similarity_with_ends' in df.columns:
                 return 'hammock'
             else:
                 raise ValueError(f"Cannot determine file format for {filepath}")
@@ -55,14 +56,31 @@ def parse_bedtools_format(filepath):
     Returns:
         pandas.DataFrame: Symmetric similarity matrix
     """
-    # Read the bedtools output (space-separated)
-    df = pd.read_csv(filepath, sep=' ')
+    # Read the bedtools output (mixed space/tab separated - use whitespace)
+    df = pd.read_csv(filepath, sep=r'\s+')
     
     # Extract similarity values and file pairs
     similarity_data = df[['file1', 'file2', 'jaccard']].copy()
     
-    # Get unique file names
-    all_files = sorted(set(similarity_data['file1'].tolist() + similarity_data['file2'].tolist()))
+    # Convert file names to basenames without extensions for matching
+    # Handle double extensions like .bed.gz
+    def get_basename(filename):
+        # Remove common double extensions first
+        name = str(filename)
+        if name.endswith('.bed.gz'):
+            name = name[:-7]  # Remove .bed.gz
+        elif name.endswith('.fa.gz'):
+            name = name[:-6]  # Remove .fa.gz
+        else:
+            # Use Path.stem for single extensions
+            name = Path(name).stem
+        return name
+    
+    similarity_data['file1_base'] = similarity_data['file1'].apply(get_basename)
+    similarity_data['file2_base'] = similarity_data['file2'].apply(get_basename)
+    
+    # Get unique file basenames
+    all_files = sorted(set(similarity_data['file1_base'].tolist() + similarity_data['file2_base'].tolist()))
     
     # Create empty similarity matrix
     n_files = len(all_files)
@@ -73,13 +91,13 @@ def parse_bedtools_format(filepath):
     
     # Fill the similarity matrix
     for _, row in similarity_data.iterrows():
-        i = file_to_idx[row['file1']]
-        j = file_to_idx[row['file2']]
+        i = file_to_idx[row['file1_base']]
+        j = file_to_idx[row['file2_base']]
         sim_matrix[i, j] = row['jaccard']
         # Make symmetric (though bedtools should already include both directions)
         sim_matrix[j, i] = row['jaccard']
     
-    # Convert to DataFrame with proper labels
+    # Convert to DataFrame with proper labels (using basenames)
     sim_df = pd.DataFrame(sim_matrix, index=all_files, columns=all_files)
     
     return sim_df
@@ -98,11 +116,38 @@ def parse_hammock_format(filepath):
     # Read the hammock CSV output
     df = pd.read_csv(filepath)
     
-    # Extract similarity values and file pairs
-    similarity_data = df[['file1', 'file2', 'jaccard_similarity']].copy()
+    # Determine which jaccard column to use
+    if 'jaccard_similarity_with_ends' in df.columns:
+        # Mode D (FASTA files) - use jaccard_similarity_with_ends
+        jaccard_col = 'jaccard_similarity_with_ends'
+    elif 'jaccard_similarity' in df.columns:
+        # Mode B (BED files) - use jaccard_similarity
+        jaccard_col = 'jaccard_similarity'
+    else:
+        raise ValueError("No jaccard similarity column found in hammock output")
     
-    # Get unique file names
-    all_files = sorted(set(similarity_data['file1'].tolist() + similarity_data['file2'].tolist()))
+    # Extract similarity values and file pairs
+    similarity_data = df[['file1', 'file2', jaccard_col]].copy()
+    
+    # Convert file names to basenames without extensions for matching
+    # Handle double extensions like .bed.gz
+    def get_basename(filename):
+        # Remove common double extensions first
+        name = str(filename)
+        if name.endswith('.bed.gz'):
+            name = name[:-7]  # Remove .bed.gz
+        elif name.endswith('.fa.gz'):
+            name = name[:-6]  # Remove .fa.gz
+        else:
+            # Use Path.stem for single extensions
+            name = Path(name).stem
+        return name
+    
+    similarity_data['file1_base'] = similarity_data['file1'].apply(get_basename)
+    similarity_data['file2_base'] = similarity_data['file2'].apply(get_basename)
+    
+    # Get unique file basenames
+    all_files = sorted(set(similarity_data['file1_base'].tolist() + similarity_data['file2_base'].tolist()))
     
     # Create empty similarity matrix
     n_files = len(all_files)
@@ -113,13 +158,13 @@ def parse_hammock_format(filepath):
     
     # Fill the similarity matrix
     for _, row in similarity_data.iterrows():
-        i = file_to_idx[row['file1']]
-        j = file_to_idx[row['file2']]
-        sim_matrix[i, j] = row['jaccard_similarity']
+        i = file_to_idx[row['file1_base']]
+        j = file_to_idx[row['file2_base']]
+        sim_matrix[i, j] = row[jaccard_col]
         # Make symmetric
-        sim_matrix[j, i] = row['jaccard_similarity']
+        sim_matrix[j, i] = row[jaccard_col]
     
-    # Convert to DataFrame with proper labels
+    # Convert to DataFrame with proper labels (using basenames)
     sim_df = pd.DataFrame(sim_matrix, index=all_files, columns=all_files)
     
     return sim_df
