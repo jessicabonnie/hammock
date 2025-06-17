@@ -7,6 +7,8 @@ require(gplots)
 require(RColorBrewer)
 require(readr)
 require(stringr)
+require(ggplot2)
+require(gridExtra)
 
 
 # Get command line arguments
@@ -333,6 +335,152 @@ graph_target_heatmap <- function(results, matrix_data, mappings) {
          cex = 0.8)
 }
 
+create_pca_plot <- function(results, matrix_data, mappings) {
+  # Prepare data for PCA
+  # Use the jaccard similarity matrix, but we need to handle missing values
+  pca_matrix <- matrix_data$matrix
+  
+  # Replace NA values with 0 for PCA
+  pca_matrix[is.na(pca_matrix)] <- 0
+  
+  # Perform PCA on the similarity matrix
+  pca_result <- prcomp(pca_matrix, center = TRUE, scale. = TRUE)
+  
+  # Create a data frame with PCA results and metadata
+  # Note: Each row in the similarity matrix represents one sample's similarity profile
+  # to all other samples, so PC coordinates represent each sample's position in similarity space
+  pca_df <- data.frame(
+    PC1 = pca_result$x[, 1],
+    PC2 = pca_result$x[, 2],
+    file_name = rownames(pca_result$x)
+  )
+  
+  # Add metadata from mappings (using file1/row sample metadata since PCA rows = samples)
+  pca_df$target <- mappings$file1_target[pca_df$file_name]
+  pca_df$biosample <- mappings$file1_biosample[pca_df$file_name]
+  pca_df$organism <- mappings$file1_organism[pca_df$file_name]
+  
+  # Debug: Print samples with PC2 > 2
+  outlier_samples <- pca_df[pca_df$PC2 > 2, ]
+  if(nrow(outlier_samples) > 0) {
+    print("Samples with PC2 > 2:")
+    print(outlier_samples)
+  }
+  
+  # Handle cases where there are too many organisms for distinct shapes
+  # ggplot2 has about 25 distinct shapes, organisms are typically fewer so this should work well
+  organism_counts <- table(pca_df$organism)
+  
+  # Create a shape mapping for organisms
+  shape_values <- c(16, 17, 15, 18, 19, 8, 11, 12, 13, 14, 20, 21, 22, 23, 24, 25, 3, 4, 5, 6)
+  
+  # Get variance explained for axis labels
+  var_explained <- round(summary(pca_result)$importance[2, 1:2] * 100, 1)
+  
+  # Create the plot
+  p <- ggplot(pca_df, aes(x = PC1, y = PC2, color = biosample, shape = organism)) +
+    geom_point(size = 3, alpha = 0.8) +
+    scale_shape_manual(values = shape_values[1:length(unique(pca_df$organism))]) +
+    facet_wrap(~ target, scales = "free") +
+    labs(
+      title = "PCA of Jaccard Similarity Matrix by Target of Assay",
+      x = paste0("PC1 (", var_explained[1], "% variance)"),
+      y = paste0("PC2 (", var_explained[2], "% variance)"),
+      color = "Biosample",
+      shape = "Organism"
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "right",
+      legend.box = "vertical",
+      plot.title = element_text(hjust = 0.5),
+      axis.text = element_text(size = 8),
+      axis.title = element_text(size = 10),
+      legend.title = element_text(size = 9),
+      legend.text = element_text(size = 7),
+      strip.text = element_text(size = 9, face = "bold")
+    ) +
+    guides(
+      color = guide_legend(override.aes = list(shape = 16)),
+      shape = guide_legend(override.aes = list(color = "black"))
+    )
+  
+  return(p)
+}
+
+create_pca_plot_by_organism <- function(results, matrix_data, mappings) {
+  # Prepare data for PCA
+  # Use the jaccard similarity matrix, but we need to handle missing values
+  pca_matrix <- matrix_data$matrix
+  
+  # Replace NA values with 0 for PCA
+  pca_matrix[is.na(pca_matrix)] <- 0
+  
+  # Perform PCA on the similarity matrix
+  pca_result <- prcomp(pca_matrix, center = TRUE, scale. = TRUE)
+  
+  # Create a data frame with PCA results and metadata
+  # Note: Each row in the similarity matrix represents one sample's similarity profile
+  # to all other samples, so PC coordinates represent each sample's position in similarity space
+  pca_df <- data.frame(
+    PC1 = pca_result$x[, 1],
+    PC2 = pca_result$x[, 2],
+    file_name = rownames(pca_result$x)
+  )
+  
+  # Add metadata from mappings (using file1/row sample metadata since PCA rows = samples)
+  pca_df$target <- mappings$file1_target[pca_df$file_name]
+  pca_df$biosample <- mappings$file1_biosample[pca_df$file_name]
+  pca_df$organism <- mappings$file1_organism[pca_df$file_name]
+  
+  # Debug: Print samples with PC2 > 2
+  outlier_samples <- pca_df[pca_df$PC2 > 2, ]
+  if(nrow(outlier_samples) > 0) {
+    print("Samples with PC2 > 2 (from organism-faceted plot):")
+    print(outlier_samples)
+  }
+  
+  # Handle cases where there are too many targets for distinct shapes
+  # ggplot2 has about 25 distinct shapes, so we'll limit to the most common targets if needed
+  target_counts <- table(pca_df$target)
+  
+  # Create a shape mapping for targets
+  shape_values <- c(16, 17, 15, 18, 19, 8, 11, 12, 13, 14, 20, 21, 22, 23, 24, 25, 3, 4, 5, 6)
+  
+  # Get variance explained for axis labels
+  var_explained <- round(summary(pca_result)$importance[2, 1:2] * 100, 1)
+  
+  # Create the plot
+  p <- ggplot(pca_df, aes(x = PC1, y = PC2, color = biosample, shape = target)) +
+    geom_point(size = 3, alpha = 0.8) +
+    scale_shape_manual(values = shape_values[1:length(unique(pca_df$target))]) +
+    facet_wrap(~ organism, scales = "free") +
+    labs(
+      title = "PCA of Jaccard Similarity Matrix by Organism",
+      x = paste0("PC1 (", var_explained[1], "% variance)"),
+      y = paste0("PC2 (", var_explained[2], "% variance)"),
+      color = "Biosample",
+      shape = "Target of Assay"
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "right",
+      legend.box = "vertical",
+      plot.title = element_text(hjust = 0.5),
+      axis.text = element_text(size = 8),
+      axis.title = element_text(size = 10),
+      legend.title = element_text(size = 9),
+      legend.text = element_text(size = 7),
+      strip.text = element_text(size = 9, face = "bold")
+    ) +
+    guides(
+      color = guide_legend(override.aes = list(shape = 16)),
+      shape = guide_legend(override.aes = list(color = "black"))
+    )
+  
+  return(p)
+}
+
 
 # Create a matrix for the heatmap
 encode_report <- args[1]
@@ -345,10 +493,11 @@ hammock_data <- prepare_results(hammock_results, lookup)
 matrix_data <- create_heatmap_matrix(hammock_data)
 mappings <- create_mapping_tables(hammock_data)
 
-# Generate three separate heatmaps
+# Generate three separate heatmaps and PCA plot
 biosample_filename <- paste0(file_prefix, "_biosample.pdf")
 organism_filename <- paste0(file_prefix, "_organism.pdf")
 target_filename <- paste0(file_prefix, "_target.pdf")
+pca_filename <- paste0(file_prefix, "_pca.pdf")
 
 print(paste("Generating biosample heatmap:", biosample_filename))
 pdf(biosample_filename, width=12, height=12)
@@ -365,5 +514,14 @@ pdf(target_filename, width=12, height=12)
 graph_target_heatmap(hammock_data, matrix_data, mappings)
 dev.off()
 
-print("All heatmaps generated successfully!")
+print(paste("Generating combined PCA plots:", pca_filename))
+pca_plot1 <- create_pca_plot(hammock_data, matrix_data, mappings)
+pca_plot2 <- create_pca_plot_by_organism(hammock_data, matrix_data, mappings)
+
+# Combine both plots into a single PDF
+pdf(pca_filename, width = 16, height = 20)
+grid.arrange(pca_plot1, pca_plot2, ncol = 1)
+dev.off()
+
+print("All heatmaps and PCA plot generated successfully!")
 
