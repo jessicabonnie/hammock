@@ -238,6 +238,29 @@ else
     exit 1
 fi
 
+# Test if compare_clustering_trees.py is available and working
+echo "Testing compare_clustering_trees.py availability..."
+CLUSTERING_COMPARISON_AVAILABLE=false
+if [[ -f "$SCRIPT_DIR/compare_clustering_trees.py" ]]; then
+    echo "Found compare_clustering_trees.py in script directory"
+    if python "$SCRIPT_DIR/compare_clustering_trees.py" --help >/dev/null 2>&1; then
+        echo "compare_clustering_trees.py is working correctly"
+        CLUSTERING_COMPARISON_AVAILABLE=true
+    else
+        echo "WARNING: compare_clustering_trees.py found but not working properly" >&2
+    fi
+elif command -v compare_clustering_trees.py >/dev/null 2>&1; then
+    echo "Found compare_clustering_trees.py in PATH"
+    if compare_clustering_trees.py --help >/dev/null 2>&1; then
+        echo "compare_clustering_trees.py is working correctly"
+        CLUSTERING_COMPARISON_AVAILABLE=true
+    else
+        echo "WARNING: compare_clustering_trees.py found in PATH but not working properly" >&2
+    fi
+else
+    echo "WARNING: compare_clustering_trees.py not found - clustering tree comparisons will be skipped" >&2
+fi
+
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
@@ -249,11 +272,24 @@ echo "File type: $FILE_TYPE"
 echo "Hammock mode: $HAMMOCK_MODE"
 echo "Quick mode: $QUICK_MODE"
 echo "Output directory: $OUTPUT_DIR"
-echo "Results table: $RESULTS_TABLE"
+echo "Similarity matrix results table: $RESULTS_TABLE"
+if [[ "$CLUSTERING_COMPARISON_AVAILABLE" == "true" ]]; then
+    echo "Clustering tree results table: $CLUSTERING_RESULTS_TABLE"
+    echo "Clustering comparison: ENABLED (using average linkage)"
+else
+    echo "Clustering comparison: DISABLED (compare_clustering_trees.py not available)"
+fi
 echo ""
 
 # Create results table with extended header
 echo -e "klen\twindow\tprecision\thammock_file\tbedtools_file\tformat1\tformat2\tmatrix_size\tfrobenius_norm\tcorrelation\tmean_abs_error\tmax_abs_error\truntime_seconds" > "$RESULTS_TABLE"
+
+# Create clustering results table if clustering comparison is available
+if [[ "$CLUSTERING_COMPARISON_AVAILABLE" == "true" ]]; then
+    CLUSTERING_RESULTS_TABLE="${RESULTS_TABLE%.tsv}_clustering.tsv"
+    echo "Clustering results will be saved to: $CLUSTERING_RESULTS_TABLE"
+    echo -e "klen\twindow\tprecision\thammock_file\tbedtools_file\tformat1\tformat2\tmatrix_size\trf_distance\tmax_rf_distance\tnormalized_rf\tlinkage_method\truntime_seconds" > "$CLUSTERING_RESULTS_TABLE"
+fi
 
 # Count total combinations for progress tracking
 total_combinations=$((${#KLEN_VALUES[@]} * ${#WINDOW_VALUES[@]} * ${#PRECISION_VALUES[@]}))
@@ -372,9 +408,47 @@ for klen in "${KLEN_VALUES[@]}"; do
             if [[ $comparison_exit_code -eq 0 && -n "$comparison_result" ]]; then
                 # Add parameter columns and runtime to the comparison result
                 echo -e "$klen\t$window\t$precision\t$comparison_result\t$runtime" >> "$RESULTS_TABLE"
-                echo "  ✓ Comparison completed successfully"
+                echo "  ✓ Similarity matrix comparison completed successfully"
+                
+                # Perform clustering tree comparison if available
+                if [[ "$CLUSTERING_COMPARISON_AVAILABLE" == "true" ]]; then
+                    echo "  Comparing clustering trees..."
+                    clustering_error_output=$(mktemp)
+                    clustering_stdout_output=$(mktemp)
+                    
+                    if [[ -f "$SCRIPT_DIR/compare_clustering_trees.py" ]]; then
+                        clustering_cmd="python $SCRIPT_DIR/compare_clustering_trees.py $hammock_output $BEDTOOLS_FILE --table --linkage average"
+                    else
+                        clustering_cmd="compare_clustering_trees.py $hammock_output $BEDTOOLS_FILE --table --linkage average"
+                    fi
+                    
+                    echo "  Clustering comparison command: $clustering_cmd"
+                    clustering_result=$($clustering_cmd > "$clustering_stdout_output" 2>"$clustering_error_output")
+                    clustering_exit_code=$?
+                    
+                    # Read the actual stdout content
+                    if [[ -f "$clustering_stdout_output" ]]; then
+                        clustering_result=$(cat "$clustering_stdout_output")
+                    fi
+                    
+                    if [[ $clustering_exit_code -eq 0 && -n "$clustering_result" ]]; then
+                        # Add parameter columns and runtime to the clustering comparison result
+                        echo -e "$klen\t$window\t$precision\t$clustering_result\t$runtime" >> "$CLUSTERING_RESULTS_TABLE"
+                        echo "  ✓ Clustering tree comparison completed successfully"
+                    else
+                        echo "  WARNING: Clustering tree comparison failed" >&2
+                        echo "  WARNING: Clustering command: $clustering_cmd" >&2
+                        echo "  WARNING: Clustering command exit code: $clustering_exit_code" >&2
+                        echo "  WARNING: Clustering stdout:" >&2
+                        cat "$clustering_stdout_output" >&2
+                        echo "  WARNING: Clustering stderr:" >&2
+                        cat "$clustering_error_output" >&2
+                        echo -e "$klen\t$window\t$precision\tCLUSTERING_FAILED\t-\t-\t-\t-\t-\t-\t-\t-\t$runtime" >> "$CLUSTERING_RESULTS_TABLE"
+                    fi
+                    rm -f "$clustering_error_output" "$clustering_stdout_output"
+                fi
             else
-                echo "  ERROR: Comparison failed" >&2
+                echo "  ERROR: Similarity matrix comparison failed" >&2
                 echo "  ERROR: Comparison command: $comparison_cmd" >&2
                 echo "  ERROR: Comparison command exit code: $comparison_exit_code" >&2
                 echo "  ERROR: Comparison stdout:" >&2
@@ -386,6 +460,11 @@ for klen in "${KLEN_VALUES[@]}"; do
                 echo "  ERROR: First 5 lines of bedtools file:" >&2
                 head -5 "$BEDTOOLS_FILE" >&2
                 echo -e "$klen\t$window\t$precision\tCOMPARISON_FAILED\t-\t-\t-\t-\t-\t-\t-\t-\t$runtime" >> "$RESULTS_TABLE"
+                
+                # Also add failed entry to clustering results if available
+                if [[ "$CLUSTERING_COMPARISON_AVAILABLE" == "true" ]]; then
+                    echo -e "$klen\t$window\t$precision\tSIM_COMPARISON_FAILED\t-\t-\t-\t-\t-\t-\t-\t-\t$runtime" >> "$CLUSTERING_RESULTS_TABLE"
+                fi
             fi
             rm -f "$comparison_error_output" "$comparison_stdout_output"
             
@@ -401,15 +480,37 @@ done
 
 echo "Parameter sweep completed!"
 echo "Results saved to: $RESULTS_TABLE"
+if [[ "$CLUSTERING_COMPARISON_AVAILABLE" == "true" ]]; then
+    echo "Clustering tree results saved to: $CLUSTERING_RESULTS_TABLE"
+fi
 echo ""
 echo "Summary:"
 echo "  File type: $FILE_TYPE"
 echo "  Hammock mode: $HAMMOCK_MODE"
 echo "  Quick mode: $QUICK_MODE"
 echo "  Total combinations tested: $total_combinations"
-echo "  Results table: $RESULTS_TABLE"
+echo "  Similarity matrix results: $RESULTS_TABLE"
+if [[ "$CLUSTERING_COMPARISON_AVAILABLE" == "true" ]]; then
+    echo "  Clustering tree results: $CLUSTERING_RESULTS_TABLE"
+fi
 
 # Show a preview of the results
 echo ""
-echo "Results preview (first 5 lines):"
-head -n 6 "$RESULTS_TABLE" | column -t -s $'\t' 
+echo "Similarity matrix results preview (first 5 lines):"
+head -n 6 "$RESULTS_TABLE" | column -t -s $'\t'
+
+if [[ "$CLUSTERING_COMPARISON_AVAILABLE" == "true" && -f "$CLUSTERING_RESULTS_TABLE" ]]; then
+    echo ""
+    echo "Clustering tree results preview (first 5 lines):"
+    head -n 6 "$CLUSTERING_RESULTS_TABLE" | column -t -s $'\t'
+    
+    # Show best clustering results (lowest normalized RF distance)
+    echo ""
+    echo "Best clustering approximations (lowest normalized RF distance):"
+    if [[ $(wc -l < "$CLUSTERING_RESULTS_TABLE") -gt 1 ]]; then
+        # Skip header and sort by normalized_rf column (column 11), then show top 3
+        tail -n +2 "$CLUSTERING_RESULTS_TABLE" | sort -k11 -n | head -3 | column -t -s $'\t'
+    else
+        echo "No successful clustering comparisons found."
+    fi
+fi 

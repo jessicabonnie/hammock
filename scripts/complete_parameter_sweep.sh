@@ -483,6 +483,12 @@ if [[ ! -f "$RESULTS_TABLE" ]]; then
 fi
 
 echo "  ✓ Parameter sweep completed: $RESULTS_TABLE"
+
+# Check if clustering results were also generated
+CLUSTERING_RESULTS_TABLE="${RESULTS_TABLE%.tsv}_clustering.tsv"
+if [[ -f "$CLUSTERING_RESULTS_TABLE" ]]; then
+    echo "  ✓ Clustering tree comparison results: $CLUSTERING_RESULTS_TABLE"
+fi
 echo ""
 
 # Step 3: Cleanup if requested
@@ -502,7 +508,10 @@ echo "  File type: $FILE_TYPE"
 echo "  Hammock mode: $HAMMOCK_MODE"
 echo "  Quick mode: $QUICK_MODE"
 echo "  Bedtools reference: $BEDTOOLS_OUTPUT"
-echo "  Results table: $RESULTS_TABLE"
+echo "  Similarity matrix results: $RESULTS_TABLE"
+if [[ -f "$CLUSTERING_RESULTS_TABLE" ]]; then
+    echo "  Clustering tree results: $CLUSTERING_RESULTS_TABLE"
+fi
 echo "  Error log: $ERROR_LOG"
 echo "  Output directory: $OUTPUT_DIR"
 
@@ -537,8 +546,25 @@ fi
 
 # Show a preview of the results
 echo ""
-echo "Results preview (first 5 lines):"
+echo "Similarity matrix results preview (first 5 lines):"
 head -n 6 "$RESULTS_TABLE" | column -t -s $'\t'
+
+# Show clustering results preview if available
+if [[ -f "$CLUSTERING_RESULTS_TABLE" ]]; then
+    echo ""
+    echo "Clustering tree results preview (first 5 lines):"
+    head -n 6 "$CLUSTERING_RESULTS_TABLE" | column -t -s $'\t'
+    
+    # Show best clustering results (lowest normalized RF distance)
+    echo ""
+    echo "Best clustering approximations (lowest normalized RF distance):"
+    if [[ $(wc -l < "$CLUSTERING_RESULTS_TABLE") -gt 1 ]]; then
+        # Skip header and sort by normalized_rf column (column 11), then show top 3
+        tail -n +2 "$CLUSTERING_RESULTS_TABLE" | sort -k11 -n | head -3 | column -t -s $'\t'
+    else
+        echo "No successful clustering comparisons found."
+    fi
+fi
 
 # Show error log info
 echo ""

@@ -34,6 +34,83 @@ compare_sim_matrices.py hammock_results.csv bedtools_output.txt
 compare_sim_matrices.py hammock_results.csv bedtools_output.txt --table
 ```
 
+#### `compare_clustering_trees.py`
+**Purpose**: Compare hierarchical clustering trees built from Jaccard similarity matrices using Robinson-Foulds distance. This provides a biologically meaningful comparison of how well hammock approximates bedtools clustering patterns.
+
+**Usage**:
+```bash
+compare_clustering_trees.py <file1> <file2> [--linkage METHOD] [--table] [--verbose] [--save-trees FILE] [--output FILE]
+```
+
+**Features**:
+- Automatically detects file format (bedtools vs hammock)
+- Builds hierarchical clustering trees from similarity matrices
+- Calculates accurate Robinson-Foulds distance using ete3 library
+- Supports multiple linkage methods (single, complete, average, ward)
+- Outputs normalized RF distance (0-1 scale) and tree similarity
+- Can save Newick format trees for visualization
+- Table format output for integration with parameter sweeps
+
+**Parameters**:
+- `--linkage, -l`: Clustering linkage method (default: average)
+  - `single`: Single linkage (minimum distance)
+  - `complete`: Complete linkage (maximum distance) 
+  - `average`: Average linkage (UPGMA)
+  - `ward`: Ward's minimum variance method
+- `--table, -t`: Output results as tab-delimited line
+- `--header`: Print tab-delimited header (use with --table)
+- `--verbose, -v`: Show detailed progress and tree information
+- `--save-trees FILE`: Save Newick format trees to file
+- `--output, -o FILE`: Save detailed comparison results to file
+
+**Output Metrics**:
+- **Robinson-Foulds distance**: Number of different splits between trees
+- **Maximum RF distance**: Theoretical maximum RF distance for n leaves
+- **Normalized RF distance**: RF distance / max RF distance (0-1 scale)
+- **Tree similarity**: 1 - normalized RF distance (higher = more similar)
+
+**Dependencies**:
+- **Required**: scipy, pandas, numpy
+- **Recommended**: ete3 (for accurate RF calculations)
+- **Alternative**: dendropy (fallback if ete3 unavailable)
+
+**Example**:
+```bash
+# Basic tree comparison with verbose output
+compare_clustering_trees.py hammock_results.csv bedtools_output.tsv --verbose
+
+# Compare with different linkage methods
+compare_clustering_trees.py hammock_results.csv bedtools_output.tsv --linkage complete
+
+# Table format for parameter sweeps
+compare_clustering_trees.py hammock_results.csv bedtools_output.tsv --table
+
+# Save trees and detailed results for further analysis
+compare_clustering_trees.py hammock_results.csv bedtools_output.tsv \
+    --save-trees clustering_trees.newick \
+    --output detailed_comparison.txt \
+    --verbose
+
+# Print header for parameter sweep integration
+compare_clustering_trees.py --header
+```
+
+**Interpretation**:
+- **RF distance = 0**: Trees are identical (perfect match)
+- **RF distance = max**: Trees are maximally different
+- **Normalized RF < 0.2**: Trees are very similar (good approximation)
+- **Normalized RF > 0.8**: Trees are very different (poor approximation)
+
+**Integration with Parameter Sweeps**:
+The table output format makes it easy to integrate with parameter sweep workflows:
+```bash
+# Header output
+file1	file2	format1	format2	matrix_size	rf_distance	max_rf_distance	normalized_rf	linkage_method
+
+# Example result
+hammock_p20_k15_w100.csv	bedtools_ref.tsv	hammock	bedtools	68	114	130	0.876923	average
+```
+
 ---
 
 ### 🧪 Parameter Sweep Scripts
@@ -43,6 +120,7 @@ compare_sim_matrices.py hammock_results.csv bedtools_output.txt --table
 1. Takes a list of BED files and runs pairwise bedtools jaccard on ALL combinations
 2. Uses the resulting jaccard matrix as reference for hammock parameter sweep  
 3. Compares hammock output against bedtools reference for different parameters
+4. Automatically includes clustering tree analysis when `compare_clustering_trees.py` is available
 
 **Usage**:
 ```bash
@@ -55,7 +133,7 @@ complete_parameter_sweep.sh -b <bed_file_list> [-f <fasta_file_list>] [-o <outpu
 - `-f`: FASTA file list (optional) - text file with one FASTA file path per line
   - If not provided, hammock will run on the BED files
 - `-o`: Output prefix with path (default: complete_parameter_sweep)
-  - Creates: `<prefix>_results/` directory, `<prefix>_bedtools_ref.tsv`, `<prefix>_results.tsv`
+  - Creates: `<prefix>_results/` directory, `<prefix>_bedtools_ref.tsv`, `<prefix>_results.tsv`, `<prefix>_results_clustering.tsv`
 - `-c`: Clean up intermediate files after completion (bedtools reference always preserved)
 - `-v`: Verbose output (shows progress of bedtools comparisons)
 - `-q, --quick`: Quick mode with limited parameter combinations for testing
@@ -77,20 +155,31 @@ complete_parameter_sweep.sh -b <bed_file_list> [-f <fasta_file_list>] [-o <outpu
 - Reuses existing bedtools reference if found (avoids time-intensive regeneration)
 - Always preserves bedtools reference file for future use (even with cleanup enabled)
 - Skips bedtools generation if reference already exists
+- **NEW**: Automatically runs clustering tree analysis when available
+- **NEW**: Generates dual output tables: similarity matrices and clustering comparisons
+- **NEW**: Shows best parameter combinations based on lowest normalized Robinson-Foulds distance
+
+**Output Files**:
+- `<prefix>_results.tsv`: Traditional similarity matrix comparison results
+- `<prefix>_results_clustering.tsv`: Clustering tree topology comparison results (when available)
+- `<prefix>_bedtools_ref.tsv`: Bedtools pairwise jaccard reference matrix
 
 **Examples**:
 ```bash
-# Run complete sweep on BED files only
+# Run complete sweep on BED files only (includes clustering analysis)
 complete_parameter_sweep.sh -b bed_files_list.txt -c -v
 
 # Run sweep on FASTA files using corresponding BED files for reference
 complete_parameter_sweep.sh -b bed_files_list.txt -f fasta_files_list.txt -c -v
 
-# Quick mode for testing
+# Quick mode for testing (still includes clustering if available)
 complete_parameter_sweep.sh -b bed_files_list.txt --quick -c -v
 
 # Custom output prefix and path
 complete_parameter_sweep.sh -b bed_files_list.txt -o /path/to/my_experiment -c -v
+
+# View clustering results (best parameters have lowest normalized RF distance)
+sort -k8 -n my_experiment_results_clustering.tsv | head -5
 ```
 
 #### `complete_parameter_sweep_quick.sh`
@@ -103,7 +192,7 @@ complete_parameter_sweep.sh -b bed_files_list.txt -o /path/to/my_experiment -c -
 - **FASTA files**: Tests only k-mer=20, window=200, precision (20, 23)
 
 #### `parameter_sweep.sh`
-**Purpose**: Run hammock parameter sweep against pre-generated bedtools reference matrix.
+**Purpose**: Run hammock parameter sweep against pre-generated bedtools reference matrix with optional clustering tree analysis.
 
 **Usage**:
 ```bash
@@ -121,6 +210,17 @@ parameter_sweep.sh -b <bedtools_output_file> -f <file_list> [-o <output_dir>] [-
 - BED files (.bed): Only precision parameter is varied (mode B)
 - FASTA files (.fa, .fasta, etc.): All parameters varied (mode D)
 
+**Features**:
+- **NEW**: Automatically detects and uses `compare_clustering_trees.py` when available
+- **NEW**: Generates dual output tables: similarity matrices and clustering tree comparisons
+- **NEW**: Uses average linkage clustering method for Robinson-Foulds distance calculations
+- Enhanced progress reporting with clustering analysis status
+- Graceful fallback when clustering comparison tools are unavailable
+
+**Output Files**:
+- `<results_table>`: Traditional similarity matrix comparison results
+- `<results_table_base>_clustering.tsv`: Clustering tree topology comparison results (when available)
+
 **Parameter Ranges**:
 - **Full mode (default)**:
   - BED files: precision = 16,18,19,20,21,22,23,25
@@ -131,7 +231,7 @@ parameter_sweep.sh -b <bedtools_output_file> -f <file_list> [-o <output_dir>] [-
 
 **Examples**:
 ```bash
-# Basic parameter sweep
+# Basic parameter sweep (includes clustering analysis when available)
 parameter_sweep.sh -b bedtools_reference.txt -f files.txt -o sweep_results/
 
 # Quick mode for testing
@@ -139,6 +239,9 @@ parameter_sweep.sh -b bedtools_output.txt -f bed_files_list.txt --quick
 
 # For FASTA files (assuming you have bedtools output)
 parameter_sweep.sh -b bedtools_fasta_output.txt -f fasta_files_list.txt
+
+# View clustering results to find best parameters
+sort -k8 -n sweep_results/parameter_sweep_results_clustering.tsv | head -5
 ```
 
 #### `parameter_sweep_quick.sh`
@@ -250,6 +353,13 @@ complete_parameter_sweep.sh -b all_files.txt -o full_results -c -v
 
 # 4. Custom parameter sweep with pre-existing bedtools reference
 parameter_sweep.sh -b full_results_bedtools_ref.tsv -f files.txt -o custom_sweep/
+
+# 5. Analyze results - both similarity matrices and clustering trees
+# Best numerical accuracy (lowest error)
+sort -k7 -n full_results_results.tsv | head -5
+
+# Best biological accuracy (lowest normalized RF distance)
+sort -k8 -n full_results_results_clustering.tsv | head -5
 ```
 
 ### Manual Analysis Workflow
@@ -260,8 +370,41 @@ bedtools_pairwise.sh -f files.txt -o bedtools_ref.txt
 # 2. Run hammock with specific parameters
 hammock files.txt files.txt -o hammock_results -p 20 --mode B
 
-# 3. Compare results (using bedtools output matrix)
+# 3. Compare similarity matrices (numerical accuracy)
 compare_sim_matrices.py hammock_results_hll_p20_jaccB.csv bedtools_ref.txt
+
+# 4. Compare clustering tree topologies (biological accuracy)
+compare_clustering_trees.py hammock_results_hll_p20_jaccB.csv bedtools_ref.txt --verbose
+
+# 5. Compare different parameter combinations
+for p in 18 20 22 25; do
+    echo "Testing precision $p"
+    hammock files.txt files.txt -o hammock_p${p} -p $p --mode B
+    echo -n "Numerical: "; compare_sim_matrices.py hammock_p${p}_hll_p${p}_jaccB.csv bedtools_ref.txt --table
+    echo -n "Biological: "; compare_clustering_trees.py hammock_p${p}_hll_p${p}_jaccB.csv bedtools_ref.txt --table
+done
+```
+
+### Clustering Tree Analysis Workflow
+```bash
+# 1. Basic tree comparison with detailed output
+compare_clustering_trees.py hammock_output.csv bedtools_ref.tsv --verbose \
+    --save-trees trees.newick --output detailed_results.txt
+
+# 2. Test different linkage methods to see which preserves topology best
+compare_clustering_trees.py hammock_output.csv bedtools_ref.tsv --linkage single --table
+compare_clustering_trees.py hammock_output.csv bedtools_ref.tsv --linkage complete --table
+compare_clustering_trees.py hammock_output.csv bedtools_ref.tsv --linkage average --table
+compare_clustering_trees.py hammock_output.csv bedtools_ref.tsv --linkage ward --table
+
+# 3. Batch comparison for parameter sweep results
+echo "file1	file2	format1	format2	matrix_size	rf_distance	max_rf_distance	normalized_rf	linkage_method" > clustering_results.tsv
+for hammock_file in parameter_sweep_results/*.csv; do
+    compare_clustering_trees.py "$hammock_file" bedtools_ref.tsv --table >> clustering_results.tsv
+done
+
+# 4. Find the best parameter combination (lowest normalized RF distance)
+sort -k8 -n clustering_results.tsv | head -5
 ```
 
 ### HPC Workflow
@@ -289,6 +432,18 @@ Scripts automatically detect file types based on extensions:
 - **R**: For visualization scripts (ggplot2, pheatmap, etc.)
 - **bash**: Shell scripting environment
 
+### Optional Python Libraries
+- **ete3**: For accurate Robinson-Foulds distance calculations (recommended)
+  ```bash
+  conda install ete3
+  # or
+  pip install ete3
+  ```
+- **dendropy**: Alternative to ete3 for tree comparisons
+  ```bash
+  pip install dendropy
+  ```
+
 ### Script Dependencies
 Scripts that call other scripts will automatically find them after installation:
 - `complete_parameter_sweep*.sh` → `parameter_sweep*.sh`
@@ -297,6 +452,8 @@ Scripts that call other scripts will automatically find them after installation:
 ## Output Files
 
 ### Parameter Sweep Results
+
+#### Similarity Matrix Results (`*_results.tsv`)
 Results are saved in TSV format with columns:
 - `klen`, `window`, `precision`: Parameter values
 - `hammock_file`, `bedtools_file`: Input files
@@ -306,6 +463,22 @@ Results are saved in TSV format with columns:
 - `correlation`: Pearson correlation coefficient
 - `mean_abs_error`, `max_abs_error`: Error metrics
 - `runtime_seconds`: Execution time
+
+#### Clustering Tree Results (`*_results_clustering.tsv`)
+**NEW**: Clustering tree topology comparison results (when `compare_clustering_trees.py` is available):
+- `file1`, `file2`: Input files (hammock vs bedtools)
+- `format1`, `format2`: File format detection
+- `matrix_size`: Number of files compared
+- `rf_distance`: Robinson-Foulds distance (number of different splits)
+- `max_rf_distance`: Maximum possible RF distance for n leaves
+- `normalized_rf`: RF distance / max RF distance (0-1 scale)
+- `linkage_method`: Clustering method used (typically 'average')
+
+**Interpretation of Clustering Results**:
+- **Normalized RF < 0.2**: Excellent biological accuracy (trees very similar)
+- **Normalized RF 0.2-0.5**: Good biological accuracy (moderate similarity)
+- **Normalized RF 0.5-0.8**: Poor biological accuracy (trees quite different)
+- **Normalized RF > 0.8**: Very poor biological accuracy (trees very different)
 
 ### Log Files
 - Most scripts generate detailed logs for debugging
@@ -319,6 +492,8 @@ Results are saved in TSV format with columns:
 2. **"Permission denied"**: Ensure scripts have execute permissions
 3. **"Bedtools failed"**: Check that input BED files are properly formatted
 4. **"Comparison failed"**: Verify that both hammock and bedtools outputs exist
+5. **"Clustering comparison unavailable"**: Install ete3 (`conda install ete3`) for accurate Robinson-Foulds calculations
+6. **"Different best parameters"**: Numerical accuracy (similarity matrices) and biological accuracy (clustering trees) may suggest different optimal parameters - consider your analysis goals
 
 ### Getting Help
 ```bash
