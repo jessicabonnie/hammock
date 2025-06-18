@@ -484,6 +484,57 @@ if [[ "$CLUSTERING_COMPARISON_AVAILABLE" == "true" ]]; then
     echo "Clustering tree results saved to: $CLUSTERING_RESULTS_TABLE"
 fi
 echo ""
+
+# Generate dendrogram visualization of bedtools reference
+echo "Generating bedtools reference dendrogram..."
+DENDROGRAM_OUTPUT="$OUTPUT_DIR/bedtools_reference_dendrogram.png"
+
+# Test if draw_clustering_tree.py is available
+DRAW_TREE_AVAILABLE=false
+if [[ -f "$SCRIPT_DIR/draw_clustering_tree.py" ]]; then
+    echo "Found draw_clustering_tree.py in script directory"
+    if python "$SCRIPT_DIR/draw_clustering_tree.py" --help >/dev/null 2>&1; then
+        DRAW_TREE_AVAILABLE=true
+        DRAW_TREE_CMD="python $SCRIPT_DIR/draw_clustering_tree.py"
+    else
+        echo "WARNING: draw_clustering_tree.py found but not working properly" >&2
+    fi
+elif command -v draw_clustering_tree.py >/dev/null 2>&1; then
+    echo "Found draw_clustering_tree.py in PATH"
+    if draw_clustering_tree.py --help >/dev/null 2>&1; then
+        DRAW_TREE_AVAILABLE=true
+        DRAW_TREE_CMD="draw_clustering_tree.py"
+    else
+        echo "WARNING: draw_clustering_tree.py found in PATH but not working properly" >&2
+    fi
+else
+    echo "WARNING: draw_clustering_tree.py not found - dendrogram generation will be skipped" >&2
+fi
+
+if [[ "$DRAW_TREE_AVAILABLE" == "true" ]]; then
+    echo "Generating dendrogram for bedtools reference file..."
+    dendrogram_error_output=$(mktemp)
+    dendrogram_stdout_output=$(mktemp)
+    
+    dendrogram_cmd="$DRAW_TREE_CMD '$BEDTOOLS_FILE' --output '$DENDROGRAM_OUTPUT' --no-show --title 'Bedtools Reference Dendrogram' --figsize 14 10"
+    echo "Dendrogram command: $dendrogram_cmd"
+    
+    if eval "$dendrogram_cmd" > "$dendrogram_stdout_output" 2>"$dendrogram_error_output"; then
+        echo "✓ Bedtools reference dendrogram saved to: $DENDROGRAM_OUTPUT"
+    else
+        echo "WARNING: Failed to generate bedtools reference dendrogram" >&2
+        echo "WARNING: Dendrogram command: $dendrogram_cmd" >&2
+        echo "WARNING: Dendrogram stdout:" >&2
+        cat "$dendrogram_stdout_output" >&2
+        echo "WARNING: Dendrogram stderr:" >&2
+        cat "$dendrogram_error_output" >&2
+    fi
+    rm -f "$dendrogram_error_output" "$dendrogram_stdout_output"
+else
+    echo "Dendrogram generation skipped (draw_clustering_tree.py not available)"
+fi
+echo ""
+
 echo "Summary:"
 echo "  File type: $FILE_TYPE"
 echo "  Hammock mode: $HAMMOCK_MODE"
@@ -492,6 +543,9 @@ echo "  Total combinations tested: $total_combinations"
 echo "  Similarity matrix results: $RESULTS_TABLE"
 if [[ "$CLUSTERING_COMPARISON_AVAILABLE" == "true" ]]; then
     echo "  Clustering tree results: $CLUSTERING_RESULTS_TABLE"
+fi
+if [[ "$DRAW_TREE_AVAILABLE" == "true" && -f "$DENDROGRAM_OUTPUT" ]]; then
+    echo "  Bedtools reference dendrogram: $DENDROGRAM_OUTPUT"
 fi
 
 # Show a preview of the results

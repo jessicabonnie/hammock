@@ -111,6 +111,73 @@ file1	file2	format1	format2	matrix_size	rf_distance	max_rf_distance	normalized_r
 hammock_p20_k15_w100.csv	bedtools_ref.tsv	hammock	bedtools	68	114	130	0.876923	average
 ```
 
+#### `draw_clustering_tree.py`
+**Purpose**: Generate hierarchical clustering dendrograms from bedtools/hammock similarity matrices OR visualize saved Newick format trees with automatic format detection.
+
+**Usage**:
+```bash
+# From similarity matrices
+draw_clustering_tree.py <matrix_file> [--output OUTPUT] [--linkage METHOD] [--figsize W H] [options]
+
+# From Newick tree files
+draw_clustering_tree.py <newick_file> [--output OUTPUT] [--tree-index N] [--list-trees] [options]
+```
+
+**Features**:
+- **NEW**: Automatically detects file format (bedtools, hammock, or Newick)
+- **NEW**: Visualizes saved Newick trees from `compare_clustering_trees.py --save-trees`
+- **NEW**: Supports multi-tree Newick files with tree selection by index
+- Supports all major linkage methods (single, complete, average, ward) for similarity matrices
+- Generates high-quality dendrogram visualizations
+- Customizable figure size, labels, and color schemes
+- Detailed clustering summary with similarity statistics (for similarity matrices)
+- Saves plots in multiple formats (PNG, PDF, SVG, etc.)
+- Option to suppress plot display for batch processing
+
+**Parameters**:
+- `input_file`: Input file (similarity matrix: bedtools/hammock format, or Newick tree file)
+- `--output, -o FILE`: Output file for dendrogram (PNG, PDF, SVG, etc.)
+- `--linkage, -l METHOD`: Linkage method (single, complete, average, ward; default: average, ignored for Newick files)
+- `--figsize W H`: Figure size as width height (default: 12 8)
+- `--title, -t TITLE`: Custom title for the dendrogram
+- `--max-label-length N`: Maximum length for sample labels (default: 20, 0 for no truncation)
+- `--color-threshold FLOAT`: Distance threshold for coloring clusters (ignored for Newick files)
+- `--no-show`: Do not display the plot (useful when saving to file)
+- `--summary, -s`: Print detailed clustering summary (ignored for Newick files)
+- `--quiet, -q`: Suppress progress messages
+- **NEW** `--tree-index N`: Index of tree to visualize from Newick file (default: 0, first tree)
+- **NEW** `--list-trees`: List all trees in Newick file and exit
+
+**Examples**:
+```bash
+# Basic dendrogram generation with display
+draw_clustering_tree.py similarity_matrix.csv
+
+# Save dendrogram to file without displaying
+draw_clustering_tree.py bedtools_output.tsv --output tree.png --no-show
+
+# Generate with different linkage method and custom size
+draw_clustering_tree.py hammock_results.csv --linkage complete --figsize 16 10 --output large_tree.pdf
+
+# Batch processing with summary statistics
+draw_clustering_tree.py data.csv --no-show --output tree.png --summary --quiet
+
+# Compare different linkage methods
+for method in single complete average ward; do
+    draw_clustering_tree.py data.csv --linkage $method --output tree_${method}.png --no-show
+done
+```
+
+**Output Information**:
+- **Dendrogram Plot**: Visual representation of hierarchical clustering
+- **Clustering Summary** (with --summary): 
+  - Number of samples and matrix dimensions
+  - Similarity range, mean, and median
+  - Clustering distance statistics
+  - Top 10 most similar sample pairs
+- **Distance Scale**: Y-axis shows distance (1 - Jaccard similarity)
+- **Color Coding**: Clusters colored by distance threshold (customizable)
+
 ---
 
 ### 🧪 Parameter Sweep Scripts
@@ -158,11 +225,13 @@ complete_parameter_sweep.sh -b <bed_file_list> [-f <fasta_file_list>] [-o <outpu
 - **NEW**: Automatically runs clustering tree analysis when available
 - **NEW**: Generates dual output tables: similarity matrices and clustering comparisons
 - **NEW**: Shows best parameter combinations based on lowest normalized Robinson-Foulds distance
+- **NEW**: Automatically generates bedtools reference dendrogram visualization
 
 **Output Files**:
 - `<prefix>_results.tsv`: Traditional similarity matrix comparison results
 - `<prefix>_results_clustering.tsv`: Clustering tree topology comparison results (when available)
 - `<prefix>_bedtools_ref.tsv`: Bedtools pairwise jaccard reference matrix
+- `<prefix>_bedtools_reference_dendrogram.png`: Visual dendrogram of bedtools reference clustering (when available)
 
 **Examples**:
 ```bash
@@ -214,12 +283,14 @@ parameter_sweep.sh -b <bedtools_output_file> -f <file_list> [-o <output_dir>] [-
 - **NEW**: Automatically detects and uses `compare_clustering_trees.py` when available
 - **NEW**: Generates dual output tables: similarity matrices and clustering tree comparisons
 - **NEW**: Uses average linkage clustering method for Robinson-Foulds distance calculations
+- **NEW**: Automatically generates bedtools reference dendrogram visualization
 - Enhanced progress reporting with clustering analysis status
 - Graceful fallback when clustering comparison tools are unavailable
 
 **Output Files**:
 - `<results_table>`: Traditional similarity matrix comparison results
 - `<results_table_base>_clustering.tsv`: Clustering tree topology comparison results (when available)
+- `bedtools_reference_dendrogram.png`: Visual dendrogram of bedtools reference clustering (when available)
 
 **Parameter Ranges**:
 - **Full mode (default)**:
@@ -342,19 +413,22 @@ These scripts are designed for high-performance computing environments using SLU
 
 ### Basic Parameter Sweep Workflow
 ```bash
-# 1. Quick test with limited parameters (automatically generates bedtools reference)
+# 1. Quick test with limited parameters (automatically generates bedtools reference + dendrogram)
 complete_parameter_sweep.sh -b test_files.txt -o test_results -v -q
 
-# 2. Full parameter sweep (automatically generates bedtools reference)
+# 2. Full parameter sweep (automatically generates bedtools reference + dendrogram)
 complete_parameter_sweep.sh -b all_files.txt -o full_results -c -v
 
 # 3. Rerun sweep with same data (reuses existing bedtools reference - much faster!)
 complete_parameter_sweep.sh -b all_files.txt -o full_results -c -v
 
-# 4. Custom parameter sweep with pre-existing bedtools reference
+# 4. Custom parameter sweep with pre-existing bedtools reference (generates dendrogram)
 parameter_sweep.sh -b full_results_bedtools_ref.tsv -f files.txt -o custom_sweep/
 
-# 5. Analyze results - both similarity matrices and clustering trees
+# 5. View generated dendrogram to understand reference clustering structure
+# full_results_bedtools_reference_dendrogram.png (or custom_sweep/bedtools_reference_dendrogram.png)
+
+# 6. Analyze results - both similarity matrices and clustering trees
 # Best numerical accuracy (lowest error)
 sort -k7 -n full_results_results.tsv | head -5
 
@@ -387,23 +461,45 @@ done
 
 ### Clustering Tree Analysis Workflow
 ```bash
-# 1. Basic tree comparison with detailed output
+# 1. Generate dendrograms for visual inspection (bedtools reference automatically generated by parameter sweep)
+draw_clustering_tree.py bedtools_ref.tsv --output bedtools_tree.png --summary
+draw_clustering_tree.py hammock_output.csv --output hammock_tree.png --summary
+
+# 2. Compare dendrograms with different linkage methods
+for method in single complete average ward; do
+    draw_clustering_tree.py bedtools_ref.tsv --linkage $method --output bedtools_${method}.png --no-show --quiet
+    draw_clustering_tree.py hammock_output.csv --linkage $method --output hammock_${method}.png --no-show --quiet
+done
+
+# 3. Quantitative tree comparison with detailed output
 compare_clustering_trees.py hammock_output.csv bedtools_ref.tsv --verbose \
     --save-trees trees.newick --output detailed_results.txt
 
-# 2. Test different linkage methods to see which preserves topology best
+# 4. Visualize saved Newick trees from clustering comparison
+draw_clustering_tree.py trees.newick --tree-index 0 --output hammock_tree_from_newick.png --title "Hammock Tree"
+draw_clustering_tree.py trees.newick --tree-index 1 --output bedtools_tree_from_newick.png --title "Bedtools Reference"
+
+# 5. Test different linkage methods to see which preserves topology best
 compare_clustering_trees.py hammock_output.csv bedtools_ref.tsv --linkage single --table
 compare_clustering_trees.py hammock_output.csv bedtools_ref.tsv --linkage complete --table
 compare_clustering_trees.py hammock_output.csv bedtools_ref.tsv --linkage average --table
 compare_clustering_trees.py hammock_output.csv bedtools_ref.tsv --linkage ward --table
 
-# 3. Batch comparison for parameter sweep results
+# 6. Batch comparison for parameter sweep results
 echo "file1	file2	format1	format2	matrix_size	rf_distance	max_rf_distance	normalized_rf	linkage_method" > clustering_results.tsv
 for hammock_file in parameter_sweep_results/*.csv; do
     compare_clustering_trees.py "$hammock_file" bedtools_ref.tsv --table >> clustering_results.tsv
 done
 
-# 4. Find the best parameter combination (lowest normalized RF distance)
+# 7. Generate dendrograms for best parameter combinations
+sort -k8 -n clustering_results.tsv | head -3 | while read line; do
+    hammock_file=$(echo "$line" | cut -f1)
+    normalized_rf=$(echo "$line" | cut -f8)
+    base_name=$(basename "$hammock_file" .csv)
+    draw_clustering_tree.py "$hammock_file" --output "best_${base_name}_rf${normalized_rf}.png" --no-show
+done
+
+# 8. Find the best parameter combination (lowest normalized RF distance)
 sort -k8 -n clustering_results.tsv | head -5
 ```
 
@@ -432,6 +528,12 @@ Scripts automatically detect file types based on extensions:
 - **R**: For visualization scripts (ggplot2, pheatmap, etc.)
 - **bash**: Shell scripting environment
 
+### Python Dependencies for Visualization
+- **matplotlib**: For dendrogram plotting (required for `draw_clustering_tree.py` and automatic dendrogram generation)
+- **scipy**: For hierarchical clustering algorithms
+- **pandas**: For data manipulation
+- **numpy**: For numerical operations
+
 ### Optional Python Libraries
 - **ete3**: For accurate Robinson-Foulds distance calculations (recommended)
   ```bash
@@ -447,7 +549,7 @@ Scripts automatically detect file types based on extensions:
 ### Script Dependencies
 Scripts that call other scripts will automatically find them after installation:
 - `complete_parameter_sweep*.sh` → `parameter_sweep*.sh`
-- `parameter_sweep*.sh` → `compare_sim_matrices.py`
+- `parameter_sweep*.sh` → `compare_sim_matrices.py`, `compare_clustering_trees.py`, `draw_clustering_tree.py`
 
 ## Output Files
 
@@ -494,6 +596,8 @@ Results are saved in TSV format with columns:
 4. **"Comparison failed"**: Verify that both hammock and bedtools outputs exist
 5. **"Clustering comparison unavailable"**: Install ete3 (`conda install ete3`) for accurate Robinson-Foulds calculations
 6. **"Different best parameters"**: Numerical accuracy (similarity matrices) and biological accuracy (clustering trees) may suggest different optimal parameters - consider your analysis goals
+7. **"No display available"**: Use `--no-show` flag with `draw_clustering_tree.py` when running on headless systems
+8. **"Matplotlib backend error"**: Set `MPLBACKEND=Agg` environment variable for non-interactive plotting
 
 ### Getting Help
 ```bash
