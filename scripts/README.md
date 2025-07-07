@@ -212,8 +212,8 @@ complete_parameter_sweep.sh -b <bed_file_list> [-f <fasta_file_list>] [-o <outpu
 
 **Parameter Ranges**:
 - **Full mode (default)**:
-  - BED files: precision = 16,18,19,20,21,22,23,25
-  - FASTA files: klen = 15,20,25; window = 100,200,500; precision = 20,23,25
+  - BED files: precision = 16,19,20,21,22,23,24,26,28,30
+  - FASTA files: klen = 10,15,20,25,30; window = 25,50,100,200,300,400,500; precision = 16,19,20,21,22,23,24,26,28,30
 - **Quick mode (-q)**:
   - BED files: precision = 20,23
   - FASTA files: klen = 20; window = 200; precision = 20,23
@@ -317,8 +317,8 @@ When enabled with `-d` or `--debug`, the script provides:
 
 **Parameter Ranges**:
 - **Full mode (default)**:
-  - BED files: precision = 16,18,19,20,21,22,23,25
-  - FASTA files: klen = 15,20,25; window = 100,200,500; precision = 20,23,25
+  - BED files: precision = 16,19,20,21,22,23,24,26,28,30
+  - FASTA files: klen = 10,15,20,25,30; window = 25,50,100,200,300,400,500; precision = 16,19,20,21,22,23,24,26,28,30
 - **Quick mode (-q)**:
   - BED files: precision = 20,23
   - FASTA files: klen = 20; window = 200; precision = 20,23

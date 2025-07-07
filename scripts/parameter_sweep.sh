@@ -92,8 +92,8 @@ usage() {
     echo ""
     echo "Parameter ranges:"
     echo "  Full mode (default):"
-    echo "    BED files: precision = 16,18,19,20,21,22,23,25"
-    echo "    FASTA files: klen = 15,20,25; window = 100,200,500; precision = 20,23,25"
+    echo "    BED files: precision = 16,19,20,21,22,23,24,26,28,30"
+    echo "    FASTA files: klen = 10,15,20,25,30; window = 25,50,100,200,300,400,500; precision = 16,19,20,21,22,23,24,26,28,30"
     echo "  Quick mode (-q):"
     echo "    BED files: precision = 20,23"
     echo "    FASTA files: klen = 20; window = 200; precision = 20,23"
@@ -157,9 +157,9 @@ set_parameters() {
             echo "Detected FASTA files - using mode D with limited parameter sweep (quick mode)"
         else
             # Full mode: comprehensive parameter sweep
-            KLEN_VALUES=(15 20 25)
-            WINDOW_VALUES=(100 200 500)
-            PRECISION_VALUES=(20 23 25)
+            KLEN_VALUES=(10 15 20 25 30)
+            WINDOW_VALUES=(25 50 100 200 300 400 500)
+            PRECISION_VALUES=(16 19 20 21 22 23 24 26 28 30)
             echo "Detected FASTA files - using mode D with full parameter sweep"
         fi
         HAMMOCK_MODE="D"
@@ -173,7 +173,7 @@ set_parameters() {
             echo "Detected BED files - using mode B with limited precision sweep (quick mode)"
         else
             # Full mode: comprehensive precision sweep
-            PRECISION_VALUES=(16 18 19 20 21 22 23 25)
+            PRECISION_VALUES=(16 19 20 21 22 23 24 26 28 30)
             echo "Detected BED files - using mode B with precision-only sweep"
         fi
         HAMMOCK_MODE="B"

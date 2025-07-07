@@ -64,10 +64,7 @@ VERBOSE=false
 QUICK_MODE=false
 DEBUG_MODE=false
 
-# Parameter arrays - will be set based on file type detection
-KLEN_VALUES=()
-WINDOW_VALUES=()
-PRECISION_VALUES=()
+# File type detection
 HAMMOCK_MODE=""
 FILE_TYPE=""
 
@@ -101,8 +98,8 @@ usage() {
     echo ""
     echo "Parameter ranges:"
     echo "  Full mode (default):"
-    echo "    BED files: precision = 16,18,19,20,21,22,23,25"
-    echo "    FASTA files: klen = 15,20,25; window = 100,200,500; precision = 20,23,25"
+    echo "    BED files: precision = 16,19,20,21,22,23,24,26,28,30"
+    echo "    FASTA files: klen = 10,15,20,25,30; window = 25,50,100,200,300,400,500; precision = 16,19,20,21,22,23,24,26,28,30"
     echo "  Quick mode (-q):"
     echo "    BED files: precision = 20,23"
     echo "    FASTA files: klen = 20; window = 200; precision = 20,23"
@@ -144,41 +141,16 @@ detect_file_type() {
     return 1
 }
 
-# Function to set parameters based on file type
-set_parameters() {
+# Function to set hammock mode based on file type
+set_hammock_mode() {
     local file_type="$1"
-    local quick_mode="$2"
     
     if [[ "$file_type" == "FASTA" ]]; then
-        # FASTA files: test all parameters (mode D)
-        if [[ "$quick_mode" == "true" ]]; then
-            # Quick mode: limited parameters for testing
-            KLEN_VALUES=(20)
-            WINDOW_VALUES=(200)
-            PRECISION_VALUES=(20 23)
-            echo "Detected FASTA files - using mode D with limited parameter sweep (quick mode)"
-        else
-            # Full mode: comprehensive parameter sweep
-            KLEN_VALUES=(10 15 20 25 30)
-            WINDOW_VALUES=(25 50 100 200 300 400 500)
-            PRECISION_VALUES=(16 19 20 21 22 23 24 26 28 30)
-            echo "Detected FASTA files - using mode D with full parameter sweep"
-        fi
         HAMMOCK_MODE="D"
+        echo "Detected FASTA files - using mode D"
     elif [[ "$file_type" == "BED" ]]; then
-        # BED files: only test precision (mode B)
-        KLEN_VALUES=(0)  # Not used for BED files
-        WINDOW_VALUES=(0)  # Not used for BED files
-        if [[ "$quick_mode" == "true" ]]; then
-            # Quick mode: limited precision values
-            PRECISION_VALUES=(20 23)
-            echo "Detected BED files - using mode B with limited precision sweep (quick mode)"
-        else
-            # Full mode: comprehensive precision sweep
-            PRECISION_VALUES=(16 19 20 21 22 23 24 26 28 30)
-            echo "Detected BED files - using mode B with precision-only sweep"
-        fi
         HAMMOCK_MODE="B"
+        echo "Detected BED files - using mode B"
     else
         echo "Error: Could not detect file type from file list" >&2
         exit 1
@@ -265,8 +237,8 @@ else
     echo "Mode: BED files only"
 fi
 
-# Set parameters based on file type
-set_parameters "$FILE_TYPE" "$QUICK_MODE"
+# Set hammock mode based on file type
+set_hammock_mode "$FILE_TYPE"
 
 # Set up output paths
 OUTPUT_DIR="${OUTPUT_PREFIX}_results"
