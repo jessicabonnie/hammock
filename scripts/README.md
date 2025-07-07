@@ -191,7 +191,7 @@ done
 
 **Usage**:
 ```bash
-complete_parameter_sweep.sh -b <bed_file_list> [-f <fasta_file_list>] [-o <output_prefix>] [-c] [-v] [-q]
+complete_parameter_sweep.sh -b <bed_file_list> [-f <fasta_file_list>] [-o <output_prefix>] [-c] [-v] [-q] [-d]
 ```
 
 **Parameters**:
@@ -204,6 +204,7 @@ complete_parameter_sweep.sh -b <bed_file_list> [-f <fasta_file_list>] [-o <outpu
 - `-c`: Clean up intermediate files after completion (bedtools reference always preserved)
 - `-v`: Verbose output (shows progress of bedtools comparisons)
 - `-q, --quick`: Quick mode with limited parameter combinations for testing
+- `-d, --debug`: **NEW** Debug mode with detailed output and preserved intermediate files
 
 **Mode Selection**:
 - **BED files only**: Runs bedtools jaccard pairwise, then tests precision parameter (mode B)
@@ -226,6 +227,7 @@ complete_parameter_sweep.sh -b <bed_file_list> [-f <fasta_file_list>] [-o <outpu
 - **NEW**: Generates dual output tables: similarity matrices and clustering comparisons
 - **NEW**: Shows best parameter combinations based on lowest normalized Robinson-Foulds distance
 - **NEW**: Automatically generates bedtools reference dendrogram visualization
+- **NEW**: Debug mode provides detailed output and preserves intermediate files for troubleshooting
 
 **Output Files**:
 - `<prefix>_results.tsv`: Traditional similarity matrix comparison results
@@ -243,6 +245,9 @@ complete_parameter_sweep.sh -b bed_files_list.txt -f fasta_files_list.txt -c -v
 
 # Quick mode for testing (still includes clustering if available)
 complete_parameter_sweep.sh -b bed_files_list.txt --quick -c -v
+
+# Debug mode with detailed output and preserved intermediate files
+complete_parameter_sweep.sh -b bed_files_list.txt -f fasta_files_list.txt -d -v
 
 # Custom output prefix and path
 complete_parameter_sweep.sh -b bed_files_list.txt -o /path/to/my_experiment -c -v
@@ -265,7 +270,7 @@ sort -k8 -n my_experiment_results_clustering.tsv | head -5
 
 **Usage**:
 ```bash
-parameter_sweep.sh -b <bedtools_output_file> -f <file_list> [-o <output_dir>] [-r <results_table>] [-q]
+parameter_sweep.sh -b <bedtools_output_file> -f <file_list> [-o <output_dir>] [-r <results_table>] [-q] [-d]
 ```
 
 **Parameters**:
@@ -274,6 +279,7 @@ parameter_sweep.sh -b <bedtools_output_file> -f <file_list> [-o <output_dir>] [-
 - `-o`: Output directory for hammock results (default: parameter_sweep_results)
 - `-r`: Results table filename (default: parameter_sweep_results.tsv)
 - `-q, --quick`: Quick mode with limited parameter combinations for testing
+- `-d, --debug`: **NEW** Debug mode with detailed output and preserved intermediate files
 
 **File Type Detection**:
 - BED files (.bed): Only precision parameter is varied (mode B)
@@ -284,8 +290,25 @@ parameter_sweep.sh -b <bedtools_output_file> -f <file_list> [-o <output_dir>] [-
 - **NEW**: Generates dual output tables: similarity matrices and clustering tree comparisons
 - **NEW**: Uses average linkage clustering method for Robinson-Foulds distance calculations
 - **NEW**: Automatically generates bedtools reference dendrogram visualization
+- **NEW**: Debug mode provides detailed output and preserves intermediate files for troubleshooting
 - Enhanced progress reporting with clustering analysis status
 - Graceful fallback when clustering comparison tools are unavailable
+
+**Debug Mode Features**:
+When enabled with `-d` or `--debug`, the script provides:
+- **Detailed clustering output**: Shows clustering exit codes, result lengths, and content
+- **File operation tracking**: Shows table paths, existence checks, and write operations
+- **Table monitoring**: Reports table sizes before and after each write operation
+- **Content visualization**: Displays the actual lines being written to tables
+- **File preservation**: Preserves intermediate hammock output files for manual inspection
+- **Enhanced error reporting**: Shows complete error messages and debugging information
+
+**When to Use Debug Mode**:
+- Investigating empty or incomplete results tables
+- Troubleshooting clustering comparison failures
+- Verifying parameter combinations are being processed correctly
+- Manually inspecting intermediate hammock output files
+- Debugging file I/O issues or table generation problems
 
 **Output Files**:
 - `<results_table>`: Traditional similarity matrix comparison results
@@ -307,6 +330,9 @@ parameter_sweep.sh -b bedtools_reference.txt -f files.txt -o sweep_results/
 
 # Quick mode for testing
 parameter_sweep.sh -b bedtools_output.txt -f bed_files_list.txt --quick
+
+# Debug mode with detailed output and preserved intermediate files
+parameter_sweep.sh -b bedtools_reference.txt -f files.txt -o sweep_results/ --debug
 
 # For FASTA files (assuming you have bedtools output)
 parameter_sweep.sh -b bedtools_fasta_output.txt -f fasta_files_list.txt
@@ -434,6 +460,30 @@ sort -k7 -n full_results_results.tsv | head -5
 
 # Best biological accuracy (lowest normalized RF distance)
 sort -k8 -n full_results_results_clustering.tsv | head -5
+```
+
+### Debug Mode Workflow
+```bash
+# 1. Debug mode for investigating empty or incomplete results
+complete_parameter_sweep.sh -b files.txt -o debug_test -d -v
+
+# 2. Debug mode for parameter sweep with existing bedtools reference
+parameter_sweep.sh -b bedtools_ref.tsv -f files.txt -o debug_sweep/ --debug
+
+# 3. Manually inspect preserved intermediate files
+ls debug_sweep/  # Shows all preserved hammock output files
+head -5 debug_sweep/hammock_*_k15_w100_p20.csv  # Check hammock output format
+
+# 4. Compare intermediate files with debug output
+# Debug output shows exact table paths, write operations, and content
+# Compare with actual table contents to identify issues
+
+# 5. Debug clustering comparison issues
+parameter_sweep.sh -b bedtools_ref.tsv -f files.txt -o debug_sweep/ --debug | grep "DEBUG:"
+# Shows clustering exit codes, result lengths, and table operations
+
+# 6. Use debug mode to troubleshoot specific parameter combinations
+# Debug output shows which combinations succeed and which fail
 ```
 
 ### Manual Analysis Workflow
@@ -598,12 +648,18 @@ Results are saved in TSV format with columns:
 6. **"Different best parameters"**: Numerical accuracy (similarity matrices) and biological accuracy (clustering trees) may suggest different optimal parameters - consider your analysis goals
 7. **"No display available"**: Use `--no-show` flag with `draw_clustering_tree.py` when running on headless systems
 8. **"Matplotlib backend error"**: Set `MPLBACKEND=Agg` environment variable for non-interactive plotting
+9. **"Empty or incomplete results tables"**: Use debug mode (`-d` or `--debug`) to investigate table writing issues and preserve intermediate files
+10. **"Clustering results missing"**: Enable debug mode to see clustering comparison exit codes and error messages
 
 ### Getting Help
 ```bash
 # Most scripts support help flags
 script_name.sh -h
 script_name.py --help
+
+# Use debug mode for troubleshooting
+complete_parameter_sweep.sh -b files.txt -o debug_test -d -v
+parameter_sweep.sh -b bedtools_ref.tsv -f files.txt --debug
 ```
 
 ---

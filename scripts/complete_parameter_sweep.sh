@@ -6,6 +6,55 @@
 
 set -e  # Exit on any error
 
+# Initialize error logging variables early
+ERROR_LOG=""
+SCRIPT_START_TIME=$(date)
+
+# Function to log errors and exit gracefully
+error_handler() {
+    local exit_code=$?
+    local line_number=$1
+    local command="$2"
+    
+    if [[ -n "$ERROR_LOG" ]]; then
+        {
+            echo ""
+            echo "FATAL ERROR - $(date)"
+            echo "===========================================" 
+            echo "Exit code: $exit_code"
+            echo "Line number: $line_number"
+            echo "Failed command: $command"
+            echo "Current working directory: $(pwd)"
+            echo "Script arguments: $0 $*"
+            echo "Environment PATH: $PATH"
+            echo ""
+            echo "Script execution details:"
+            echo "  Start time: $SCRIPT_START_TIME"
+            echo "  End time: $(date)"
+            echo "  BED file list: ${BED_FILE_LIST:-'not set'}"
+            echo "  FASTA file list: ${FASTA_FILE_LIST:-'not set'}"
+            echo "  Output prefix: ${OUTPUT_PREFIX:-'not set'}"
+            echo "  Quick mode: ${QUICK_MODE:-'not set'}"
+            echo ""
+            echo "Available commands check:"
+            echo "  bedtools: $(command -v bedtools 2>/dev/null || echo 'NOT FOUND')"
+            echo "  hammock: $(command -v hammock 2>/dev/null || echo 'NOT FOUND')"
+            echo "  parameter_sweep.sh: $(command -v parameter_sweep.sh 2>/dev/null || echo 'NOT FOUND')"
+            echo ""
+            echo "Recent shell history (last 10 commands):"
+            history | tail -10 2>/dev/null || echo "History not available"
+            echo ""
+        } >> "$ERROR_LOG"
+    fi
+    
+    echo "FATAL ERROR: Script failed at line $line_number with exit code $exit_code" >&2
+    echo "Check error log for details: ${ERROR_LOG:-'Error log not initialized'}" >&2
+    exit $exit_code
+}
+
+# Set up error trapping
+trap 'error_handler $LINENO "$BASH_COMMAND"' ERR
+
 # Default values - modify these as needed
 FASTA_FILE_LIST=""
 BED_FILE_LIST=""
@@ -13,6 +62,7 @@ OUTPUT_PREFIX="complete_parameter_sweep"
 CLEANUP=false
 VERBOSE=false
 QUICK_MODE=false
+DEBUG_MODE=false
 
 # Parameter arrays - will be set based on file type detection
 KLEN_VALUES=()
@@ -23,7 +73,7 @@ FILE_TYPE=""
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 -b <bed_file_list> [-f <fasta_file_list>] [-o <output_prefix>] [-c] [-v] [-q]"
+    echo "Usage: $0 -b <bed_file_list> [-f <fasta_file_list>] [-o <output_prefix>] [-c] [-v] [-q] [-d]"
     echo ""
     echo "Complete parameter sweep for hammock:"
     echo "  1. Takes a list of BED files and runs pairwise bedtools jaccard on ALL combinations"
@@ -42,6 +92,7 @@ usage() {
     echo "  -c                    Clean up intermediate files after completion (bedtools reference always preserved)"
     echo "  -v                    Verbose output (shows progress of bedtools comparisons)"
     echo "  -q, --quick           Quick mode with limited parameter combinations for testing"
+    echo "  -d, --debug           Debug mode with detailed output and preserved intermediate files"
     echo "  -h                    Show this help message"
     echo ""
     echo "Mode selection:"
@@ -63,6 +114,8 @@ usage() {
     echo "  $0 -b bed_files_list.txt -f fasta_files_list.txt -c -v"
     echo "  # Quick mode for testing"
     echo "  $0 -b bed_files_list.txt --quick -c -v"
+    echo "  # Debug mode with detailed output and preserved files"
+    echo "  $0 -b bed_files_list.txt -f fasta_files_list.txt -d -v"
     echo "  # Custom output prefix and path"
     echo "  $0 -b bed_files_list.txt -o /path/to/my_experiment -c -v"
 }
@@ -122,7 +175,7 @@ set_parameters() {
             echo "Detected BED files - using mode B with limited precision sweep (quick mode)"
         else
             # Full mode: comprehensive precision sweep
-            PRECISION_VALUES=(16 18 19 20 21 22 23 25)
+            PRECISION_VALUES=(16 19 20 21 22 23 24 26 28 30)
             echo "Detected BED files - using mode B with precision-only sweep"
         fi
         HAMMOCK_MODE="B"
@@ -133,7 +186,7 @@ set_parameters() {
 }
 
 # Parse command line arguments
-while getopts "b:f:o:cvqh-:" opt; do
+while getopts "b:f:o:cvqdh-:" opt; do
     case $opt in
         b)
             BED_FILE_LIST="$OPTARG"
@@ -153,6 +206,9 @@ while getopts "b:f:o:cvqh-:" opt; do
         q)
             QUICK_MODE=true
             ;;
+        d)
+            DEBUG_MODE=true
+            ;;
         h)
             usage
             exit 0
@@ -161,6 +217,9 @@ while getopts "b:f:o:cvqh-:" opt; do
             case "$OPTARG" in
                 quick)
                     QUICK_MODE=true
+                    ;;
+                debug)
+                    DEBUG_MODE=true
                     ;;
                 *)
                     echo "Invalid long option: --$OPTARG" >&2
@@ -214,6 +273,34 @@ OUTPUT_DIR="${OUTPUT_PREFIX}_results"
 BEDTOOLS_OUTPUT="${OUTPUT_PREFIX}_bedtools_ref.tsv"
 RESULTS_TABLE="${OUTPUT_PREFIX}_results.tsv"
 ERROR_LOG="${OUTPUT_PREFIX}_error.log"
+
+# Initialize error log header immediately after setting path
+{
+    echo "Complete Parameter Sweep Error Log - $(date)"
+    echo "=========================================="
+    echo "Script: $0"
+    echo "Arguments: $*"
+    echo "Working directory: $(pwd)"
+    echo "User: $(whoami)"
+    echo "Host: $(hostname)"
+    echo ""
+    echo "Configuration:"
+    echo "  BED file list: ${BED_FILE_LIST}"
+    echo "  FASTA file list: ${FASTA_FILE_LIST:-'none'}"
+    echo "  Output prefix: ${OUTPUT_PREFIX}"
+    echo "  Quick mode: ${QUICK_MODE}"
+    echo "  Verbose: ${VERBOSE}"
+    echo "  Cleanup: ${CLEANUP}"
+    echo ""
+    echo "Environment check:"
+    echo "  PATH: $PATH"
+    echo "  bedtools: $(command -v bedtools 2>/dev/null || echo 'NOT FOUND')"
+    echo "  hammock: $(command -v hammock 2>/dev/null || echo 'NOT FOUND')"
+    echo "  parameter_sweep.sh: $(command -v parameter_sweep.sh 2>/dev/null || echo 'NOT FOUND')"
+    echo ""
+    echo "Log entries:"
+    echo "============"
+} > "$ERROR_LOG"
 
 # Validate that all files in the lists exist
 echo "Validating BED file list..."
@@ -414,6 +501,9 @@ PARAM_SWEEP_CMD="$SCRIPT_DIR/parameter_sweep.sh -b $BEDTOOLS_OUTPUT -f $HAMMOCK_
 if [[ "$QUICK_MODE" == "true" ]]; then
     PARAM_SWEEP_CMD="$PARAM_SWEEP_CMD --quick"
 fi
+if [[ "$DEBUG_MODE" == "true" ]]; then
+    PARAM_SWEEP_CMD="$PARAM_SWEEP_CMD --debug"
+fi
 
 # Run parameter sweep with real-time progress output
 # We'll filter the output to show progress messages while capturing errors
@@ -432,6 +522,15 @@ mkfifo "$progress_pipe"
            [[ "$line" =~ ^[[:space:]]*Testing[[:space:]] ]] || \
            [[ "$line" =~ parameter[[:space:]]combinations ]] || \
            [[ "$line" =~ Parameter[[:space:]]sweep[[:space:]]completed ]]; then
+            echo "  $line"
+        elif [[ "$DEBUG_MODE" == "true" ]] && \
+             ([[ "$line" =~ ^[[:space:]]*DEBUG: ]] || \
+              [[ "$line" =~ ^[[:space:]]*DEBUG[[:space:]]MODE: ]] || \
+              [[ "$line" =~ ^[[:space:]]*[[:space:]]*ERROR[[:space:]]reading ]] || \
+              [[ "$line" =~ ^[[:space:]]*[[:space:]]*[0-9] ]] || \
+              [[ "$line" =~ ^[[:space:]]*[[:space:]]*klen ]] || \
+              [[ "$line" =~ ^[[:space:]]*[[:space:]]*[A-Za-z_].*\.csv ]] || \
+              [[ "$line" =~ ^[[:space:]]*[[:space:]]*[A-Za-z_].*\.tsv ]]); then
             echo "  $line"
         elif [[ "$VERBOSE" == "true" ]]; then
             # In verbose mode, show all non-error output

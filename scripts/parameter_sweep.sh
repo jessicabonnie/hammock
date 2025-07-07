@@ -6,12 +6,62 @@
 
 set -e  # Exit on any error
 
+# Initialize error logging variables early
+ERROR_LOG=""
+SCRIPT_START_TIME=$(date)
+
+# Function to log errors and exit gracefully
+error_handler() {
+    local exit_code=$?
+    local line_number=$1
+    local command="$2"
+    
+    if [[ -n "$ERROR_LOG" ]]; then
+        {
+            echo ""
+            echo "FATAL ERROR - $(date)"
+            echo "===========================================" 
+            echo "Exit code: $exit_code"
+            echo "Line number: $line_number"
+            echo "Failed command: $command"
+            echo "Current working directory: $(pwd)"
+            echo "Script arguments: $0 $*"
+            echo "Environment PATH: $PATH"
+            echo ""
+            echo "Script execution details:"
+            echo "  Start time: $SCRIPT_START_TIME"
+            echo "  End time: $(date)"
+            echo "  Bedtools file: ${BEDTOOLS_FILE:-'not set'}"
+            echo "  File list: ${FILE_LIST:-'not set'}"
+            echo "  Output directory: ${OUTPUT_DIR:-'not set'}"
+            echo "  Quick mode: ${QUICK_MODE:-'not set'}"
+            echo ""
+            echo "Available commands check:"
+            echo "  bedtools: $(command -v bedtools 2>/dev/null || echo 'NOT FOUND')"
+            echo "  hammock: $(command -v hammock 2>/dev/null || echo 'NOT FOUND')"
+            echo "  compare_sim_matrices.py: $(command -v compare_sim_matrices.py 2>/dev/null || echo 'NOT FOUND')"
+            echo ""
+            echo "Recent shell history (last 10 commands):"
+            history | tail -10 2>/dev/null || echo "History not available"
+            echo ""
+        } >> "$ERROR_LOG"
+    fi
+    
+    echo "FATAL ERROR: Script failed at line $line_number with exit code $exit_code" >&2
+    echo "Check error log for details: ${ERROR_LOG:-'Error log not initialized'}" >&2
+    exit $exit_code
+}
+
+# Set up error trapping
+trap 'error_handler $LINENO "$BASH_COMMAND"' ERR
+
 # Default values - modify these as needed
 BEDTOOLS_FILE=""
 FILE_LIST=""
 OUTPUT_DIR="parameter_sweep_results"
 RESULTS_TABLE="parameter_sweep_results.tsv"
 QUICK_MODE=false
+DEBUG_MODE=false
 
 # Parameter arrays - will be set based on file type detection
 KLEN_VALUES=()
@@ -22,7 +72,7 @@ FILE_TYPE=""
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 -b <bedtools_output_file> -f <file_list> [-o <output_dir>] [-r <results_table>] [-q]"
+    echo "Usage: $0 -b <bedtools_output_file> -f <file_list> [-o <output_dir>] [-r <results_table>] [-q] [-d]"
     echo ""
     echo "Required arguments:"
     echo "  -b <bedtools_output_file>  Path to bedtools pairwise jaccard output matrix file"
@@ -33,6 +83,7 @@ usage() {
     echo "  -o <output_dir>            Output directory for hammock results (default: parameter_sweep_results)"
     echo "  -r <results_table>         Results table filename (default: parameter_sweep_results.tsv)"
     echo "  -q, --quick                Quick mode with limited parameter combinations for testing"
+    echo "  -d, --debug                Debug mode with detailed output and preserved intermediate files"
     echo "  -h                         Show this help message"
     echo ""
     echo "File type detection:"
@@ -133,7 +184,7 @@ set_parameters() {
 }
 
 # Parse command line arguments
-while getopts "b:f:o:r:qh-:" opt; do
+while getopts "b:f:o:r:qdh-:" opt; do
     case $opt in
         b)
             BEDTOOLS_FILE="$OPTARG"
@@ -150,6 +201,9 @@ while getopts "b:f:o:r:qh-:" opt; do
         q)
             QUICK_MODE=true
             ;;
+        d)
+            DEBUG_MODE=true
+            ;;
         h)
             usage
             exit 0
@@ -158,6 +212,9 @@ while getopts "b:f:o:r:qh-:" opt; do
             case "$OPTARG" in
                 quick)
                     QUICK_MODE=true
+                    ;;
+                debug)
+                    DEBUG_MODE=true
                     ;;
                 *)
                     echo "Invalid long option: --$OPTARG" >&2
@@ -264,6 +321,34 @@ fi
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
+# Initialize error log
+ERROR_LOG="$OUTPUT_DIR/parameter_sweep_error.log"
+{
+    echo "Parameter Sweep Error Log - $(date)"
+    echo "========================================"
+    echo "Script: $0"
+    echo "Arguments: $*"
+    echo "Working directory: $(pwd)"
+    echo "User: $(whoami)"
+    echo "Host: $(hostname)"
+    echo ""
+    echo "Configuration:"
+    echo "  Bedtools file: ${BEDTOOLS_FILE}"
+    echo "  File list: ${FILE_LIST}"
+    echo "  Output directory: ${OUTPUT_DIR}"
+    echo "  Results table: ${RESULTS_TABLE}"
+    echo "  Quick mode: ${QUICK_MODE}"
+    echo ""
+    echo "Environment check:"
+    echo "  PATH: $PATH"
+    echo "  bedtools: $(command -v bedtools 2>/dev/null || echo 'NOT FOUND')"
+    echo "  hammock: $(command -v hammock 2>/dev/null || echo 'NOT FOUND')"
+    echo "  compare_sim_matrices.py: $(command -v compare_sim_matrices.py 2>/dev/null || echo 'NOT FOUND')"
+    echo ""
+    echo "Log entries:"
+    echo "============"
+} > "$ERROR_LOG"
+
 # Initialize results table with header
 echo "Starting parameter sweep..."
 echo "Bedtools file: $BEDTOOLS_FILE"
@@ -273,7 +358,10 @@ echo "Hammock mode: $HAMMOCK_MODE"
 echo "Quick mode: $QUICK_MODE"
 echo "Output directory: $OUTPUT_DIR"
 echo "Similarity matrix results table: $RESULTS_TABLE"
+
+# Set clustering results table path if clustering comparison is available
 if [[ "$CLUSTERING_COMPARISON_AVAILABLE" == "true" ]]; then
+    CLUSTERING_RESULTS_TABLE="${RESULTS_TABLE%.tsv}_clustering.tsv"
     echo "Clustering tree results table: $CLUSTERING_RESULTS_TABLE"
     echo "Clustering comparison: ENABLED (using average linkage)"
 else
@@ -286,7 +374,6 @@ echo -e "klen\twindow\tprecision\thammock_file\tbedtools_file\tformat1\tformat2\
 
 # Create clustering results table if clustering comparison is available
 if [[ "$CLUSTERING_COMPARISON_AVAILABLE" == "true" ]]; then
-    CLUSTERING_RESULTS_TABLE="${RESULTS_TABLE%.tsv}_clustering.tsv"
     echo "Clustering results will be saved to: $CLUSTERING_RESULTS_TABLE"
     echo -e "klen\twindow\tprecision\thammock_file\tbedtools_file\tformat1\tformat2\tmatrix_size\trf_distance\tmax_rf_distance\tnormalized_rf\tlinkage_method\truntime_seconds" > "$CLUSTERING_RESULTS_TABLE"
 fi
@@ -431,9 +518,29 @@ for klen in "${KLEN_VALUES[@]}"; do
                         clustering_result=$(cat "$clustering_stdout_output")
                     fi
                     
+                    # DEBUG: Show what we captured
+                    if [[ "$DEBUG_MODE" == "true" ]]; then
+                        echo "  DEBUG: Clustering exit code: $clustering_exit_code"
+                        echo "  DEBUG: Clustering result length: ${#clustering_result}"
+                        echo "  DEBUG: Clustering result content: '$clustering_result'"
+                    fi
+                    
                     if [[ $clustering_exit_code -eq 0 && -n "$clustering_result" ]]; then
                         # Add parameter columns and runtime to the clustering comparison result
-                        echo -e "$klen\t$window\t$precision\t$clustering_result\t$runtime" >> "$CLUSTERING_RESULTS_TABLE"
+                        clustering_line="$klen\t$window\t$precision\t$clustering_result\t$runtime"
+                        if [[ "$DEBUG_MODE" == "true" ]]; then
+                            echo "  DEBUG: Writing clustering line: '$clustering_line'"
+                            echo "  DEBUG: Clustering table path: '$CLUSTERING_RESULTS_TABLE'"
+                            echo "  DEBUG: Table exists before write: $(test -f "$CLUSTERING_RESULTS_TABLE" && echo "YES" || echo "NO")"
+                            echo "  DEBUG: Table size before write: $(wc -l < "$CLUSTERING_RESULTS_TABLE" 2>/dev/null || echo "ERROR") lines"
+                        fi
+                        echo -e "$clustering_line" >> "$CLUSTERING_RESULTS_TABLE"
+                        if [[ "$DEBUG_MODE" == "true" ]]; then
+                            echo "  DEBUG: Write operation exit code: $?"
+                            echo "  DEBUG: Table size after write: $(wc -l < "$CLUSTERING_RESULTS_TABLE" 2>/dev/null || echo "ERROR") lines"
+                            echo "  DEBUG: Last few lines of table:"
+                            tail -3 "$CLUSTERING_RESULTS_TABLE" 2>/dev/null | sed 's/^/    /' || echo "    ERROR reading table"
+                        fi
                         echo "  ✓ Clustering tree comparison completed successfully"
                     else
                         echo "  WARNING: Clustering tree comparison failed" >&2
@@ -468,9 +575,13 @@ for klen in "${KLEN_VALUES[@]}"; do
             fi
             rm -f "$comparison_error_output" "$comparison_stdout_output"
             
-            # Clean up hammock output file
-            echo "  Cleaning up hammock output..."
-            rm -f "$hammock_output"
+            # Clean up hammock output file (skip during debug mode)
+            if [[ "$DEBUG_MODE" == "true" ]]; then
+                echo "  DEBUG MODE: Preserving hammock output file: $hammock_output"
+            else
+                echo "  Cleaning up hammock output..."
+                rm -f "$hammock_output"
+            fi
             
             echo "  Runtime: ${runtime}s"
             echo ""
