@@ -191,7 +191,7 @@ done
 
 **Usage**:
 ```bash
-complete_parameter_sweep.sh -b <bed_file_list> [-f <fasta_file_list>] [-o <output_prefix>] [-c] [-v] [-q] [-d]
+complete_parameter_sweep.sh -b <bed_file_list> [-f <fasta_file_list>] [-o <output_prefix>] [-c] [-v] [-q] [-d] [--klen <values>] [--window <values>] [--precision <values>]
 ```
 
 **Parameters**:
@@ -204,13 +204,20 @@ complete_parameter_sweep.sh -b <bed_file_list> [-f <fasta_file_list>] [-o <outpu
 - `-c`: Clean up intermediate files after completion (bedtools reference always preserved)
 - `-v`: Verbose output (shows progress of bedtools comparisons)
 - `-q, --quick`: Quick mode with limited parameter combinations for testing
-- `-d, --debug`: **NEW** Debug mode with detailed output and preserved intermediate files
+- `-d, --debug`: Debug mode with detailed output and preserved intermediate files
+- `--klen <values>`: **NEW** Custom klen values (comma-separated, e.g., '10,15,20')
+- `--window <values>`: **NEW** Custom window values (comma-separated, e.g., '50,100,200')
+- `--precision <values>`: **NEW** Custom precision values (comma-separated, e.g., '20,22,24')
 
 **Mode Selection**:
 - **BED files only**: Runs bedtools jaccard pairwise, then tests precision parameter (mode B)
 - **FASTA files + BED**: Uses BED files for reference, tests all parameters on FASTA (mode D)
 
 **Parameter Ranges**:
+- **Custom parameters (--klen, --window, --precision)**: **NEW**
+  - Uses your specified values instead of defaults/quick mode
+  - Custom parameters override default/quick mode parameters
+  - Values must be comma-separated without spaces (e.g., '10,15,20,25')
 - **Full mode (default)**:
   - BED files: precision = 16,19,20,21,22,23,24,26,28,30
   - FASTA files: klen = 10,15,20,25,30; window = 25,50,100,200,300,400,500; precision = 16,19,20,21,22,23,24,26,28,30
@@ -252,6 +259,15 @@ complete_parameter_sweep.sh -b bed_files_list.txt -f fasta_files_list.txt -d -v
 # Custom output prefix and path
 complete_parameter_sweep.sh -b bed_files_list.txt -o /path/to/my_experiment -c -v
 
+# Custom parameter values for FASTA files (NEW)
+complete_parameter_sweep.sh -b bed_files_list.txt -f fasta_files_list.txt --klen 15,20,25 --window 100,200 --precision 20,22,24 -c -v
+
+# Custom precision values for BED files (NEW)
+complete_parameter_sweep.sh -b bed_files_list.txt --precision 18,20,22,24 -c -v
+
+# Use default klen and window, but custom precision for FASTA files (NEW)
+complete_parameter_sweep.sh -b bed_files_list.txt -f fasta_files_list.txt --precision 19,21,23 -c -v
+
 # View clustering results (best parameters have lowest normalized RF distance)
 sort -k8 -n my_experiment_results_clustering.tsv | head -5
 ```
@@ -270,7 +286,7 @@ sort -k8 -n my_experiment_results_clustering.tsv | head -5
 
 **Usage**:
 ```bash
-parameter_sweep.sh -b <bedtools_output_file> -f <file_list> [-o <output_dir>] [-r <results_table>] [-q] [-d]
+parameter_sweep.sh -b <bedtools_output_file> -f <file_list> [-o <output_dir>] [-r <results_table>] [-q] [-d] [--klen <values>] [--window <values>] [--precision <values>]
 ```
 
 **Parameters**:
@@ -279,7 +295,10 @@ parameter_sweep.sh -b <bedtools_output_file> -f <file_list> [-o <output_dir>] [-
 - `-o`: Output directory for hammock results (default: parameter_sweep_results)
 - `-r`: Results table filename (default: parameter_sweep_results.tsv)
 - `-q, --quick`: Quick mode with limited parameter combinations for testing
-- `-d, --debug`: **NEW** Debug mode with detailed output and preserved intermediate files
+- `-d, --debug`: Debug mode with detailed output and preserved intermediate files
+- `--klen <values>`: **NEW** Custom klen values (comma-separated, e.g., '10,15,20')
+- `--window <values>`: **NEW** Custom window values (comma-separated, e.g., '50,100,200')
+- `--precision <values>`: **NEW** Custom precision values (comma-separated, e.g., '20,22,24')
 
 **File Type Detection**:
 - BED files (.bed): Only precision parameter is varied (mode B)
@@ -316,6 +335,10 @@ When enabled with `-d` or `--debug`, the script provides:
 - `bedtools_reference_dendrogram.png`: Visual dendrogram of bedtools reference clustering (when available)
 
 **Parameter Ranges**:
+- **Custom parameters (--klen, --window, --precision)**: **NEW**
+  - Uses your specified values instead of defaults/quick mode
+  - Custom parameters override default/quick mode parameters
+  - Values must be comma-separated without spaces (e.g., '10,15,20,25')
 - **Full mode (default)**:
   - BED files: precision = 16,19,20,21,22,23,24,26,28,30
   - FASTA files: klen = 10,15,20,25,30; window = 25,50,100,200,300,400,500; precision = 16,19,20,21,22,23,24,26,28,30
@@ -336,6 +359,15 @@ parameter_sweep.sh -b bedtools_reference.txt -f files.txt -o sweep_results/ --de
 
 # For FASTA files (assuming you have bedtools output)
 parameter_sweep.sh -b bedtools_fasta_output.txt -f fasta_files_list.txt
+
+# Custom parameter values for FASTA files (NEW)
+parameter_sweep.sh -b bedtools_ref.tsv -f fasta_files_list.txt --klen 12,18,24 --window 75,150,300 --precision 18,20,22
+
+# Custom precision values for BED files (NEW)
+parameter_sweep.sh -b bedtools_ref.tsv -f bed_files_list.txt --precision 19,21,25
+
+# Test only specific combinations (NEW)
+parameter_sweep.sh -b bedtools_ref.tsv -f fasta_files_list.txt --klen 20 --window 100,200 --precision 22,24
 
 # View clustering results to find best parameters
 sort -k8 -n sweep_results/parameter_sweep_results_clustering.tsv | head -5
@@ -384,9 +416,8 @@ ENCODE_report_to_key.sh <encode_report.tsv>
 **Purpose**: Generate heatmaps from similarity matrices with ENCODE metadata integration.
 
 **Usage**:
-```R
-# Run in R environment
-source("encode_heatmap.R")
+```bash
+encode_heatmap.R <encode.report> <hammock.results> [file_prefix]
 ```
 
 **Features**:
@@ -451,10 +482,16 @@ complete_parameter_sweep.sh -b all_files.txt -o full_results -c -v
 # 4. Custom parameter sweep with pre-existing bedtools reference (generates dendrogram)
 parameter_sweep.sh -b full_results_bedtools_ref.tsv -f files.txt -o custom_sweep/
 
-# 5. View generated dendrogram to understand reference clustering structure
+# 5. Custom parameter sweep with specific values (NEW)
+complete_parameter_sweep.sh -b files.txt -f fasta_files.txt --klen 15,20,25 --precision 20,22,24 -o custom_params/ -c -v
+
+# 6. Narrow parameter sweep based on initial results (NEW)
+parameter_sweep.sh -b custom_params_bedtools_ref.tsv -f fasta_files.txt --klen 20 --window 150,200,250 --precision 22 -o narrow_sweep/
+
+# 7. View generated dendrogram to understand reference clustering structure
 # full_results_bedtools_reference_dendrogram.png (or custom_sweep/bedtools_reference_dendrogram.png)
 
-# 6. Analyze results - both similarity matrices and clustering trees
+# 8. Analyze results - both similarity matrices and clustering trees
 # Best numerical accuracy (lowest error)
 sort -k7 -n full_results_results.tsv | head -5
 
@@ -484,6 +521,30 @@ parameter_sweep.sh -b bedtools_ref.tsv -f files.txt -o debug_sweep/ --debug | gr
 
 # 6. Use debug mode to troubleshoot specific parameter combinations
 # Debug output shows which combinations succeed and which fail
+```
+
+### Custom Parameter Optimization Workflow *(NEW)*
+```bash
+# 1. Quick exploration with broad custom parameter ranges
+complete_parameter_sweep.sh -b files.txt -f fasta_files.txt --klen 10,20,30 --window 50,200,400 --precision 18,22,26 -o broad_sweep/ -c -v
+
+# 2. Analyze initial results to identify promising regions
+sort -k11 -n broad_sweep_results_clustering.tsv | head -5  # Best biological accuracy
+sort -k10 -n broad_sweep_results.tsv | head -5  # Best numerical accuracy
+
+# 3. Narrow sweep based on promising parameters (e.g., best was klen=20, window=200)
+parameter_sweep.sh -b broad_sweep_bedtools_ref.tsv -f fasta_files.txt --klen 18,20,22 --window 150,200,250 --precision 20,21,22,23 -o narrow_sweep/
+
+# 4. Fine-tune around best parameters (e.g., best was klen=20, window=200, precision=22)
+parameter_sweep.sh -b broad_sweep_bedtools_ref.tsv -f fasta_files.txt --klen 19,20,21 --window 190,200,210 --precision 21,22,23 -o fine_tune/
+
+# 5. Compare custom results with default parameter ranges
+complete_parameter_sweep.sh -b files.txt -f fasta_files.txt -o default_sweep/ -c -v
+compare_sim_matrices.py fine_tune/best_result.csv default_sweep_results/best_default.csv
+
+# 6. Test single optimal combination extensively
+hammock fasta_files.txt fasta_files.txt -o final_test -k 20 -w 200 -p 22 --mode D
+compare_clustering_trees.py final_test_mnmzr_p22_jaccD_k20_w200.csv broad_sweep_bedtools_ref.tsv --verbose
 ```
 
 ### Manual Analysis Workflow
@@ -650,6 +711,8 @@ Results are saved in TSV format with columns:
 8. **"Matplotlib backend error"**: Set `MPLBACKEND=Agg` environment variable for non-interactive plotting
 9. **"Empty or incomplete results tables"**: Use debug mode (`-d` or `--debug`) to investigate table writing issues and preserve intermediate files
 10. **"Clustering results missing"**: Enable debug mode to see clustering comparison exit codes and error messages
+11. **"Custom parameter format error"**: Ensure custom parameter values are comma-separated without spaces (e.g., '10,15,20' not '10, 15, 20')
+12. **"Too many parameter combinations"**: Use custom parameters to limit the search space instead of full parameter sweeps
 
 ### Getting Help
 ```bash
@@ -657,9 +720,17 @@ Results are saved in TSV format with columns:
 script_name.sh -h
 script_name.py --help
 
+# See custom parameter options
+complete_parameter_sweep.sh -h
+parameter_sweep.sh -h
+
 # Use debug mode for troubleshooting
 complete_parameter_sweep.sh -b files.txt -o debug_test -d -v
 parameter_sweep.sh -b bedtools_ref.tsv -f files.txt --debug
+
+# Test custom parameters with debug mode
+complete_parameter_sweep.sh -b files.txt --precision 20,22 -d -v
+parameter_sweep.sh -b bedtools_ref.tsv -f files.txt --klen 15,20 --debug
 ```
 
 ---
