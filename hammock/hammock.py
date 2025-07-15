@@ -537,7 +537,7 @@ def main():
                     if key in output:
                         row = [basename, key, args.sketch_type, args.mode]  # files and sketch info
                         if args.sketch_type in ["hyperloglog", "minhash", "minimizer"]:
-                            precision = args.precision if args.sketch_type == "hyperloglog" else "NA"
+                            precision = args.precision if args.sketch_type in ["hyperloglog", "minimizer"] else "NA"
                             num_hashes = args.num_hashes if args.sketch_type == "minhash" else "NA"
                             # Only include kmer size and window size if they are relevant
                             if args.mode == "D" or args.kmer_size > 0:
