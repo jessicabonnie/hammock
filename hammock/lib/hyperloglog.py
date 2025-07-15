@@ -85,7 +85,7 @@ class HyperLogLog(AbstractSketch):
         else:
             raise ValueError("hash_size must be 32 or 64")
 
-
+    # TODO: make this a class method for the abstractsketch class
     @staticmethod
     def _hash64_int(x: int, seed: int = 0) -> int:
         """64-bit hash function for integers.

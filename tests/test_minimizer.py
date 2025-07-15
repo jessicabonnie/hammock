@@ -257,7 +257,7 @@ def test_use_sets_completely_different_sequences():
 
 def test_use_sets_save_load(tmp_path):
     """Test saving and loading sketches with use_sets=True."""
-    import numpy as np
+    import numpy as np # type: ignore
     
     sketch = MinimizerSketch(kmer_size=4, window_size=6, use_sets=True, precision=12)
     sketch.add_string("ACGTACGTACGTACGT")

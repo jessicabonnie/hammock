@@ -43,7 +43,7 @@ class MinimizerSketch(AbstractSketch):
         """Add a string to the sketch."""
         # Get minimizers from the string
         minimizers = window_minimizer(s, self.window_size, self.kmer_size, self.seed)
-        
+        # TODO: what happens if the string is shorter than the window size?
         # Add minimizers to the sketch
         for _, hash_val in minimizers:
             if self.use_sets:

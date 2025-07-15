@@ -26,7 +26,8 @@ class SequenceSketch(AbstractSketch):
                  precision: int = 12,
                  num_hashes: int = 128,
                  seed: int = 42,
-                 debug: bool = False):
+                 debug: bool = False,
+                 use_sets: bool = False):
         """Initialize a SequenceSketch.
         
         Args:
@@ -38,6 +39,7 @@ class SequenceSketch(AbstractSketch):
             num_hashes: Number of hash functions for MinHash
             seed: Random seed for hashing
             debug: Whether to print debug information
+            use_sets: Whether to store exact sets (only applies to minimizer sketch)
         """
         super().__init__()
         self.sketch_type = sketch_type
@@ -45,6 +47,7 @@ class SequenceSketch(AbstractSketch):
         self.window_size = window_size
         self.seed = seed
         self.debug = debug
+        self.use_sets = use_sets
         
         # Create the appropriate sketch based on sketch_type
         if sketch_type == "minimizer":
@@ -54,7 +57,8 @@ class SequenceSketch(AbstractSketch):
                 #  gapn=gapn,
                 seed=seed,
                 precision=precision,
-                debug=debug
+                debug=debug,
+                use_sets=use_sets
             )
         elif sketch_type == "hyperloglog":
             self.sketch = HyperLogLog(
@@ -128,7 +132,8 @@ class SequenceSketch(AbstractSketch):
                 precision=kwargs.get('precision', 12),
                 num_hashes=kwargs.get('num_hashes', 128),
                 seed=kwargs.get('seed', 42),
-                debug=kwargs.get('debug', False)
+                debug=kwargs.get('debug', False),
+                use_sets=kwargs.get('use_sets', False)
             )
             
             # Process the file
