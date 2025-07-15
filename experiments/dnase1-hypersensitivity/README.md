@@ -166,6 +166,32 @@ The analysis generates a pairwise similarity matrix showing Jaccard indices betw
 - Merged regions eliminate overlapping DHS calls within samples (inferred from `.merge.bed` in filenames)
 - Two-pass hotspot algorithm was used for processing (inferred from `.twopass` in filenames)
 
+## Analysis
+
+Create a fasta file for each bed file
+```bash
+grch37=/data/blangme2/fasta/grch37/hg19.fa
+tag=""
+# Create directories for fasta files
+mkdir -p fastas${tag}
+# Process human files using hg38 reference  
+while read -r bedfile; do
+    outfile=$(basename "$bedfile" .bed)
+    bedtools getfasta -fi $grch37 -bed "$bedfile" -fo "fastas${tag}/${outfile}.fa";
+    echo $(realpath fastas${tag}/${outfile}.fa)
+done < maurano_files.txt > maurano_fastas.txt
+
+```
+Do a parameter sweep to look at how everything compares to the bedtools output for different parameter combos
+
+```bash
+mkdir -p parameter_scan
+cd parameter_scan
+complete_parameter_sweep.sh -b ../data/maurano_files.txt -f ../data/maurano_fastas.txt -o maurano 2> scan.log
+
+```
+
+
 ## Citation
 
 If you use this analysis or data, please cite:

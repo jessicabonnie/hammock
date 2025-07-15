@@ -1,8 +1,6 @@
-## Mus-Homo TF3 Binding Experiments from Report Captured June 11, 2025
+## Mus-Homo CTCF TF Binding Experiments from Report Captured June 11, 2025
 
-ENCODE Chip-Seq experiments were filtered for those tissues and Target TFs for which there were experiment results for BOTH Mus musculus and Homo sapiens. This yeilded a report (data/experiment_report_2025_6_11_22h_5m.tsv) and a text file fed to xargs to download a set of bedfiles each labeled by file accession number, found in the report under the Files column.
-
-The three Transcription Factors with experiments in both species are CTCF (also analyzed separately), POLR2A, EP300. There were
+ENCODE ATAC-Seq experiments were filtered for those tissues for which there were experiment results for BOTH Mus musculus and Homo sapiens. This yeilded a report (data/experiment_report_2025_2_5_20h_24m.tsv) and a text file fed to xargs to download a set of bedfiles each labeled by file accession number, found in the report under the Files column.
 
 ## Data Treatment
 This code assumes you are in your data directory
@@ -11,7 +9,7 @@ This code assumes you are in your data directory
 tag=""
  mkdir -p beds${tag}
  cd beds${tag}
- xargs -n 1 curl -O -L < ../20250611_TF3_files.txt
+ xargs -n 1 curl -O -L < ../20250611_CTCF_files.txt
 cd ..
 ls beds${tag}/* | xargs realpath > bed_paths${tag}.txt
 # make a list of the file accessions
@@ -31,7 +29,7 @@ while read -r filepath; do basename "$filepath" | sed -E 's/\.(gz|bz2|xz)$//' | 
 ### Make A Key and Subset files as needed 
 ```
 # Make a key
-../../../scripts/ENCODE_report_to_key.sh experiment_report_2025_6_11_22h_5m.tsv accession_key_2025_6_11.tsv
+../../../scripts/ENCODE_report_to_key.sh experiment_report_2025_6_11_18h_49m.tsv accession_key_2025_6_11.tsv
 
 # Filter it for what is actually there
 awk 'NR==1 {print; next} FNR==NR {files[$0]=1; next} $2 in files' file_accessions.txt accession_key_2025_6_11.tsv > filtered_accession_key.tsv
@@ -40,19 +38,9 @@ awk 'NR==1 {print; next} FNR==NR {files[$0]=1; next} $2 in files' file_accession
 grep "Homo sapiens" filtered_accession_key.tsv | cut -f2 > Homo_sapiens_accessions.txt
 grep -f Homo_sapiens_accessions.txt bed_paths.txt > Homo_sapiens_paths_beds.txt
 
+
 grep "Mus musculus" filtered_accession_key.tsv | cut -f2 > Mus_musculus_accessions.txt
 grep -f Mus_musculus_accessions.txt bed_paths.txt > Mus_musculus_paths_beds.txt
-
-# Filter for TF Target
-
-grep "POLR2A" filtered_accession_key.tsv | cut -f2 > POLR2A_accessions.txt
-grep -f POLR2A_accessions.txt bed_paths.txt > POLR2A_paths_beds.txt
-
-grep "EP300" filtered_accession_key.tsv | cut -f2 > EP300_accessions.txt
-grep -f EP300_accessions.txt bed_paths.txt > EP300_paths_beds.txt
-
-grep "CTCF" filtered_accession_key.tsv | cut -f2 > CTCF_accessions.txt
-grep -f CTCF_accessions.txt bed_paths.txt > CTCF_paths_beds.txt
 
 ```
 
@@ -85,12 +73,13 @@ done < Homo_sapiens_paths_beds.txt > Homo_sapiens_fastas.txt
 
 cat Mus_musculus_fastas.txt Homo_sapiens_fastas.txt > mus_homo_fastas.txt
 
+
 ```
 
 
 
 ## Mode A/B/C
-From within the TF3 directory (where you find this README)
+From within the CTCF directory (where you find this README)
 
 ```
 hammock data/Mus_musculus_paths_beds.txt data/Mus_musculus_paths_beds.txt --mode C --precision 20 --outprefix results/mouseonly
@@ -106,26 +95,5 @@ hammock data/Mus_musculus_fastas.txt data/Mus_musculus_fastas.txt --outprefix re
 
 hammock data/Homo_sapiens_fastas.txt data/Homo_sapiens_fastas.txt --outprefix results/humanonly -k 20 -w 200 --precision 20
 
-hammock data/mus_homo_fastas.txt data/mus_homo_fastas.txt --outprefix results/manmouse -k 20 -w 200 --precision 20
-```
-
-## Visualizations
-Hammock 0.2.1 allows calling Rscript and includes a script to draw three heatmaps for a given output as long as a "report" can be provided in the same format as an ENCODE report. It takes the following arguments: `<ENCODE REPORT> <HAMMOCK OUTPUT> [<OUTPUT PREFIX>]` 
-
-```{bash}
-encode_heatmap.R data/experiment_report_2025_6_11_22h_5m.tsv results/manmouse_mnmzr_p20_jaccD_k20_w200.csv results/manmouse_p20k20w200jaccD
-
-```
-
-## Parameter Scan: Window, k, precision
-First we seek out the best precision value when comparing mode B against bedtools jaccard as "ground truth," then we compare the results from bedtools jaccard on bedfiles against hammock. The process produces a lot of temp files, so we run it in a separate directory.
-
-```
-mkdir -p parameter_scan
-cd parameter_scan
-complete_parameter_sweep.sh -b ../data/bed_paths.txt -f ../data/mus_homo_fastas.txt -o scan
-
-
-
-
+hammock data/mus_homo_fastas.txt data/mus_homo_fastas.txt  --outprefix results/manmouse -k 20 -w 200 --precision 20
 ```
