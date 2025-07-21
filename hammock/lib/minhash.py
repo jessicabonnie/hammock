@@ -70,6 +70,19 @@ class MinHash(AbstractSketch):
         
         return hashes
     
+    def hash_str(self, s: bytes) -> int:
+        """Override AbstractSketch hash_str to provide single hash value for compatibility.
+        
+        Returns the first hash value from the MinHash hash array.
+        """
+        if isinstance(s, str):
+            s = s.encode()
+        else:
+            s = s.decode() if isinstance(s, bytes) else str(s)
+        
+        hashes = self._hash_str(s)
+        return int(hashes[0])
+    
     def _process_kmer(self, kmer: str) -> None:
         """Process a k-mer and update minimum hash values."""
         if not kmer:

@@ -30,6 +30,7 @@ class SetSketch(AbstractSketch):
         self.precision = precision
         self.num_registers = 1 << precision
         self.seed = seed
+        self.hash_size = 64  # SetSketch uses 64-bit hashing
         self.registers = np.zeros(self.num_registers, dtype=np.float64)
         self.kmer_size = kmer_size
         self.window_size = window_size if window_size else kmer_size
@@ -37,31 +38,7 @@ class SetSketch(AbstractSketch):
         
         self.item_count = 0
 
-    @staticmethod
-    def _hash64_int(x: int, seed: int = 0) -> int:
-        """64-bit hash function for integers.
-        
-        Args:
-            x: Integer value to hash
-            seed: Random seed for hashing
-            
-        Returns:
-            64-bit hash value as integer
-        """
-        hasher = xxhash.xxh64(seed=seed)
-        hasher.update(x.to_bytes(8, byteorder='little'))
-        return hasher.intdigest()
-
-    @staticmethod
-    def _hash_str(s: bytes, seed: int = 0) -> int:
-        """Hash a string using xxhash."""
-        hasher = xxhash.xxh64(seed=seed)
-        hasher.update(s)
-        return hasher.intdigest()
-
-    def hash_str(self, s: bytes) -> int:
-        """Instance method to hash a string using the instance's seed."""
-        return self._hash_str(s, seed=self.seed)
+    # Hash functions now inherited from AbstractSketch base class
 
     def add_string(self, s: str) -> None:
         """Add a string to the sketch.

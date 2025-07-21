@@ -85,63 +85,9 @@ class HyperLogLog(AbstractSketch):
         else:
             raise ValueError("hash_size must be 32 or 64")
 
-    # TODO: make this a class method for the abstractsketch class
-    @staticmethod
-    def _hash64_int(x: int, seed: int = 0) -> int:
-        """64-bit hash function for integers.
-        
-        Args:
-            x: Integer value to hash
-            seed: Random seed for hashing
-            
-        Returns:
-            64-bit hash value as integer
-        """
-        hasher = xxhash.xxh64(seed=seed)
-        hasher.update(x.to_bytes(8, byteorder='little'))
-        return hasher.intdigest()
-    
-    @staticmethod
-    def _hash32_int(x: int, seed: int = 0) -> int:
-        """32-bit hash function for integers.
-        
-        Args:
-            x: Integer value to hash
-            seed: Random seed for hashing
-            
-        Returns:
-            32-bit hash value as integer
-        """
-        hasher = xxhash.xxh32(seed=seed)
-        hasher.update(x.to_bytes(8, byteorder='little'))
-        return hasher.intdigest()
+    # Hash functions now inherited from AbstractSketch base class
 
-    # def hash64(self, x: int) -> int:
-    #     """Instance method to hash an integer using the instance's seed."""
-    #     return self._hash64_int(x, seed=self.seed)
-
-    @staticmethod
-    def _hash_str(s: bytes, seed: int = 0, hash_size: int = 32) -> int:
-        """Hash a string using xxhash.
-        
-        Args:
-            s: String to hash
-            seed: Random seed for hashing
-            hash_size: Size of hash in bits (32 or 64)
-            
-        Returns:
-            Hash value as integer
-        """
-        if hash_size == 32:
-            hasher = xxhash.xxh32(seed=seed)
-        else:
-            hasher = xxhash.xxh64(seed=seed)
-        hasher.update(s)
-        return hasher.intdigest()
-
-    def hash_str(self, s: bytes) -> int:
-        """Instance method to hash a string using the instance's seed."""
-        return self._hash_str(s, seed=self.seed, hash_size=self.hash_size)
+    # hash_str method now inherited from AbstractSketch base class (uses self.hash_size automatically)
 
     def _rho(self, hash_val: int) -> int:
         """Calculate position of leftmost 1-bit."""
@@ -203,7 +149,7 @@ class HyperLogLog(AbstractSketch):
             # Find minimum hash in this window
             for j in range(self.window_size - self.kmer_size + 1):
                 kmer = window[j:j + self.kmer_size]
-                h = self._hash_str(kmer.encode(), seed=self.seed, hash_size=self.hash_size)
+                h = self.hash_str(kmer.encode())
                 if h < min_hash:
                     min_hash = h
                     min_pos = j
@@ -243,21 +189,15 @@ class HyperLogLog(AbstractSketch):
         for s in strings:
             self.add_string(s)
 
-    def hash64_int(self, x: int) -> int:
-        """Instance method to hash an integer using the instance's seed."""
-        return self._hash64_int(x, seed=self.seed)
-    
-    def hash32_int(self, x: int) -> int:
-        """Instance method to hash an integer using the instance's seed."""
-        return self._hash32_int(x, seed=self.seed)
+    # hash64_int and hash32_int methods now inherited from AbstractSketch base class
 
     def add_int(self, value: int) -> None:
         """Add an integer to the sketch."""
         self.item_count += 1
         if self.hash_size == 32:
-            hash_val = self._hash32_int(value, self.seed)
+            hash_val = self.hash32_int(value)
         else:
-            hash_val = self._hash64_int(value, self.seed)
+            hash_val = self.hash64_int(value)
         idx = hash_val & (self.num_registers - 1)
         rank = self._rho(hash_val)
         self.registers[idx] = max(self.registers[idx], rank)
