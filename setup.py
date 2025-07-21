@@ -98,6 +98,7 @@ setup(
         'dev': [
             'pytest>=7.0.0',
             'pytest-benchmark>=4.0.0',
+            'psutil>=5.0.0',  # Required for memory monitoring tests
             'black>=22.0.0',
             'isort>=5.0.0',
             'mypy>=0.900',
