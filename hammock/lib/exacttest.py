@@ -14,9 +14,24 @@ class ExactTest(AbstractSketch):
         """Add string to counter."""
         self.elements.add(s)
     
+    def add_batch(self, strings: list[str]) -> None:
+        """Add multiple strings to counter."""
+        for s in strings:
+            self.add_string(s)
+    
     def estimate_cardinality(self) -> float:
         """Return exact cardinality."""
         return len(self.elements)
+    
+    def similarity_values(self, other: 'AbstractSketch') -> dict[str, float]:
+        """Calculate similarity values.
+        
+        Returns:
+            Dictionary containing 'jaccard_similarity'
+        """
+        if not isinstance(other, ExactTest):
+            raise ValueError("Can only compare with another ExactTest")
+        return {'jaccard_similarity': self.estimate_jaccard(other)}
     
     def estimate_jaccard(self, other: 'ExactTest') -> float:
         """Return exact Jaccard similarity."""
@@ -24,11 +39,7 @@ class ExactTest(AbstractSketch):
         union = len(self.elements | other.elements)
         return intersection / union if union > 0 else 0.0
     
-    def _hash_str(self, s: bytes, seed: Optional[int] = None) -> int:
-        """Hash bytes using Python's built-in hash function."""
-        if seed is None:
-            seed = self.seed
-        return hash(s + str(seed).encode('utf-8')) % (2**32)
+    # _hash_str method now inherited from AbstractSketch base class
     
     def merge(self, other: 'ExactTest') -> None:
         """Merge another ExactTest into this one."""

@@ -7,6 +7,14 @@ from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
 from hammock.lib.exact import ExactCounter
 from hammock.lib.exacttest import ExactTest
+
+# Try to import FastHyperLogLog for better performance
+try:
+    from hammock.lib.hyperloglog_fast import FastHyperLogLog
+    FAST_HLL_AVAILABLE = True
+except ImportError:
+    FAST_HLL_AVAILABLE = False
+    FastHyperLogLog = None
 import pyBigWig  # type: ignore  # no type stubs available
 from numpy import floor  # type: ignore  # no type stubs available
 import gzip
@@ -127,9 +135,14 @@ class IntervalSketch(AbstractSketch):
         if not all(isinstance(x, (int, float)) and 0 <= x <= 1 for x in self.subsample):
             raise ValueError(f"subsample values must be between 0 and 1, got {self.subsample}")
         
-        # Choose sketch implementation based on use_rust flag
+        # Choose sketch implementation based on use_rust flag and availability
         if use_rust:
             self.sketch = RustHLL(precision=precision)
+        elif FAST_HLL_AVAILABLE and kwargs.get('use_fast_hll', True):
+            # Use FastHyperLogLog for better performance when available
+            self.sketch = FastHyperLogLog(precision=precision, debug=debug)
+            if debug:
+                print("Using FastHyperLogLog with optional Cython acceleration")
         else:
             self.sketch = HyperLogLog(precision=precision, debug=debug)
         

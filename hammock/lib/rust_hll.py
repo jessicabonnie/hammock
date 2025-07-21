@@ -53,7 +53,7 @@ class RustHLL:
                     memory_limit = memory_limit * 1024 * 1024 * 1024
                 
                 self._sketch = RustHLLClass(precision, hash_size=hash_size, memory_limit=memory_limit)
-            self._using_rust = True
+                self._using_rust = True
             except ValueError as e:
                 print(f"Warning: Failed to initialize Rust HLL: {e}")
                 print("Falling back to Python implementation")
