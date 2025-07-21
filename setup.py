@@ -69,7 +69,7 @@ def get_scripts():
 
 setup(
     name="hammock",
-    version="0.2.2",
+    version="0.3.0",
     author="Jessica Bonnie",
     author_email="jbonnie@jhu.edu",
     description="Cardinality Estimation and Interval Sketches",

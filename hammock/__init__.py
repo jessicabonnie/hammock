@@ -20,7 +20,7 @@ except ImportError:
 if RUST_HLL_AVAILABLE:
     from hammock.lib.rusthll_compat import RustHLLWrapper
 
-__version__ = '0.2.1'
+__version__ = '0.3.0'
 
 __all__ = [
     'HyperLogLog',
