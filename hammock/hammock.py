@@ -170,7 +170,7 @@ def parse_args():
     arg_parser.add_argument("--seed", type=int, default=42, help="Random seed for hashing")
     arg_parser.add_argument("--verbose", action="store_true", help="Print verbose output")
     arg_parser.add_argument("--debug", action="store_true", help="Enable debug mode")
-    arg_parser.add_argument("--rust", action="store_true", help="Use Rust implementation for HyperLogLog when available")
+
     
     # Sketch type arguments
     sketch_group = arg_parser.add_mutually_exclusive_group()
@@ -342,10 +342,7 @@ def main():
     
     # Print implementation info first
     if args.sketch_type == "hyperloglog":
-        if args.rust:
-            print("Using Rust implementation")
-        else:
-            print("Using Python implementation")
+        print("Using Python implementation")
     elif args.sketch_type == "minhash":
         print("Using MinHash implementation")
     elif args.sketch_type == "minimizer":
@@ -446,7 +443,7 @@ def main():
                 'subsample': subsample,
                 'expA': args.expA,
                 'debug': args.debug,
-                'use_rust': args.rust  # Add use_rust flag to sketch arguments
+                'use_rust': False  # Default to not using Rust implementation
             }
             primary_sets[basename] = IntervalSketch.from_file(
                 filename=filepath,
@@ -495,7 +492,7 @@ def main():
     else:
         # Standard processing for different file lists
         pool_args = [
-            (filepath, primary_paths, args.mode, args.num_hashes, args.precision, args.kmer_size, args.window_size, args.subA, args.subB, args.expA, args.rust, args.sketch_type, args.hash_size)
+            (filepath, primary_paths, args.mode, args.num_hashes, args.precision, args.kmer_size, args.window_size, args.subA, args.subB, args.expA, False, args.sketch_type, args.hash_size)
             for filepath in filepaths
         ]
         

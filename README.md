@@ -42,24 +42,7 @@ python setup.py build_ext --inplace
 pip install hammock  # Pure Python, works everywhere
 ```
 
-### Ultra-High Performance (Rust Implementation)
-
-For maximum performance, you can also use the Rust implementation of HyperLogLog. There are two ways to build the Rust extension:
-
-1. Using the automated build script (recommended):
-```bash
-python build_rust.py
-```
-This script will:
-- Install maturin if not already installed
-- Build the Rust extension
-- Verify the installation
-
-2. Manual build:
-```bash
-cd rust_hll
-python -m maturin develop
-```
+### Digest for $k$-mers
 
 `hammock`'s mode D makes use of `Digest`, a C++ library that supports various sub-sampling schemes for $k$-mers in DNA sequences. `Digest` is now available on bioconda:    
 ```bash
@@ -140,7 +123,7 @@ Sketching Options:
 - `--precision`, `-p`: Precision for HyperLogLog (default: 8)
 - `--num_hashes`, `-n`: Number of hashes for MinHash (default: 128)
 - `--hashsize`: Hash size in bits for HyperLogLog (32 or 64, default: 64)
-- `--rust`: Use the Rust implementation of HyperLogLog for maximum performance
+
 
 **Performance Note**: When you install with `pip install "hammock[fast]"`, HyperLogLog sketching automatically uses FastHyperLogLog with Cython acceleration for 2-5x better performance. This works transparently with all existing commands.
 
@@ -179,11 +162,11 @@ hammock files.txt primary.txt --subA 0.5 --subB 0.5
 # Compare sequences (automatically uses mode D)
 hammock fasta_files.txt primary_fastas.txt
 
-# Use Rust implementation with 32-bit hashing (maximum performance)
-hammock files.txt primary.txt --rust --hashsize 32
+# Use 32-bit hashing
+hammock files.txt primary.txt --hashsize 32
 
-# Use Rust implementation with 64-bit hashing (default)
-hammock files.txt primary.txt --rust --hashsize 64
+# Use 64-bit hashing (default)
+hammock files.txt primary.txt --hashsize 64
 ```
 
 ### Performance Verification
