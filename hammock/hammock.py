@@ -496,11 +496,14 @@ def main():
             for filepath in filepaths
         ]
         
-        # Process files sequentially instead of in parallel to avoid pickling issues
+        # Process files in parallel using multiprocessing
+        with Pool(processes=num_threads) as pool:
+            parallel_results = pool.starmap(process_file, pool_args)
+        
+        # Convert results to expected format (basename, similarity_dict)
         results = []
-        for pool_arg in pool_args:
-            filepath, primary_paths, mode, num_hashes, precision, kmer_size, window_size, subA, subB, expA, use_rust, sketch_type, hash_size = pool_arg
-            result = process_file(filepath, primary_paths, mode, num_hashes, precision, kmer_size, window_size, subA, subB, expA, use_rust, sketch_type, hash_size)
+        for pool_arg, result in zip(pool_args, parallel_results):
+            filepath = pool_arg[0]  # First element in pool_args is the filepath
             results.append((os.path.basename(filepath), result))
     
     # Write results
