@@ -50,10 +50,15 @@ def test_sequence_shorter_than_k():
     
     sketch2 = MinimizerSketch(kmer_size=5, window_size=10)
     sim = sketch1.similarity_values(sketch2)
-    # assert sim['hash_similarity'] == 0
-    # assert sim['hash_with_ends_similarity'] == 0
+    # Both sketches are empty, so similarity should be 0
     assert sim['jaccard_similarity'] == 0
     assert sim['jaccard_similarity_with_ends'] == 0
+    
+    # But if we add the same short sequence to sketch2, they should be similar
+    sketch2.add_string("ACG")  # same short sequence
+    sim = sketch1.similarity_values(sketch2)
+    assert sim['jaccard_similarity'] > 0.9  # Should be very high similarity
+    assert sim['jaccard_similarity_with_ends'] > 0.9
 
 def test_different_parameters():
     sketch1 = MinimizerSketch(kmer_size=4, window_size=6)
@@ -330,4 +335,96 @@ def test_use_sets_backward_compatibility(tmp_path):
     loaded_sketch = MinimizerSketch.load(filepath)
     assert loaded_sketch.use_sets == False
     assert not hasattr(loaded_sketch, 'minimizers')
-    assert not hasattr(loaded_sketch, 'startend_kmers') 
+    assert not hasattr(loaded_sketch, 'startend_kmers')
+
+def test_short_sequence_handling():
+    """Test that sequences too short for window_minimizer are added as whole sequences."""
+    # Test sequence shorter than k-mer size
+    sketch1 = MinimizerSketch(kmer_size=5, window_size=10, use_sets=False)
+    sketch2 = MinimizerSketch(kmer_size=5, window_size=10, use_sets=False)
+    
+    short_seq = "ACG"  # length 3, shorter than kmer_size=5
+    sketch1.add_string(short_seq)
+    sketch2.add_string(short_seq)
+    
+    # Should have perfect similarity since both have the same short sequence
+    sim = sketch1.similarity_values(sketch2)
+    assert sim['jaccard_similarity'] > 0.9  # Should be very high similarity
+    assert sim['jaccard_similarity_with_ends'] > 0.9
+    
+    # Should contribute to cardinality
+    assert sketch1.estimate_cardinality() > 0
+
+def test_short_sequence_handling_with_sets():
+    """Test that sequences too short for window_minimizer work with use_sets=True."""
+    sketch1 = MinimizerSketch(kmer_size=6, window_size=8, use_sets=True)
+    sketch2 = MinimizerSketch(kmer_size=6, window_size=8, use_sets=True)
+    
+    short_seq = "ACGT"  # length 4, shorter than kmer_size=6
+    sketch1.add_string(short_seq)
+    sketch2.add_string(short_seq)
+    
+    # Should have perfect similarity since both have the same short sequence
+    sim = sketch1.similarity_values(sketch2)
+    assert sim['set_similarity'] == 1.0  # Perfect set similarity
+    assert sim['set_with_ends_similarity'] == 1.0
+    assert sim['jaccard_similarity'] > 0.9
+    assert sim['jaccard_similarity_with_ends'] > 0.9
+    
+    # Check that the sequence was added to sets
+    assert len(sketch1.minimizers) > 0
+    assert len(sketch1.startend_kmers) > 0
+
+def test_sequence_shorter_than_window():
+    """Test sequences shorter than window size but longer than k-mer size."""
+    sketch1 = MinimizerSketch(kmer_size=3, window_size=10, use_sets=False)
+    sketch2 = MinimizerSketch(kmer_size=3, window_size=10, use_sets=False)
+    
+    short_seq = "ACGTAG"  # length 6, longer than kmer_size=3 but shorter than window_size=10
+    sketch1.add_string(short_seq)
+    sketch2.add_string(short_seq)
+    
+    # Should have high similarity
+    sim = sketch1.similarity_values(sketch2)
+    assert sim['jaccard_similarity'] > 0.5  # Should have reasonable similarity
+    assert sim['jaccard_similarity_with_ends'] > 0.5
+    
+    # Should contribute to cardinality
+    assert sketch1.estimate_cardinality() > 0
+
+def test_short_vs_normal_sequences():
+    """Test that short sequences still contribute meaningfully when mixed with normal sequences."""
+    sketch1 = MinimizerSketch(kmer_size=4, window_size=8, use_sets=True)
+    sketch2 = MinimizerSketch(kmer_size=4, window_size=8, use_sets=True)
+    
+    # Add both short and normal sequences
+    short_seq = "AC"  # shorter than k-mer size
+    normal_seq = "ACGTACGTACGTACGT"  # normal length
+    
+    sketch1.add_string(short_seq)
+    sketch1.add_string(normal_seq)
+    
+    sketch2.add_string(short_seq)  # Same short sequence
+    sketch2.add_string("TGCATGCATGCATGCA")  # Different normal sequence
+    
+    sim = sketch1.similarity_values(sketch2)
+    # Should have some similarity due to the common short sequence
+    assert sim['jaccard_similarity'] > 0.0
+    assert sim['jaccard_similarity_with_ends'] > 0.0
+    
+    # Both sketches should have cardinality > 0
+    assert sketch1.estimate_cardinality() > 0
+    assert sketch2.estimate_cardinality() > 0
+
+def test_empty_vs_short_sequence():
+    """Test that empty sequences behave differently from short sequences."""
+    sketch1 = MinimizerSketch(kmer_size=4, window_size=6, use_sets=False)
+    sketch2 = MinimizerSketch(kmer_size=4, window_size=6, use_sets=False)
+    
+    sketch1.add_string("")  # empty sequence
+    sketch2.add_string("AC")  # short sequence
+    
+    sim = sketch1.similarity_values(sketch2)
+    # Empty and short should have low similarity
+    assert sim['jaccard_similarity'] >= 0.0
+    assert sim['jaccard_similarity_with_ends'] >= 0.0 

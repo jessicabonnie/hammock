@@ -41,23 +41,41 @@ class MinimizerSketch(AbstractSketch):
     
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
+        # Handle empty string edge case
+        if not s:
+            return
+            
         # Get minimizers from the string
         minimizers = window_minimizer(s, self.window_size, self.kmer_size, self.seed)
-        # TODO: what happens if the string is shorter than the window size?
-        # Add minimizers to the sketch
-        for _, hash_val in minimizers:
-            if self.use_sets:
-                self.minimizers.add(hash_val)
-            self.minimizer_sketch.add_string(str(hash_val))
         
-        # Add start and end k-mers
-        if len(s) >= self.kmer_size:
-            start_kmer = s[:self.kmer_size]
-            end_kmer = s[-self.kmer_size:]
-            self.startend_sketch.add_string(start_kmer + end_kmer)
+        if not minimizers:
+            # If window_minimizer returns empty (sequence too short), add entire sequence
+            # Use _process_kmer directly to bypass the length check in add_string
+            self.minimizer_sketch._process_kmer(s)
+            self.startend_sketch._process_kmer(s)
             if self.use_sets:
-                self.startend_kmers.add(start_kmer)
-                self.startend_kmers.add(end_kmer)
+                # Add the sequence as both a minimizer and start/end kmer
+                self.minimizers.add(hash(s))
+                self.startend_kmers.add(s)
+        else:
+            # Normal processing - add minimizers to the sketch
+            for _, hash_val in minimizers:
+                if self.use_sets:
+                    self.minimizers.add(hash_val)
+                self.minimizer_sketch.add_string(str(hash_val))
+            
+            # Add start and end k-mers
+            if len(s) >= 2 * self.kmer_size:
+                start_kmer = s[:self.kmer_size]
+                end_kmer = s[-self.kmer_size:]
+                self.startend_sketch.add_string(start_kmer + end_kmer)
+                if self.use_sets:
+                    self.startend_kmers.add(start_kmer)
+                    self.startend_kmers.add(end_kmer)
+            else:
+                self.startend_sketch.add_string(s)
+                if self.use_sets:
+                    self.startend_kmers.add(s)
     
     def add_batch(self, strings: List[str]) -> None:
         """Add multiple strings to the sketch.
