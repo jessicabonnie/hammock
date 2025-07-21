@@ -64,13 +64,18 @@ VERBOSE=false
 QUICK_MODE=false
 DEBUG_MODE=false
 
+# Custom parameter ranges (empty means use defaults)
+CUSTOM_WINDOW=""
+CUSTOM_KLEN=""
+CUSTOM_PRECISION=""
+
 # File type detection
 HAMMOCK_MODE=""
 FILE_TYPE=""
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 -b <bed_file_list> [-f <fasta_file_list>] [-o <output_prefix>] [-c] [-v] [-q] [-d]"
+    echo "Usage: $0 -b <bed_file_list> [-f <fasta_file_list>] [-o <output_prefix>] [-c] [-v] [-q] [-d] [--window <values>] [--klen <values>] [--precision <values>]"
     echo ""
     echo "Complete parameter sweep for hammock:"
     echo "  1. Takes a list of BED files and runs pairwise bedtools jaccard on ALL combinations"
@@ -90,6 +95,9 @@ usage() {
     echo "  -v                    Verbose output (shows progress of bedtools comparisons)"
     echo "  -q, --quick           Quick mode with limited parameter combinations for testing"
     echo "  -d, --debug           Debug mode with detailed output and preserved intermediate files"
+    echo "  --window <values>     Custom window sizes (comma-separated, e.g., '10,20,50')"
+    echo "  --klen <values>       Custom k-mer lengths (comma-separated, e.g., '10,15,20')"
+    echo "  --precision <values>  Custom precision values (comma-separated, e.g., '20,22,24')"
     echo "  -h                    Show this help message"
     echo ""
     echo "Mode selection:"
@@ -103,6 +111,9 @@ usage() {
     echo "  Quick mode (-q):"
     echo "    BED files: precision = 20,23"
     echo "    FASTA files: klen = 20; window = 200; precision = 20,23"
+    echo "  Custom mode:"
+    echo "    Use --window, --klen, and --precision to override defaults"
+    echo "    Custom parameters take precedence over quick/full mode settings"
     echo ""
     echo "Examples:"
     echo "  # Run complete sweep on BED files only"
@@ -113,6 +124,8 @@ usage() {
     echo "  $0 -b bed_files_list.txt --quick -c -v"
     echo "  # Debug mode with detailed output and preserved files"
     echo "  $0 -b bed_files_list.txt -f fasta_files_list.txt -d -v"
+    echo "  # Custom parameter ranges"
+    echo "  $0 -b bed_files_list.txt -f fasta_files_list.txt --window 8,10,20,50 --klen 8,15,20 --precision 20,22,24 -c -v"
     echo "  # Custom output prefix and path"
     echo "  $0 -b bed_files_list.txt -o /path/to/my_experiment -c -v"
 }
@@ -192,6 +205,15 @@ while getopts "b:f:o:cvqdh-:" opt; do
                     ;;
                 debug)
                     DEBUG_MODE=true
+                    ;;
+                window)
+                    CUSTOM_WINDOW="${!OPTIND}"; OPTIND=$(( OPTIND + 1 ))
+                    ;;
+                klen)
+                    CUSTOM_KLEN="${!OPTIND}"; OPTIND=$(( OPTIND + 1 ))
+                    ;;
+                precision)
+                    CUSTOM_PRECISION="${!OPTIND}"; OPTIND=$(( OPTIND + 1 ))
                     ;;
                 *)
                     echo "Invalid long option: --$OPTARG" >&2
@@ -475,6 +497,17 @@ if [[ "$QUICK_MODE" == "true" ]]; then
 fi
 if [[ "$DEBUG_MODE" == "true" ]]; then
     PARAM_SWEEP_CMD="$PARAM_SWEEP_CMD --debug"
+fi
+
+# Add custom parameter ranges if specified
+if [[ -n "$CUSTOM_WINDOW" ]]; then
+    PARAM_SWEEP_CMD="$PARAM_SWEEP_CMD --window '$CUSTOM_WINDOW'"
+fi
+if [[ -n "$CUSTOM_KLEN" ]]; then
+    PARAM_SWEEP_CMD="$PARAM_SWEEP_CMD --klen '$CUSTOM_KLEN'"
+fi
+if [[ -n "$CUSTOM_PRECISION" ]]; then
+    PARAM_SWEEP_CMD="$PARAM_SWEEP_CMD --precision '$CUSTOM_PRECISION'"
 fi
 
 # Run parameter sweep with real-time progress output

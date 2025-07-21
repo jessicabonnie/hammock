@@ -63,6 +63,11 @@ RESULTS_TABLE="parameter_sweep_results.tsv"
 QUICK_MODE=false
 DEBUG_MODE=false
 
+# Custom parameter ranges (empty means use defaults)
+CUSTOM_WINDOW=""
+CUSTOM_KLEN=""
+CUSTOM_PRECISION=""
+
 # Parameter arrays - will be set based on file type detection
 KLEN_VALUES=()
 WINDOW_VALUES=()
@@ -72,7 +77,7 @@ FILE_TYPE=""
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 -b <bedtools_output_file> -f <file_list> [-o <output_dir>] [-r <results_table>] [-q] [-d]"
+    echo "Usage: $0 -b <bedtools_output_file> -f <file_list> [-o <output_dir>] [-r <results_table>] [-q] [-d] [--window <values>] [--klen <values>] [--precision <values>]"
     echo ""
     echo "Required arguments:"
     echo "  -b <bedtools_output_file>  Path to bedtools pairwise jaccard output matrix file"
@@ -84,6 +89,9 @@ usage() {
     echo "  -r <results_table>         Results table filename (default: parameter_sweep_results.tsv)"
     echo "  -q, --quick                Quick mode with limited parameter combinations for testing"
     echo "  -d, --debug                Debug mode with detailed output and preserved intermediate files"
+    echo "  --window <values>          Custom window sizes (comma-separated, e.g., '10,20,50')"
+    echo "  --klen <values>            Custom k-mer lengths (comma-separated, e.g., '10,15,20')"
+    echo "  --precision <values>       Custom precision values (comma-separated, e.g., '20,22,24')"
     echo "  -h                         Show this help message"
     echo ""
     echo "File type detection:"
@@ -97,6 +105,9 @@ usage() {
     echo "  Quick mode (-q):"
     echo "    BED files: precision = 20,23"
     echo "    FASTA files: klen = 20; window = 200; precision = 20,23"
+    echo "  Custom mode:"
+    echo "    Use --window, --klen, and --precision to override defaults"
+    echo "    Custom parameters take precedence over quick/full mode settings"
     echo ""
     echo "IMPORTANT: You must first generate bedtools output before running this script:"
     echo "  For BED files:"
@@ -113,6 +124,9 @@ usage() {
     echo ""
     echo "  # Quick mode for testing"
     echo "  $0 -b bedtools_output.txt -f bed_files_list.txt --quick"
+    echo ""
+    echo "  # Custom parameter ranges"
+    echo "  $0 -b bedtools_output.txt -f fasta_files_list.txt --window 8,10,20,50 --klen 8,15,20 --precision 20,22,24"
     echo ""
     echo "  # For FASTA files (assuming you have bedtools output)"
     echo "  $0 -b bedtools_fasta_output.txt -f fasta_files_list.txt"
@@ -147,6 +161,7 @@ set_parameters() {
     local file_type="$1"
     local quick_mode="$2"
     
+    # First set default parameters based on file type and mode
     if [[ "$file_type" == "FASTA" ]]; then
         # FASTA files: test all parameters (mode D)
         if [[ "$quick_mode" == "true" ]]; then
@@ -180,6 +195,20 @@ set_parameters() {
     else
         echo "Error: Could not detect file type from file list" >&2
         exit 1
+    fi
+    
+    # Override with custom parameters if provided
+    if [[ -n "$CUSTOM_KLEN" ]]; then
+        IFS=',' read -ra KLEN_VALUES <<< "$CUSTOM_KLEN"
+        echo "Using custom k-mer lengths: ${KLEN_VALUES[*]}"
+    fi
+    if [[ -n "$CUSTOM_WINDOW" ]]; then
+        IFS=',' read -ra WINDOW_VALUES <<< "$CUSTOM_WINDOW"
+        echo "Using custom window sizes: ${WINDOW_VALUES[*]}"
+    fi
+    if [[ -n "$CUSTOM_PRECISION" ]]; then
+        IFS=',' read -ra PRECISION_VALUES <<< "$CUSTOM_PRECISION"
+        echo "Using custom precision values: ${PRECISION_VALUES[*]}"
     fi
 }
 
@@ -215,6 +244,15 @@ while getopts "b:f:o:r:qdh-:" opt; do
                     ;;
                 debug)
                     DEBUG_MODE=true
+                    ;;
+                window)
+                    CUSTOM_WINDOW="${!OPTIND}"; OPTIND=$(( OPTIND + 1 ))
+                    ;;
+                klen)
+                    CUSTOM_KLEN="${!OPTIND}"; OPTIND=$(( OPTIND + 1 ))
+                    ;;
+                precision)
+                    CUSTOM_PRECISION="${!OPTIND}"; OPTIND=$(( OPTIND + 1 ))
                     ;;
                 *)
                     echo "Invalid long option: --$OPTARG" >&2
