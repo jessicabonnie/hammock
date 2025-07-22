@@ -1,5 +1,48 @@
 import pytest # type: ignore
-from hammock.lib.minimizer import MinimizerSketch
+from hammock.lib.minimizer import MinimizerSketch, canonicalize_kmer
+
+def test_canonicalize_kmer():
+    """Test that k-mer canonicalization works correctly."""
+    # Test basic canonicalization with clear examples (all converted to uppercase)
+    assert canonicalize_kmer("ATCG") == "ATCG"  # ATCG < CGAT (reverse complement)
+    assert canonicalize_kmer("CGAT") == "ATCG"  # ATCG < CGAT (reverse complement)
+    assert canonicalize_kmer("AAAA") == "AAAA"  # AAAA < TTTT (reverse complement)
+    assert canonicalize_kmer("TTTT") == "AAAA"  # AAAA < TTTT (reverse complement)
+    
+    # Test case conversion (lowercase input converted to uppercase)
+    assert canonicalize_kmer("atcg") == "ATCG"  # atcg -> ATCG, ATCG < CGAT
+    assert canonicalize_kmer("cgat") == "ATCG"  # cgat -> CGAT, ATCG < CGAT
+    
+    # Test edge cases
+    assert canonicalize_kmer("") == ""
+    assert canonicalize_kmer("A") == "A"
+    assert canonicalize_kmer("T") == "A"  # A < T
+    assert canonicalize_kmer("a") == "A"  # a -> A
+    assert canonicalize_kmer("t") == "A"  # t -> T, A < T
+    
+    # Test mixed case (all converted to uppercase)
+    assert canonicalize_kmer("AtCg") == "ATCG"  # AtCg -> ATCG, ATCG < CGAT
+    assert canonicalize_kmer("CgAt") == "ATCG"  # CgAt -> CGAT, ATCG < CGAT
+    
+    # Test palindromic sequences (self-reverse complement)
+    assert canonicalize_kmer("ACGT") == "ACGT"  # ACGT is its own reverse complement
+    assert canonicalize_kmer("TGCA") == "TGCA"  # TGCA is its own reverse complement
+    assert canonicalize_kmer("acgt") == "ACGT"  # acgt -> ACGT, ACGT is its own reverse complement
+    assert canonicalize_kmer("tgca") == "TGCA"  # tgca -> TGCA, TGCA is its own reverse complement
+
+def test_canonicalized_flanking_kmers():
+    """Test that flanking k-mers are properly canonicalized."""
+    sketch1 = MinimizerSketch(kmer_size=4, window_size=6, use_sets=True)
+    sketch2 = MinimizerSketch(kmer_size=4, window_size=6, use_sets=True)
+    
+    # Add sequences with different orientations but same canonical flanking k-mers
+    sketch1.add_string("ACGTACGTACGT")  # Start: ACGT, End: ACGT
+    sketch2.add_string("TGCATGCATGCA")  # Start: TGCA (canonical: ACGT), End: TGCA (canonical: ACGT)
+    
+    # The flanking k-mers should be the same after canonicalization
+    sim = sketch1.similarity_values(sketch2)
+    # The similarity with ends should be higher than without ends due to canonicalized flanking k-mers
+    assert sim['jaccard_similarity_with_ends'] >= sim['jaccard_similarity']
 
 def test_minimizer_sketch_initialization():
     sketch = MinimizerSketch(kmer_size=5, window_size=10)

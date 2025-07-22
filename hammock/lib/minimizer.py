@@ -6,6 +6,30 @@ from hammock.lib.abstractsketch import AbstractSketch
 from hammock.lib.hyperloglog import HyperLogLog
 import numpy as np # type: ignore
 
+def canonicalize_kmer(kmer: str) -> str:
+    """Canonicalize a k-mer by returning the lexicographically smaller of the original and its reverse complement.
+    
+    The function converts all letters to uppercase for consistency and memory efficiency.
+    
+    Args:
+        kmer: The k-mer to canonicalize
+        
+    Returns:
+        The canonical form of the k-mer (lexicographically smaller of original and reverse complement) in uppercase
+    """
+    if not kmer:
+        return kmer
+    
+    # Convert to uppercase for consistency
+    kmer = kmer.upper()
+    
+    # Create reverse complement: first reverse, then complement each base
+    complement_map = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
+    reverse_complement = ''.join(complement_map.get(base, base) for base in kmer[::-1])
+    
+    # Return the lexicographically smaller of the two
+    return min(kmer, reverse_complement)
+
 class MinimizerSketch(AbstractSketch):
     def __init__(self, 
                  kmer_size: int = 4, 
@@ -64,18 +88,19 @@ class MinimizerSketch(AbstractSketch):
                     self.minimizers.add(hash_val)
                 self.minimizer_sketch.add_string(str(hash_val))
             
-            # Add start and end k-mers
+            # Add start and end k-mers (canonicalized)
             if len(s) >= 2 * self.kmer_size:
                 start_kmer = s[:self.kmer_size]
                 end_kmer = s[-self.kmer_size:]
-                self.startend_sketch.add_string(start_kmer + end_kmer)
+                self.startend_sketch.add_string(canonicalize_kmer(start_kmer + end_kmer))
                 if self.use_sets:
-                    self.startend_kmers.add(start_kmer)
-                    self.startend_kmers.add(end_kmer)
+                    self.startend_kmers.add(canonicalize_kmer(start_kmer))
+                    self.startend_kmers.add(canonicalize_kmer(end_kmer))
             else:
-                self.startend_sketch.add_string(s)
+                canonical_s = canonicalize_kmer(s)
+                self.startend_sketch.add_string(canonical_s)
                 if self.use_sets:
-                    self.startend_kmers.add(s)
+                    self.startend_kmers.add(canonical_s)
     
     def add_batch(self, strings: List[str]) -> None:
         """Add multiple strings to the sketch.
