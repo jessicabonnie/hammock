@@ -501,13 +501,13 @@ fi
 
 # Add custom parameter ranges if specified
 if [[ -n "$CUSTOM_WINDOW" ]]; then
-    PARAM_SWEEP_CMD="$PARAM_SWEEP_CMD --window '$CUSTOM_WINDOW'"
+    PARAM_SWEEP_CMD="$PARAM_SWEEP_CMD --window $CUSTOM_WINDOW"
 fi
 if [[ -n "$CUSTOM_KLEN" ]]; then
-    PARAM_SWEEP_CMD="$PARAM_SWEEP_CMD --klen '$CUSTOM_KLEN'"
+    PARAM_SWEEP_CMD="$PARAM_SWEEP_CMD --klen $CUSTOM_KLEN"
 fi
 if [[ -n "$CUSTOM_PRECISION" ]]; then
-    PARAM_SWEEP_CMD="$PARAM_SWEEP_CMD --precision '$CUSTOM_PRECISION'"
+    PARAM_SWEEP_CMD="$PARAM_SWEEP_CMD --precision $CUSTOM_PRECISION"
 fi
 
 # Run parameter sweep with real-time progress output

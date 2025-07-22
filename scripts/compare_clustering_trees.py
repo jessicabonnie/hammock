@@ -9,9 +9,11 @@ import numpy as np
 import argparse
 import sys
 from pathlib import Path
-from scipy.cluster.hierarchy import linkage, to_tree
+from scipy.cluster.hierarchy import linkage, to_tree, fcluster
 from scipy.spatial.distance import squareform
 import warnings
+from sklearn.metrics import silhouette_score, adjusted_rand_score, normalized_mutual_info_score
+from sklearn.cluster import KMeans
 
 # Suppress scipy warnings about clustering
 warnings.filterwarnings('ignore', category=RuntimeWarning)
@@ -230,6 +232,128 @@ def similarity_to_distance_matrix(sim_matrix):
     return condensed_dist
 
 
+def dynamic_tree_cut(linkage_matrix, distance_threshold=None, min_cluster_size=2, max_cluster_size=None):
+    """
+    Perform dynamic tree cutting to automatically determine optimal clusters.
+    
+    Args:
+        linkage_matrix: Linkage matrix from scipy.cluster.hierarchy.linkage
+        distance_threshold: Distance threshold for cutting (if None, auto-detect)
+        min_cluster_size: Minimum cluster size
+        max_cluster_size: Maximum cluster size (if None, no limit)
+        
+    Returns:
+        tuple: (cluster_labels, n_clusters, distance_threshold_used)
+    """
+    # If no distance threshold provided, try to auto-detect
+    if distance_threshold is None:
+        # Use the median of the linkage distances as a starting point
+        distances = linkage_matrix[:, 2]
+        distance_threshold = np.median(distances)
+        
+        # Adjust based on data size - smaller datasets need smaller thresholds
+        n_samples = len(linkage_matrix) + 1
+        if n_samples < 10:
+            distance_threshold *= 0.5
+        elif n_samples > 50:
+            distance_threshold *= 1.5
+    
+    # Perform clustering with the threshold
+    cluster_labels = fcluster(linkage_matrix, distance_threshold, criterion='distance')
+    n_clusters = len(set(cluster_labels))
+    
+    # Post-process to ensure minimum cluster size
+    if min_cluster_size > 1:
+        # Count cluster sizes
+        cluster_sizes = {}
+        for label in cluster_labels:
+            cluster_sizes[label] = cluster_sizes.get(label, 0) + 1
+        
+        # Find clusters that are too small
+        small_clusters = [label for label, size in cluster_sizes.items() if size < min_cluster_size]
+        
+        if small_clusters:
+            # Merge small clusters with their nearest neighbors
+            for small_cluster in small_clusters:
+                # Find the nearest cluster to merge with
+                best_merge = None
+                best_distance = float('inf')
+                
+                for other_cluster in set(cluster_labels):
+                    if other_cluster != small_cluster and cluster_sizes.get(other_cluster, 0) >= min_cluster_size:
+                        # Calculate average distance between clusters
+                        small_indices = np.where(cluster_labels == small_cluster)[0]
+                        other_indices = np.where(cluster_labels == other_cluster)[0]
+                        
+                        # Use linkage matrix to find distance
+                        for i in range(len(linkage_matrix)):
+                            if (linkage_matrix[i, 0] in small_indices and linkage_matrix[i, 1] in other_indices) or \
+                               (linkage_matrix[i, 1] in small_indices and linkage_matrix[i, 0] in other_indices):
+                                if linkage_matrix[i, 2] < best_distance:
+                                    best_distance = linkage_matrix[i, 2]
+                                    best_merge = other_cluster
+                                break
+                
+                if best_merge is not None:
+                    # Merge the small cluster into the best merge candidate
+                    cluster_labels[cluster_labels == small_cluster] = best_merge
+    
+    # Re-number clusters to be consecutive
+    unique_labels = sorted(set(cluster_labels))
+    label_map = {old_label: new_label for new_label, old_label in enumerate(unique_labels, 1)}
+    cluster_labels = np.array([label_map[label] for label in cluster_labels])
+    n_clusters = len(unique_labels)
+    
+    return cluster_labels, n_clusters, distance_threshold
+
+
+def evaluate_clustering_similarity(labels1, labels2, names):
+    """
+    Evaluate the similarity between two clusterings.
+    
+    Args:
+        labels1: Cluster labels from first clustering
+        labels2: Cluster labels from second clustering
+        names: List of sample names
+        
+    Returns:
+        dict: Dictionary containing various similarity metrics
+    """
+    # Calculate clustering similarity metrics
+    ari = adjusted_rand_score(labels1, labels2)
+    nmi = normalized_mutual_info_score(labels1, labels2)
+    
+    # Calculate cluster overlap matrix
+    n_clusters1 = len(set(labels1))
+    n_clusters2 = len(set(labels2))
+    
+    overlap_matrix = np.zeros((n_clusters1, n_clusters2))
+    for i in range(n_clusters1):
+        for j in range(n_clusters2):
+            # Count samples that are in cluster i in labels1 and cluster j in labels2
+            overlap = np.sum((labels1 == (i+1)) & (labels2 == (j+1)))
+            overlap_matrix[i, j] = overlap
+    
+    # Calculate cluster correspondence
+    max_overlaps = np.max(overlap_matrix, axis=1)
+    total_samples = len(labels1)
+    cluster_correspondence = np.sum(max_overlaps) / total_samples
+    
+    # Calculate cluster stability (how many samples stay in the same cluster)
+    stable_samples = np.sum(labels1 == labels2)
+    cluster_stability = stable_samples / total_samples
+    
+    return {
+        'adjusted_rand_index': ari,
+        'normalized_mutual_info': nmi,
+        'cluster_correspondence': cluster_correspondence,
+        'cluster_stability': cluster_stability,
+        'overlap_matrix': overlap_matrix,
+        'n_clusters1': n_clusters1,
+        'n_clusters2': n_clusters2
+    }
+
+
 def cluster_tree_to_newick(tree_node, names):
     """
     Convert scipy clustering tree to Newick format string.
@@ -361,7 +485,7 @@ def print_table_header():
     """
     Print the header for tab-delimited output.
     """
-    print("file1\tfile2\tformat1\tformat2\tmatrix_size\trf_distance\tmax_rf_distance\tnormalized_rf\tlinkage_method")
+    print("file1\tfile2\tformat1\tformat2\tmatrix_size\trf_distance\tmax_rf_distance\tnormalized_rf\tlinkage_method\tclustering_method\tn_clusters1\tn_clusters2\tadjusted_rand_index\tnormalized_mutual_info\tcluster_correspondence\tcluster_stability")
 
 
 def main():
@@ -383,6 +507,12 @@ def main():
     parser.add_argument('--header', action='store_true', 
                        help='Print tab-delimited header (use with --table)')
     parser.add_argument('--save-trees', help='Save Newick trees to file (useful for visualization)')
+    parser.add_argument('--clustering-method', '-c', choices=['kmeans', 'dynamic', 'both'], 
+                       default='both', help='Clustering method: kmeans (fixed k), dynamic (tree cutting), or both (default: both)')
+    parser.add_argument('--distance-threshold', '-d', type=float, 
+                       help='Distance threshold for dynamic tree cutting (auto-detect if not specified)')
+    parser.add_argument('--min-cluster-size', type=int, default=2,
+                       help='Minimum cluster size for dynamic tree cutting (default: 2)')
     
     args = parser.parse_args()
     
@@ -447,6 +577,104 @@ def main():
         linkage1 = linkage(dist1, method=args.linkage)
         linkage2 = linkage(dist2, method=args.linkage)
         
+        # Perform clustering based on method
+        clustering_results = {}
+        clustering_similarity = {}
+        
+        if args.clustering_method in ['kmeans', 'both']:
+            if not args.table:
+                print("Performing k-means clustering...")
+            
+            # Try different numbers of clusters
+            cluster_counts = [2, 3, 4, 5, 6]
+            best_silhouette1 = -1
+            best_silhouette2 = -1
+            best_k1 = 0
+            best_k2 = 0
+            best_labels1 = None
+            best_labels2 = None
+            
+            for k in cluster_counts:
+                kmeans1 = KMeans(n_clusters=k, random_state=42)
+                kmeans2 = KMeans(n_clusters=k, random_state=42)
+                
+                # Convert condensed distance matrices back to full matrices for silhouette calculation
+                n_samples = len(aligned_matrix1)
+                dist_matrix1 = squareform(dist1)
+                dist_matrix2 = squareform(dist2)
+                
+                # Get cluster labels
+                labels1 = kmeans1.fit_predict(dist_matrix1)
+                labels2 = kmeans2.fit_predict(dist_matrix2)
+                
+                # Calculate silhouette scores
+                silhouette1 = silhouette_score(dist_matrix1, labels1, metric='precomputed')
+                silhouette2 = silhouette_score(dist_matrix2, labels2, metric='precomputed')
+                
+                # Track best scores
+                if silhouette1 > best_silhouette1:
+                    best_silhouette1 = silhouette1
+                    best_k1 = k
+                    best_labels1 = labels1
+                if silhouette2 > best_silhouette2:
+                    best_silhouette2 = silhouette2
+                    best_k2 = k
+                    best_labels2 = labels2
+                    
+                if not args.table:
+                    print(f"k={k}:")
+                    print(f"  Silhouette score for matrix 1: {silhouette1:.4f}")
+                    print(f"  Silhouette score for matrix 2: {silhouette2:.4f}")
+            
+            if not args.table:
+                print(f"\nBest k-means clustering results:")
+                print(f"Matrix 1: k={best_k1}, silhouette={best_silhouette1:.4f}")
+                print(f"Matrix 2: k={best_k2}, silhouette={best_silhouette2:.4f}")
+            
+            clustering_results['kmeans'] = {
+                'k1': best_k1, 'k2': best_k2,
+                'silhouette1': best_silhouette1, 'silhouette2': best_silhouette2,
+                'labels1': best_labels1, 'labels2': best_labels2
+            }
+            
+            # Evaluate clustering similarity for k-means
+            if best_labels1 is not None and best_labels2 is not None:
+                clustering_similarity['kmeans'] = evaluate_clustering_similarity(
+                    best_labels1, best_labels2, list(aligned_matrix1.index)
+                )
+        
+        if args.clustering_method in ['dynamic', 'both']:
+            if not args.table:
+                print("Performing dynamic tree cutting...")
+            
+            # Perform dynamic tree cutting
+            labels1, n_clusters1, threshold1 = dynamic_tree_cut(
+                linkage1, 
+                distance_threshold=args.distance_threshold,
+                min_cluster_size=args.min_cluster_size
+            )
+            labels2, n_clusters2, threshold2 = dynamic_tree_cut(
+                linkage2, 
+                distance_threshold=args.distance_threshold,
+                min_cluster_size=args.min_cluster_size
+            )
+            
+            if not args.table:
+                print(f"Dynamic tree cutting results:")
+                print(f"Matrix 1: {n_clusters1} clusters, threshold={threshold1:.4f}")
+                print(f"Matrix 2: {n_clusters2} clusters, threshold={threshold2:.4f}")
+            
+            clustering_results['dynamic'] = {
+                'n_clusters1': n_clusters1, 'n_clusters2': n_clusters2,
+                'threshold1': threshold1, 'threshold2': threshold2,
+                'labels1': labels1, 'labels2': labels2
+            }
+            
+            # Evaluate clustering similarity for dynamic tree cutting
+            clustering_similarity['dynamic'] = evaluate_clustering_similarity(
+                labels1, labels2, list(aligned_matrix1.index)
+            )
+        
         # Convert to tree objects
         tree1 = to_tree(linkage1)
         tree2 = to_tree(linkage2)
@@ -471,8 +699,22 @@ def main():
             file1_name = Path(args.file1).name
             file2_name = Path(args.file2).name
             
+            # Determine clustering method and cluster counts for output
+            clustering_method = args.clustering_method
+            n_clusters1 = clustering_results.get('dynamic', {}).get('n_clusters1', 
+                        clustering_results.get('kmeans', {}).get('k1', 0))
+            n_clusters2 = clustering_results.get('dynamic', {}).get('n_clusters2', 
+                        clustering_results.get('kmeans', {}).get('k2', 0))
+            
+            # Get clustering similarity metrics
+            similarity_metrics = clustering_similarity.get('dynamic', clustering_similarity.get('kmeans', {}))
+            ari = similarity_metrics.get('adjusted_rand_index', 0.0)
+            nmi = similarity_metrics.get('normalized_mutual_info', 0.0)
+            correspondence = similarity_metrics.get('cluster_correspondence', 0.0)
+            stability = similarity_metrics.get('cluster_stability', 0.0)
+            
             # Print tab-delimited line
-            print(f"{file1_name}\t{file2_name}\t{format1}\t{format2}\t{n_leaves}\t{rf_distance}\t{max_rf}\t{normalized_rf:.6f}\t{args.linkage}")
+            print(f"{file1_name}\t{file2_name}\t{format1}\t{format2}\t{n_leaves}\t{rf_distance}\t{max_rf}\t{normalized_rf:.6f}\t{args.linkage}\t{clustering_method}\t{n_clusters1}\t{n_clusters2}\t{ari:.6f}\t{nmi:.6f}\t{correspondence:.6f}\t{stability:.6f}")
         else:
             # Print results in normal format
             print("\n" + "="*60)
@@ -481,11 +723,39 @@ def main():
             print(f"File 1: {args.file1} ({format1} format)")
             print(f"File 2: {args.file2} ({format2} format)")
             print(f"Linkage method: {args.linkage}")
+            print(f"Clustering method: {args.clustering_method}")
             print(f"Number of common leaves: {n_leaves}")
             print(f"Robinson-Foulds distance: {rf_distance}")
             print(f"Maximum possible RF distance: {max_rf}")
             print(f"Normalized RF distance: {normalized_rf:.6f}")
             print(f"Tree similarity: {1.0 - normalized_rf:.6f}")
+            
+            # Print clustering-specific results
+            if args.clustering_method in ['kmeans', 'both']:
+                kmeans_results = clustering_results.get('kmeans', {})
+                kmeans_similarity = clustering_similarity.get('kmeans', {})
+                print(f"\nK-means clustering results:")
+                print(f"  Best k for matrix 1: {kmeans_results.get('k1', 0)} (silhouette: {kmeans_results.get('silhouette1', 0):.4f})")
+                print(f"  Best k for matrix 2: {kmeans_results.get('k2', 0)} (silhouette: {kmeans_results.get('silhouette2', 0):.4f})")
+                if kmeans_similarity:
+                    print(f"  Clustering similarity metrics:")
+                    print(f"    Adjusted Rand Index: {kmeans_similarity.get('adjusted_rand_index', 0):.4f}")
+                    print(f"    Normalized Mutual Information: {kmeans_similarity.get('normalized_mutual_info', 0):.4f}")
+                    print(f"    Cluster Correspondence: {kmeans_similarity.get('cluster_correspondence', 0):.4f}")
+                    print(f"    Cluster Stability: {kmeans_similarity.get('cluster_stability', 0):.4f}")
+            
+            if args.clustering_method in ['dynamic', 'both']:
+                dynamic_results = clustering_results.get('dynamic', {})
+                dynamic_similarity = clustering_similarity.get('dynamic', {})
+                print(f"\nDynamic tree cutting results:")
+                print(f"  Clusters in matrix 1: {dynamic_results.get('n_clusters1', 0)} (threshold: {dynamic_results.get('threshold1', 0):.4f})")
+                print(f"  Clusters in matrix 2: {dynamic_results.get('n_clusters2', 0)} (threshold: {dynamic_results.get('threshold2', 0):.4f})")
+                if dynamic_similarity:
+                    print(f"  Clustering similarity metrics:")
+                    print(f"    Adjusted Rand Index: {dynamic_similarity.get('adjusted_rand_index', 0):.4f}")
+                    print(f"    Normalized Mutual Information: {dynamic_similarity.get('normalized_mutual_info', 0):.4f}")
+                    print(f"    Cluster Correspondence: {dynamic_similarity.get('cluster_correspondence', 0):.4f}")
+                    print(f"    Cluster Stability: {dynamic_similarity.get('cluster_stability', 0):.4f}")
         
         # Save trees if requested
         if args.save_trees:
@@ -505,6 +775,7 @@ def main():
                 f.write(f"File 1: {args.file1} ({format1} format)\n")
                 f.write(f"File 2: {args.file2} ({format2} format)\n")
                 f.write(f"Linkage method: {args.linkage}\n")
+                f.write(f"Clustering method: {args.clustering_method}\n")
                 f.write(f"Number of common leaves: {n_leaves}\n")
                 f.write(f"Robinson-Foulds distance: {rf_distance}\n")
                 f.write(f"Maximum possible RF distance: {max_rf}\n")

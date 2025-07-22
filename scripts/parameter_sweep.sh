@@ -413,7 +413,7 @@ echo -e "klen\twindow\tprecision\thammock_file\tbedtools_file\tformat1\tformat2\
 # Create clustering results table if clustering comparison is available
 if [[ "$CLUSTERING_COMPARISON_AVAILABLE" == "true" ]]; then
     echo "Clustering results will be saved to: $CLUSTERING_RESULTS_TABLE"
-    echo -e "klen\twindow\tprecision\thammock_file\tbedtools_file\tformat1\tformat2\tmatrix_size\trf_distance\tmax_rf_distance\tnormalized_rf\tlinkage_method\truntime_seconds" > "$CLUSTERING_RESULTS_TABLE"
+    echo -e "klen\twindow\tprecision\thammock_file\tbedtools_file\tformat1\tformat2\tmatrix_size\trf_distance\tmax_rf_distance\tnormalized_rf\tlinkage_method\tclustering_method\tn_clusters1\tn_clusters2\tadjusted_rand_index\tnormalized_mutual_info\tcluster_correspondence\tcluster_stability\truntime_seconds" > "$CLUSTERING_RESULTS_TABLE"
 fi
 
 # Count total combinations for progress tracking
@@ -588,7 +588,7 @@ for klen in "${KLEN_VALUES[@]}"; do
                         cat "$clustering_stdout_output" >&2
                         echo "  WARNING: Clustering stderr:" >&2
                         cat "$clustering_error_output" >&2
-                        echo -e "$klen\t$window\t$precision\tCLUSTERING_FAILED\t-\t-\t-\t-\t-\t-\t-\t-\t$runtime" >> "$CLUSTERING_RESULTS_TABLE"
+                        echo -e "$klen\t$window\t$precision\tCLUSTERING_FAILED\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t$runtime" >> "$CLUSTERING_RESULTS_TABLE"
                     fi
                     rm -f "$clustering_error_output" "$clustering_stdout_output"
                 fi
@@ -608,7 +608,7 @@ for klen in "${KLEN_VALUES[@]}"; do
                 
                 # Also add failed entry to clustering results if available
                 if [[ "$CLUSTERING_COMPARISON_AVAILABLE" == "true" ]]; then
-                    echo -e "$klen\t$window\t$precision\tSIM_COMPARISON_FAILED\t-\t-\t-\t-\t-\t-\t-\t-\t$runtime" >> "$CLUSTERING_RESULTS_TABLE"
+                    echo -e "$klen\t$window\t$precision\tSIM_COMPARISON_FAILED\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t$runtime" >> "$CLUSTERING_RESULTS_TABLE"
                 fi
             fi
             rm -f "$comparison_error_output" "$comparison_stdout_output"
