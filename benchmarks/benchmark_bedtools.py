@@ -39,15 +39,20 @@ def run_bedtools_benchmark(file1_list_path: str, file2_list_path: str) -> float:
     end_time = time.process_time()
     return end_time - start_time
 
-def run_hammock_benchmark(file1_list_path: str, file2_list_path: str, mode='A', sketch_type='hyperloglog', precision=12, use_rust=False) -> float:
+def run_hammock_benchmark(file1_list_path: str, file2_list_path: str, mode='A', sketch_type='hyperloglog', precision=12, use_rust=False, python_only=False) -> float:
     """Run hammock benchmark with specified parameters."""
     cmd = ['hammock', file1_list_path, file2_list_path, 
            '--mode', mode,
            f'--{sketch_type}',
            '--precision', str(precision)]
     
-    if use_rust and sketch_type == 'hyperloglog':
-        cmd.append('--rust')
+    # Add --python-only flag if requested
+    if python_only:
+        cmd.append('--python-only')
+    
+    # Note: The --rust flag has been removed. HyperLogLog now automatically uses
+    # Cython acceleration when available (FastHyperLogLog), falling back to
+    # pure Python implementation when not available.
     
     start_time = time.process_time()
     try:
@@ -102,7 +107,7 @@ def run_benchmark(num_files_list: List[int] = NUM_FILES_LIST, num_runs: int = NU
             for mode in ['A', 'B', 'C']:
                 for sketch_type in ['hyperloglog', 'minhash']:
                     for precision in [8, 12, 16]:
-                        # Run with Python implementation
+                        # Run with automatic acceleration (Cython when available, Python fallback)
                         key = f"hammock_{mode}_{sketch_type}_p{precision}"
                         times = []
                         for run in range(num_runs):
@@ -110,7 +115,7 @@ def run_benchmark(num_files_list: List[int] = NUM_FILES_LIST, num_runs: int = NU
                                 time_taken = run_hammock_benchmark(
                                     file1_list_path, file2_list_path,
                                     mode=mode, sketch_type=sketch_type,
-                                    precision=precision, use_rust=False
+                                    precision=precision, use_rust=False, python_only=False
                                 )
                                 times.append(time_taken)
                             except Exception as e:
@@ -132,16 +137,16 @@ def run_benchmark(num_files_list: List[int] = NUM_FILES_LIST, num_runs: int = NU
                                 'max_time': float('nan')
                             }
                         
-                        # Run with Rust implementation for HyperLogLog
+                        # Run with Python-only implementation for HyperLogLog
                         if sketch_type == 'hyperloglog':
-                            key = f"hammock_{mode}_{sketch_type}_rust_p{precision}"
+                            key = f"hammock_{mode}_{sketch_type}_python_p{precision}"
                             times = []
                             for run in range(num_runs):
                                 try:
                                     time_taken = run_hammock_benchmark(
                                         file1_list_path, file2_list_path,
                                         mode=mode, sketch_type=sketch_type,
-                                        precision=precision, use_rust=True
+                                        precision=precision, use_rust=False, python_only=True
                                     )
                                     times.append(time_taken)
                                 except Exception as e:
@@ -179,69 +184,119 @@ def run_benchmark(num_files_list: List[int] = NUM_FILES_LIST, num_runs: int = NU
     return results
 
 def plot_results(results):
-    """Plot the benchmark results."""
+    """Plot the benchmark results with separate graphs for each mode and a comparison graph."""
     num_files = [r['num_files'] for r in results]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    # Create a figure with multiple subplots
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+    # Colors and markers for different configurations
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f']
+    markers = ['o', 's', '^', 'D', 'v', '<', '>', 'p']
     
-    # Plot bedtools results
-    bedtools_mean = [r['bedtools']['mean_time'] for r in results]
-    bedtools_std = [r['bedtools']['std_time'] for r in results]
-    ax1.errorbar(num_files, bedtools_mean, yerr=bedtools_std, 
-                fmt='o-', capsize=5, label='bedtools')
-    
-    # Plot hammock results for different modes and sketching options
-    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
-    markers = ['o', 's', '^', 'D', 'v', '<']
-    
-    # Plot Python implementation results
-    for idx, (mode, sketch_type) in enumerate([('A', 'hyperloglog'), ('B', 'hyperloglog'),
-                                              ('C', 'hyperloglog'), ('A', 'minhash'),
-                                              ('B', 'minhash'), ('C', 'minhash')]):
-        for precision in [8, 12, 16]:
-            key = f"hammock_{mode}_{sketch_type}_p{precision}"
-            if all(key in r and not np.isnan(r[key]['mean_time']) for r in results):
-                mean_times = [r[key]['mean_time'] for r in results]
-                std_times = [r[key]['std_time'] for r in results]
-                label = f"{key} (p={precision})"
-                ax2.errorbar(num_files, mean_times, yerr=std_times,
-                            fmt=f'{markers[idx]}-', capsize=5, color=colors[idx],
-                            label=label)
-            else:
-                print(f"Skipping plot for {key} due to missing or NaN results")
-    
-    # Plot Rust implementation results
-    for idx, mode in enumerate(['A', 'B', 'C']):
-        for precision in [8, 12, 16]:
-            key = f"hammock_{mode}_hyperloglog_rust_p{precision}"
-            if all(key in r and not np.isnan(r[key]['mean_time']) for r in results):
-                mean_times = [r[key]['mean_time'] for r in results]
-                std_times = [r[key]['std_time'] for r in results]
-                label = f"{key} (p={precision})"
-                ax2.errorbar(num_files, mean_times, yerr=std_times,
-                            fmt=f'{markers[idx]}--', capsize=5, color=colors[idx],
-                            label=label)
-            else:
-                print(f"Skipping plot for {key} due to missing or NaN results")
-    
-    # Customize plots
-    for ax in [ax1, ax2]:
+    # Create separate graphs for each mode (A, B, C)
+    for mode in ['A', 'B', 'C']:
+        fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+        
+        # Plot bedtools for reference
+        bedtools_mean = [r['bedtools']['mean_time'] for r in results]
+        bedtools_std = [r['bedtools']['std_time'] for r in results]
+        ax.errorbar(num_files, bedtools_mean, yerr=bedtools_std, 
+                   fmt='ko-', capsize=5, label='bedtools', linewidth=2, markersize=8)
+        
+        # Plot hammock results for this mode
+        color_idx = 0
+        for sketch_type in ['hyperloglog', 'minhash']:
+            for precision in [8, 12, 16]:
+                # Cython version (automatic acceleration)
+                key = f"hammock_{mode}_{sketch_type}_p{precision}"
+                if all(key in r and not np.isnan(r[key]['mean_time']) for r in results):
+                    mean_times = [r[key]['mean_time'] for r in results]
+                    std_times = [r[key]['std_time'] for r in results]
+                    label = f"hammock {mode} {sketch_type} p{precision} (Cython)"
+                    ax.errorbar(num_files, mean_times, yerr=std_times,
+                               fmt=f'{markers[color_idx]}-', capsize=5, 
+                               color=colors[color_idx], label=label, linewidth=2)
+                    color_idx += 1
+                
+                # Python-only version (only for HyperLogLog)
+                if sketch_type == 'hyperloglog':
+                    key = f"hammock_{mode}_{sketch_type}_python_p{precision}"
+                    if all(key in r and not np.isnan(r[key]['mean_time']) for r in results):
+                        mean_times = [r[key]['mean_time'] for r in results]
+                        std_times = [r[key]['std_time'] for r in results]
+                        label = f"hammock {mode} {sketch_type} p{precision} (Python)"
+                        ax.errorbar(num_files, mean_times, yerr=std_times,
+                                   fmt=f'{markers[color_idx-1]}--', capsize=5, 
+                                   color=colors[color_idx-1], label=label, linewidth=2)
+        
         ax.set_xlabel('Number of Files')
         ax.set_ylabel('CPU Time (seconds)')
-        ax.grid(True)
+        ax.set_title(f'hammock Mode {mode} Performance Comparison')
+        ax.grid(True, alpha=0.3)
         ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.tight_layout()
+        
+        # Save plot
+        plot_path = os.path.join('benchmarks/results', f'hammock_mode_{mode}_benchmark_{timestamp}.png')
+        plt.savefig(plot_path, bbox_inches='tight', dpi=300)
+        plt.close()
     
-    ax1.set_title('bedtools.sh Performance')
-    ax2.set_title('hammock Performance (solid=Python, dashed=Rust)')
+    # Create comparison graph: bedtools vs hammock mode B HyperLogLog (Python vs Cython)
+    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
     
-    # Adjust layout to prevent label cutoff
+    # Plot bedtools
+    bedtools_mean = [r['bedtools']['mean_time'] for r in results]
+    bedtools_std = [r['bedtools']['std_time'] for r in results]
+    ax.errorbar(num_files, bedtools_mean, yerr=bedtools_std, 
+               fmt='ko-', capsize=5, label='bedtools', linewidth=3, markersize=10)
+    
+    # Calculate average across precision levels for hammock mode B HyperLogLog
+    cython_times = []
+    python_times = []
+    
+    for file_idx in range(len(num_files)):
+        cython_file_times = []
+        python_file_times = []
+        
+        for precision in [8, 12, 16]:
+            # Cython version
+            key = f"hammock_B_hyperloglog_p{precision}"
+            if key in results[file_idx] and not np.isnan(results[file_idx][key]['mean_time']):
+                cython_file_times.append(results[file_idx][key]['mean_time'])
+            
+            # Python-only version
+            key = f"hammock_B_hyperloglog_python_p{precision}"
+            if key in results[file_idx] and not np.isnan(results[file_idx][key]['mean_time']):
+                python_file_times.append(results[file_idx][key]['mean_time'])
+        
+        if cython_file_times:
+            cython_times.append(np.mean(cython_file_times))
+        else:
+            cython_times.append(np.nan)
+            
+        if python_file_times:
+            python_times.append(np.mean(python_file_times))
+        else:
+            python_times.append(np.nan)
+    
+    # Plot averaged hammock results
+    if not all(np.isnan(cython_times)):
+        ax.errorbar(num_files, cython_times, fmt='o-', capsize=5, 
+                   label='hammock B HyperLogLog (Cython, avg)', linewidth=2, color='blue')
+    
+    if not all(np.isnan(python_times)):
+        ax.errorbar(num_files, python_times, fmt='s--', capsize=5, 
+                   label='hammock B HyperLogLog (Python, avg)', linewidth=2, color='red')
+    
+    ax.set_xlabel('Number of Files')
+    ax.set_ylabel('CPU Time (seconds)')
+    ax.set_title('bedtools vs hammock Mode B HyperLogLog Comparison')
+    ax.grid(True, alpha=0.3)
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     
-    # Save plot
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    plot_path = os.path.join('benchmarks/results', f'bedtools_hammock_benchmark_{timestamp}.png')
-    plt.savefig(plot_path, bbox_inches='tight')
+    # Save comparison plot
+    plot_path = os.path.join('benchmarks/results', f'bedtools_vs_hammock_B_comparison_{timestamp}.png')
+    plt.savefig(plot_path, bbox_inches='tight', dpi=300)
     plt.close()
     
     # Save numerical results
@@ -265,6 +320,99 @@ def plot_results(results):
                     f.write(f"    Min CPU time: {r[key]['min_time']:.3f} seconds\n")
                     f.write(f"    Max CPU time: {r[key]['max_time']:.3f} seconds\n")
             f.write("\n" + "="*50 + "\n\n")
+    
+    # Save results table
+    table_path = os.path.join('benchmarks/results', f'benchmark_table_{timestamp}.csv')
+    save_results_table(results, table_path)
+
+def save_results_table(results, output_path):
+    """Save benchmark results as a CSV table."""
+    import csv
+    
+    # Define all possible columns
+    columns = ['num_files', 'bedtools_mean', 'bedtools_std', 'bedtools_min', 'bedtools_max']
+    
+    # Add hammock columns for all configurations
+    for mode in ['A', 'B', 'C']:
+        for sketch_type in ['hyperloglog', 'minhash']:
+            for precision in [8, 12, 16]:
+                base_key = f"hammock_{mode}_{sketch_type}_p{precision}"
+                columns.extend([
+                    f"{base_key}_mean",
+                    f"{base_key}_std", 
+                    f"{base_key}_min",
+                    f"{base_key}_max"
+                ])
+                
+                # Add Python-only version for HyperLogLog
+                if sketch_type == 'hyperloglog':
+                    python_key = f"hammock_{mode}_{sketch_type}_python_p{precision}"
+                    columns.extend([
+                        f"{python_key}_mean",
+                        f"{python_key}_std",
+                        f"{python_key}_min", 
+                        f"{python_key}_max"
+                    ])
+    
+    # Write CSV file
+    with open(output_path, 'w', newline='') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=columns)
+        writer.writeheader()
+        
+        for r in results:
+            row = {
+                'num_files': r['num_files'],
+                'bedtools_mean': f"{r['bedtools']['mean_time']:.6f}",
+                'bedtools_std': f"{r['bedtools']['std_time']:.6f}",
+                'bedtools_min': f"{r['bedtools']['min_time']:.6f}",
+                'bedtools_max': f"{r['bedtools']['max_time']:.6f}"
+            }
+            
+            # Add hammock results
+            for mode in ['A', 'B', 'C']:
+                for sketch_type in ['hyperloglog', 'minhash']:
+                    for precision in [8, 12, 16]:
+                        base_key = f"hammock_{mode}_{sketch_type}_p{precision}"
+                        if base_key in r and not np.isnan(r[base_key]['mean_time']):
+                            row[f"{base_key}_mean"] = f"{r[base_key]['mean_time']:.6f}"
+                            row[f"{base_key}_std"] = f"{r[base_key]['std_time']:.6f}"
+                            row[f"{base_key}_min"] = f"{r[base_key]['min_time']:.6f}"
+                            row[f"{base_key}_max"] = f"{r[base_key]['max_time']:.6f}"
+                        else:
+                            row[f"{base_key}_mean"] = "NaN"
+                            row[f"{base_key}_std"] = "NaN"
+                            row[f"{base_key}_min"] = "NaN"
+                            row[f"{base_key}_max"] = "NaN"
+                        
+                        # Add Python-only version for HyperLogLog
+                        if sketch_type == 'hyperloglog':
+                            python_key = f"hammock_{mode}_{sketch_type}_python_p{precision}"
+                            if python_key in r and not np.isnan(r[python_key]['mean_time']):
+                                row[f"{python_key}_mean"] = f"{r[python_key]['mean_time']:.6f}"
+                                row[f"{python_key}_std"] = f"{r[python_key]['std_time']:.6f}"
+                                row[f"{python_key}_min"] = f"{r[python_key]['min_time']:.6f}"
+                                row[f"{python_key}_max"] = f"{r[python_key]['max_time']:.6f}"
+                            else:
+                                row[f"{python_key}_mean"] = "NaN"
+                                row[f"{python_key}_std"] = "NaN"
+                                row[f"{python_key}_min"] = "NaN"
+                                row[f"{python_key}_max"] = "NaN"
+            
+            writer.writerow(row)
+    
+    print(f"Results table saved to: {output_path}")
+
+def quick_test():
+    """Run a quick test to verify graphing functionality."""
+    print("Running quick test to verify graphing functionality...")
+    
+    # Create results directory if it doesn't exist
+    os.makedirs('benchmarks/results', exist_ok=True)
+    
+    # Run with minimal parameters for quick test
+    results = run_benchmark(num_files_list=[2, 4], num_runs=2)
+    plot_results(results)
+    print("\nQuick test completed. Check benchmarks/results/ for generated graphs.")
 
 def main():
     # Create results directory if it doesn't exist
@@ -276,4 +424,8 @@ def main():
     print("\nBenchmark completed. Results saved in benchmarks/results/")
 
 if __name__ == "__main__":
-    main() 
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "--test":
+        quick_test()
+    else:
+        main() 
