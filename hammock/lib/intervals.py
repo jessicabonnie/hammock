@@ -211,19 +211,28 @@ class IntervalSketch(AbstractSketch):
                     line = line.strip()
                     if not line or line.startswith('#'):
                         continue
-                    interval, points, size = sketch.bedline(line, mode=kwargs.get('mode', 'A'), sep=sep, subsample=kwargs.get('subsample', (1.0, 1.0)))
-                    if interval:
-                        sketch.sketch.add_string(interval)
-                        # Add multiple copies of the interval if expA is set
-                        if expA > 0:
-                            for i in range(1, int(10**expA) + 1):
-                                sketch.sketch.add_string(interval + str(i))
-                        sketch.num_intervals += 1  # Increment counter for each interval
-                        sketch.total_interval_size += size
-                    if points:
-                        for point in points:
-                            if point is not None:
-                                sketch.sketch.add_string(point)
+                    # Skip header lines that start with common header words
+                    first_word = line.split()[0].lower() if line.split() else ""
+                    if first_word in ['chromosome', 'start', 'end', 'chrom', 'chromosome_name']:
+                        continue
+                    try:
+                        interval, points, size = sketch.bedline(line, mode=kwargs.get('mode', 'A'), sep=sep, subsample=kwargs.get('subsample', (1.0, 1.0)))
+                        if interval:
+                            sketch.sketch.add_string(interval)
+                            # Add multiple copies of the interval if expA is set
+                            if expA > 0:
+                                for i in range(1, int(10**expA) + 1):
+                                    sketch.sketch.add_string(interval + str(i))
+                            sketch.num_intervals += 1  # Increment counter for each interval
+                            sketch.total_interval_size += size
+                        if points:
+                            for point in points:
+                                if point is not None:
+                                    sketch.sketch.add_string(point)
+                    except ValueError as e:
+                        if debug:
+                            print(f"Skipping invalid line: {line.strip()[:50]}... (Error: {e})")
+                        continue
             
             # Print completion of file processing only in debug mode
             if debug:
