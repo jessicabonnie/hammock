@@ -1,0 +1,199 @@
+Accession	File	Target_of_Assay	Biosample_term_name	Organism
+ENCSR813CKU	ENCFF386HEY		urinary bladder	Homo sapiens
+ENCSR690LVC	ENCFF232KUW		urinary bladder	Mus musculus
+ENCSR000EIK	ENCFF400QKK		frontal cortex	Homo sapiens
+ENCSR000EIY	ENCFF635VUD		frontal cortex	Homo sapiens
+ENCSR193OYD	ENCFF301NHA		frontal cortex	Mus musculus
+ENCSR338GYD	ENCFF642OMY		frontal cortex	Mus musculus
+ENCSR196VDE	ENCFF175IJC		embryonic facial prominence	Mus musculus
+ENCSR435NHO	ENCFF169ISM		embryonic facial prominence	Homo sapiens
+ENCSR053ZKP	ENCFF669RIT		adrenal gland	Homo sapiens
+ENCSR060BFU	ENCFF949ZRW		adrenal gland	Homo sapiens
+ENCSR080PZL	ENCFF230LFX		adrenal gland	Homo sapiens
+ENCSR259GYP	ENCFF558JPT		adrenal gland	Homo sapiens
+ENCSR277KRY	ENCFF111KHO		adrenal gland	Homo sapiens
+ENCSR325FWM	ENCFF071WCJ		adrenal gland	Homo sapiens
+ENCSR419MZH	ENCFF101DAL		adrenal gland	Homo sapiens
+ENCSR458AOS	ENCFF742MRZ		adrenal gland	Homo sapiens
+ENCSR541JMK	ENCFF559POI		adrenal gland	Homo sapiens
+ENCSR597NVK	ENCFF745NET		adrenal gland	Homo sapiens
+ENCSR696XSJ	ENCFF420WQQ		adrenal gland	Homo sapiens
+ENCSR728BAD	ENCFF659HIW		adrenal gland	Homo sapiens
+ENCSR856QJX	ENCFF744JJO		adrenal gland	Homo sapiens
+ENCSR866RCY	ENCFF522YCT		adrenal gland	Homo sapiens
+ENCSR962VJO	ENCFF715QGZ		adrenal gland	Homo sapiens
+ENCSR204WCY	ENCFF648VOW		adrenal gland	Mus musculus
+ENCSR205UJK	ENCFF548SLA		adrenal gland	Mus musculus
+ENCSR365LKY	ENCFF493LZI		adrenal gland	Mus musculus
+ENCSR385MRA	ENCFF565BPK		adrenal gland	Mus musculus
+ENCSR406JCQ	ENCFF536YDE		adrenal gland	Mus musculus
+ENCSR428CWD	ENCFF813CNE		adrenal gland	Mus musculus
+ENCSR455VIA	ENCFF031QJO		adrenal gland	Mus musculus
+ENCSR551FWJ	ENCFF466OYU		adrenal gland	Mus musculus
+ENCSR655MEK	ENCFF665JAC		adrenal gland	Mus musculus
+ENCSR667KPL	ENCFF311FMI		adrenal gland	Mus musculus
+ENCSR756AFB	ENCFF947SPA		adrenal gland	Mus musculus
+ENCSR822RKU	ENCFF688UXH		adrenal gland	Mus musculus
+ENCSR831ITR	ENCFF173WFA		adrenal gland	Mus musculus
+ENCSR840HMW	ENCFF776XAF		adrenal gland	Mus musculus
+ENCSR923UKN	ENCFF330EGW		adrenal gland	Mus musculus
+ENCSR000EIJ	ENCFF109NJY		cerebellum	Homo sapiens
+ENCSR000EJQ	ENCFF326DYD		heart	Homo sapiens
+ENCSR006IJP	ENCFF266NXE		lung	Homo sapiens
+ENCSR026EOM	ENCFF291KDT		brain	Homo sapiens
+ENCSR064GBK	ENCFF302OBA		heart	Homo sapiens
+ENCSR066WZJ	ENCFF723TSB		kidney	Homo sapiens
+ENCSR076YBB	ENCFF778XBV		lung	Homo sapiens
+ENCSR082JCE	ENCFF410WHC		kidney	Homo sapiens
+ENCSR095GWE	ENCFF401IRH		stomach	Homo sapiens
+ENCSR106OKX	ENCFF388NNQ		kidney	Homo sapiens
+ENCSR128GBN	ENCFF052RRA		spleen	Homo sapiens
+ENCSR138UGH	ENCFF172OPL		ovary	Homo sapiens
+ENCSR141IUS	ENCFF692WOM		lung	Homo sapiens
+ENCSR141VGA	ENCFF700LFU		lung	Homo sapiens
+ENCSR154ZNQ	ENCFF271ZLC		heart	Homo sapiens
+ENCSR156CLC	ENCFF317LIS		brain	Homo sapiens
+ENCSR158YXM	ENCFF760SUM		liver	Homo sapiens
+ENCSR164PQJ	ENCFF007IZH		thymus	Homo sapiens
+ENCSR174JMM	ENCFF821EUZ		heart	Homo sapiens
+ENCSR189YJQ	ENCFF566BKD		heart	Homo sapiens
+ENCSR206OJJ	ENCFF132KNJ		kidney	Homo sapiens
+ENCSR214XJO	ENCFF767JZA		lung	Homo sapiens
+ENCSR262QJC	ENCFF720ENQ		kidney	Homo sapiens
+ENCSR305UJX	ENCFF730ORU		heart	Homo sapiens
+ENCSR311LLZ	ENCFF579QVX		heart	Homo sapiens
+ENCSR318WOD	ENCFF239JXU		lung	Homo sapiens
+ENCSR320PGJ	ENCFF993OIN		heart	Homo sapiens
+ENCSR342NCX	ENCFF608DZT		thymus	Homo sapiens
+ENCSR366EGE	ENCFF861CQD		heart	Homo sapiens
+ENCSR392GCE	ENCFF104PCD		heart	Homo sapiens
+ENCSR437KLY	ENCFF234RER		kidney	Homo sapiens
+ENCSR474GZQ	ENCFF208OQF		retina	Homo sapiens
+ENCSR475VQD	ENCFF224LZZ		brain	Homo sapiens
+ENCSR482HQE	ENCFF841TDH		lung	Homo sapiens
+ENCSR499PZA	ENCFF302YHA		kidney	Homo sapiens
+ENCSR504KZE	ENCFF278CXU		lung	Homo sapiens
+ENCSR532CRI	ENCFF958PPG		limb	Homo sapiens
+ENCSR533VAF	ENCFF091XLV		heart	Homo sapiens
+ENCSR536NGW	ENCFF227DNW		heart	Homo sapiens
+ENCSR541UPY	ENCFF511YWZ		thymus	Homo sapiens
+ENCSR544KDB	ENCFF361OCI		thymus	Homo sapiens
+ENCSR562FNN	ENCFF933OGA		liver	Homo sapiens
+ENCSR567EEO	ENCFF737OQO		spleen	Homo sapiens
+ENCSR582IPV	ENCFF175JRX		lung	Homo sapiens
+ENCSR587HPR	ENCFF200ZET		lung	Homo sapiens
+ENCSR597UIG	ENCFF891FHW		spleen	Homo sapiens
+ENCSR621ENC	ENCFF853KWU		retina	Homo sapiens
+ENCSR627NIF	ENCFF136PUE		lung	Homo sapiens
+ENCSR645GJD	ENCFF931HGM		kidney	Homo sapiens
+ENCSR664PKM	ENCFF372KCN		heart	Homo sapiens
+ENCSR679IFH	ENCFF686XTC		spleen	Homo sapiens
+ENCSR682PKY	ENCFF535YDL		thymus	Homo sapiens
+ENCSR705CNJ	ENCFF579OZM		heart	Homo sapiens
+ENCSR706IDL	ENCFF740RSJ		midbrain	Homo sapiens
+ENCSR712PYJ	ENCFF418PRB		ovary	Homo sapiens
+ENCSR732RIC	ENCFF608SOD		ovary	Homo sapiens
+ENCSR749BWV	ENCFF744ZUS		heart	Homo sapiens
+ENCSR757EPJ	ENCFF989JWT		kidney	Homo sapiens
+ENCSR774RCO	ENCFF973MIR		kidney	Homo sapiens
+ENCSR777USE	ENCFF494PNZ		thymus	Homo sapiens
+ENCSR792ZXA	ENCFF464MIT		kidney	Homo sapiens
+ENCSR804RSI	ENCFF944OVS		heart	Homo sapiens
+ENCSR818JGZ	ENCFF183JKX		limb	Homo sapiens
+ENCSR820ICX	ENCFF910DCV		retina	Homo sapiens
+ENCSR838IPF	ENCFF282QFQ		thymus	Homo sapiens
+ENCSR847RSJ	ENCFF423WOR		lung	Homo sapiens
+ENCSR866ODX	ENCFF806TUA		testis	Homo sapiens
+ENCSR872DUY	ENCFF816OUE		ovary	Homo sapiens
+ENCSR873ANE	ENCFF743ARK		kidney	Homo sapiens
+ENCSR888UPQ	ENCFF339ARK		thymus	Homo sapiens
+ENCSR911LTI	ENCFF802TWB		heart	Homo sapiens
+ENCSR914DOH	ENCFF536PBU		heart	Homo sapiens
+ENCSR941DTJ	ENCFF820ERD		kidney	Homo sapiens
+ENCSR945JJB	ENCFF136IYG		lung	Homo sapiens
+ENCSR946OIO	ENCFF523NCT		spleen	Homo sapiens
+ENCSR953JVX	ENCFF470PMD		kidney	Homo sapiens
+ENCSR962EAP	ENCFF513DPR		thymus	Homo sapiens
+ENCSR978QUT	ENCFF914YUP		testis	Homo sapiens
+ENCSR986XLW	ENCFF691GQY		lung	Homo sapiens
+ENCSR047FNH	ENCFF235JPE		large intestine	Homo sapiens
+ENCSR000CNH	ENCFF104HKW		large intestine	Mus musculus
+ENCSR000CMO	ENCFF584ERS		cerebellum	Mus musculus
+ENCSR000CNG	ENCFF587XGH		kidney	Mus musculus
+ENCSR000CNM	ENCFF268DLZ		lung	Mus musculus
+ENCSR000CNU	ENCFF951VJK		retina	Mus musculus
+ENCSR000CNV	ENCFF956EUO		retina	Mus musculus
+ENCSR000COE	ENCFF941CCB		brain	Mus musculus
+ENCSR000COF	ENCFF185BXA		brain	Mus musculus
+ENCSR000COG	ENCFF807DSU		brain	Mus musculus
+ENCSR005WPU	ENCFF055RDC		heart	Mus musculus
+ENCSR018FXD	ENCFF353CVJ		kidney	Mus musculus
+ENCSR021IRX	ENCFF044YWS		thymus	Mus musculus
+ENCSR023EDS	ENCFF085OYZ		kidney	Mus musculus
+ENCSR049ACM	ENCFF988JKK		thymus	Mus musculus
+ENCSR059VAQ	ENCFF677RKU		lung	Mus musculus
+ENCSR060ALG	ENCFF249RHX		kidney	Mus musculus
+ENCSR066DPD	ENCFF890GCF		kidney	Mus musculus
+ENCSR087PCD	ENCFF744KST		spleen	Mus musculus
+ENCSR087SUF	ENCFF410IVK		ovary	Mus musculus
+ENCSR090RLB	ENCFF441YOR		thymus	Mus musculus
+ENCSR094XAY	ENCFF459KBR		lung	Mus musculus
+ENCSR104ZBW	ENCFF586PPA		heart	Mus musculus
+ENCSR113CGA	ENCFF136VVL		kidney	Mus musculus
+ENCSR121JAB	ENCFF744YEV		heart	Mus musculus
+ENCSR145TJB	ENCFF468ERD		heart	Mus musculus
+ENCSR147AIN	ENCFF475OMI		heart	Mus musculus
+ENCSR162TZA	ENCFF833USD		kidney	Mus musculus
+ENCSR168HGB	ENCFF884MUG		heart	Mus musculus
+ENCSR170FAP	ENCFF178TWV		kidney	Mus musculus
+ENCSR179HEN	ENCFF917VQD		thymus	Mus musculus
+ENCSR224ZGJ	ENCFF286UJV		lung	Mus musculus
+ENCSR231NBX	ENCFF290NTU		heart	Mus musculus
+ENCSR232ELD	ENCFF482KHA		ovary	Mus musculus
+ENCSR260SFQ	ENCFF371RQS		liver	Mus musculus
+ENCSR285LPX	ENCFF629EVU		lung	Mus musculus
+ENCSR293SQC	ENCFF260VYP		lung	Mus musculus
+ENCSR315TVO	ENCFF315UOF		thymus	Mus musculus
+ENCSR322AIL	ENCFF979ULB		thymus	Mus musculus
+ENCSR352FCL	ENCFF473DRI		kidney	Mus musculus
+ENCSR362ZRQ	ENCFF470EDQ		ovary	Mus musculus
+ENCSR373ZJT	ENCFF197GXG		kidney	Mus musculus
+ENCSR398LUY	ENCFF792NCD		thymus	Mus musculus
+ENCSR408JZW	ENCFF030LSS		lung	Mus musculus
+ENCSR409LVQ	ENCFF675GRT		heart	Mus musculus
+ENCSR427LHI	ENCFF421MWI		lung	Mus musculus
+ENCSR441MWY	ENCFF880CNF		heart	Mus musculus
+ENCSR443DSO	ENCFF728ZKQ		testis	Mus musculus
+ENCSR488VEQ	ENCFF470FLX		retina	Mus musculus
+ENCSR536FZI	ENCFF837DKV		lung	Mus musculus
+ENCSR541MWB	ENCFF349UID		heart	Mus musculus
+ENCSR575YLW	ENCFF801GFP		lung	Mus musculus
+ENCSR581ZXI	ENCFF220UEZ		spleen	Mus musculus
+ENCSR585JUM	ENCFF090XEB		spleen	Mus musculus
+ENCSR591ILA	ENCFF023FHV		ovary	Mus musculus
+ENCSR597QYA	ENCFF359GEV		spleen	Mus musculus
+ENCSR603SOS	ENCFF320EUT		spleen	Mus musculus
+ENCSR605PMM	ENCFF765OSL		kidney	Mus musculus
+ENCSR613LJB	ENCFF122DJK		heart	Mus musculus
+ENCSR636NXY	ENCFF008TLV		limb	Mus musculus
+ENCSR657WHR	ENCFF437CYP		heart	Mus musculus
+ENCSR661HDP	ENCFF748OYA		limb	Mus musculus
+ENCSR664IBN	ENCFF655TUY		kidney	Mus musculus
+ENCSR671JNA	ENCFF546GWU		thymus	Mus musculus
+ENCSR671NPO	ENCFF045UHT		heart	Mus musculus
+ENCSR671SQM	ENCFF891NLA		testis	Mus musculus
+ENCSR677CPE	ENCFF132BTX		heart	Mus musculus
+ENCSR702AVR	ENCFF907KPL		lung	Mus musculus
+ENCSR720KMQ	ENCFF405YDD		lung	Mus musculus
+ENCSR749ILN	ENCFF846XYQ		heart	Mus musculus
+ENCSR756QHG	ENCFF410TOW		lung	Mus musculus
+ENCSR767AJS	ENCFF123TXA		midbrain	Mus musculus
+ENCSR788KLG	ENCFF761RBV		kidney	Mus musculus
+ENCSR800YHA	ENCFF575EQF		heart	Mus musculus
+ENCSR802MKV	ENCFF219WTD		liver	Mus musculus
+ENCSR804CGV	ENCFF541TUJ		heart	Mus musculus
+ENCSR913OPY	ENCFF037QRW		lung	Mus musculus
+ENCSR935RRY	ENCFF486ARJ		thymus	Mus musculus
+ENCSR961EFP	ENCFF968PVC		heart	Mus musculus
+ENCSR969OPE	ENCFF220GXC		stomach	Mus musculus
+ENCSR984XSP	ENCFF596VTP		kidney	Mus musculus
