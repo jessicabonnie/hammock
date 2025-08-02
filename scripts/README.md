@@ -425,6 +425,69 @@ encode_heatmap.R <encode.report> <hammock.results> [file_prefix]
 - Integrates ENCODE metadata for labeling
 - Supports various similarity matrix formats
 - Customizable color schemes and annotations
+- Generates three types of heatmaps:
+  - Biosample-based clustering
+  - Organism-based clustering
+  - Target of assay-based clustering
+
+**Output Files**:
+- `{file_prefix}_biosample.pdf` - Heatmap colored by biosample
+- `{file_prefix}_organism.pdf` - Heatmap colored by organism
+- `{file_prefix}_target.pdf` - Heatmap colored by target of assay
+
+#### `encode_PCA.R`
+**Purpose**: Generate PCA plots from similarity matrices with ENCODE metadata integration, including both global and organism-specific analyses.
+
+**Usage**:
+```bash
+encode_PCA.R <encode.report> <hammock.results> [file_prefix]
+```
+
+**Features**:
+- **Global PCA**: Single PCA analysis of all organisms together
+- **Organism-specific PCA**: Separate PCA analysis for each organism
+- Large, readable text and point sizes for publication quality
+- Color coding by biosample, shape coding by organism
+- Variance explained percentages in axis labels
+- Summary statistics for each organism
+
+**Output Files**:
+- `{file_prefix}_pca.pdf` - Global PCA plot (all organisms together)
+- `{file_prefix}_organism_specific_pca.pdf` - Organism-specific PCA plots (one per organism)
+
+**Analysis Types**:
+1. **Global PCA**: Uses the full similarity matrix to show how all samples cluster together
+2. **Organism-specific PCA**: Calculates separate PCA for each organism using only within-organism similarities
+
+#### `encode_graphs.sh`
+**Purpose**: Orchestrate the generation of all ENCODE visualization graphs (heatmaps and PCA plots) in one command.
+
+**Usage**:
+```bash
+encode_graphs.sh <encode.report> <hammock.results> [file_prefix]
+```
+
+**Features**:
+- Calls both `encode_heatmap.R` and `encode_PCA.R` automatically
+- Validates input files before processing
+- Clear progress reporting for each step
+- Error handling with informative messages
+- Summary of all generated files
+
+**Generated Files**:
+- `{file_prefix}_biosample.pdf` - Biosample heatmap
+- `{file_prefix}_organism.pdf` - Organism heatmap
+- `{file_prefix}_target.pdf` - Target heatmap
+- `{file_prefix}_pca.pdf` - Global PCA plot (all organisms)
+- `{file_prefix}_organism_specific_pca.pdf` - Organism-specific PCA plots
+
+**Example Workflow**:
+```bash
+# Generate all ENCODE visualizations in one command
+encode_graphs.sh encode_metadata.tsv hammock_results.csv my_experiment
+
+# This produces 5 PDF files with comprehensive visualizations
+```
 
 ---
 

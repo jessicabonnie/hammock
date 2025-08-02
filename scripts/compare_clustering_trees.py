@@ -481,11 +481,31 @@ def simple_robinson_foulds(tree1_newick, tree2_newick):
     return rf, max_rf, normalized_rf, n_leaves
 
 
+def extract_parameters_from_filename(filename):
+    """
+    Extract klen, window, and precision parameters from hammock output filename.
+    Returns (klen, window, precision) as integers, or (0, 0, 0) if not found.
+    """
+    import re
+    
+    # Pattern to match parameters in hammock output filenames
+    # Example: hammock_mnmzr_p16_jaccD_k10_w25.csv
+    pattern = r'k(\d+).*w(\d+).*p(\d+)'
+    match = re.search(pattern, filename)
+    
+    if match:
+        klen = int(match.group(1))
+        window = int(match.group(2))
+        precision = int(match.group(3))
+        return klen, window, precision
+    else:
+        return 0, 0, 0
+
 def print_table_header():
     """
     Print the header for tab-delimited output.
     """
-    print("file1\tfile2\tformat1\tformat2\tmatrix_size\trf_distance\tmax_rf_distance\tnormalized_rf\tlinkage_method\tclustering_method\tn_clusters1\tn_clusters2\tadjusted_rand_index\tnormalized_mutual_info\tcluster_correspondence\tcluster_stability")
+    print("file1\tfile2\tformat1\tformat2\tklen1\twindow1\tprecision1\tklen2\twindow2\tprecision2\tn_leaves\trf_distance\tmax_rf_distance\tnormalized_rf\tlinkage_method\tclustering_method\tn_clusters1\tn_clusters2\tadjusted_rand_index\tnormalized_mutual_info\tcluster_correspondence\tcluster_stability")
 
 
 def main():
@@ -699,22 +719,58 @@ def main():
             file1_name = Path(args.file1).name
             file2_name = Path(args.file2).name
             
-            # Determine clustering method and cluster counts for output
-            clustering_method = args.clustering_method
-            n_clusters1 = clustering_results.get('dynamic', {}).get('n_clusters1', 
-                        clustering_results.get('kmeans', {}).get('k1', 0))
-            n_clusters2 = clustering_results.get('dynamic', {}).get('n_clusters2', 
-                        clustering_results.get('kmeans', {}).get('k2', 0))
+            # Extract parameters from filenames
+            klen1, window1, precision1 = extract_parameters_from_filename(file1_name)
+            klen2, window2, precision2 = extract_parameters_from_filename(file2_name)
             
-            # Get clustering similarity metrics
-            similarity_metrics = clustering_similarity.get('dynamic', clustering_similarity.get('kmeans', {}))
-            ari = similarity_metrics.get('adjusted_rand_index', 0.0)
-            nmi = similarity_metrics.get('normalized_mutual_info', 0.0)
-            correspondence = similarity_metrics.get('cluster_correspondence', 0.0)
-            stability = similarity_metrics.get('cluster_stability', 0.0)
+            # Output separate lines for each clustering method when both are used
+            methods_to_output = []
+            if args.clustering_method == 'kmeans' or (args.clustering_method == 'both' and 'kmeans' in clustering_results):
+                methods_to_output.append('kmeans')
+            if args.clustering_method == 'dynamic' or (args.clustering_method == 'both' and 'dynamic' in clustering_results):
+                methods_to_output.append('dynamic')
             
-            # Print tab-delimited line
-            print(f"{file1_name}\t{file2_name}\t{format1}\t{format2}\t{n_leaves}\t{rf_distance}\t{max_rf}\t{normalized_rf:.6f}\t{args.linkage}\t{clustering_method}\t{n_clusters1}\t{n_clusters2}\t{ari:.6f}\t{nmi:.6f}\t{correspondence:.6f}\t{stability:.6f}")
+            for method in methods_to_output:
+                if method == 'kmeans':
+                    # For k-means, output results for each k value tested
+                    cluster_counts = [2, 3, 4, 5, 6]
+                    for k in cluster_counts:
+                        # Re-run k-means for this k value to get the results
+                        kmeans1 = KMeans(n_clusters=k, random_state=42)
+                        kmeans2 = KMeans(n_clusters=k, random_state=42)
+                        
+                        # Convert condensed distance matrices back to full matrices
+                        n_samples = len(aligned_matrix1)
+                        dist_matrix1 = squareform(dist1)
+                        dist_matrix2 = squareform(dist2)
+                        
+                        # Get cluster labels
+                        labels1 = kmeans1.fit_predict(dist_matrix1)
+                        labels2 = kmeans2.fit_predict(dist_matrix2)
+                        
+                        # Calculate similarity metrics for this k
+                        similarity_metrics = evaluate_clustering_similarity(labels1, labels2, list(aligned_matrix1.index))
+                        
+                        ari = similarity_metrics.get('adjusted_rand_index', 0.0)
+                        nmi = similarity_metrics.get('normalized_mutual_info', 0.0)
+                        correspondence = similarity_metrics.get('cluster_correspondence', 0.0)
+                        stability = similarity_metrics.get('cluster_stability', 0.0)
+                        
+                        # Print tab-delimited line for this k value
+                        print(f"{file1_name}\t{file2_name}\t{format1}\t{format2}\t{klen1}\t{window1}\t{precision1}\t{klen2}\t{window2}\t{precision2}\t{n_leaves}\t{rf_distance}\t{max_rf}\t{normalized_rf:.6f}\t{args.linkage}\tkmeans_k{k}\t{k}\t{k}\t{ari:.6f}\t{nmi:.6f}\t{correspondence:.6f}\t{stability:.6f}")
+                else:  # dynamic
+                    # Get cluster counts for dynamic method
+                    n_clusters1 = clustering_results['dynamic'].get('n_clusters1', 0)
+                    n_clusters2 = clustering_results['dynamic'].get('n_clusters2', 0)
+                    similarity_metrics = clustering_similarity.get('dynamic', {})
+                    
+                    ari = similarity_metrics.get('adjusted_rand_index', 0.0)
+                    nmi = similarity_metrics.get('normalized_mutual_info', 0.0)
+                    correspondence = similarity_metrics.get('cluster_correspondence', 0.0)
+                    stability = similarity_metrics.get('cluster_stability', 0.0)
+                    
+                    # Print tab-delimited line for dynamic method
+                    print(f"{file1_name}\t{file2_name}\t{format1}\t{format2}\t{klen1}\t{window1}\t{precision1}\t{klen2}\t{window2}\t{precision2}\t{n_leaves}\t{rf_distance}\t{max_rf}\t{normalized_rf:.6f}\t{args.linkage}\t{method}\t{n_clusters1}\t{n_clusters2}\t{ari:.6f}\t{nmi:.6f}\t{correspondence:.6f}\t{stability:.6f}")
         else:
             # Print results in normal format
             print("\n" + "="*60)
