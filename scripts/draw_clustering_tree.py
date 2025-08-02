@@ -8,12 +8,20 @@ import pandas as pd
 import numpy as np
 import argparse
 import sys
+import os
 from pathlib import Path
 from scipy.cluster.hierarchy import linkage, dendrogram
 from scipy.spatial.distance import squareform
 import matplotlib.pyplot as plt
 import matplotlib
 import warnings
+
+# Add the scripts directory to Python path
+scripts_path = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(scripts_path)
+
+# Import utility functions
+from utils import parse_hammock_format
 
 # Suppress scipy warnings about clustering
 warnings.filterwarnings('ignore', category=RuntimeWarning)
@@ -124,70 +132,7 @@ def parse_bedtools_format(filepath):
     return sim_df
 
 
-def parse_hammock_format(filepath):
-    """
-    Parse hammock CSV output into a similarity matrix.
-    
-    Args:
-        filepath (str): Path to hammock CSV file
-        
-    Returns:
-        pandas.DataFrame: Symmetric similarity matrix
-    """
-    # Read the hammock CSV output
-    df = pd.read_csv(filepath)
-    
-    # Determine which jaccard column to use
-    if 'jaccard_similarity_with_ends' in df.columns:
-        # Mode D (FASTA files) - use jaccard_similarity_with_ends
-        jaccard_col = 'jaccard_similarity_with_ends'
-    elif 'jaccard_similarity' in df.columns:
-        # Mode B (BED files) - use jaccard_similarity
-        jaccard_col = 'jaccard_similarity'
-    else:
-        raise ValueError("No jaccard similarity column found in hammock output")
-    
-    # Extract similarity values and file pairs
-    similarity_data = df[['file1', 'file2', jaccard_col]].copy()
-    
-    # Convert file names to basenames without extensions for matching
-    def get_basename(filename):
-        # Remove common double extensions first
-        name = str(filename)
-        if name.endswith('.bed.gz'):
-            name = name[:-7]  # Remove .bed.gz
-        elif name.endswith('.fa.gz'):
-            name = name[:-6]  # Remove .fa.gz
-        else:
-            # Use Path.stem for single extensions
-            name = Path(name).stem
-        return name
-    
-    similarity_data['file1_base'] = similarity_data['file1'].apply(get_basename)
-    similarity_data['file2_base'] = similarity_data['file2'].apply(get_basename)
-    
-    # Get unique file basenames
-    all_files = sorted(set(similarity_data['file1_base'].tolist() + similarity_data['file2_base'].tolist()))
-    
-    # Create empty similarity matrix
-    n_files = len(all_files)
-    sim_matrix = np.zeros((n_files, n_files))
-    
-    # Create file name to index mapping
-    file_to_idx = {file: idx for idx, file in enumerate(all_files)}
-    
-    # Fill the similarity matrix
-    for _, row in similarity_data.iterrows():
-        i = file_to_idx[row['file1_base']]
-        j = file_to_idx[row['file2_base']]
-        sim_matrix[i, j] = row[jaccard_col]
-        # Make symmetric
-        sim_matrix[j, i] = row[jaccard_col]
-    
-    # Convert to DataFrame with proper labels
-    sim_df = pd.DataFrame(sim_matrix, index=all_files, columns=all_files)
-    
-    return sim_df
+
 
 
 def parse_newick_format(filepath):

@@ -10,6 +10,52 @@ After installation (`pip install .`), all scripts in this directory become globa
 
 ### 🔬 Analysis and Comparison Scripts
 
+#### `clustering_analysis.py`
+**Purpose**: Perform agglomerative clustering analysis on hammock similarity matrices and evaluate clustering quality using Normalized Mutual Information (NMI) against true tissue type labels.
+
+**Usage**:
+```bash
+clustering_analysis.py <hammock_output> <accession_key> [--clusters N1 N2 ...] [--linkage METHOD]
+```
+
+**Features**:
+- Loads hammock similarity matrix and true tissue type labels from accession key
+- Performs agglomerative clustering with different numbers of clusters
+- Evaluates clustering quality using NMI (Normalized Mutual Information)
+- Compares different linkage methods (ward, complete, average, single)
+- Generates visualizations: NMI scores vs cluster numbers, confusion matrices
+- Handles reproducible random sampling with seed control
+- Supports custom cluster ranges and linkage methods
+- **Uses centralized parsing from utils.py** for consistent hammock format handling
+
+**Parameters**:
+- `hammock_output`: Path to hammock CSV output file
+- `accession_key`: Path to accession key TSV file with tissue type labels
+- `--clusters N1 N2 ...`: Number of clusters to test (default: 2-10)
+- `--linkage METHOD`: Linkage method for clustering (default: ward)
+
+**Output**:
+- NMI scores for different cluster numbers
+- Best clustering configuration identification
+- Confusion matrix comparing true tissue types with predicted clusters
+- Linkage method comparison
+- Visual plots of results
+
+**Example**:
+```bash
+# Basic clustering analysis
+clustering_analysis.py hammock_results.csv accession_key.tsv
+
+# Test specific cluster numbers
+clustering_analysis.py hammock_results.csv accession_key.tsv --clusters 2 3 4 5 6
+
+# Use different linkage method
+clustering_analysis.py hammock_results.csv accession_key.tsv --linkage complete
+
+# Full example with custom parameters
+clustering_analysis.py manmouse_subtissue_mnmzr_p24_jaccD_k10_w100.csv balanced_accession_key.tsv --clusters 2 3 4 5 --linkage complete
+```
+
 #### `compare_sim_matrices.py`
 **Purpose**: Compare similarity matrices from bedtools and hammock outputs, calculating various metrics.
 
@@ -24,6 +70,7 @@ compare_sim_matrices.py <hammock_output> <bedtools_output> [--table] [--quiet]
 - Calculates Frobenius norm, correlation, mean/max absolute error
 - Outputs detailed comparison metrics or table format
 - Handles different file extensions (.bed.gz, .fa.gz, etc.)
+- **Uses centralized parsing from utils.py** for consistent hammock format handling
 
 **Example**:
 ```bash
@@ -33,6 +80,193 @@ compare_sim_matrices.py hammock_results.csv bedtools_output.txt
 # Get table format for parameter sweeps
 compare_sim_matrices.py hammock_results.csv bedtools_output.txt --table
 ```
+
+#### `compare_clustering_trees.py`
+**Purpose**: Compare hierarchical clustering trees built from Jaccard similarity matrices using Robinson-Foulds distance. This provides a biologically meaningful comparison of how well hammock approximates bedtools clustering patterns.
+
+**Usage**:
+```bash
+compare_clustering_trees.py <file1> <file2> [--linkage METHOD] [--table] [--verbose] [--save-trees FILE] [--output FILE]
+```
+
+**Features**:
+- Automatically detects file format (bedtools vs hammock)
+- Builds hierarchical clustering trees from similarity matrices
+- Calculates accurate Robinson-Foulds distance using ete3 library
+- Supports multiple linkage methods (single, complete, average, ward)
+- Outputs normalized RF distance (0-1 scale) and tree similarity
+- Can save Newick format trees for visualization
+- Table format output for integration with parameter sweeps
+- **Uses centralized parsing from utils.py** for consistent hammock format handling
+
+**Parameters**:
+- `--linkage, -l`: Clustering linkage method (default: average)
+  - `single`: Single linkage (minimum distance)
+  - `complete`: Complete linkage (maximum distance) 
+  - `average`: Average linkage (UPGMA)
+  - `ward`: Ward's minimum variance method
+- `--table, -t`: Output results as tab-delimited line
+- `--header`: Print tab-delimited header (use with --table)
+- `--verbose, -v`: Show detailed progress and tree information
+- `--save-trees FILE`: Save Newick format trees to file
+- `--output, -o FILE`: Save detailed comparison results to file
+
+**Output Metrics**:
+- **Robinson-Foulds distance**: Number of different splits between trees
+- **Maximum RF distance**: Theoretical maximum RF distance for n leaves
+- **Normalized RF distance**: RF distance / max RF distance (0-1 scale)
+- **Tree similarity**: 1 - normalized RF distance (higher = more similar)
+
+**Dependencies**:
+- **Required**: scipy, pandas, numpy
+- **Recommended**: ete3 (for accurate RF calculations)
+- **Alternative**: dendropy (fallback if ete3 unavailable)
+
+**Example**:
+```bash
+# Basic tree comparison with verbose output
+compare_clustering_trees.py hammock_results.csv bedtools_output.tsv --verbose
+
+# Compare with different linkage methods
+compare_clustering_trees.py hammock_results.csv bedtools_output.tsv --linkage complete
+
+# Table format for parameter sweeps
+compare_clustering_trees.py hammock_results.csv bedtools_output.tsv --table
+
+# Save trees and detailed results for further analysis
+compare_clustering_trees.py hammock_results.csv bedtools_output.tsv \
+    --save-trees clustering_trees.newick \
+    --output detailed_comparison.txt \
+    --verbose
+
+# Print header for parameter sweep integration
+compare_clustering_trees.py --header
+```
+
+**Interpretation**:
+- **RF distance = 0**: Trees are identical (perfect match)
+- **RF distance = max**: Trees are maximally different
+- **Normalized RF < 0.2**: Trees are very similar (good approximation)
+- **Normalized RF > 0.8**: Trees are very different (poor approximation)
+
+**Integration with Parameter Sweeps**:
+The table output format makes it easy to integrate with parameter sweep workflows:
+```bash
+# Header output
+file1	file2	format1	format2	matrix_size	rf_distance	max_rf_distance	normalized_rf	linkage_method
+
+# Example result
+hammock_p20_k15_w100.csv	bedtools_ref.tsv	hammock	bedtools	68	114	130	0.876923	average
+```
+
+#### `draw_clustering_tree.py`
+**Purpose**: Generate hierarchical clustering dendrograms from bedtools/hammock similarity matrices OR visualize saved Newick format trees with automatic format detection.
+
+**Usage**:
+```bash
+# From similarity matrices
+draw_clustering_tree.py <matrix_file> [--output OUTPUT] [--linkage METHOD] [--figsize W H] [options]
+
+# From Newick tree files
+draw_clustering_tree.py <newick_file> [--output OUTPUT] [--tree-index N] [--list-trees] [options]
+```
+
+**Features**:
+- **NEW**: Automatically detects file format (bedtools, hammock, or Newick)
+- **NEW**: Visualizes saved Newick trees from `compare_clustering_trees.py --save-trees`
+- **NEW**: Supports multi-tree Newick files with tree selection by index
+- Supports all major linkage methods (single, complete, average, ward) for similarity matrices
+- Generates high-quality dendrogram visualizations
+- Customizable figure size, labels, and color schemes
+- Detailed clustering summary with similarity statistics (for similarity matrices)
+- Saves plots in multiple formats (PNG, PDF, SVG, etc.)
+- Option to suppress plot display for batch processing
+- **Uses centralized parsing from utils.py** for consistent hammock format handling
+
+**Parameters**:
+- `input_file`: Input file (similarity matrix: bedtools/hammock format, or Newick tree file)
+- `--output, -o FILE`: Output file for dendrogram (PNG, PDF, SVG, etc.)
+- `--linkage, -l METHOD`: Linkage method (single, complete, average, ward; default: average, ignored for Newick files)
+- `--figsize W H`: Figure size as width height (default: 12 8)
+- `--title, -t TITLE`: Custom title for the dendrogram
+- `--max-label-length N`: Maximum length for sample labels (default: 20, 0 for no truncation)
+- `--color-threshold FLOAT`: Distance threshold for coloring clusters (ignored for Newick files)
+- `--no-show`: Do not display the plot (useful when saving to file)
+- `--summary, -s`: Print detailed clustering summary (ignored for Newick files)
+- `--quiet, -q`: Suppress progress messages
+- **NEW** `--tree-index N`: Index of tree to visualize from Newick file (default: 0, first tree)
+- **NEW** `--list-trees`: List all trees in Newick file and exit
+
+**Examples**:
+```bash
+# Basic dendrogram generation with display
+draw_clustering_tree.py similarity_matrix.csv
+
+# Save dendrogram to file without displaying
+draw_clustering_tree.py bedtools_output.tsv --output tree.png --no-show
+
+# Generate with different linkage method and custom size
+draw_clustering_tree.py hammock_results.csv --linkage complete --figsize 16 10 --output large_tree.pdf
+
+# Batch processing with summary statistics
+draw_clustering_tree.py data.csv --no-show --output tree.png --summary --quiet
+
+# Compare different linkage methods
+for method in single complete average ward; do
+    draw_clustering_tree.py data.csv --linkage $method --output tree_${method}.png --no-show
+done
+```
+
+**Output Information**:
+- **Dendrogram Plot**: Visual representation of hierarchical clustering
+- **Clustering Summary** (with --summary): 
+  - Number of samples and matrix dimensions
+  - Similarity range, mean, and median
+  - Clustering distance statistics
+  - Top 10 most similar sample pairs
+- **Distance Scale**: Y-axis shows distance (1 - Jaccard similarity)
+- **Color Coding**: Clusters colored by distance threshold (customizable)
+
+#### `filter_hammock_output.py`
+**Purpose**: Filter hammock output to only include rows where both file1 and file2 have basenames that match entries in the accession list.
+
+**Usage**:
+```bash
+filter_hammock_output.py <hammock_file> <accession_list> [output_file] [--verbose]
+```
+
+**Features**:
+- Loads accession list from file (one accession per line)
+- Extracts basenames from hammock file1 and file2 columns
+- Filters to keep only rows where both file1 and file2 basenames are in the accession list
+- Handles various file extensions (.bed.gz, .fa.gz, etc.)
+- Provides detailed statistics about filtering results
+- Can output to file or stdout
+
+**Parameters**:
+- `hammock_file`: Path to hammock CSV output file
+- `accession_list`: Path to file containing accessions (one per line)
+- `output_file`: Output file path (optional, prints to stdout if not provided)
+- `--verbose, -v`: Verbose output with detailed statistics
+
+**Example**:
+```bash
+# Filter hammock output and save to file
+filter_hammock_output.py hammock_results.csv accession_list.txt filtered_results.csv
+
+# Filter and print to stdout
+filter_hammock_output.py hammock_results.csv accession_list.txt
+
+# Verbose output with detailed statistics
+filter_hammock_output.py hammock_results.csv accession_list.txt filtered_results.csv --verbose
+```
+
+**Output Statistics**:
+- Original number of rows
+- Number of accessions in list
+- Filtered number of rows
+- Percentage of rows kept
+- Number of unique files in filtered output
 
 #### `compare_clustering_trees.py`
 **Purpose**: Compare hierarchical clustering trees built from Jaccard similarity matrices using Robinson-Foulds distance. This provides a biologically meaningful comparison of how well hammock approximates bedtools clustering patterns.
@@ -382,6 +616,57 @@ sort -k8 -n sweep_results/parameter_sweep_results_clustering.tsv | head -5
 
 ### 🔧 Utility Scripts
 
+#### `utils.py`
+**Purpose**: Shared utility functions used across multiple analysis scripts.
+
+**Functions**:
+- `parse_hammock_format(filepath)`: Parse hammock CSV output into similarity matrix (handles both `jaccard_similarity_with_ends` and `jaccard_similarity` columns)
+- `load_accession_key(filepath)`: Load accession key file and create mapping from file to tissue type labels
+- `filter_hammock_by_accessions(hammock_file, accession_list, output_file=None)`: Filter hammock output by accession list
+
+**Usage**: Imported by other scripts, not used directly. All analysis scripts now use the centralized `parse_hammock_format` function from utils.
+
+#### `filter_hammock_output.py`
+**Purpose**: Filter hammock output to only include rows where both file1 and file2 have basenames that match entries in the accession list.
+
+**Usage**:
+```bash
+filter_hammock_output.py <hammock_file> <accession_list> [output_file] [--verbose]
+```
+
+**Features**:
+- Loads accession list from file (one accession per line)
+- Extracts basenames from hammock file1 and file2 columns
+- Filters to keep only rows where both file1 and file2 basenames are in the accession list
+- Handles various file extensions (.bed.gz, .fa.gz, etc.)
+- Provides detailed statistics about filtering results
+- Can output to file or stdout
+
+**Parameters**:
+- `hammock_file`: Path to hammock CSV output file
+- `accession_list`: Path to file containing accessions (one per line)
+- `output_file`: Output file path (optional, prints to stdout if not provided)
+- `--verbose, -v`: Verbose output with detailed statistics
+
+**Example**:
+```bash
+# Filter hammock output and save to file
+filter_hammock_output.py hammock_results.csv accession_list.txt filtered_results.csv
+
+# Filter and print to stdout
+filter_hammock_output.py hammock_results.csv accession_list.txt
+
+# Verbose output with detailed statistics
+filter_hammock_output.py hammock_results.csv accession_list.txt filtered_results.csv --verbose
+```
+
+**Output Statistics**:
+- Original number of rows
+- Number of accessions in list
+- Filtered number of rows
+- Percentage of rows kept
+- Number of unique files in filtered output
+
 #### `bedtools_pairwise.sh`
 **Purpose**: Generate pairwise Jaccard similarity matrix using bedtools for comparison reference.
 
@@ -633,6 +918,33 @@ for p in 18 20 22 25; do
 done
 ```
 
+### Clustering Analysis Workflow
+```bash
+# 1. Run clustering analysis on hammock similarity matrix
+clustering_analysis.py hammock_results.csv accession_key.tsv
+
+# 2. Test specific cluster numbers for tissue type separation
+clustering_analysis.py hammock_results.csv accession_key.tsv --clusters 2 3 4 5 6
+
+# 3. Compare different linkage methods
+clustering_analysis.py hammock_results.csv accession_key.tsv --linkage complete
+clustering_analysis.py hammock_results.csv accession_key.tsv --linkage average
+clustering_analysis.py hammock_results.csv accession_key.tsv --linkage single
+
+# 4. Analyze results - find optimal cluster number for tissue type separation
+# Look for highest NMI score in the output
+
+# 5. Generate confusion matrix for best clustering
+# The script automatically creates confusion matrix for the best cluster number
+
+# 6. Compare clustering with different hammock parameters
+for p in 18 20 22 25; do
+    echo "Testing precision $p"
+    hammock files.txt files.txt -o hammock_p${p} -p $p --mode B
+    clustering_analysis.py hammock_p${p}_hll_p${p}_jaccB.csv accession_key.tsv --clusters 2 3 4 5
+done
+```
+
 ### Clustering Tree Analysis Workflow
 ```bash
 # 1. Generate dendrograms for visual inspection (bedtools reference automatically generated by parameter sweep)
@@ -698,7 +1010,7 @@ Scripts automatically detect file types based on extensions:
 ### Required Software
 - **hammock**: Main analysis tool
 - **bedtools**: For reference similarity calculations
-- **Python 3.6+**: With numpy, matplotlib, scipy, pandas
+- **Python 3.6+**: With numpy, matplotlib, scipy, pandas, scikit-learn
 - **R**: For visualization scripts (ggplot2, pheatmap, etc.)
 - **bash**: Shell scripting environment
 
@@ -707,6 +1019,7 @@ Scripts automatically detect file types based on extensions:
 - **scipy**: For hierarchical clustering algorithms
 - **pandas**: For data manipulation
 - **numpy**: For numerical operations
+- **scikit-learn**: For agglomerative clustering and NMI calculations (required for `clustering_analysis.py`)
 
 ### Optional Python Libraries
 - **ete3**: For accurate Robinson-Foulds distance calculations (recommended)
@@ -724,6 +1037,10 @@ Scripts automatically detect file types based on extensions:
 Scripts that call other scripts will automatically find them after installation:
 - `complete_parameter_sweep*.sh` → `parameter_sweep*.sh`
 - `parameter_sweep*.sh` → `compare_sim_matrices.py`, `compare_clustering_trees.py`, `draw_clustering_tree.py`
+- `clustering_analysis.py` → `utils.py`
+- `compare_sim_matrices.py` → `utils.py`
+- `compare_clustering_trees.py` → `utils.py`
+- `draw_clustering_tree.py` → `utils.py`
 
 ## Output Files
 
@@ -776,6 +1093,8 @@ Results are saved in TSV format with columns:
 10. **"Clustering results missing"**: Enable debug mode to see clustering comparison exit codes and error messages
 11. **"Custom parameter format error"**: Ensure custom parameter values are comma-separated without spaces (e.g., '10,15,20' not '10, 15, 20')
 12. **"Too many parameter combinations"**: Use custom parameters to limit the search space instead of full parameter sweeps
+13. **"Import error for utils"**: All analysis scripts now depend on `utils.py` - ensure it's in the scripts directory
+14. **"Column not found"**: The centralized `parse_hammock_format` function handles both `jaccard_similarity_with_ends` (Mode D) and `jaccard_similarity` (Mode B/C) columns automatically
 
 ### Getting Help
 ```bash
