@@ -37,7 +37,7 @@ sed 's/^[^/]*//' accession_key_2025_7_31.tsv > repaired_accession_key.tsv
    awk 'FNR==1 && FILENAME==ARGV[2] {print; next} FNR==NR {files[$0]=1; next} $2 in files' file_accessions.txt accession_key_2025_7_31.tsv > filtered_accession_key.tsv
 
 # Create a table of tissues with sample counts
-python analyze_tissue_summary.py filtered_accession_key.tsv
+python summarize_accession_key.py filtered_accession_key.tsv
 ```
 
 ### Homo sapiens
