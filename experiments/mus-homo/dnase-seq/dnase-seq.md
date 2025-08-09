@@ -31,26 +31,97 @@ while read -r filepath; do basename "$filepath" | sed -E 's/\.(gz|bz2|xz)$//' | 
 ```
 # Make a key
 ENCODE_report_to_key.sh experiment_report_2025_7_31_19h_28m.tsv accession_key_2025_7_31.tsv
+sed 's/^[^/]*//' accession_key_2025_7_31.tsv > repaired_accession_key.tsv
 
 # Filter it for what is actually there
    awk 'FNR==1 && FILENAME==ARGV[2] {print; next} FNR==NR {files[$0]=1; next} $2 in files' file_accessions.txt accession_key_2025_7_31.tsv > filtered_accession_key.tsv
 
+# Create a table of tissues with sample counts
+python analyze_tissue_summary.py filtered_accession_key.tsv
+```
+
+### Homo sapiens
+
+**Total samples:** 150  
+**Unique tissues:** 19
+
+| Tissue | Count | Percentage |
+|--------|-------|------------|
+| stomach | 21 | 14.0% |
+| heart | 18 | 12.0% |
+| adrenal gland | 15 | 10.0% |
+| brain | 14 | 9.3% |
+| lung | 14 | 9.3% |
+| kidney | 14 | 9.3% |
+| large intestine | 14 | 9.3% |
+| ovary | 9 | 6.0% |
+| thymus | 9 | 6.0% |
+| spleen | 5 | 3.3% |
+| testis | 4 | 2.7% |
+| retina | 3 | 2.0% |
+| frontal cortex | 2 | 1.3% |
+| liver | 2 | 1.3% |
+| limb | 2 | 1.3% |
+| cerebellum | 1 | 0.7% |
+| urinary bladder | 1 | 0.7% |
+| midbrain | 1 | 0.7% |
+| embryonic facial prominence | 1 | 0.7% |
+
+### Mus musculus
+
+**Total samples:** 193  
+**Unique tissues:** 19
+
+| Tissue | Count | Percentage |
+|--------|-------|------------|
+| kidney | 22 | 11.4% |
+| liver | 22 | 11.4% |
+| cerebellum | 21 | 10.9% |
+| heart | 21 | 10.9% |
+| adrenal gland | 18 | 9.3% |
+| lung | 16 | 8.3% |
+| thymus | 15 | 7.8% |
+| spleen | 13 | 6.7% |
+| frontal cortex | 10 | 5.2% |
+| urinary bladder | 10 | 5.2% |
+| ovary | 4 | 2.1% |
+| retina | 4 | 2.1% |
+| midbrain | 4 | 2.1% |
+| brain | 3 | 1.6% |
+| embryonic facial prominence | 3 | 1.6% |
+| limb | 3 | 1.6% |
+| testis | 2 | 1.0% |
+| large intestine | 1 | 0.5% |
+| stomach | 1 | 0.5% |
+
+
+```
 # Create a more balanced balanced_accession_key.txt (balanced between species)
 ./balance_species.sh filtered_accession_key.tsv balanced_accession_key.tsv
 
 # Filter for species
 grep "Homo sapiens" filtered_accession_key.tsv | cut -f2 > Homo_sapiens_accessions.txt
 grep -f Homo_sapiens_accessions.txt bed_paths.txt > Homo_sapiens_paths_beds.txt
+```
 
+
+
+```
+# Create Balanced Versions
 grep "Homo sapiens" balanced_accession_key.tsv | cut -f2 > Homo_sapiens_accessions_balanced.txt
 grep -f Homo_sapiens_accessions_balanced.txt bed_paths.txt > Homo_sapiens_paths_beds_balanced.txt
 
 
-grep "Mus musculus" filtered_accession_key.tsv | cut -f2 > Mus_musculus_accessions.txt
+grep "Mus musculus" filtered_accession_key.tsv | cut -f2  > Mus_musculus_accessions.txt
 grep -f Mus_musculus_accessions.txt bed_paths.txt > Mus_musculus_paths_beds.txt
 
 grep "Mus musculus" balanced_accession_key.tsv | cut -f2 > Mus_musculus_accessions_balanced.txt
 grep -f Mus_musculus_accessions_balanced.txt bed_paths.txt > Mus_musculus_paths_beds_balanced.txt
+
+# create subsets that contains only certain tissue types from the balanced sets
+grep "kidney\|lung\|heart\|brain\|large intestine\|liver\|stomach" balanced_accession_key.tsv | cut -f2 > subtissue_accessions.txt
+
+
 ```
 
 ### Create Fasta Files using appropriate reference genomes
@@ -70,7 +141,9 @@ while read -r bedfile; do
     echo $(realpath fastas${tag}/${outfile}.fa)
 done < Mus_musculus_paths_beds.txt > Mus_musculus_fastas.txt
 
-grep -f Mus_musculus_accessions_balanced.txt Mus_musculus_fastas.txt > Mus_musculus_fastas_balanced.txt
+sed -i 's/^[^/]*//' Mus_musculus_fastas.txt
+
+grep -f Mus_musculus_accessions_balanced.txt Mus_musculus_fastas.txt | sed 's/^[^/]*//' > Mus_musculus_fastas_balanced.txt
 
 
 grc38=/data/blangme2/fasta/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna
@@ -81,7 +154,7 @@ while read -r bedfile; do
     outfile=$(basename "$bedfile" .bed.gz)
     bedtools getfasta -fi $grc38 -bed "$bedfile" -fo "fastas${tag}/${outfile}.fa";
     echo $(realpath fastas${tag}/${outfile}.fa)
-done < Homo_sapiens_paths_beds.txt | sed 's/^[^/]*//' > Homo_sapiens_fastas.txt
+done < Homo_sapiens_paths_beds.txt > Homo_sapiens_fastas.txt
 
 grep -f Homo_sapiens_accessions_balanced.txt Homo_sapiens_fastas.txt | sed 's/^[^/]*//' > Homo_sapiens_fastas_balanced.txt
 
@@ -89,12 +162,15 @@ cat Mus_musculus_fastas.txt Homo_sapiens_fastas.txt > mus_homo_fastas.txt
 
 cat Mus_musculus_fastas_balanced.txt Homo_sapiens_fastas_balanced.txt | sed 's/^[^/]*//' > mus_homo_fastas_balanced.txt
 
+# create a list subsetted for certain tissue types
+grep -f subtissue_accessions.txt mus_homo_fastas_balanced.txt > mus_homo_fastas_subtissue.txt
+
 ```
 
 
 
 ## Mode A/B/C
-From within the TF3 directory (where you find this README)
+From within the dnase-seq directory (where you find this README)
 
 ```
 hammock data/Mus_musculus_paths_beds.txt data/Mus_musculus_paths_beds.txt --mode C --precision 20 --outprefix results/mouseonly
@@ -112,7 +188,7 @@ hammock data/Homo_sapiens_paths_beds_balanced.txt data/Homo_sapiens_paths_beds_b
 ## Mode D
 
 ```
-hammock data/Mus_musculus_fastas.txt data/Mus_musculus_fastas.txt --outprefix results/mouseonly -k 20 -w 200 --precision 20
+hammock data/Mus_musculus_fastas.txt data/Mus_musculus_fastas.txt --outprefix results/mouseonly -k 10 -w 100 --precision 24
 
 hammock data/Homo_sapiens_fastas.txt data/Homo_sapiens_fastas.txt --outprefix results/humanonly -k 20 -w 200 --precision 20
 
@@ -120,16 +196,18 @@ hammock data/mus_homo_fastas.txt data/mus_homo_fastas.txt --outprefix results/ma
 
 hammock data/mus_homo_fastas_balanced.txt data/mus_homo_fastas_balanced.txt --outprefix results/manmouse_balanced -k 10 -w 100 --precision 24
 
+hammock data/mus_homo_fastas_subtissue.txt data/mus_homo_fastas_subtissue.txt --outprefix results/manmouse_subtissue -k 10 -w 100 --precision 24
+
 ```
 
 ## Visualizations
 Hammock 0.2.1 allows calling Rscript and includes a script to draw three heatmaps for a given output as long as a "report" can be provided in the same format as an ENCODE report. It takes the following arguments: `<ENCODE REPORT> <HAMMOCK OUTPUT> [<OUTPUT PREFIX>]` 
 
 ```{bash}
-encode_heatmap.R data/experiment_report_2025_6_11_22h_5m.tsv results/manmouse_mnmzr_p20_jaccD_k20_w200.csv results/manmouse_p20k20w200jaccD
 
+encode_heatmap.R data/experiment_report_2025_7_31_19h_28m.tsv results/manmouse_balanced_mnmzr_p24_jaccD_k10_w100.csv results/manmouse_balanced_p24k10w100jaccD
 
-encode_heatmap.R data/experiment_report_2025_6_11_22h_5m.tsv results/manmouse_balanced_mnmzr_p24_jaccD_k10_w100.csv results/manmouse_balanced_p24k10w100jaccD
+encode_heatmap.R data/experiment_report_2025_7_31_19h_28m.tsv results/manmouse_subtissue_mnmzr_p24_jaccD_k10_w100.csv results/manmouse_subtissue_p24k10w100jaccD
 
 ```
 
