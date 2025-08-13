@@ -58,6 +58,9 @@ cd maurano.dnaseI/
 tar -zxvf maurano.dnaseI.tgz
 cd ..
 rm maurano.dnaseI.tgz
+# create an accession key from the filenames
+echo -e echo -e "Accession\tFile\tTarget_of_Assay\tBiosample_term_name\tOrganism\tLife_stage" > maurano_filenames_key.tsv && ls maurano.dnaseI | awk -F'-' '{split($2,a,"\\."); print a[1] "\t" $0 "\t\t" $1 "\tHomo sapiens\tfetal"}' >> maurano_filenames_key.tsv
+
 ```
 
 **Additional files included:**
@@ -110,6 +113,7 @@ experiments/dnase1-hypersensitivity/
 │   ├── hesc.chromHmm.bed        # Chromatin states in hESCs
 │   ├── genome.txt               # Genome coordinates file
 │   ├── maurano_files.txt        # List of input file paths
+│   ├── maurano_files_key.tsv    # Key of accessions and biosamples etc.
 │   ├── bedtools_pairwise.sh     # Pairwise analysis script
 │   └── bedtools_pairwise_jaccard.txt  # Output similarity matrix
 ├── results/
@@ -187,7 +191,7 @@ Do a parameter sweep to look at how everything compares to the bedtools output f
 ```bash
 mkdir -p parameter_scan
 cd parameter_scan
-complete_parameter_sweep.sh -b ../data/maurano_files.txt -f ../data/maurano_fastas.txt -o maurano 2> scan.log
+complete_parameter_sweep.sh -b ../data/maurano_files.txt -f ../data/maurano_fastas.txt -o maurano  -v --window 8,10,20,30,50,100,200 --klen 8,10,15,20,25 --precision 20,22,23,24 2> scan.log
 
 ```
 
