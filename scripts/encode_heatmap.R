@@ -165,7 +165,7 @@ create_heatmap_matrix <- function(results) {
     arrange(file1, file2) %>%
     pivot_wider(names_from = file2, 
                 values_from = jaccard) %>%
-    as.data.frame() 
+    as.data.frame()
   
   # Extract row names and prepare matrix
   row_names <- jaccard_subtable$file1

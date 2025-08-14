@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Requires: GNU parallel (install on RHEL/CentOS: sudo dnf install -y parallel)
-
+ml parallel
 expA=(0.1 0.2 0.5 0.8 1 1.2 1.5 1.8 2)
 precision=($(seq 20 1 24))
 bedfiles=$1

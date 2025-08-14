@@ -11,50 +11,172 @@ After installation (`pip install .`), all scripts in this directory become globa
 ### 🔬 Analysis and Comparison Scripts
 
 #### `clustering_analysis.py`
-**Purpose**: Perform agglomerative clustering analysis on hammock similarity matrices and evaluate clustering quality using Normalized Mutual Information (NMI) against true tissue type labels.
+**Purpose**: Perform agglomerative clustering analysis on similarity matrices and evaluate clustering quality using Normalized Mutual Information (NMI) against true tissue type 
+labels. Supports hammock CSV and bedtools pairwise TSV inputs.
 
 **Usage**:
 ```bash
-clustering_analysis.py <hammock_output> <accession_key> [--clusters N1 N2 ...] [--linkage METHOD]
+clustering_analysis.py <input_matrix> <accession_key> \
+  [--clusters N1 N2 ...] \
+  [--linkage-methods METHOD [METHOD ...]] \
+  [-o TSV | --out TSV] \
+  [--long-table-out TSV] \
+  [--plots-pdf PDF] \
+  [--stdout] \
+  [--linkage METHOD]
 ```
 
 **Features**:
-- Loads hammock similarity matrix and true tissue type labels from accession key
-- Performs agglomerative clustering with different numbers of clusters
-- Evaluates clustering quality using NMI (Normalized Mutual Information)
-- Compares different linkage methods (ward, complete, average, single)
-- Generates visualizations: NMI scores vs cluster numbers, confusion matrices
-- Handles reproducible random sampling with seed control
-- Supports custom cluster ranges and linkage methods
-- **Uses centralized parsing from utils.py** for consistent hammock format handling
+- Accepts hammock CSV or bedtools pairwise TSV (auto-detected)
+- Converts similarity to distance (1 − similarity) and runs agglomerative clustering
+- Evaluates clustering with NMI and silhouette across combinations of cluster counts and linkage methods
+- Outputs a long-table suitable for sweeps; can print to stdout (quiet) or write to file
+- Extracts parameters from filename and includes in the output: sketch, mode, precision, exp (Mode C), window, klen
+- Visualizations (when not using `--stdout`): NMI vs clusters, best confusion matrix, linkage comparison
+- **Uses centralized parsing from `utils.py`** (auto-selects `jaccard_similarity` vs `jaccard_similarity_with_ends`)
 
 **Parameters**:
-- `hammock_output`: Path to hammock CSV output file
-- `accession_key`: Path to accession key TSV file with tissue type labels
-- `--clusters N1 N2 ...`: Number of clusters to test (default: 2-10)
-- `--linkage METHOD`: Linkage method for clustering (default: ward)
+- `input_matrix`: Path to hammock CSV or bedtools TSV
+- `accession_key`: Path to accession key TSV (maps files to labels)
+- `--clusters N1 N2 ...`: Cluster counts to test (default: 2–20)
+- `--linkage-methods {ward,complete,average,single} [...]`: Methods for the long-table (default: `average complete`)
+- `--long-table-out TSV`: Write long-table TSV to this file
+- `--stdout`: Print only the long-table TSV to stdout (suppresses other prints)
+- `--linkage METHOD`: Linkage for plots/point analyses (default: ward; for precomputed distances Ward is internally mapped to complete)
 
-**Output**:
-- NMI scores for different cluster numbers
-- Best clustering configuration identification
-- Confusion matrix comparing true tissue types with predicted clusters
-- Linkage method comparison
-- Visual plots of results
+**Long-table columns**:
+`sketch  mode  precision  expA  subA  subB  window  klen  n_clusters  linkage  nmi  silhouette`
 
-**Example**:
+**Examples**:
 ```bash
-# Basic clustering analysis
-clustering_analysis.py hammock_results.csv accession_key.tsv
+# Hammock CSV → stdout table (defaults: clusters 2–20; methods average, complete)
+clustering_analysis.py results/mouseonly_hll_p18_jaccA.csv data/filtered_accession_key.tsv --stdout
 
-# Test specific cluster numbers
-clustering_analysis.py hammock_results.csv accession_key.tsv --clusters 2 3 4 5 6
+# Hammock CSV → write TSV
+clustering_analysis.py results/manmouse_subtissue_mnmzr_p24_jaccD_k10_w100.csv \
+  data/filtered_accession_key.tsv \
+  --long-table-out results/subtissue_clustering_long_table.tsv
 
-# Use different linkage method
-clustering_analysis.py hammock_results.csv accession_key.tsv --linkage complete
+# Bedtools TSV → stdout
+clustering_analysis.py parameter_scan/maurano_custom_bedtools_ref.tsv data/filtered_accession_key.tsv --stdout
 
-# Full example with custom parameters
-clustering_analysis.py manmouse_subtissue_mnmzr_p24_jaccD_k10_w100.csv balanced_accession_key.tsv --clusters 2 3 4 5 --linkage complete
+# Custom linkages and clusters
+clustering_analysis.py results/mouseonly_hll_p18_jaccA.csv data/filtered_accession_key.tsv \
+  --clusters 2 3 4 5 6 7 8 --linkage-methods average complete single
 ```
+
+#### `draw_dendrograms.py`
+**Purpose**: Generate a multi-page PDF with one hierarchical clustering dendrogram per linkage method, with leaf labels colored by true tissue labels. Accepts hammock CSV or bedtools pairwise TSV inputs.
+
+**Usage**:
+```bash
+draw_dendrograms.py <input_matrix> <accession_key> \
+  [--linkage-methods METHOD [METHOD ...]] \
+  [--output PDF] \
+  [--figsize W H] \
+  [--quiet]
+```
+
+**Features**:
+- Auto-detects input format (hammock CSV vs bedtools TSV)
+- Converts 1 − similarity to distance, performs hierarchical clustering (scipy)
+- Renders one dendrogram per linkage method into a single PDF (one page per method)
+- Colors leaf labels by tissue; adds a legend keyed by tissue
+- Aligns matrix to accession labels; if no overlap, infers labels from file basenames
+- Ward linkage on precomputed distances is mapped to complete, noted in the page title
+
+**Parameters**:
+- `input_matrix`: Hammock CSV or bedtools TSV
+- `accession_key`: TSV mapping file basenames to tissue labels
+- `--linkage-methods {single,complete,average,ward} [...]`: Methods to render (default: `average complete single`)
+- `--output PDF`: Output PDF path (default: <input_basename>_dendrograms.pdf)
+- `--figsize W H`: Figure size in inches (default: 12 8)
+- `--quiet`: Suppress status prints
+
+**Examples**:
+```bash
+# Hammock CSV → multi-page PDF
+draw_dendrograms.py experiments/mus-homo/dnase-seq/results/mouseonly_hll_p18_jaccA.csv \
+  experiments/mus-homo/dnase-seq/data/filtered_accession_key.tsv \
+  --output experiments/mus-homo/dnase-seq/results/mouseonly_dendrograms.pdf
+
+# Bedtools TSV → multi-page PDF
+draw_dendrograms.py experiments/dnase1-hypersensitivity/parameter_scan/maurano_custom_bedtools_ref.tsv \
+  experiments/mus-homo/dnase-seq/data/filtered_accession_key.tsv \
+  --output experiments/dnase1-hypersensitivity/results/maurano_dendrograms.pdf
+
+# Custom methods and size
+draw_dendrograms.py input.csv key.tsv --linkage-methods average complete single ward --figsize 14 9
+```
+
+#### `draw_dendrograms.R`
+**Purpose**: R implementation to generate a multi-page PDF with one hierarchical clustering dendrogram per linkage method, with branches and labels colored by tissue labels. Uses shared helpers in `scripts/utils.R`.
+
+**Usage**:
+```bash
+Rscript scripts/draw_dendrograms.R <input_matrix> <accession_key> [output_pdf] [linkages]
+```
+
+**Features**:
+- Auto-detects input format (hammock CSV vs bedtools TSV) via `scripts/utils.R`
+- Converts 1 − similarity to distance; performs hclust
+- Colors branches uniformly when all descendant leaves share a tissue; mixed nodes are gray
+- Colors leaf labels by tissue; legend included per page
+- One page per linkage method
+
+**Parameters**:
+- `input_matrix`: Hammock CSV or bedtools TSV
+- `accession_key`: TSV mapping `File` to `Biosample_term_name`
+- `output_pdf` (optional): Defaults to `<input_basename>_dend.pdf`
+- `linkages` (optional): Comma-separated list (default: `average,complete,single`). `ward` maps to `complete` for precomputed distances
+
+**Examples**:
+```bash
+Rscript scripts/draw_dendrograms.R \
+  experiments/mus-homo/dnase-seq/results/manmouse_subtissue_mnmzr_p24_jaccD_k10_w100.csv \
+  experiments/mus-homo/dnase-seq/data/filtered_accession_key.tsv \
+  experiments/mus-homo/dnase-seq/results/manmouse_subtissue_mnmzr_p24_jaccD_k10_w100.csv_dend_R.pdf
+
+# With custom linkages
+Rscript scripts/draw_dendrograms.R input.csv key.tsv output.pdf average,complete,single,ward
+```
+
+**Dependencies**:
+- Required: base R (stats), ggplot2 (for palettes), dendextend (for some versions may not be required; current script uses base dendrogram operations)
+- Optional: data.table (fast IO), scales (palettes)
+- Install in R: `install.packages(c('ggplot2','dendextend','data.table','scales'))`
+
+#### `utils.R`
+**Purpose**: Shared R helpers for scripts.
+
+**Functions**:
+- `detect_file_format(filepath)`: hammock vs bedtools
+- `parse_hammock_format(filepath)`: similarity matrix from hammock CSV
+- `parse_bedtools_format(filepath)`: similarity matrix from bedtools TSV
+- `load_accession_key(filepath)`: map basenames to tissue labels
+- `align_matrix_and_labels(sim_df, accession_labels, quiet=FALSE)`: align/fallback to inferred labels
+
+#### `clustering_analysis.R`
+**Purpose**: Compute long-table clustering metrics (NMI and silhouette) across cluster counts and linkage methods for hammock CSV or bedtools TSV inputs. R counterpart to `clustering_analysis.py`.
+
+**Usage**:
+```bash
+Rscript scripts/clustering_analysis.R <input_matrix> <accession_key.tsv> [out.tsv]
+```
+
+**Features**:
+- Auto-detects input format via `scripts/utils.R`
+- Supports linkage methods: ward (mapped to ward.D2), complete, average, single
+- Aligns to accession labels if available, otherwise infers labels from basenames
+- Writes long-table TSV to provided path or `<input_basename>_cluster.tsv`
+
+**Long-table columns**:
+`sketch  mode  precision  expA  subA  subB  window  klen  n_clusters  linkage  nmi  silhouette`
+
+**Used by cluster_analysis app**:
+- The Shiny app at `graphics/apps/cluster_analysis/app.R` sources and uses:
+  - `scripts/clustering_analysis.R` (function `clustering_analysis` and helpers like `evaluate_nmi_long_table`)
+  - `scripts/utils.R` (functions `detect_file_format`, `parse_hammock_format`, `parse_bedtools_format`, `load_accession_key`, `align_matrix_and_labels`, `extract_params_from_filename`, `detect_hammock_expA`)
 
 #### `compare_sim_matrices.py`
 **Purpose**: Compare similarity matrices from bedtools and hammock outputs, calculating various metrics.
@@ -86,7 +208,13 @@ compare_sim_matrices.py hammock_results.csv bedtools_output.txt --table
 
 **Usage**:
 ```bash
-compare_clustering_trees.py <file1> <file2> [--linkage METHOD] [--table] [--verbose] [--save-trees FILE] [--output FILE]
+compare_clustering_trees.py <file1> <file2> \
+  [--linkage METHOD] \
+  [--clustering-method {kmeans,dynamic,both}] \
+  [--distance-threshold FLOAT] \
+  [--min-cluster-size INT] \
+  [--table] [--header] [--verbose] \
+  [--save-trees FILE] [--output FILE]
 ```
 
 **Features**:
@@ -101,10 +229,10 @@ compare_clustering_trees.py <file1> <file2> [--linkage METHOD] [--table] [--verb
 
 **Parameters**:
 - `--linkage, -l`: Clustering linkage method (default: average)
-  - `single`: Single linkage (minimum distance)
-  - `complete`: Complete linkage (maximum distance) 
-  - `average`: Average linkage (UPGMA)
-  - `ward`: Ward's minimum variance method
+  - `single`, `complete`, `average`, `ward`
+- `--clustering-method, -c`: `kmeans`, `dynamic`, or `both` (default: both)
+- `--distance-threshold, -d`: Threshold for dynamic tree cut (auto-detect if not set)
+- `--min-cluster-size`: Minimum cluster size for dynamic cut (default: 2)
 - `--table, -t`: Output results as tab-delimited line
 - `--header`: Print tab-delimited header (use with --table)
 - `--verbose, -v`: Show detailed progress and tree information
@@ -116,10 +244,11 @@ compare_clustering_trees.py <file1> <file2> [--linkage METHOD] [--table] [--verb
 - **Maximum RF distance**: Theoretical maximum RF distance for n leaves
 - **Normalized RF distance**: RF distance / max RF distance (0-1 scale)
 - **Tree similarity**: 1 - normalized RF distance (higher = more similar)
+- For clustering-method lines: ARI, NMI, cluster correspondence, cluster stability, and cluster counts
 
 **Dependencies**:
-- **Required**: scipy, pandas, numpy
-- **Recommended**: ete3 (for accurate RF calculations)
+- **Required**: scipy, pandas, numpy, scikit-learn
+- **Recommended**: ete3 (for accurate RF)
 - **Alternative**: dendropy (fallback if ete3 unavailable)
 
 **Example**:
@@ -152,11 +281,11 @@ compare_clustering_trees.py --header
 **Integration with Parameter Sweeps**:
 The table output format makes it easy to integrate with parameter sweep workflows:
 ```bash
-# Header output
-file1	file2	format1	format2	matrix_size	rf_distance	max_rf_distance	normalized_rf	linkage_method
+# Header output (abbreviated)
+file1	file2	format1	format2	klen1	window1	precision1	klen2	window2	precision2	n_leaves	rf_distance	max_rf_distance	normalized_rf	linkage_method	clustering_method	n_clusters1	n_clusters2	adjusted_rand_index	normalized_mutual_info	cluster_correspondence	cluster_stability
 
-# Example result
-hammock_p20_k15_w100.csv	bedtools_ref.tsv	hammock	bedtools	68	114	130	0.876923	average
+# Example result line (dynamic)
+hammock_p20_k15_w100.csv	bedtools_ref.tsv	hammock	bedtools	20	100	20	0	0	0	68	114	130	0.876923	average	dynamic	4	4	0.512300	0.601200	0.780000	0.700000
 ```
 
 #### `draw_clustering_tree.py`
@@ -503,17 +632,8 @@ complete_parameter_sweep.sh -b bed_files_list.txt --precision 18,20,22,24 -c -v
 complete_parameter_sweep.sh -b bed_files_list.txt -f fasta_files_list.txt --precision 19,21,23 -c -v
 
 # View clustering results (best parameters have lowest normalized RF distance)
-sort -k8 -n my_experiment_results_clustering.tsv | head -5
+sort -k14 -n my_experiment_results_clustering.tsv | head -5
 ```
-
-#### `complete_parameter_sweep_quick.sh`
-**Purpose**: Faster version of complete parameter sweep with limited parameter combinations for testing.
-
-**Usage**: Same as `complete_parameter_sweep.sh`
-
-**Parameter Differences**:
-- **BED files**: Tests only precision (20, 23)
-- **FASTA files**: Tests only k-mer=20, window=200, precision (20, 23)
 
 #### `parameter_sweep.sh`
 **Purpose**: Run hammock parameter sweep against pre-generated bedtools reference matrix with optional clustering tree analysis.
@@ -607,11 +727,6 @@ parameter_sweep.sh -b bedtools_ref.tsv -f fasta_files_list.txt --klen 20 --windo
 sort -k8 -n sweep_results/parameter_sweep_results_clustering.tsv | head -5
 ```
 
-#### `parameter_sweep_quick.sh`
-**Purpose**: Quick version of parameter sweep with limited combinations.
-
-**Usage**: Same as `parameter_sweep.sh` but with reduced parameter space for faster testing.
-
 ---
 
 ### 🔧 Utility Scripts
@@ -672,7 +787,8 @@ filter_hammock_output.py hammock_results.csv accession_list.txt filtered_results
 
 **Usage**:
 ```bash
-bedtools_pairwise.sh -f <file_list> [-o <output_file>] [-v]
+bedtools_pairwise.sh [OPTIONS] <bed1> <bed2> ... <bedN>
+bedtools_pairwise.sh -f <file_list> [OPTIONS]
 ```
 
 **Features**:
@@ -683,6 +799,7 @@ bedtools_pairwise.sh -f <file_list> [-o <output_file>] [-v]
 **Example**:
 ```bash
 bedtools_pairwise.sh -f bed_files.txt -o reference_matrix.txt -v
+bedtools_pairwise.sh *.bed -o reference_matrix.txt
 ```
 
 #### `ENCODE_report_to_key.sh`
@@ -691,6 +808,34 @@ bedtools_pairwise.sh -f bed_files.txt -o reference_matrix.txt -v
 **Usage**:
 ```bash
 ENCODE_report_to_key.sh <encode_report.tsv>
+# Writes long table mapping accessions to individual file IDs and metadata
+```
+
+**Output**:
+- TSV with columns: `Accession`, `File`, `Target_of_Assay`, `Biosample_term_name`, `Organism`, `Life_stage`
+
+#### `encode_graphs.sh`
+**Purpose**: Orchestrate generation of ENCODE visualizations in one command.
+
+**Usage**:
+```bash
+encode_graphs.sh <encode.report> <hammock.results> [file_prefix]
+```
+
+**Generates**:
+- `<prefix>_biosample.pdf`, `<prefix>_organism.pdf`, `<prefix>_target.pdf`, `<prefix>_pca.pdf`, `<prefix>_organism_specific_pca.pdf`
+
+#### `summarize_accession_key.py`
+**Purpose**: Summarize tissues and sample counts by organism from a filtered accession key TSV.
+
+**Usage**:
+```bash
+summarize_accession_key.py <accession_key.tsv> [--output FILE] [--no-markdown]
+```
+
+**Output**:
+- Prints a human-readable summary to stdout
+- Writes a markdown summary table to `tissue_summary_table.md` by default (override with `--output`)
 ```
 
 ---
