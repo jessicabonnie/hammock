@@ -63,7 +63,7 @@ evaluate_nmi_long_table <- function(sim_matrix, true_labels_map, n_clusters_rang
   true_labels <- ifelse(files %in% names(true_labels_map), true_labels_map[files], 'unknown')
   true_labels <- as.character(true_labels)
   true_labels[is.na(true_labels) | !nzchar(true_labels)] <- 'unknown'
-  # Convert similarity to clipped distance
+  # Convert similarity to clipped distance once
   dist_sq <- 1 - sim_matrix
   dist_sq[dist_sq < 0] <- 0
   diag(dist_sq) <- 0
@@ -75,18 +75,30 @@ evaluate_nmi_long_table <- function(sim_matrix, true_labels_map, n_clusters_rang
   rows <- list()
   for (meth in linkage_methods) {
     message(sprintf("[R] linkage=%s", meth))
+    # Build one dendrogram per linkage, then cut for all k
+    method_mapped <- switch(tolower(meth),
+                            ward = 'ward.D2',
+                            complete = 'complete',
+                            average = 'average',
+                            single = 'single',
+                            meth)
+    fit <- tryCatch({
+      if (requireNamespace('fastcluster', quietly = TRUE)) fastcluster::hclust(d, method = method_mapped)
+      else stats::hclust(d, method = method_mapped)
+    }, error = function(e) NULL)
+    if (is.null(fit)) {
+      for (k in n_clusters_range) {
+        rows[[length(rows) + 1]] <- data.frame(n_clusters = as.integer(k), linkage = as.character(meth), nmi = NA_real_, silhouette = NA_real_, stringsAsFactors = FALSE)
+      }
+      next
+    }
     for (k in n_clusters_range) {
+      labs <- tryCatch(stats::cutree(fit, k = k), error = function(e) NULL)
       nmi <- NA_real_; sil <- NA_real_
-      err_msg <- NULL
-      labs <- tryCatch(perform_hclust_labels(sim_matrix, k, meth), error = function(e) { err_msg <<- conditionMessage(e); NULL })
       if (!is.null(labs)) {
-        # Ensure labels vector is integer and length matches
         labs <- as.integer(labs)
         if (length(labs) == length(true_labels)) {
-          # NMI on character labels vs integer cluster ids
-          # Use arithmetic normalization (2*MI/(H(X)+H(Y))) to match sklearn
           nmi <- tryCatch({ aricode::NMI(true_labels, labs, variant = "sum") }, error = function(e) NA_real_)
-          # Silhouette only if >= 2 clusters present
           if (length(unique(labs)) >= 2) {
             sil <- tryCatch({
               sw <- cluster::silhouette(labs, d)
@@ -95,7 +107,6 @@ evaluate_nmi_long_table <- function(sim_matrix, true_labels_map, n_clusters_rang
           } else {
             sil <- NA_real_
           }
-          # Light debug for a few k values
           if (k %in% c(min(n_clusters_range), max(n_clusters_range), 10, 20)) {
             message(sprintf("[R] k=%d: NMI=%s, sil=%s",
                             k,
@@ -103,8 +114,6 @@ evaluate_nmi_long_table <- function(sim_matrix, true_labels_map, n_clusters_rang
                             ifelse(is.na(sil), "NA", sprintf("%.4f", sil))))
           }
         }
-      } else if (!is.null(err_msg)) {
-        message(sprintf("[R] k=%d: clustering error: %s", k, err_msg))
       }
       rows[[length(rows) + 1]] <- data.frame(
         n_clusters = as.integer(k),

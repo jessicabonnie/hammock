@@ -21,40 +21,71 @@ if [ ! -f "$INPUT_FILE" ]; then
 fi
 
 # Write header to output file
-echo -e "Accession\tFile\tTarget_of_Assay\tBiosample_term_name\tOrganism" > "$OUTPUT_FILE"
+echo -e "Accession\tFile\tTarget_of_Assay\tBiosample_term_name\tOrganism\tLife_stage" > "$OUTPUT_FILE"
 
 # Process the TSV file using awk for more reliable field parsing
-# Skip the first line (timestamp) and header line, then process each data row
-tail -n +3 "$INPUT_FILE" | awk -F'\t' -v output_file="$OUTPUT_FILE" '
+# Skip only the first line (timestamp); read the header row to map column names dynamically
+tail -n +2 "$INPUT_FILE" | awk -F'\t' -v output_file="$OUTPUT_FILE" -v input_file="$INPUT_FILE" '
+NR == 1 {
+    # Map header names to indices (1-based)
+    for (i = 1; i <= NF; i++) {
+        header[$i] = i
+    }
+
+    # Resolve required/optional column indices
+    acc_i     = header["Accession"]
+    target_i  = header["Target of assay"]        # optional in some reports
+    bios_i    = header["Biosample term name"]
+    files_i   = header["Files"]
+    org_i     = header["Organism"]
+    stage_i   = header["Life stage"]              # optional in some reports
+
+    # Validate required columns exist
+    if (!acc_i || !files_i || !bios_i || !org_i) {
+        msg = "Error: One or more required columns are missing in the header. Required: Accession, Biosample term name, Files, Organism. Optional: Target of assay, Life stage"
+        print msg > "/dev/stderr"
+        exit 1
+    }
+
+    # Warn for optional columns missing
+    if (!target_i) {
+        print "Warning: Optional column Target of assay not found in header for " input_file > "/dev/stderr"
+    }
+    if (!stage_i) {
+        print "Warning: Optional column Life stage not found in header for " input_file > "/dev/stderr"
+    }
+
+    next
+}
+
 {
-    # Extract relevant columns (1-based indexing in awk)
-    # Accession=2, Target_of_assay=7, Biosample_term_name=10, Files=16, Organism=22
-    accession = $2
-    target_of_assay = $7
-    biosample_term_name = $10
-    files = $16
-    organism = $22
-    
+    accession = $(acc_i)
+    target_of_assay = (target_i ? $(target_i) : "")
+    biosample_term_name = $(bios_i)
+    files = $(files_i)
+    organism = $(org_i)
+    life_stage = (stage_i ? $(stage_i) : "")
+
     # Skip empty lines or lines with missing data
     if (accession == "" || files == "") {
         next
     }
-    
+
     # Split files by comma and process each file
     split(files, file_array, ",")
     for (i in file_array) {
         # Remove leading/trailing whitespace
         gsub(/^[ \t]+|[ \t]+$/, "", file_array[i])
-        
+
         # Extract just the filename from the path (remove /files/ prefix and trailing /)
         filename = file_array[i]
         gsub(/^\/files\//, "", filename)
         gsub(/\/$/, "", filename)
-        
+
         # Skip empty filenames
         if (filename != "") {
             # Write to output file
-            print accession "\t" filename "\t" target_of_assay "\t" biosample_term_name "\t" organism >> output_file
+            print accession "\t" filename "\t" target_of_assay "\t" biosample_term_name "\t" organism "\t" life_stage >> output_file
         }
     }
 }'

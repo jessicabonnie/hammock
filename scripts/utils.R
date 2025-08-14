@@ -159,18 +159,26 @@ extract_params_from_filename <- function(filename) {
   sketch <- if (grepl('(^|[_.-])(hll|hyperloglog)([_.-]|$)', lowered)) 'hyperloglog'
             else if (grepl('(^|[_.-])(mnmzr|minimizer)([_.-]|$)', lowered)) 'minimizer'
             else if (grepl('(^|[_.-])(kmv|minhash)([_.-]|$)', lowered)) 'kmv' else NA_character_
-  # Tokens for subA, subB, expA
+  # Robust regex extraction for expA, subA, subB (preserve decimals; don't split on '.')
   stem <- tools::file_path_sans_ext(name)
-  tokens <- unlist(strsplit(stem, "[_.-]+"))
   subA <- NA_real_; subB <- NA_real_; expA <- NA_real_
-  for (tok in tokens) {
-    if (grepl('^expA[0-9.]+$', tok, ignore.case = TRUE)) {
-      expA <- suppressWarnings(as.numeric(sub('(?i)expA', '', tok, perl = TRUE)))
-    } else if (grepl('^A[0-9.]+$', tok)) {
-      subA <- suppressWarnings(as.numeric(sub('A', '', tok)))
-    } else if (grepl('^B[0-9.]+$', tok)) {
-      subB <- suppressWarnings(as.numeric(sub('B', '', tok)))
-    }
+  # expA like expA2.50 (case-insensitive)
+  m_exp <- regexec("(?i)expA([0-9]+(?:\\.[0-9]+)?)", stem, perl = TRUE)
+  r_exp <- regmatches(stem, m_exp)
+  if (length(r_exp) > 0 && length(r_exp[[1]]) > 1) {
+    expA <- suppressWarnings(as.numeric(r_exp[[1]][2]))
+  }
+  # subA like A0.50
+  m_a <- regexec("(^|[^A-Za-z0-9])A([0-9]+(?:\\.[0-9]+)?)", stem, perl = TRUE)
+  r_a <- regmatches(stem, m_a)
+  if (length(r_a) > 0 && length(r_a[[1]]) > 2) {
+    subA <- suppressWarnings(as.numeric(r_a[[1]][3]))
+  }
+  # subB like B1.25
+  m_b <- regexec("(^|[^A-Za-z0-9])B([0-9]+(?:\\.[0-9]+)?)", stem, perl = TRUE)
+  r_b <- regmatches(stem, m_b)
+  if (length(r_b) > 0 && length(r_b[[1]]) > 2) {
+    subB <- suppressWarnings(as.numeric(r_b[[1]][3]))
   }
   list(mode = ifelse(is.na(mode), NA, mode),
        klen = ifelse(is.na(klen), NA, klen),
