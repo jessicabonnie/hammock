@@ -284,8 +284,23 @@ def extract_hammock_parameters_from_filename(filename):
     subA = None
     subB = None
     expA = None
-    for tok in tokens:
-        # expA token like expA2.00
+    for i, tok in enumerate(tokens):
+        # Handle case where expA is split across tokens (e.g., expA0 and 20) - check this first
+        if tok.lower().startswith('expa') and i + 1 < len(tokens):
+            # Check if next token is a number (could be decimal part)
+            next_tok = tokens[i + 1]
+            if re.fullmatch(r'\d+', next_tok):
+                try:
+                    # Try to parse as expA0.20 format
+                    combined = tok + '.' + next_tok
+                    m_exp_combined = re.fullmatch(r'expA(\d+\.\d+)', combined, flags=re.IGNORECASE)
+                    if m_exp_combined:
+                        expA = float(m_exp_combined.group(1))
+                        continue
+                except Exception:
+                    pass
+        
+        # expA token like expA2.00 (direct match)
         m_exp = re.fullmatch(r'expA(\d+(?:\.\d+)?)', tok, flags=re.IGNORECASE)
         if m_exp:
             try:
@@ -293,7 +308,23 @@ def extract_hammock_parameters_from_filename(filename):
             except Exception:
                 pass
             continue
-        # A token like A0.75
+        
+        # Handle case where A token is split across tokens (e.g., A0 and 5) - check this first
+        if tok.startswith('A') and i + 1 < len(tokens):
+            # Check if next token is a number (could be decimal part)
+            next_tok = tokens[i + 1]
+            if re.fullmatch(r'\d+', next_tok):
+                try:
+                    # Try to parse as A0.5 format
+                    combined = tok + '.' + next_tok
+                    m_a_combined = re.fullmatch(r'A(\d+\.\d+)', combined)
+                    if m_a_combined:
+                        subA = float(m_a_combined.group(1))
+                        continue
+                except Exception:
+                    pass
+        
+        # A token like A0.75 (direct match) - only if not handled by split pattern above
         m_a = re.fullmatch(r'A(\d+(?:\.\d+)?)', tok)
         if m_a:
             try:
@@ -301,7 +332,23 @@ def extract_hammock_parameters_from_filename(filename):
             except Exception:
                 pass
             continue
-        # B token like B0.60
+        
+        # Handle case where B token is split across tokens (e.g., B0 and 90) - check this first
+        if tok.startswith('B') and i + 1 < len(tokens):
+            # Check if next token is a number (could be decimal part)
+            next_tok = tokens[i + 1]
+            if re.fullmatch(r'\d+', next_tok):
+                try:
+                    # Try to parse as B0.90 format
+                    combined = tok + '.' + next_tok
+                    m_b_combined = re.fullmatch(r'B(\d+\.\d+)', combined)
+                    if m_b_combined:
+                        subB = float(m_b_combined.group(1))
+                        continue
+                except Exception:
+                    pass
+        
+        # B token like B0.60 (direct match) - only if not handled by split pattern above
         m_b = re.fullmatch(r'B(\d+(?:\.\d+)?)', tok)
         if m_b:
             try:

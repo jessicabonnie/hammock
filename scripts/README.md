@@ -356,47 +356,6 @@ done
 - **Distance Scale**: Y-axis shows distance (1 - Jaccard similarity)
 - **Color Coding**: Clusters colored by distance threshold (customizable)
 
-#### `filter_hammock_output.py`
-**Purpose**: Filter hammock output to only include rows where both file1 and file2 have basenames that match entries in the accession list.
-
-**Usage**:
-```bash
-filter_hammock_output.py <hammock_file> <accession_list> [output_file] [--verbose]
-```
-
-**Features**:
-- Loads accession list from file (one accession per line)
-- Extracts basenames from hammock file1 and file2 columns
-- Filters to keep only rows where both file1 and file2 basenames are in the accession list
-- Handles various file extensions (.bed.gz, .fa.gz, etc.)
-- Provides detailed statistics about filtering results
-- Can output to file or stdout
-
-**Parameters**:
-- `hammock_file`: Path to hammock CSV output file
-- `accession_list`: Path to file containing accessions (one per line)
-- `output_file`: Output file path (optional, prints to stdout if not provided)
-- `--verbose, -v`: Verbose output with detailed statistics
-
-**Example**:
-```bash
-# Filter hammock output and save to file
-filter_hammock_output.py hammock_results.csv accession_list.txt filtered_results.csv
-
-# Filter and print to stdout
-filter_hammock_output.py hammock_results.csv accession_list.txt
-
-# Verbose output with detailed statistics
-filter_hammock_output.py hammock_results.csv accession_list.txt filtered_results.csv --verbose
-```
-
-**Output Statistics**:
-- Original number of rows
-- Number of accessions in list
-- Filtered number of rows
-- Percentage of rows kept
-- Number of unique files in filtered output
-
 #### `compare_clustering_trees.py`
 **Purpose**: Compare hierarchical clustering trees built from Jaccard similarity matrices using Robinson-Foulds distance. This provides a biologically meaningful comparison of how well hammock approximates bedtools clustering patterns.
 
@@ -742,11 +701,11 @@ sort -k8 -n sweep_results/parameter_sweep_results_clustering.tsv | head -5
 **Usage**: Imported by other scripts, not used directly. All analysis scripts now use the centralized `parse_hammock_format` function from utils.
 
 #### `filter_hammock_output.py`
-**Purpose**: Filter hammock output to only include rows where both file1 and file2 have basenames that match entries in the accession list.
+**Purpose**: Filter hammock output to only include rows where both file1 and file2 have basenames that match entries in the accession list. Includes comprehensive pairwise completeness checking to ensure all expected comparisons are present.
 
 **Usage**:
 ```bash
-filter_hammock_output.py <hammock_file> <accession_list> [output_file] [--verbose]
+filter_hammock_output.py <hammock_file> <accession_list> [output_file] [OPTIONS]
 ```
 
 **Features**:
@@ -754,6 +713,9 @@ filter_hammock_output.py <hammock_file> <accession_list> [output_file] [--verbos
 - Extracts basenames from hammock file1 and file2 columns
 - Filters to keep only rows where both file1 and file2 basenames are in the accession list
 - Handles various file extensions (.bed.gz, .fa.gz, etc.)
+- **NEW**: Automatic pairwise completeness check - verifies all expected pairwise comparisons are present
+- **NEW**: Detailed reporting of missing pairwise comparisons
+- **NEW**: Optional strict mode that exits with error if comparisons are incomplete
 - Provides detailed statistics about filtering results
 - Can output to file or stdout
 
@@ -762,25 +724,104 @@ filter_hammock_output.py <hammock_file> <accession_list> [output_file] [--verbos
 - `accession_list`: Path to file containing accessions (one per line)
 - `output_file`: Output file path (optional, prints to stdout if not provided)
 - `--verbose, -v`: Verbose output with detailed statistics
+- `--skip-completeness-check`: Skip the pairwise completeness validation
+- `--fail-on-incomplete`: Exit with error code 2 if pairwise comparisons are incomplete
 
-**Example**:
+**Examples**:
 ```bash
-# Filter hammock output and save to file
+# Basic filtering with completeness check
 filter_hammock_output.py hammock_results.csv accession_list.txt filtered_results.csv
 
 # Filter and print to stdout
 filter_hammock_output.py hammock_results.csv accession_list.txt
 
-# Verbose output with detailed statistics
+# Skip completeness check for faster processing
+filter_hammock_output.py hammock_results.csv accession_list.txt filtered_results.csv --skip-completeness-check
+
+# Strict mode - fail if any pairwise comparisons are missing
+filter_hammock_output.py hammock_results.csv accession_list.txt filtered_results.csv --fail-on-incomplete
+
+# Verbose output with all details
 filter_hammock_output.py hammock_results.csv accession_list.txt filtered_results.csv --verbose
 ```
 
 **Output Statistics**:
-- Original number of rows
-- Number of accessions in list
-- Filtered number of rows
-- Percentage of rows kept
+- Original number of rows and accessions loaded
+- Filtered number of rows and percentage kept
 - Number of unique files in filtered output
+- **NEW**: Pairwise completeness analysis:
+  - Expected vs. found pairwise comparisons
+  - List of missing pairs (if any)
+  - Completeness status (✓ complete or ⚠ incomplete)
+
+**Completeness Check Details**:
+For N remaining files after filtering, the script expects N² pairwise comparisons (including self-comparisons and both directions A↔B and B↔A). Missing comparisons indicate potential issues with the original hammock run or filtering process.
+
+**Exit Codes**:
+- `0`: Success (filtering completed successfully)
+- `1`: Error (file not found, parsing error, etc.)
+- `2`: Incomplete pairwise comparisons (only when `--fail-on-incomplete` is used)
+
+#### `batch_filter_hammock.sh`
+**Purpose**: Batch process multiple CSV files with `filter_hammock_output.py`, applying the same accession list to all files in a directory. Outputs filtered files to the current directory with optional filename tagging.
+
+**Usage**:
+```bash
+batch_filter_hammock.sh <input_directory> <accession_list> [tag]
+```
+
+**Features**:
+- Processes all CSV files in the specified input directory
+- Applies the same accession list to all files
+- Flexible output naming with optional tag insertion
+- Outputs all filtered files to the current working directory
+- Comprehensive error handling and progress reporting
+- Continues processing even if individual files fail
+- Automatic discovery of `filter_hammock_output.py` script
+- Summary statistics for successful vs. failed processing
+
+**Parameters**:
+- `input_directory`: Directory containing CSV files to process (required)
+- `accession_list`: Path to accession list file (required)
+- `tag`: Optional tag to append to output filenames before the extension (optional)
+
+**Output Naming**:
+- **Without tag**: `original_file.csv` → `original_file.csv`
+- **With tag**: `original_file.csv` → `original_file_filtered.csv` (if tag is "_filtered")
+
+**Examples**:
+```bash
+# Process all CSV files with same names
+batch_filter_hammock.sh /path/to/csv/files accession_list.txt
+
+# Process all CSV files with "_filtered" tag
+batch_filter_hammock.sh /path/to/csv/files accession_list.txt _filtered
+
+# Process files from relative path
+batch_filter_hammock.sh ../results/hammock_outputs/ ../data/filtered_accessions.txt _clean
+
+# Example with full paths
+batch_filter_hammock.sh /home/user/experiments/results /home/user/data/accessions.txt _subset
+```
+
+**Output**:
+- All filtered CSV files written to current directory
+- Progress messages for each file processed
+- Final summary showing successful vs. failed processing counts
+- Individual file status (✓ success or ✗ failure with exit code)
+
+**Error Handling**:
+- Validates input directory and accession list exist
+- Checks for presence of `filter_hammock_output.py` script
+- Continues processing remaining files if individual files fail
+- Provides detailed error reporting with exit codes
+- Returns non-zero exit code only if any files failed to process
+
+**Integration with Filter Script**:
+The batch script automatically passes through all the enhanced features of `filter_hammock_output.py`, including:
+- Pairwise completeness checking for each file
+- Detailed filtering statistics
+- Proper handling of various file extensions
 
 #### `bedtools_pairwise.sh`
 **Purpose**: Generate pairwise Jaccard similarity matrix using bedtools for comparison reference.

@@ -34,7 +34,60 @@ def load_accession_list(accession_file):
     return accessions
 
 
-def filter_hammock_output(hammock_file, accession_list, output_file=None):
+def check_pairwise_completeness(df, unique_files):
+    """
+    Check if all pairwise comparisons are present for the given files.
+    
+    Args:
+        df (pandas.DataFrame): Filtered dataframe with file1 and file2 columns
+        unique_files (set): Set of unique file basenames
+        
+    Returns:
+        tuple: (is_complete, missing_pairs, total_expected, total_found)
+    """
+    from itertools import combinations
+    
+    # Get basename extraction function
+    def get_basename(filename):
+        """Extract basename from filename, handling various extensions."""
+        name = str(filename)
+        # Handle common double extensions
+        if name.endswith('.bed.gz'):
+            name = name[:-7]  # Remove .bed.gz
+        elif name.endswith('.fa.gz'):
+            name = name[:-6]  # Remove .fa.gz
+        else:
+            # Use Path.stem for single extensions
+            name = Path(name).stem
+        return name
+    
+    # Create set of all possible pairwise combinations (including self-comparisons)
+    files_list = sorted(list(unique_files))
+    expected_pairs = set()
+    
+    # Add all pairwise combinations (both directions: A-B and B-A)
+    for i, file1 in enumerate(files_list):
+        for j, file2 in enumerate(files_list):
+            expected_pairs.add((file1, file2))
+    
+    # Get actual pairs from the filtered dataframe
+    actual_pairs = set()
+    for _, row in df.iterrows():
+        file1_base = get_basename(row['file1'])
+        file2_base = get_basename(row['file2'])
+        actual_pairs.add((file1_base, file2_base))
+    
+    # Find missing pairs
+    missing_pairs = expected_pairs - actual_pairs
+    
+    total_expected = len(expected_pairs)
+    total_found = len(actual_pairs)
+    is_complete = len(missing_pairs) == 0
+    
+    return is_complete, missing_pairs, total_expected, total_found
+
+
+def filter_hammock_output(hammock_file, accession_list, output_file=None, check_completeness=True):
     """
     Filter hammock output to only include rows where both file1 and file2 
     have basenames in the accession list.
@@ -43,9 +96,11 @@ def filter_hammock_output(hammock_file, accession_list, output_file=None):
         hammock_file (str): Path to hammock CSV output file
         accession_list (set): Set of accession basenames to keep
         output_file (str): Output file path (if None, prints to stdout)
+        check_completeness (bool): Whether to check for complete pairwise comparisons
         
     Returns:
-        int: Number of rows in filtered output
+        tuple: (num_rows, is_complete) where num_rows is number of filtered rows 
+               and is_complete indicates if all pairwise comparisons are present
     """
     # Read hammock output
     df = pd.read_csv(hammock_file)
@@ -91,6 +146,27 @@ def filter_hammock_output(hammock_file, accession_list, output_file=None):
     
     print(f"Unique files in filtered output: {len(unique_files)}")
     
+    # Check pairwise completeness if requested
+    is_complete = True  # Default to True if check is skipped
+    if check_completeness:
+        is_complete, missing_pairs, total_expected, total_found = check_pairwise_completeness(filtered_df, unique_files)
+        
+        print(f"\nPairwise completeness check:")
+        print(f"Expected pairwise comparisons: {total_expected}")
+        print(f"Found pairwise comparisons: {total_found}")
+        
+        if is_complete:
+            print("✓ All pairwise comparisons are present")
+        else:
+            print(f"⚠ WARNING: {len(missing_pairs)} pairwise comparisons are missing!")
+            print("Missing pairs:")
+            # Show first 10 missing pairs to avoid overwhelming output
+            for i, (file1, file2) in enumerate(sorted(missing_pairs)):
+                if i >= 10:
+                    print(f"... and {len(missing_pairs) - 10} more missing pairs")
+                    break
+                print(f"  {file1} <-> {file2}")
+    
     # Write output
     if output_file:
         filtered_df.to_csv(output_file, index=False)
@@ -99,7 +175,7 @@ def filter_hammock_output(hammock_file, accession_list, output_file=None):
         # Print to stdout
         filtered_df.to_csv(sys.stdout, index=False)
     
-    return len(filtered_df)
+    return len(filtered_df), is_complete
 
 
 def main():
@@ -114,6 +190,10 @@ def main():
     parser.add_argument('accession_list', help='Path to file containing accessions (one per line)')
     parser.add_argument('output_file', nargs='?', help='Output file path (if not provided, prints to stdout)')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
+    parser.add_argument('--skip-completeness-check', action='store_true', 
+                       help='Skip the pairwise completeness check')
+    parser.add_argument('--fail-on-incomplete', action='store_true',
+                       help='Exit with error code if pairwise comparisons are incomplete')
     
     args = parser.parse_args()
     
@@ -145,11 +225,24 @@ def main():
     
     # Filter hammock output
     try:
-        num_rows = filter_hammock_output(args.hammock_file, accession_set, args.output_file)
+        check_completeness = not args.skip_completeness_check
+        num_rows, is_complete = filter_hammock_output(
+            args.hammock_file, 
+            accession_set, 
+            args.output_file,
+            check_completeness=check_completeness
+        )
         
         if args.verbose:
             print(f"\nFiltering completed successfully!")
             print(f"Final output contains {num_rows} rows")
+            if check_completeness:
+                print(f"Pairwise completeness: {'Complete' if is_complete else 'Incomplete'}")
+        
+        # Exit with error if requested and pairwise comparisons are incomplete
+        if args.fail_on_incomplete and not is_complete:
+            print(f"\nError: Pairwise comparisons are incomplete and --fail-on-incomplete was specified")
+            sys.exit(2)  # Use exit code 2 to distinguish from other errors
             
     except Exception as e:
         print(f"Error during filtering: {e}")
