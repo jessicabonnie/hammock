@@ -36,7 +36,7 @@ def process_file(filepath: str, primary_files: List[str], mode: str = 'A',
                 num_hashes: int = 64, precision: int = 12, kmer_size: int = 0,
                 window_size: int = 0, subA: float = 1.0, subB: float = 1.0,
                 expA: float = 0.5, use_rust: bool = False, sketch_type: str = "hyperloglog",
-                hash_size: int = 32) -> Dict[str, float]:
+                hash_size: int = 32, use_fast_hll: bool = True) -> Dict[str, float]:
     """Process a file and calculate similarity against primary sets."""
     # Set memory limit before processing
     limit_memory()
@@ -91,7 +91,8 @@ def process_file(filepath: str, primary_files: List[str], mode: str = 'A',
                 sketch_type=sketch_type,
                 subsample=(subA, subB),
                 expA=expA,
-                use_rust=use_rust
+                use_rust=use_rust,
+                use_fast_hll=use_fast_hll
             )
                         
         primary_sets[os.path.basename(primary_file)] = sketch
@@ -122,7 +123,8 @@ def process_file(filepath: str, primary_files: List[str], mode: str = 'A',
                 sketch_type=sketch_type,
                 subsample=(subA, subB),
                 expA=expA,
-                use_rust=use_rust
+                use_rust=use_rust,
+                use_fast_hll=use_fast_hll
             )
                     
     # Calculate similarity values
@@ -180,6 +182,10 @@ def parse_args():
     sketch_group.add_argument("--minimizer", action="store_true", help="Use minimizer sketching")
     
     arg_parser.add_argument('--hashsize', type=int, default=32, choices=[32, 64], help='Hash size in bits (32 or 64, default: 32)', dest='hash_size')
+    
+    # Add flag to force Python-only implementation for benchmarking
+    arg_parser.add_argument('--python-only', action='store_true', 
+                           help='Force use of pure Python implementation (for benchmarking)')
     
     return arg_parser.parse_args()
 
@@ -443,7 +449,8 @@ def main():
                 'subsample': subsample,
                 'expA': args.expA,
                 'debug': args.debug,
-                'use_rust': False  # Default to not using Rust implementation
+                'use_rust': False,  # Default to not using Rust implementation
+                'use_fast_hll': not args.python_only  # Use Cython if available, unless --python-only is set
             }
             primary_sets[basename] = IntervalSketch.from_file(
                 filename=filepath,
@@ -492,7 +499,7 @@ def main():
     else:
         # Standard processing for different file lists
         pool_args = [
-            (filepath, primary_paths, args.mode, args.num_hashes, args.precision, args.kmer_size, args.window_size, args.subA, args.subB, args.expA, False, args.sketch_type, args.hash_size)
+            (filepath, primary_paths, args.mode, args.num_hashes, args.precision, args.kmer_size, args.window_size, args.subA, args.subB, args.expA, False, args.sketch_type, args.hash_size, not args.python_only)
             for filepath in filepaths
         ]
         
