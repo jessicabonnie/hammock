@@ -39,6 +39,7 @@ sed 's/^[^/]*//' accession_key_2025_7_31.tsv > repaired_accession_key.tsv
 # Create a table of tissues with sample counts
 python summarize_accession_key.py filtered_accession_key.tsv
 ```
+## All Available Samples
 
 ### Homo sapiens
 
@@ -99,18 +100,72 @@ python summarize_accession_key.py filtered_accession_key.tsv
 # Create a more balanced balanced_accession_key.txt (balanced between species)
 ./balance_species.sh filtered_accession_key.tsv balanced_accession_key.tsv
 
+summarize_accession_key.py balanced_accession_key.tsv -o balanced_summary.md
+
 # Filter for species
 grep "Homo sapiens" filtered_accession_key.tsv | cut -f2 > Homo_sapiens_accessions.txt
 grep -f Homo_sapiens_accessions.txt bed_paths.txt > Homo_sapiens_paths_beds.txt
-```
 
-
-
-```
 # Create Balanced Versions
 grep "Homo sapiens" balanced_accession_key.tsv | cut -f2 > Homo_sapiens_accessions_balanced.txt
 grep -f Homo_sapiens_accessions_balanced.txt bed_paths.txt > Homo_sapiens_paths_beds_balanced.txt
+```
+## Balanced Between Organisms
+### Homo sapiens
 
+**Total samples:** 99  
+**Unique tissues:** 19
+
+| Tissue | Count | Percentage |
+|--------|-------|------------|
+| heart | 18 | 18.2% |
+| adrenal gland | 15 | 15.2% |
+| lung | 14 | 14.1% |
+| kidney | 14 | 14.1% |
+| thymus | 9 | 9.1% |
+| spleen | 5 | 5.1% |
+| ovary | 4 | 4.0% |
+| brain | 3 | 3.0% |
+| retina | 3 | 3.0% |
+| frontal cortex | 2 | 2.0% |
+| liver | 2 | 2.0% |
+| limb | 2 | 2.0% |
+| testis | 2 | 2.0% |
+| urinary bladder | 1 | 1.0% |
+| embryonic facial prominence | 1 | 1.0% |
+| cerebellum | 1 | 1.0% |
+| midbrain | 1 | 1.0% |
+| stomach | 1 | 1.0% |
+| large intestine | 1 | 1.0% |
+
+### Mus musculus
+
+**Total samples:** 99  
+**Unique tissues:** 19
+
+| Tissue | Count | Percentage |
+|--------|-------|------------|
+| heart | 18 | 18.2% |
+| adrenal gland | 15 | 15.2% |
+| kidney | 14 | 14.1% |
+| lung | 14 | 14.1% |
+| thymus | 9 | 9.1% |
+| spleen | 5 | 5.1% |
+| ovary | 4 | 4.0% |
+| retina | 3 | 3.0% |
+| brain | 3 | 3.0% |
+| frontal cortex | 2 | 2.0% |
+| liver | 2 | 2.0% |
+| testis | 2 | 2.0% |
+| limb | 2 | 2.0% |
+| urinary bladder | 1 | 1.0% |
+| embryonic facial prominence | 1 | 1.0% |
+| large intestine | 1 | 1.0% |
+| midbrain | 1 | 1.0% |
+| cerebellum | 1 | 1.0% |
+| stomach | 1 | 1.0% |
+
+```
 
 grep "Mus musculus" filtered_accession_key.tsv | cut -f2  > Mus_musculus_accessions.txt
 grep -f Mus_musculus_accessions.txt bed_paths.txt > Mus_musculus_paths_beds.txt
@@ -119,9 +174,13 @@ grep "Mus musculus" balanced_accession_key.tsv | cut -f2 > Mus_musculus_accessio
 grep -f Mus_musculus_accessions_balanced.txt bed_paths.txt > Mus_musculus_paths_beds_balanced.txt
 
 # create subsets that contains only certain tissue types from the balanced sets
-grep "kidney\|lung\|heart\|brain\|large intestine\|liver\|stomach" balanced_accession_key.tsv | cut -f2 > subtissue_accessions.txt
+head -n1 balanced_accession_key.tsv > subtissue_accession_key.tsv
+grep "kidney\|lung\|heart\|brain\|large intestine\|liver\|stomach" balanced_accession_key.tsv | grep -v "midbrain"  >> subtissue_accession_key.tsv
+tail -n +2 subtissue_accession_key.tsv | cut -f2 > subtissue_accessions.txt
 
+grep -f subtissue_accessions.txt Mus_musculus_paths_beds.txt > Mus_musculus_subtissue_beds.txt
 
+grep -f subtissue_accessions.txt Homo_sapiens_paths_beds.txt > Homo_sapiens_subtissue_beds.txt
 ```
 
 ### Create Fasta Files using appropriate reference genomes
@@ -144,6 +203,7 @@ done < Mus_musculus_paths_beds.txt > Mus_musculus_fastas.txt
 sed -i 's/^[^/]*//' Mus_musculus_fastas.txt
 
 grep -f Mus_musculus_accessions_balanced.txt Mus_musculus_fastas.txt | sed 's/^[^/]*//' > Mus_musculus_fastas_balanced.txt
+
 
 
 grc38=/data/blangme2/fasta/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna

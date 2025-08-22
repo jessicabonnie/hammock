@@ -137,7 +137,8 @@ infer_label_from_basename <- function(basename) {
 clustering_analysis <- function(hammock_output, accession_key,
                                 clusters = 2:30,
                                 linkage_methods = c('average', 'complete'),
-                                out = NULL) {
+                                out = NULL,
+                                include_life_stage = TRUE) {
   file_format <- detect_file_format(hammock_output)
   if (file_format == 'hammock') {
     sim_df <- parse_hammock_format(hammock_output)
@@ -145,17 +146,29 @@ clustering_analysis <- function(hammock_output, accession_key,
     sim_df <- parse_bedtools_format(hammock_output)
   }
   sim_matrix <- as.matrix(sim_df)
-  labels_map <- tryCatch(load_accession_key(accession_key), error = function(e) NULL)
+  labels_map <- tryCatch(load_accession_key(accession_key, include_life_stage = include_life_stage), error = function(e) NULL)
   files_in_matrix <- rownames(sim_matrix)
   has_overlap <- !is.null(labels_map) && any(files_in_matrix %in% names(labels_map))
+  
   if (has_overlap) {
-    common <- intersect(files_in_matrix, names(labels_map))
-    sim_matrix <- sim_matrix[common, common, drop = FALSE]
-    effective_labels <- labels_map
+    aligned_result <- align_matrix_and_labels(sim_matrix, labels_map, quiet = FALSE)
+    sim_matrix <- aligned_result[[1]]
+    effective_labels <- aligned_result[[2]]
+    
+    # Report on Life_stage usage
+    if (has_life_stage_info(effective_labels)) {
+      message(sprintf("[R] Using enhanced labels with Life_stage information (%d unique labels)", 
+                     length(unique(effective_labels))))
+    } else {
+      message(sprintf("[R] Using standard Biosample labels (%d unique labels)", 
+                     length(unique(effective_labels))))
+    }
   } else {
     # Fallback to inference
     eff <- setNames(vapply(files_in_matrix, infer_label_from_basename, character(1)), files_in_matrix)
+    attr(eff, "has_life_stage") <- FALSE
     effective_labels <- eff
+    message("[R] No overlap with accession key; using inferred labels from basenames")
   }
 
   long_table <- evaluate_nmi_long_table(sim_matrix, effective_labels, clusters, linkage_methods)
@@ -196,12 +209,14 @@ clustering_analysis <- function(hammock_output, accession_key,
 if (identical(environment(), globalenv()) && !interactive()) {
   args <- commandArgs(trailingOnly = TRUE)
   if (length(args) < 2) {
-    stop('Usage: clustering_analysis.R <hammock_or_bedtools_output> <accession_key.tsv> [out.tsv]')
+    stop('Usage: clustering_analysis.R <hammock_or_bedtools_output> <accession_key.tsv> [out.tsv] [include_life_stage=TRUE]')
   }
   input_file <- args[[1]]
   acc_key <- args[[2]]
   out_file <- if (length(args) >= 3) args[[3]] else NULL
-  res <- clustering_analysis(input_file, acc_key, out = out_file)
+  include_life_stage <- if (length(args) >= 4) as.logical(args[[4]]) else TRUE
+  
+  res <- clustering_analysis(input_file, acc_key, out = out_file, include_life_stage = include_life_stage)
   # Also echo the output path for convenience
   message(sprintf('Long-table NMI results written to: %s', if (is.null(out_file) || !nzchar(out_file)) {
     in_path <- normalizePath(input_file, mustWork = FALSE)

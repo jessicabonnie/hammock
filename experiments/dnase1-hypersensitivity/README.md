@@ -189,9 +189,19 @@ done < maurano_files.txt > maurano_fastas.txt
 Do a parameter sweep to look at how everything compares to the bedtools output for different parameter combos
 
 ```bash
-mkdir -p parameter_scan
-cd parameter_scan
-complete_parameter_sweep.sh -b ../data/maurano_files.txt -f ../data/maurano_fastas.txt -o maurano  -v --window 8,10,20,30,50,100,200 --klen 8,10,15,20,25 --precision 20,22,23,24 2> scan.log
+# mkdir -p parameter_scan
+# cd parameter_scan
+# complete_parameter_sweep.sh -b ../data/maurano_files.txt -f ../data/maurano_fastas.txt -o maurano  -v --window 8,10,20,30,50,100,200 --klen 8,10,15,20,25 --precision 20,22,23,24 2> scan.log
+
+#still in data folder
+bfile=$(pwd)/maurano_files.txt
+ffile=$(pwd)/maurano_fastas.txt
+
+cd ..
+mkdir -p cluster_analysis
+cd cluster_analysis
+ml parallel
+sweepABC.sh $bfile
 
 ```
 

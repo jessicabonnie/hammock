@@ -20,6 +20,12 @@ get_basename <- function(filename) {
 }
 
 detect_file_format <- function(filepath) {
+  # Check filename first - if "bedtools" appears in the filename, treat as bedtools format
+  filename <- basename(filepath)
+  if (grepl("bedtools", filename, ignore.case = TRUE)) {
+    return('bedtools')
+  }
+  
   con <- file(filepath, "r"); on.exit(close(con))
   first_line <- readLines(con, n = 1, warn = FALSE)
   if (grepl('^file1\\tfile2\\tintersection\\tunion\\tjaccard', first_line) ||
@@ -65,11 +71,9 @@ parse_hammock_format <- function(filepath) {
 }
 
 parse_bedtools_format <- function(filepath) {
-  df <- if (requireNamespace("data.table", quietly = TRUE)) {
-    data.table::fread(filepath, sep = "\t", header = TRUE, showProgress = FALSE)
-  } else {
-    utils::read.table(filepath, header = TRUE)
-  }
+  # Always use read.table for bedtools files as it handles whitespace-separated files better
+  # than fread when headers have multiple spaces between column names
+  df <- utils::read.table(filepath, header = TRUE, stringsAsFactors = FALSE)
   if (!all(c('file1', 'file2', 'jaccard') %in% names(df))) stop('Bedtools file missing required columns: file1, file2, jaccard')
   df$file1_base <- vapply(df$file1, get_basename, character(1))
   df$file2_base <- vapply(df$file2, get_basename, character(1))
@@ -86,15 +90,108 @@ parse_bedtools_format <- function(filepath) {
   mat
 }
 
-load_accession_key <- function(filepath) {
+load_accession_key <- function(filepath, include_life_stage = TRUE) {
   df <- if (requireNamespace("data.table", quietly = TRUE)) {
     data.table::fread(filepath, sep = "\t", header = TRUE, showProgress = FALSE)
   } else {
     utils::read.table(filepath, sep = "\t", header = TRUE, stringsAsFactors = FALSE)
   }
   if (!all(c('File', 'Biosample_term_name') %in% names(df))) stop('Accession key missing required columns: File, Biosample_term_name')
+  
   base <- vapply(df$File, function(x) tools::file_path_sans_ext(basename(x)), character(1))
-  setNames(df$Biosample_term_name, base)
+  
+  # Check if Life_stage column exists and include_life_stage is TRUE
+  has_life_stage <- 'Life_stage' %in% names(df) && include_life_stage
+  
+  if (has_life_stage) {
+    # Create enhanced labels combining Biosample + Life_stage
+    enhanced_labels <- create_enhanced_labels(df$Biosample_term_name, df$Life_stage)
+    result <- setNames(enhanced_labels, base)
+    attr(result, "has_life_stage") <- TRUE
+    attr(result, "raw_data") <- df
+    return(result)
+  } else {
+    # Return traditional Biosample labels only
+    result <- setNames(df$Biosample_term_name, base)
+    attr(result, "has_life_stage") <- FALSE
+    if (has_life_stage) {
+      attr(result, "raw_data") <- df
+    }
+    return(result)
+  }
+}
+
+create_enhanced_labels <- function(biosample_terms, life_stages) {
+  # Clean up life stage values (handle NAs, empty strings)
+  clean_life_stages <- ifelse(is.na(life_stages) | life_stages == "" | is.null(life_stages), 
+                             "unknown", as.character(life_stages))
+  
+  # Create enhanced labels: "biosample (life_stage)"
+  enhanced <- paste0(biosample_terms, " (", clean_life_stages, ")")
+  
+  return(enhanced)
+}
+
+get_biosample_from_enhanced_label <- function(enhanced_label) {
+  # Extract biosample term from enhanced label "biosample (life_stage)"
+  gsub("\\s*\\([^)]*\\)$", "", enhanced_label)
+}
+
+get_life_stage_from_enhanced_label <- function(enhanced_label) {
+  # Extract life stage from enhanced label "biosample (life_stage)"
+  matches <- regmatches(enhanced_label, regexpr("\\(([^)]*)\\)$", enhanced_label))
+  if (length(matches) > 0) {
+    gsub("[()]", "", matches)
+  } else {
+    "unknown"
+  }
+}
+
+has_life_stage_info <- function(label_map) {
+  # Check if the label map includes life stage information
+  !is.null(attr(label_map, "has_life_stage")) && attr(label_map, "has_life_stage")
+}
+
+create_color_palette_with_life_stage <- function(enhanced_labels, base_palette_fun = NULL) {
+  # Create a color palette that groups by biosample but varies by life stage
+  if (is.null(base_palette_fun)) {
+    base_palette_fun <- if (requireNamespace('scales', quietly = TRUE)) {
+      scales::hue_pal()
+    } else {
+      function(n) grDevices::rainbow(n, s = 0.7, v = 0.9)
+    }
+  }
+  
+  # Extract unique biosamples and life stages
+  biosamples <- unique(get_biosample_from_enhanced_label(enhanced_labels))
+  life_stages <- unique(get_life_stage_from_enhanced_label(enhanced_labels))
+  
+  # Create base colors for biosamples
+  base_colors <- base_palette_fun(length(biosamples))
+  names(base_colors) <- biosamples
+  
+  # Create variations for life stages using different saturations/brightness
+  life_stage_factors <- c("adult" = 1.0, "embryonic" = 0.7, "postnatal" = 0.85, 
+                         "child" = 0.9, "unknown" = 0.6)
+  
+  enhanced_colors <- character(length(enhanced_labels))
+  names(enhanced_colors) <- enhanced_labels
+  
+  for (label in enhanced_labels) {
+    biosample <- get_biosample_from_enhanced_label(label)
+    life_stage <- get_life_stage_from_enhanced_label(label)
+    
+    base_color <- base_colors[biosample]
+    factor <- life_stage_factors[life_stage]
+    if (is.na(factor)) factor <- 0.8
+    
+    # Adjust color brightness/saturation based on life stage
+    rgb_vals <- col2rgb(base_color) / 255
+    adjusted_vals <- rgb_vals * factor + (1 - factor) * 0.3  # blend with gray
+    enhanced_colors[label] <- rgb(adjusted_vals[1], adjusted_vals[2], adjusted_vals[3])
+  }
+  
+  return(enhanced_colors)
 }
 
 infer_label_from_basename <- function(basename) {
@@ -109,10 +206,17 @@ align_matrix_and_labels <- function(sim_df, accession_labels, quiet = FALSE) {
   if (length(common) == 0) {
     if (!quiet) message('Warning: No overlap with accession key; inferring labels from basenames.')
     inferred <- setNames(vapply(files_in_matrix, infer_label_from_basename, character(1)), files_in_matrix)
+    # Preserve attributes for consistency
+    attr(inferred, "has_life_stage") <- FALSE
     list(sim_df, inferred)
   } else {
     sim_sub <- sim_df[common, common, drop = FALSE]
-    list(sim_sub, accession_labels)
+    # Subset the labels but preserve attributes
+    labels_sub <- accession_labels[common]
+    attributes_to_preserve <- attributes(accession_labels)
+    attributes_to_preserve$names <- names(labels_sub)
+    attributes(labels_sub) <- attributes_to_preserve
+    list(sim_sub, labels_sub)
   }
 }
 
