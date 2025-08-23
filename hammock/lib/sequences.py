@@ -10,6 +10,14 @@ from hammock.lib.minimizer import MinimizerSketch
 from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.minhash import MinHash
 
+# Try to import FastHyperLogLog for better performance
+try:
+    from hammock.lib.hyperloglog_fast import FastHyperLogLog
+    FAST_HLL_AVAILABLE = True
+except ImportError:
+    FAST_HLL_AVAILABLE = False
+    FastHyperLogLog = None
+
 # Use TYPE_CHECKING to avoid circular imports
 if TYPE_CHECKING:
     from hammock.lib.minimizer import MinimizerSketch
@@ -61,13 +69,23 @@ class SequenceSketch(AbstractSketch):
                 use_sets=use_sets
             )
         elif sketch_type == "hyperloglog":
-            self.sketch = HyperLogLog(
-                precision=precision,
-                kmer_size=kmer_size,
-                window_size=window_size,
-                seed=seed,
-                debug=debug
-            )
+            # Use FastHyperLogLog if available for better performance
+            if FAST_HLL_AVAILABLE:
+                self.sketch = FastHyperLogLog(
+                    precision=precision,
+                    kmer_size=kmer_size,
+                    window_size=window_size,
+                    seed=seed,
+                    debug=debug
+                )
+            else:
+                self.sketch = HyperLogLog(
+                    precision=precision,
+                    kmer_size=kmer_size,
+                    window_size=window_size,
+                    seed=seed,
+                    debug=debug
+                )
         elif sketch_type == "minhash":
             self.sketch = MinHash(
                 num_hashes=num_hashes,

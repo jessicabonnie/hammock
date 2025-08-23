@@ -14,7 +14,7 @@ pip install -e .
 
 ### Optimized Installation (Recommended)
 
-For **2-5x performance improvement** with FastHyperLogLog and optional Cython acceleration:
+For **2-15x performance improvement** with FastHyperLogLog and C++ acceleration:
 
 ```bash
 # Install with Cython acceleration support
@@ -24,8 +24,8 @@ pip install -e ".[fast]"
 ```
 
 This will:
-- ✅ Enable FastHyperLogLog with Cython acceleration (2-5x speedup)
-- ✅ Automatically fall back to pure Python if Cython build fails
+- ✅ Enable FastHyperLogLog with C++ acceleration (2-15x speedup)
+- ✅ Automatically fall back to Cython (2-5x speedup) or Python if compilation fails
 - ✅ Provide identical results with significantly better performance
 - ✅ Work transparently - existing code runs faster without changes
 
@@ -58,16 +58,18 @@ Hammock offers multiple implementation options for different performance needs:
 | Implementation | Installation | Performance | When to Use |
 |----------------|--------------|-------------|-------------|
 | **Pure Python** | `pip install hammock` | Baseline (1x) | ✅ Simple installation<br>✅ Works everywhere<br>⚠️ Slower for large datasets |
-| **FastHyperLogLog** | `pip install "hammock[fast]"` | **2-5x faster** | 🚀 **Recommended for most users**<br>✅ Significant speedup<br>✅ Automatic fallback<br>✅ Easy installation |
-| **Rust HyperLogLog** | Build with maturin | **5-10x faster** | 🔥 Maximum performance<br>⚠️ Requires Rust build tools<br>⚠️ More complex setup |
+| **FastHyperLogLog (C++)** | `pip install "hammock[fast]"` | **2-15x faster** | 🚀 **🚀 Recommended for most users**<br>✅ Maximum speedup<br>✅ Automatic fallback<br>✅ Easy installation |
+| **FastHyperLogLog (Cython)** | `pip install "hammock[fast]"` | **2-5x faster** | ✅ Good speedup<br>✅ Automatic fallback<br>✅ Easy installation |
 
 **Performance results** (based on comprehensive testing):
-- **Small datasets** (100-1000 items): FastHyperLogLog provides ~2x speedup
-- **Medium datasets** (1000-10000 items): FastHyperLogLog provides ~3x speedup  
-- **Large datasets** (10000+ items): FastHyperLogLog provides ~2-5x speedup
-- **Batch operations**: Up to 5x speedup with optimized batch processing
+- **Small datasets** (100-1000 items): FastHyperLogLog (C++) provides ~2.5x speedup
+- **Medium datasets** (1000-10000 items): FastHyperLogLog (C++) provides ~3.3x speedup  
+- **Large datasets** (10000+ items): FastHyperLogLog (C++) provides ~2-15x speedup
+- **Batch operations**: Up to 15x speedup with optimized batch processing
+- **C++ vs Python**: Consistent 2-15x improvement across all dataset sizes
+- **Cython fallback**: 2-5x speedup when C++ compilation fails
 
-**Recommendation**: Install with `pip install "hammock[fast]"` for the best balance of performance and ease of use.
+**Recommendation**: Install with `pip install "hammock[fast]"` for the best balance of performance and ease of use. FastHyperLogLog automatically uses C++ acceleration when available, providing maximum performance with automatic fallbacks.
 
 
 ## Usage
@@ -76,6 +78,23 @@ Calculate pairwise Jaccard similarities between lists of BED or sequence files.
 Both input files are text files containing a path per line to the files to be compared. For computational purposes, `<primary_paths_file>` should be the shorter of the two file lists.
 ```bash
 hammock <filepaths_file> <primary_file> --mode {A|B|C|D} [options]
+```
+
+## Analysis and Visualization Scripts
+
+See `scripts/README.md` for full details. Notable utilities:
+
+- `scripts/clustering_analysis.py`: Evaluate hierarchical clustering (NMI, silhouette) over multiple cluster counts and linkage methods from a hammock CSV or bedtools TSV. Supports long-table TSV to stdout or file.
+- `scripts/draw_dendrograms.py` (new): Create a multi-page PDF with one dendrogram per linkage method, colored by tissue labels, from a hammock CSV or bedtools TSV plus an accession key.
+
+Examples:
+
+```bash
+# Long-table clustering analysis
+python3 scripts/clustering_analysis.py results/mouseonly_hll_p18_jaccA.csv data/filtered_accession_key.tsv --stdout
+
+# Multi-page dendrogram PDF
+python3 scripts/draw_dendrograms.py results/mouseonly_hll_p18_jaccA.csv data/filtered_accession_key.tsv --output results/mouseonly_dendrograms.pdf
 ```
 
 ### Modes and Auto-Detection
@@ -125,7 +144,7 @@ Sketching Options:
 - `--hashsize`: Hash size in bits for HyperLogLog (32 or 64, default: 64)
 
 
-**Performance Note**: When you install with `pip install "hammock[fast]"`, HyperLogLog sketching automatically uses FastHyperLogLog with Cython acceleration for 2-5x better performance. This works transparently with all existing commands.
+**Performance Note**: When you install with `pip install "hammock[fast]"`, HyperLogLog sketching automatically uses FastHyperLogLog with C++ acceleration for 2-15x better performance. If C++ compilation fails, it automatically falls back to Cython acceleration (2-5x speedup) or pure Python. This works transparently with all existing commands.
 
 Mode C Options:
 - `--subA`: Subsampling rate for intervals (default: 1.0)
@@ -150,7 +169,7 @@ Results are written to CSV files with the following format:
 
 ```bash
 # Compare intervals using HyperLogLog (mode A)
-# Automatically uses FastHyperLogLog for 2-5x speedup when installed with [fast]
+# Automatically uses FastHyperLogLog for 2-15x speedup when installed with [fast]
 hammock files.txt primary.txt --precision 12
 
 # Compare points using MinHash (mode B)
@@ -238,6 +257,7 @@ python3 -m pytest hammock/tests -m full    # Run full tests only
 - `test_sequences.py`: Tests sequence processing and mode D
 - `test_hammock.py`: Tests CLI functionality and mode switching
 - `benchmark_sketches.py`: Performance benchmarks comparing different sketching methods
+- `benchmark_hll.py`: Comprehensive HyperLogLog benchmarks including C++ vs Python performance
 
 ### Test Cases
 Tests include:
@@ -258,65 +278,216 @@ python -m pytest hammock/tests/test_hyperloglog.py
 python -m pytest hammock/tests/test_minhash.py
 # Run benchmarks
 python -m pytest hammock/tests/benchmark_sketches.py
+
+# Run comprehensive HyperLogLog benchmarks (includes C++ vs Python comparison)
+cd benchmarks
+python benchmark_hll.py
 ```
 
-## Fast HyperLogLog with Rust
 
-For maximum performance, Hammock includes a native Rust implementation of HyperLogLog called `RustHLLWrapper`. This implementation provides significant speed improvements, especially for large datasets.
 
-### Installation
+# Fast HyperLogLog with C++ (Recommended)
 
-The Rust implementation requires building the Rust extension:
+For **2-15x performance improvement**, Hammock includes a high-performance C++ implementation of HyperLogLog called `FastHyperLogLog`. This implementation provides the best balance of performance and ease of use, automatically falling back to Cython or Python if C++ compilation fails.
+
+## Obtaining the C++ HLL Code
+
+**The C++ HyperLogLog implementation is already included** when you clone the main hammock repository. You don't need to download or clone any additional repositories. Simply clone hammock and the C++ code will be available in the `hll/` directory:
 
 ```bash
-cd rust_hll
-python -m maturin develop
+git clone https://github.com/jessicabonnie/hammock.git
+cd hammock
+# The C++ code is now available in hll/ directory
+ls hll/
 ```
 
-### Usage
+**Note**: The C++ HyperLogLog implementation is based on the [hll library](https://github.com/mindis/hll) by Daniel Baker, which provides a high-performance C++ implementation with SIMD parallelism. This library is included under the MIT License and is fully open source for both academic and commercial use.
+
+This implementation provides:
+
+- **SIMD optimizations** (SSE2, AVX2, AVX-512) for maximum performance
+- **Thread-safe operations** for concurrent access
+- **Optimized memory management** for large datasets
+- **High-precision cardinality estimation** with multiple correction methods
+
+## Installation and Setup
+
+### Prerequisites
+
+Ensure you have the following build tools installed:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install build-essential python3-dev
+
+# CentOS/RHEL/Rocky Linux
+sudo yum groupinstall "Development Tools"
+sudo yum install python3-devel
+
+# macOS (using Homebrew)
+brew install gcc python3
+
+# Windows (using MSVC)
+# Install Visual Studio Build Tools or use WSL
+```
+
+### Automatic Installation (Recommended)
+
+The C++ implementation is automatically built when you install hammock with the `[fast]` option. The C++ source code is already included in the repository:
+
+```bash
+git clone https://github.com/jessicabonnie/hammock.git
+cd hammock
+pip install -e ".[fast]"
+```
+
+This will:
+- ✅ Compile the C++ HyperLogLog library
+- ✅ Build the Cython wrapper
+- ✅ Install FastHyperLogLog with automatic acceleration detection
+- ✅ Provide 2-15x performance improvement
+- ✅ Automatically fall back to Cython or Python if compilation fails
+
+### Manual Build (Advanced Users)
+
+If you need to customize the build process or troubleshoot compilation issues:
+
+```bash
+# 1. Build the standalone C++ library
+cd hll
+make clean && make
+
+# 2. Build the Python extension
+cd ..
+python setup.py build_ext --inplace
+
+# 3. Test the installation
+python -c "from hammock.lib.hyperloglog_fast import FastHyperLogLog; print('C++ HLL successfully installed!')"
+```
+
+### Build Script
+
+Use the provided build script for automated compilation:
+
+```bash
+python build_cpp_extension.py
+```
+
+This script will:
+- Check dependencies
+- Build the C++ library
+- Compile the Cython extension
+- Run basic tests
+- Provide detailed error messages if something fails
+
+## Usage
+
+FastHyperLogLog automatically detects and uses the best available acceleration:
 
 ```python
-from hammock import RustHLLWrapper
+from hammock.lib.hyperloglog_fast import FastHyperLogLog
 
-# Create a sketch with precision 12 (2^12 = 4096 registers)
-sketch = RustHLLWrapper(precision=12)
+# Create an optimized sketch (automatically uses C++ if available)
+sketch = FastHyperLogLog(precision=12, hash_size=64)
 
-# Add values
-sketch.add("item1")
-sketch.add("item2")
+# Add items individually
+sketch.add_string("item1")
+sketch.add_string("item2")
 
-# Add in batch (much faster)
+# Add items in batch (much faster)
 sketch.add_batch(["item3", "item4", "item5", "item6"])
 
 # Get cardinality estimate
-estimate = sketch.cardinality()
+estimate = sketch.estimate_cardinality()
 print(f"Estimated cardinality: {estimate}")
 
-# Merge with another sketch
-sketch2 = RustHLLWrapper(precision=12)
-sketch2.add_batch(["item5", "item6", "item7", "item8"])
-sketch.merge(sketch2)
-
-# Calculate Jaccard similarity
-jaccard = sketch.jaccard(sketch2)
-print(f"Jaccard similarity: {jaccard}")
+# Check which acceleration is being used
+print(f"Acceleration type: {sketch._acceleration_type}")
+print(f"Performance info: {sketch.get_performance_info()}")
 ```
 
-### Performance Features
+## Performance Features
 
-The Rust implementation includes several performance optimizations:
+The C++ implementation includes several performance optimizations:
 
-- Multi-threaded batch processing for large datasets
-- SIMD-style vectorized operations
-- Optimized hashing and register access
-- Fast Maximum Likelihood Estimation
+- **SIMD vectorization** for register operations
+- **Optimized hashing** using xxHash
+- **Memory-efficient storage** with bit-packing
+- **Fast set operations** (union, intersection)
+- **Automatic precision optimization** based on data size
 
-You can control threading with:
+## Performance Comparison
+
+| Implementation | Speedup | Installation | Best For |
+|----------------|---------|--------------|----------|
+| **Pure Python** | 1x | `pip install hammock` | Simple setup, small datasets |
+| **FastHyperLogLog (C++)** | **2-15x** | `pip install "hammock[fast]"` | **🚀 Best balance** |
+| **FastHyperLogLog (Cython)** | 2-5x | `pip install "hammock[fast]"` | Fallback when C++ fails |
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"No module named 'hammock.lib.cpp_hll_wrapper'"**
+   - Ensure you have build tools installed
+   - Try: `python build_cpp_extension.py`
+   - Check: `python setup.py build_ext --inplace`
+
+2. **"C++ compiler not found"**
+   - Install build-essential (Ubuntu) or Development Tools (CentOS)
+   - On macOS: `xcode-select --install`
+
+3. **"Cython compilation failed"**
+   - Update Cython: `pip install --upgrade cython`
+   - Check Python version compatibility
+
+4. **Performance not as expected**
+   - Verify C++ acceleration: `sketch._acceleration_type == 'C++'`
+   - Check precision settings (higher precision = better accuracy, slower speed)
+
+### Verification
+
+Test that C++ acceleration is working:
 
 ```python
-# Disable threading
-sketch = RustHLLWrapper(precision=12, use_threading=False)
+from hammock.lib.hyperloglog_fast import FastHyperLogLog, CPP_AVAILABLE
 
-# Enable threading with custom batch size threshold
-sketch = RustHLLWrapper(precision=12, use_threading=True, min_thread_batch=100000)
+print(f"C++ available: {CPP_AVAILABLE}")
+
+sketch = FastHyperLogLog(precision=12)
+print(f"Acceleration type: {sketch._acceleration_type}")
+
+# Should show "C++" if working correctly
 ```
+
+## Benchmarks
+
+Run comprehensive performance benchmarks:
+
+```bash
+cd benchmarks
+python benchmark_hll.py
+```
+
+This will test all implementations and show detailed performance comparisons including:
+- Individual add performance
+- Batch add performance  
+- Cardinality estimation speed
+- Memory usage
+- Accuracy comparisons
+
+## Citation and Attribution
+
+The C++ HyperLogLog implementation in hammock is based on the following work:
+
+**Baker, D. (2016). hll: C++ HyperLogLog Implementation with SIMD Parallelism.**  
+GitHub repository: [https://github.com/mindis/hll](https://github.com/mindis/hll)  
+License: MIT License
+
+**If you use the C++ HyperLogLog acceleration in hammock, please cite:**
+
+Baker, D. (2016). hll: C++ HyperLogLog Implementation with SIMD Parallelism. GitHub repository. https://github.com/mindis/hll
+
+**Original HyperLogLog Algorithm:**
+
+Flajolet, P., Fusy, É., Gandouet, O., & Meunier, F. (2007). HyperLogLog: the analysis of a near-optimal cardinality estimation algorithm. In *Discrete Mathematics and Theoretical Computer Science* (pp. 137-156).

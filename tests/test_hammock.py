@@ -2,6 +2,7 @@
 from __future__ import annotations
 from hammock.lib.sequences import SequenceSketch
 from hammock.lib.intervals import IntervalSketch
+from hammock.lib.hyperloglog_fast import FastHyperLogLog, CPP_AVAILABLE
 from unittest.mock import patch, mock_open, MagicMock
 import pytest # type: ignore
 from hammock.hammock import main
@@ -330,6 +331,35 @@ def test_identical_file_lists_optimization(capsys):
         result = process_file('file3.bed', ['file1.bed', 'file2.bed'], mode='A')
         # Should call from_file for the unique files (2 primaries + 1 new = 3 calls)
         assert mock_sketch.call_count == 3
+
+
+@pytest.mark.skipif(not CPP_AVAILABLE, reason="C++ extension not available")
+def test_cpp_integration_in_hammock():
+    """Test that C++ integration works within the hammock framework."""
+    # Test that FastHyperLogLog can be used in sequence sketching
+    seq1 = "ATCGATCGATCG" * 10
+    seq2 = "ATCGATCGATCG" * 8 + "GTTCATGCATAT" * 2
+    
+    # Create sketches with C++ acceleration
+    sketch1 = SequenceSketch(sketch_type="hyperloglog", kmer_size=8)
+    sketch2 = SequenceSketch(sketch_type="hyperloglog", kmer_size=8)
+    
+    # Verify that the underlying sketch is using C++ acceleration
+    assert hasattr(sketch1.sketch, '_acceleration_type')
+    assert sketch1.sketch._acceleration_type in ['C++', 'Cython', 'Python']
+    
+    # Add sequences
+    sketch1.add_string(seq1)
+    sketch2.add_string(seq2)
+    
+    # Get similarity values
+    result = sketch1.similarity_values(sketch2)
+    jaccard = result['jaccard_similarity']
+    
+    # Should get reasonable similarity
+    assert 0.0 <= jaccard <= 1.0
+    print(f"C++ integration test - Jaccard similarity: {jaccard:.3f}")
+
 
 if __name__ == "__main__":
     print("Testing sequence sketching...")

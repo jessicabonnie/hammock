@@ -42,6 +42,31 @@ def get_extensions():
             include_dirs=[np.get_include()],
             extra_compile_args=["-O3"],
             extra_link_args=[],
+        ),
+        Extension(
+            "hammock.lib.cpp_hll_wrapper",
+            sources=[
+                "hammock/lib/cpp_hll_wrapper.pyx",
+                "hll/hll.cpp",
+                "hll/kthread.c"
+            ],
+            include_dirs=[
+                np.get_include(),
+                "."
+            ],
+            extra_compile_args=[
+                "-O3", 
+                "-funroll-loops", 
+                "-pipe", 
+                "-march=native",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-DNDEBUG",
+                "-DTHREADSAFE"
+            ],
+            extra_link_args=["-pthread"],
+            language="c++",
         )
     ]
     
@@ -69,7 +94,7 @@ def get_scripts():
 
 setup(
     name="hammock",
-    version="0.3.0",
+    version="0.4.0",
     author="Jessica Bonnie",
     author_email="jbonnie@jhu.edu",
     description="Cardinality Estimation and Interval Sketches",

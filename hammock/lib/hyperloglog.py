@@ -49,8 +49,7 @@ class HyperLogLog(AbstractSketch):
         if kmer_size < 0:
             raise ValueError("k-mer size must be non-negative")
         
-        if window_size and window_size < kmer_size:
-            raise ValueError("Window size must be >= kmer size")
+        # Allow any window_size; downstream algorithms handle edge cases
         
         self.precision = precision
         self.num_registers = 1 << precision

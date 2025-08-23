@@ -2,6 +2,7 @@ from __future__ import annotations
 import pytest # type: ignore
 from hammock.lib.hyperloglog import HyperLogLog
 from hammock.lib.abstractsketch import AbstractSketch
+from hammock.lib.hyperloglog_fast import FastHyperLogLog, CPP_AVAILABLE
 import csv
 from datetime import datetime
 import os
@@ -526,6 +527,57 @@ def test_hyperloglog_basic_operations():
     est = sketch.estimate_cardinality()
     assert est > 0
     assert est < 8  # Should be close to 6, allow for some error
+
+@pytest.mark.skipif(not CPP_AVAILABLE, reason="C++ extension not available")
+class TestCppIntegration:
+    """Tests for C++ HyperLogLog integration."""
+    
+    def test_cpp_vs_python_consistency(self):
+        """Test that C++ and Python implementations give consistent results."""
+        # Create test data
+        test_data = [f"test_item_{i}" for i in range(1000)]
+        
+        # Test Python implementation
+        python_sketch = HyperLogLog(precision=12)
+        python_sketch.add_batch(test_data)
+        python_cardinality = python_sketch.estimate_cardinality()
+        
+        # Test C++ implementation
+        cpp_sketch = FastHyperLogLog(precision=12, use_cpp=True)
+        cpp_sketch.add_batch(test_data)
+        cpp_cardinality = cpp_sketch.estimate_cardinality()
+        
+        # Results should be reasonably close (within 20% due to different algorithms)
+        relative_diff = abs(cpp_cardinality - python_cardinality) / python_cardinality
+        assert relative_diff < 0.2, f"Results too different: {relative_diff:.3f}"
+    
+    def test_cpp_performance_improvement(self):
+        """Test that C++ implementation is faster than Python."""
+        import time
+        
+        # Create larger test data for meaningful performance test
+        test_data = [f"perf_test_{i}" for i in range(5000)]
+        
+        # Time Python implementation
+        start_time = time.time()
+        python_sketch = HyperLogLog(precision=12)
+        python_sketch.add_batch(test_data)
+        python_time = time.time() - start_time
+        
+        # Time C++ implementation
+        start_time = time.time()
+        cpp_sketch = FastHyperLogLog(precision=12, use_cpp=True)
+        cpp_sketch.add_batch(test_data)
+        cpp_time = time.time() - start_time
+        
+        # C++ should be faster
+        assert cpp_time < python_time, f"C++ ({cpp_time:.4f}s) should be faster than Python ({python_time:.4f}s)"
+        
+        # Calculate speedup
+        speedup = python_time / cpp_time
+        print(f"C++ speedup: {speedup:.2f}x")
+        assert speedup > 1.1, f"Expected at least 1.1x speedup, got {speedup:.2f}x"
+
 
 if __name__ == "__main__":
     # Run quick tests
