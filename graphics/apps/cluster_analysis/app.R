@@ -581,7 +581,8 @@ ui <- fluidPage(
           selectInput("linkageMethod", "Clustering approach (linkage)", choices = character(0)),
           conditionalPanel(
             condition = "input.modeSelect == 'C'",
-            selectInput("expA", "expA", choices = character(0))
+            selectInput("expA", "expA", choices = character(0)),
+            selectInput("subB", "subB", choices = character(0))
           ),
           conditionalPanel(
             condition = "input.modeSelect == 'D'",
@@ -1402,6 +1403,20 @@ server <- function(input, output, session) {
     exp_labels <- if (length(exp_vals)) sprintf("%.2f", exp_vals) else character(0)
     exp_choices <- if (length(exp_vals)) stats::setNames(as.character(exp_vals), exp_labels) else character(0)
     updateSelectInput(session, "expA", choices = exp_choices, selected = if (length(exp_vals)) as.character(exp_vals[1]) else NULL)
+    # Collect subB across files by re-parsing filenames if column missing or NA
+    subB_vals <- suppressWarnings(as.numeric(na.omit(res$df$subB)))
+    if (length(subB_vals) == 0 || all(is.na(subB_vals))) {
+      # Fall back: parse from source_file names
+      subB_from_name <- lapply(unique(res$df$source_file), function(sf) {
+        p <- tryCatch(extract_params_from_filename(sf), error = function(e) NULL)
+        if (!is.null(p) && is.list(p)) p$subB else NA_real_
+      })
+      subB_vals <- suppressWarnings(as.numeric(na.omit(unlist(subB_from_name))))
+    }
+    subB_vals <- sort(unique(subB_vals))
+    subB_labels <- if (length(subB_vals)) sprintf("%.2f", subB_vals) else character(0)
+    subB_choices <- if (length(subB_vals)) stats::setNames(as.character(subB_vals), subB_labels) else character(0)
+    updateSelectInput(session, "subB", choices = subB_choices, selected = if (length(subB_vals)) as.character(subB_vals[1]) else NULL)
     k_choices <- sort(unique(na.omit(res$df$klen)))
     w_choices <- sort(unique(na.omit(res$df$window)))
     updateSelectInput(session, "klen", choices = k_choices, selected = if (length(k_choices)) k_choices[1] else NULL)
@@ -1606,6 +1621,10 @@ server <- function(input, output, session) {
       suppressWarnings(v <- as.numeric(input$expA))
       if (!is.na(v)) d <- d[!is.na(d$expA) & abs(d$expA - v) < 1e-9, , drop = FALSE]
     }
+    if (identical(input$modeSelect, "C") && "subB" %in% names(d) && !is.null(input$subB) && nzchar(input$subB)) {
+      suppressWarnings(v <- as.numeric(input$subB))
+      if (!is.na(v)) d <- d[!is.na(d$subB) & abs(d$subB - v) < 1e-9, , drop = FALSE]
+    }
     if (identical(input$modeSelect, "D")) {
       if ("klen" %in% names(d) && !is.null(input$klen) && nzchar(input$klen)) { suppressWarnings(kv <- as.numeric(input$klen)); if (!is.na(kv)) d <- d[!is.na(d$klen) & d$klen == kv, , drop = FALSE] }
       if ("window" %in% names(d) && !is.null(input$window) && nzchar(input$window)) { suppressWarnings(wv <- as.numeric(input$window)); if (!is.na(wv)) d <- d[!is.na(d$window) & d$window == wv, , drop = FALSE] }
@@ -1635,6 +1654,7 @@ server <- function(input, output, session) {
           if (!is.null(input$linkageMethod) && nzchar(input$linkageMethod)) paste0("linkage ", input$linkageMethod) else NULL,
           if (!is.null(input$precision) && nzchar(input$precision)) paste0("p=", input$precision) else NULL,
           if (identical(input$modeSelect, "C") && !is.null(input$expA) && nzchar(input$expA)) paste0("expA=", input$expA) else NULL,
+          if (identical(input$modeSelect, "C") && !is.null(input$subB) && nzchar(input$subB)) paste0("subB=", input$subB) else NULL,
           if (identical(input$modeSelect, "D") && !is.null(input$klen) && nzchar(input$klen)) paste0("k=", input$klen) else NULL,
           if (identical(input$modeSelect, "D") && !is.null(input$window) && nzchar(input$window)) paste0("w=", input$window) else NULL
         ), collapse = ", "
@@ -1812,7 +1832,7 @@ server <- function(input, output, session) {
 
   # Auto-select a matching file for the dendrogram when NMI parameters change
   observeEvent(list(input$modeSelect, input$linkageMethod, input$precision,
-                    input$expA, input$klen, input$window, filtered_data()), {
+                    input$expA, input$subB, input$klen, input$window, filtered_data()), {
     d <- filtered_data()
     if (is.null(d) || !("source_file" %in% names(d))) return()
     srcs <- sort(unique(na.omit(as.character(d$source_file))))
