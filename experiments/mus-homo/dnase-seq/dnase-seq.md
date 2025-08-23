@@ -31,10 +31,10 @@ while read -r filepath; do basename "$filepath" | sed -E 's/\.(gz|bz2|xz)$//' | 
 ```
 # Make a key
 ENCODE_report_to_key.sh experiment_report_2025_7_31_19h_28m.tsv accession_key_2025_7_31.tsv
-sed 's/^[^/]*//' accession_key_2025_7_31.tsv > repaired_accession_key.tsv
+sed 's/^[^/]*//' accession_key_2025_7_31.tsv > accession_key_2025_7_31_with_lifestage.tsv
 
 # Filter it for what is actually there
-   awk 'FNR==1 && FILENAME==ARGV[2] {print; next} FNR==NR {files[$0]=1; next} $2 in files' file_accessions.txt accession_key_2025_7_31.tsv > filtered_accession_key.tsv
+   awk 'FNR==1 && FILENAME==ARGV[2] {print; next} FNR==NR {files[$0]=1; next} $2 in files' file_accessions.txt accession_key_2025_7_31_with_lifestage.tsv > filtered_accession_key.tsv
 
 # Create a table of tissues with sample counts
 python summarize_accession_key.py filtered_accession_key.tsv
@@ -174,13 +174,26 @@ grep "Mus musculus" balanced_accession_key.tsv | cut -f2 > Mus_musculus_accessio
 grep -f Mus_musculus_accessions_balanced.txt bed_paths.txt > Mus_musculus_paths_beds_balanced.txt
 
 # create subsets that contains only certain tissue types from the balanced sets
-head -n1 balanced_accession_key.tsv > subtissue_accession_key.tsv
+head -n1 filtered_accession_key.tsv > subtissue_accession_key.tsv
 grep "kidney\|lung\|heart\|brain\|large intestine\|liver\|stomach" balanced_accession_key.tsv | grep -v "midbrain"  >> subtissue_accession_key.tsv
 tail -n +2 subtissue_accession_key.tsv | cut -f2 > subtissue_accessions.txt
+
+# create subsets that contains only certain tissue types from the full sets
+head -n1 accession_key_2025_7_31_with_lifestage.tsv > subtissue_accession_key_unbalanced.tsv
+grep "kidney\|lung\|heart\|brain\|large intestine\|liver\|stomach" accession_key_2025_7_31_with_lifestage.tsv | grep -v "midbrain"  >> subtissue_accession_key_unbalanced.tsv
+tail -n +2 subtissue_accession_key_unbalanced.tsv | cut -f2 > subtissue_accessions_unbalanced.txt
 
 grep -f subtissue_accessions.txt Mus_musculus_paths_beds.txt > Mus_musculus_subtissue_beds.txt
 
 grep -f subtissue_accessions.txt Homo_sapiens_paths_beds.txt > Homo_sapiens_subtissue_beds.txt
+
+grep "embryonic" accession_key_2025_7_31_with_lifestage.tsv | cut -f2 > embryonic_accessions.txt
+
+
+
+grep -f embryonic_accessions.txt Mus_musculus_paths_beds.txt > Mus_musculus_embryonic_beds.txt
+
+grep -f embryonic_accessions.txt Homo_sapiens_paths_beds.txt > Mus_musculus_embryonic_beds.txt
 ```
 
 ### Create Fasta Files using appropriate reference genomes
@@ -225,6 +238,9 @@ cat Mus_musculus_fastas_balanced.txt Homo_sapiens_fastas_balanced.txt | sed 's/^
 # create a list subsetted for certain tissue types
 grep -f subtissue_accessions.txt mus_homo_fastas_balanced.txt > mus_homo_fastas_subtissue.txt
 
+grep -f Mus_musculus_accessions.txt mus_homo_fastas_subtissue.txt | sed 's/^[^/]*//' > Mus_musculus_fastas_subtissue.txt
+
+grep -f Homo_sapiens_accessions.txt mus_homo_fastas_subtissue.txt | sed 's/^[^/]*//' > Homo_sapiens_fastas_subtissue.txt
 ```
 
 
@@ -237,9 +253,9 @@ hammock data/Mus_musculus_paths_beds.txt data/Mus_musculus_paths_beds.txt --mode
 
 hammock data/Homo_sapiens_paths_beds.txt data/Homo_sapiens_paths_beds.txt --mode C --precision 20 --outprefix results/humanonly
 
-hammock data/Mus_musculus_paths_beds_balanced.txt data/Mus_musculus_paths_beds_balanced.txt --mode C --precision 20 --outprefix results/mouseonly_balanced
+#hammock data/Mus_musculus_paths_beds_balanced.txt data/Mus_musculus_paths_beds_balanced.txt --mode C --precision 20 --outprefix results/mouseonly_balanced
 
-hammock data/Homo_sapiens_paths_beds_balanced.txt data/Homo_sapiens_paths_beds_balanced.txt --mode C --precision 20 --outprefix results/humanonly_balanced
+#hammock data/Homo_sapiens_paths_beds_balanced.txt data/Homo_sapiens_paths_beds_balanced.txt --mode C --precision 20 --outprefix results/humanonly_balanced
 
 
 ```
@@ -259,6 +275,17 @@ hammock data/mus_homo_fastas_balanced.txt data/mus_homo_fastas_balanced.txt --ou
 hammock data/mus_homo_fastas_subtissue.txt data/mus_homo_fastas_subtissue.txt --outprefix results/manmouse_subtissue -k 10 -w 100 --precision 24
 
 ```
+
+## Subsets
+Hammock includes a script to filter hammock output files to contain only the pairwise comparisons for a list of file accessions so that hammock does not need to be run again to have hammock output for only that subset.
+
+```bash
+mkdir mouse_
+batch_filter_hammock.sh ../mouseonly/ ../data/embryonic_accessions.txt
+
+```
+
+
 
 ## Visualizations
 Hammock 0.2.1 allows calling Rscript and includes a script to draw three heatmaps for a given output as long as a "report" can be provided in the same format as an ENCODE report. It takes the following arguments: `<ENCODE REPORT> <HAMMOCK OUTPUT> [<OUTPUT PREFIX>]` 

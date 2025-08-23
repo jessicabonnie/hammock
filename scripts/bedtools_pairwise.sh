@@ -6,7 +6,7 @@
 set -e  # Exit on any error
 
 # Default values
-OUTPUT_FILE="bedtools_pairwise_jaccard.txt"
+OUTPUT_FILE="bedtools_pairwise_jaccard.tsv"
 VERBOSE=false
 
 # Function to display usage
