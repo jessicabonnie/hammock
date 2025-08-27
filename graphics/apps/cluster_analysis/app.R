@@ -155,6 +155,11 @@ filter_similarity_matrix <- function(sim_matrix, accession_meta, selected_biosam
     return(sim_matrix)
   }
   
+  # Add debugging for DNase-hypersensitivity dataset
+  cat(sprintf("DEBUG: Filtering matrix with %d samples\n", nrow(sim_matrix)))
+  cat(sprintf("DEBUG: Selected biosamples: %s\n", paste(selected_biosamples, collapse = ", ")))
+  cat(sprintf("DEBUG: Selected lifestage: %s\n", selected_lifestage))
+  
   acc_df <- accession_meta$full_data
   if (!"file_base" %in% names(acc_df)) {
     return(sim_matrix)
@@ -176,10 +181,14 @@ filter_similarity_matrix <- function(sim_matrix, accession_meta, selected_biosam
   
   # Get the samples that should be included
   included_samples <- unique(filtered_acc$file_base)
+  cat(sprintf("DEBUG: Included samples from accession key: %d\n", length(included_samples)))
   
   # Filter similarity matrix to only include these samples
   sample_names <- rownames(sim_matrix)
   valid_samples <- intersect(sample_names, included_samples)
+  cat(sprintf("DEBUG: Valid samples after intersection: %d\n", length(valid_samples)))
+  cat(sprintf("DEBUG: Sample names in matrix: %s\n", paste(head(sample_names, 3), collapse = ", ")))
+  cat(sprintf("DEBUG: Included samples from key: %s\n", paste(head(included_samples, 3), collapse = ", ")))
   
   if (length(valid_samples) < 2) {
     # Not enough samples for clustering
@@ -342,7 +351,11 @@ run_clustering_on_dir <- function(dir_path, acc_key, files = NULL, use_cache = F
       used_cache <- TRUE
       diag <- c(diag, sprintf("cache_load: %s", cache_path))
       cached <- NULL
-      tryCatch({ cached <- readRDS(cache_path) }, error = function(e) { err <<- conditionMessage(e) })
+      tryCatch({ 
+        cached <- readRDS(cache_path) 
+      }, error = function(e) { 
+        err <<- conditionMessage(e) 
+      })
       if (!is.null(cached) && is.list(cached) && (!is.null(cached$long_table_raw) || !is.null(cached$similarity))) {
         # If long-table cached with same key, reuse directly
         key_same <- FALSE
@@ -365,9 +378,17 @@ run_clustering_on_dir <- function(dir_path, acc_key, files = NULL, use_cache = F
         if (!is.null(lt)) {
           # Recompute meta from filename to ensure latest parsing (avoids stale cached meta)
           meta <- extract_params_from_filename(f)
-          if (!is.null(meta$mode) && toupper(meta$mode) == 'C' && (is.null(meta$expA) || is.na(meta$expA) || !is.finite(meta$expA))) {
-            # Try to detect expA from file header if not present in name
-            meta$expA <- tryCatch(detect_hammock_expA(f), error = function(e) NA_real_)
+          if (!is.null(meta$mode) && toupper(meta$mode) == 'C') {
+            # Try to detect missing parameters from file header if not present in name
+            if (is.null(meta$expA) || is.na(meta$expA) || !is.finite(meta$expA)) {
+              meta$expA <- tryCatch(detect_hammock_expA(f), error = function(e) NA_real_)
+            }
+            if (is.null(meta$subA) || is.na(meta$subA) || !is.finite(meta$subA)) {
+              meta$subA <- tryCatch(detect_hammock_subA(f), error = function(e) NA_real_)
+            }
+            if (is.null(meta$subB) || is.na(meta$subB) || !is.finite(meta$subB)) {
+              meta$subB <- tryCatch(detect_hammock_subB(f), error = function(e) NA_real_)
+            }
           }
           # Safely add expected columns; fill missing with NA
           lt$sketch <- meta$sketch
@@ -388,7 +409,11 @@ run_clustering_on_dir <- function(dir_path, acc_key, files = NULL, use_cache = F
     }
     diag <- c(diag, sprintf("cluster: %d/%d %s", file_index, total_files, basename(f)))
     if (is.function(progress_cb)) try(progress_cb(0, sprintf("Clustering %d/%d: %s", file_index, total_files, basename(f))), silent = TRUE)
-    tryCatch({ tbl <- clustering_analysis(f, acc_key, clusters = clusters_vec, out = out_tmp) }, error = function(e) { err <<- conditionMessage(e) })
+    tryCatch({ 
+      tbl <- clustering_analysis(f, acc_key, clusters = clusters_vec, out = out_tmp) 
+    }, error = function(e) { 
+      err <<- conditionMessage(e) 
+    })
     if (!is.null(tbl) && is.data.frame(tbl)) {
       # Add source and normalize
       tbl$source_file <- basename(f)
@@ -479,7 +504,30 @@ run_clustering_on_dir <- function(dir_path, acc_key, files = NULL, use_cache = F
   for (col in intersect(names(df), num_cols)) {
     suppressWarnings(df[[col]] <- as.numeric(df[[col]]))
   }
-  list(df = df, diag = c(diag, sprintf("rows: %d", nrow(df))))
+  
+
+  
+  # Return both the data frame and any loaded cache data for efficiency
+  loaded_cache <- list()
+  if (isTRUE(use_cache)) {
+    # Collect any cache data that was loaded during processing
+    for (f in files) {
+      base_name <- basename(f)
+      cache_path <- file.path(dirname(f), paste0(base_name, ".prep.rds"))
+      if (file.exists(cache_path)) {
+        tryCatch({
+          cached <- readRDS(cache_path)
+          if (!is.null(cached$similarity)) {
+            loaded_cache[[base_name]] <- cached$similarity
+          }
+        }, error = function(e) {
+          # Silently ignore cache read errors
+        })
+      }
+    }
+  }
+  
+  list(df = df, diag = c(diag, sprintf("rows: %d", nrow(df))), loaded_cache = loaded_cache)
 }
 
 ui <- fluidPage(
@@ -487,6 +535,16 @@ ui <- fluidPage(
   tabsetPanel(
     tabPanel(
       "Inputs",
+      # Filter summary text box at the top
+      fluidRow(
+        column(12,
+          div(
+            style = "background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 10px; margin-bottom: 15px;",
+            h5("Active Filters Summary", style = "margin-top: 0; margin-bottom: 8px; color: #495057; font-weight: bold;"),
+            verbatimTextOutput("filterSummaryInputs", placeholder = TRUE)
+          )
+        )
+      ),
       fluidRow(
         column(4,
           h4("File Selection"),
@@ -507,7 +565,7 @@ ui <- fluidPage(
         column(4,
           h4("Biosample Filtering"),
           radioButtons("biosampleMode", "Biosample Selection:", 
-                      choices = c("All biosamples" = "ALL", "Regular subset" = "REGULAR", "Custom subset" = "SUBSET"), 
+                      choices = c("All biosamples" = "ALL", "Custom subset" = "SUBSET"), 
                       selected = "ALL",
                       inline = TRUE),
           conditionalPanel(
@@ -540,13 +598,19 @@ ui <- fluidPage(
       ),
       tags$hr(),
       fluidRow(
-        column(6,
+        column(4,
           tags$h4("Data Summary by Biosample & Life Stage"),
           tags$p("Shows the distribution of samples across biological conditions.", 
                  style = "font-size: 12px; color: #666; margin-bottom: 10px;"),
           tableOutput("biologicalSummaryTable")
         ),
-        column(6,
+        column(4,
+          tags$h4("Filtered Data Summary"),
+          tags$p("Shows the distribution of samples based on current biological filter selections.", 
+                 style = "font-size: 12px; color: #666; margin-bottom: 10px;"),
+          tableOutput("filteredDataSummaryTable")
+        ),
+        column(4,
           tags$h4("Top NMI Results per File"),
           tableOutput("summaryTable")
         )
@@ -571,6 +635,16 @@ ui <- fluidPage(
     ),
     tabPanel(
       "Results",
+      # Filter summary text box at the top
+      fluidRow(
+        column(12,
+          div(
+            style = "background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 10px; margin-bottom: 15px;",
+            h5("Active Filters Summary", style = "margin-top: 0; margin-bottom: 8px; color: #495057; font-weight: bold;"),
+            verbatimTextOutput("filterSummaryResults", placeholder = TRUE)
+          )
+        )
+      ),
       fluidRow(
         column(6,
           radioButtons("modeSelect", "Mode", choices = c("A", "B", "C", "D", "BEDTOOLS"), inline = TRUE),
@@ -581,13 +655,22 @@ ui <- fluidPage(
           selectInput("linkageMethod", "Clustering approach (linkage)", choices = character(0)),
           conditionalPanel(
             condition = "input.modeSelect == 'C'",
-            selectInput("expA", "expA", choices = character(0)),
-            selectInput("subB", "subB", choices = character(0))
+            selectInput("expA", "expA", choices = character(0), selected = "0"),
+            selectInput("subB", "subB", choices = character(0), selected = "1")
           ),
           conditionalPanel(
             condition = "input.modeSelect == 'D'",
             selectInput("klen", "k-mer size (k)", choices = character(0)),
             selectInput("window", "window size (w)", choices = character(0))
+          ),
+          conditionalPanel(
+            condition = "input.modeSelect == 'BEDTOOLS'",
+            div(
+              style = "background-color: #e8f4fd; border: 1px solid #bee5eb; border-radius: 5px; padding: 15px; margin-top: 10px;",
+              h5("BEDTOOLS Mode", style = "color: #0c5460; margin-top: 0;"),
+              p("Using bedtools pairwise Jaccard similarity data. No additional parameters needed.", 
+                style = "color: #0c5460; margin-bottom: 0; font-size: 14px;")
+            )
           )
         ),
         column(6,
@@ -608,6 +691,16 @@ ui <- fluidPage(
     ,
     tabPanel(
       "Heatmaps",
+      # Filter summary text box at the top
+      fluidRow(
+        column(12,
+          div(
+            style = "background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 10px; margin-bottom: 15px;",
+            h5("Active Filters Summary", style = "margin-top: 0; margin-bottom: 8px; color: #495057; font-weight: bold;"),
+            verbatimTextOutput("filterSummaryHeatmaps", placeholder = TRUE)
+          )
+        )
+      ),
       fluidRow(
         column(6,
           selectInput("heatmapFile1", "Heatmap A input file", choices = character(0)),
@@ -626,6 +719,16 @@ ui <- fluidPage(
     ),
     tabPanel(
       "Dendrograms",
+      # Filter summary text box at the top
+      fluidRow(
+        column(12,
+          div(
+            style = "background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 10px; margin-bottom: 15px;",
+            h5("Active Filters Summary", style = "margin-top: 0; margin-bottom: 8px; color: #495057; font-weight: bold;"),
+            verbatimTextOutput("filterSummaryDendrograms", placeholder = TRUE)
+          )
+        )
+      ),
       fluidRow(
         column(6,
           h4("Dendrogram A"),
@@ -647,6 +750,16 @@ ui <- fluidPage(
     ),
     tabPanel(
       "PCA",
+      # Filter summary text box at the top
+      fluidRow(
+        column(12,
+          div(
+            style = "background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 10px; margin-bottom: 15px;",
+            h5("Active Filters Summary", style = "margin-top: 0; margin-bottom: 8px; color: #495057; font-weight: bold;"),
+            verbatimTextOutput("filterSummaryPCA", placeholder = TRUE)
+          )
+        )
+      ),
       fluidRow(
         column(6,
           h4("PCA Plot 1"),
@@ -688,8 +801,11 @@ server <- function(input, output, session) {
   
   # Cache status display
   output$cacheStatus <- renderText({
+    # Force reactive invalidation by accessing the reactive values
     sim_cache <- cached_similarity_matrices()
     results_cache <- clustering_results_cache()
+    # Also access accession metadata to trigger updates during loading
+    acc_meta <- accession_metadata()
     
     if (is.null(sim_cache) && is.null(results_cache)) {
       return("No data loaded")
@@ -697,6 +813,12 @@ server <- function(input, output, session) {
     
     sim_files <- if (is.null(sim_cache)) 0 else length(sim_cache)
     session_cached_combinations <- if (is.null(results_cache)) 0 else length(results_cache)
+    
+    # Simple loading indicator - only show if we have some files but not many
+    loading_status <- ""
+    if (sim_files > 0 && sim_files < 10) {
+      loading_status <- sprintf("\n🔄 Loading: %d files cached", sim_files)
+    }
     
     # Check RDS files for persistent cache info
     dir_path <- effective_dir()
@@ -739,14 +861,20 @@ server <- function(input, output, session) {
     }
     
     paste(
-      sprintf("Similarity matrices cached: %d files", sim_files),
-      sprintf("Session cache: %d filter combinations", session_cached_combinations),
+      sprintf("✓ Similarity matrices cached: %d files", sim_files),
+      loading_status,
+      sprintf("✓ Session cache: %d filter combinations", session_cached_combinations),
       if (session_cached_combinations > 0) {
         paste("Session combinations:", paste(names(results_cache), collapse = ", "))
       } else {
         "No session combinations yet"
       },
       rds_cache_info,
+      if (isTRUE(input$useCache)) {
+        "\n💾 Cache enabled - faster loading"
+      } else {
+        "\n⚠️ Cache disabled - slower loading"
+      },
       sep = "\n"
     )
   })
@@ -798,8 +926,89 @@ server <- function(input, output, session) {
     }
   })
   
+  # Reactive to determine biosample mode choices based on available data
+  biosample_mode_choices <- reactive({
+    acc_meta <- accession_metadata()
+    if (!is.null(acc_meta) && !is.null(acc_meta$biosamples)) {
+      available_biosamples <- acc_meta$biosamples
+      
+      # Define the regular subset tissues
+      regular_tissues <- c("kidney", "lung", "heart", "brain", "large intestine", "liver", "stomach")
+      
+      # Check if any regular tissues are present (exact matches only, not prefixed)
+      has_regular_tissues <- FALSE
+      for (tissue in regular_tissues) {
+        # Use word boundaries to ensure exact matches, not prefixed matches
+        pattern <- paste0("\\b", tissue, "\\b")
+        if (any(grepl(pattern, available_biosamples, ignore.case = TRUE))) {
+          has_regular_tissues <- TRUE
+          break
+        }
+      }
+      
+      if (has_regular_tissues) {
+        c("All biosamples" = "ALL", "Regular subset" = "REGULAR", "Custom subset" = "SUBSET")
+      } else {
+        c("All biosamples" = "ALL", "Custom subset" = "SUBSET")
+      }
+    } else {
+      c("All biosamples" = "ALL", "Custom subset" = "SUBSET")
+    }
+  })
+  
+  # Observer to update biosample mode choices based on available data
+  observeEvent(biosample_mode_choices(), {
+    choices <- biosample_mode_choices()
+    cat("Biosample mode choices updated:", paste(names(choices), collapse = ", "), "\n")
+    
+    # Determine the new selection
+    current_mode <- input$biosampleMode
+    new_selection <- if (current_mode == "REGULAR" && !("REGULAR" %in% choices)) "ALL" else current_mode
+    
+    cat("Current mode:", current_mode, "New selection:", new_selection, "\n")
+    
+    # Update the radio buttons
+    updateRadioButtons(session, "biosampleMode", 
+                      choices = choices,
+                      selected = new_selection)
+    
+    # Clear approved biosamples if switching from REGULAR
+    if (current_mode == "REGULAR" && new_selection != "REGULAR") {
+      approved_biosamples(NULL)
+    }
+  })
+  
   # Observer to reset approved biosamples when switching back to "ALL"
-  observeEvent(input$biosampleMode, {
+  observeEvent(list(input$biosampleMode, accession_metadata()), {
+    # Safety check: if mode is REGULAR but no regular tissues are available, force switch to ALL
+    if (input$biosampleMode == "REGULAR") {
+      acc_meta <- accession_metadata()
+      if (!is.null(acc_meta) && !is.null(acc_meta$biosamples)) {
+        available_biosamples <- acc_meta$biosamples
+        regular_tissues <- c("kidney", "lung", "heart", "brain", "large intestine", "liver", "stomach")
+        
+        has_regular_tissues <- FALSE
+        for (tissue in regular_tissues) {
+          # Use word boundaries to ensure exact matches, not prefixed matches
+          pattern <- paste0("\\b", tissue, "\\b")
+          if (any(grepl(pattern, available_biosamples, ignore.case = TRUE))) {
+            has_regular_tissues <- TRUE
+            break
+          }
+        }
+        
+        # If no regular tissues are available, switch to ALL mode immediately
+        if (!has_regular_tissues) {
+          cat("Safety check: REGULAR mode selected but no regular tissues available. Switching to ALL.\n")
+          updateRadioButtons(session, "biosampleMode", 
+                            choices = c("All biosamples" = "ALL", "Custom subset" = "SUBSET"),
+                            selected = "ALL")
+          approved_biosamples(NULL)
+          return()
+        }
+      }
+    }
+    
     if (input$biosampleMode == "ALL") {
       approved_biosamples(NULL)
     } else if (input$biosampleMode == "REGULAR") {
@@ -808,18 +1017,23 @@ server <- function(input, output, session) {
       
       # Get current available biosamples
       acc_meta <- accession_metadata()
+      cat("REGULAR mode selected. Accession metadata:", if(is.null(acc_meta)) "NULL" else "available", "\n")
+      
       if (!is.null(acc_meta) && !is.null(acc_meta$biosamples)) {
         available_biosamples <- acc_meta$biosamples
+        cat("Available biosamples count:", length(available_biosamples), "\n")
         
         # Find matches for regular tissues (case-insensitive, partial matching)
         selected_biosamples <- c()
         for (tissue in regular_tissues) {
           matches <- available_biosamples[grepl(tissue, available_biosamples, ignore.case = TRUE)]
+          cat("Tissue '", tissue, "' matches:", length(matches), "biosamples\n")
           selected_biosamples <- c(selected_biosamples, matches)
         }
         
         # Remove duplicates and update the checkbox selection
         selected_biosamples <- unique(selected_biosamples)
+        cat("Total unique selected biosamples:", length(selected_biosamples), "\n")
         
         if (length(selected_biosamples) > 0) {
           updateCheckboxGroupInput(session, "biosampleCheckboxes", selected = selected_biosamples)
@@ -839,9 +1053,78 @@ server <- function(input, output, session) {
             duration = 5
           )
         }
+      } else {
+        cat("No accession metadata or biosamples available yet\n")
+        showNotification(
+          "Accession metadata not loaded yet. Please wait for data to load, then try selecting Regular subset again.",
+          type = "warning",
+          duration = 5
+        )
       }
     }
   })
+  
+  # Helper to draw a dendrogram from a similarity matrix (for BEDTOOLS mode)
+  draw_dendrogram_from_matrix <- function(sim_matrix, labels_map, linkage, mode_label = "BEDTOOLS") {
+    if (is.null(sim_matrix) || nrow(sim_matrix) < 2) {
+      plot.new(); title("Not enough samples for dendrogram"); return(invisible())
+    }
+    
+    # Convert similarity to distance
+    dist_matrix <- 1 - sim_matrix
+    diag(dist_matrix) <- 0
+    
+    # Create distance object
+    d <- as.dist(dist_matrix)
+    
+    # Perform hierarchical clustering
+    hc <- hclust(d, method = linkage)
+    
+    # Create dendrogram
+    dend <- as.dendrogram(hc)
+    
+    # Color the dendrogram if we have labels
+    if (!is.null(labels_map)) {
+      # Get labels for samples in the matrix
+      sample_names <- rownames(sim_matrix)
+      sample_labels <- sapply(sample_names, function(name) {
+        if (name %in% names(labels_map)) {
+          labels_map[[name]]
+        } else {
+          "unknown"
+        }
+      })
+      
+      # Create color palette
+      unique_labels <- unique(sample_labels)
+      palette_fun <- if (requireNamespace('scales', quietly = TRUE)) scales::hue_pal() else function(n) grDevices::rainbow(n, s = 0.7, v = 0.9)
+      palette <- palette_fun(max(3, length(unique_labels)))
+      lab_to_col <- setNames(palette[seq_along(unique_labels)], unique_labels)
+      
+      # Colorize the dendrogram
+      colorize <- function(node) {
+        if (is.leaf(node)) {
+          lab <- attr(node, 'label')
+          col <- lab_to_col[[ sample_labels[[lab]] ]] %||% '#888888'
+          ep <- attr(node, 'edgePar'); if (is.null(ep)) ep <- list(); ep$col <- col; attr(node, 'edgePar') <- ep
+          np <- attr(node, 'nodePar'); if (is.null(np)) np <- list(); np$lab.col <- col; attr(node, 'nodePar') <- np
+          return(node)
+        } else {
+          for (i in seq_along(node)) node[[i]] <- colorize(node[[i]])
+          leaves <- labels(node)
+          labs <- unique(sample_labels[leaves])
+          col <- if (length(labs) == 1) lab_to_col[[ labs[[1]] ]] %||% '#888888' else '#888888'
+          ep <- attr(node, 'edgePar'); if (is.null(ep)) ep <- list(); ep$col <- col; attr(node, 'edgePar') <- ep
+          return(node)
+        }
+      }
+      dend <- colorize(dend)
+    }
+    
+    # Plot the dendrogram
+    plot(dend, main = paste("Hierarchical Clustering -", mode_label), 
+         xlab = "Samples", ylab = "Distance")
+  }
   
   # Helper to compute and draw a colored dendrogram for a given file (with biological filtering support)
   draw_dendrogram_for <- function(input_file, accession_key, linkage) {
@@ -853,13 +1136,28 @@ server <- function(input, output, session) {
     # Get effective biosample selection
     effective_biosamples <- if (input$biosampleMode == "ALL") {
       acc_meta$biosamples
+    } else if (input$biosampleMode == "REGULAR") {
+      # For REGULAR mode, use the selected checkboxes directly
+      # Add NULL check to prevent errors when no regular tissues are available
+      if (!is.null(input$biosampleCheckboxes) && length(input$biosampleCheckboxes) > 0) {
+        input$biosampleCheckboxes
+      } else {
+        # Fallback to all biosamples if no checkboxes are selected
+        acc_meta$biosamples
+      }
     } else {
+      # For SUBSET mode, use approved_biosamples
       approved_biosamples()
     }
     
-    has_biosample_filter <- input$biosampleMode == "SUBSET" && !is.null(effective_biosamples) && 
-                           length(effective_biosamples) > 0 && 
-                           !is.null(acc_meta) && !setequal(effective_biosamples, acc_meta$biosamples)
+    has_biosample_filter <- FALSE
+    if ((input$biosampleMode == "SUBSET" || input$biosampleMode == "REGULAR") && 
+        !is.null(effective_biosamples) && 
+        length(effective_biosamples) > 0 && 
+        !is.null(acc_meta) && 
+        !is.null(acc_meta$biosamples)) {
+      has_biosample_filter <- !setequal(effective_biosamples, acc_meta$biosamples)
+    }
     has_lifestage_filter <- !is.null(input$lifestageSelect) && input$lifestageSelect != "ALL"
     
     sim_df <- NULL
@@ -1106,13 +1404,28 @@ server <- function(input, output, session) {
     # Get effective biosample selection
     effective_biosamples <- if (input$biosampleMode == "ALL") {
       acc_meta$biosamples
+    } else if (input$biosampleMode == "REGULAR") {
+      # For REGULAR mode, use the selected checkboxes directly
+      # Add NULL check to prevent errors when no regular tissues are available
+      if (!is.null(input$biosampleCheckboxes) && length(input$biosampleCheckboxes) > 0) {
+        input$biosampleCheckboxes
+      } else {
+        # Fallback to all biosamples if no checkboxes are selected
+        acc_meta$biosamples
+      }
     } else {
+      # For SUBSET mode, use approved_biosamples
       approved_biosamples()
     }
     
-    has_biosample_filter <- input$biosampleMode == "SUBSET" && !is.null(effective_biosamples) && 
-                           length(effective_biosamples) > 0 && 
-                           !is.null(acc_meta) && !setequal(effective_biosamples, acc_meta$biosamples)
+    has_biosample_filter <- FALSE
+    if ((input$biosampleMode == "SUBSET" || input$biosampleMode == "REGULAR") && 
+        !is.null(effective_biosamples) && 
+        length(effective_biosamples) > 0 && 
+        !is.null(acc_meta) && 
+        !is.null(acc_meta$biosamples)) {
+      has_biosample_filter <- !setequal(effective_biosamples, acc_meta$biosamples)
+    }
     has_lifestage_filter <- !is.null(input$lifestageSelect) && input$lifestageSelect != "ALL"
     
     mat <- NULL
@@ -1180,7 +1493,7 @@ server <- function(input, output, session) {
       labs(x = NULL, y = NULL, fill = "Similarity", color = "Labels", title = paste0(basename(input_file), 
            if (has_biosample_filter || has_lifestage_filter) {
              filter_parts <- c()
-             if (has_biosample_filter) filter_parts <- c(filter_parts, sprintf("%d biosamples", length(input$biosampleSelect)))
+             if (has_biosample_filter) filter_parts <- c(filter_parts, sprintf("%d biosamples", length(effective_biosamples)))
              if (has_lifestage_filter) filter_parts <- c(filter_parts, sprintf("lifestage: %s", input$lifestageSelect))
              sprintf(" [Filtered: %s]", paste(filter_parts, collapse = ", "))
            } else "")) +
@@ -1271,6 +1584,10 @@ server <- function(input, output, session) {
       output$statusText <- renderText("Select a directory of hammock or bedtools output files.")
       return()
     }
+    
+    # Show initial loading message
+    output$statusText <- renderText("Scanning directory for valid files...")
+    
     # Pre-scan for hammock or bedtools outputs
     all_files <- list.files(path, pattern = "\\.(csv|tsv|txt)$", ignore.case = TRUE, full.names = TRUE)
     is_valid_format <- function(fp) {
@@ -1287,9 +1604,31 @@ server <- function(input, output, session) {
       output$diagText <- renderText(sprintf("Scanned %d files in %s", length(all_files), path))
       return()
     }
+    
+    # Extract accession metadata early for immediate UI updates
+    output$statusText <- renderText("Loading accession metadata...")
+    acc_meta <- extract_accession_metadata(ak)
+    accession_metadata(acc_meta)
+    
+    # Update UI immediately with basic information
+    output$statusText <- renderText(sprintf("Found %d valid files. Loading data...", length(valid_files)))
+    
+    # Update biosample and lifestage choices immediately
+    updateCheckboxGroupInput(session, "biosampleCheckboxes", 
+                           choices = setNames(acc_meta$biosamples, acc_meta$biosamples),
+                           selected = character(0))
+    
+    lifestage_choices <- c("ALL" = "ALL")
+    if (length(acc_meta$lifestages) > 0) {
+      lifestage_choices <- c(lifestage_choices, setNames(acc_meta$lifestages, acc_meta$lifestages))
+    }
+    updateRadioButtons(session, "lifestageSelect", choices = lifestage_choices, selected = "ALL")
+    
+    # Start loading data in background
     output$statusText <- renderText(sprintf("Running clustering on %d files... (key: %s)", length(valid_files), ak))
     res <- NULL
     err_top <- NULL
+    
     # Simpler direct call (avoid nested progress scoping issues)
     tryCatch({
       res <- run_clustering_on_dir(
@@ -1298,11 +1637,41 @@ server <- function(input, output, session) {
         files = valid_files,
         use_cache = isTRUE(input$useCache)
       )
-    }, error = function(e) { err_top <<- conditionMessage(e); res <<- NULL })
+    }, error = function(e) { 
+      err_top <<- conditionMessage(e); 
+      res <<- NULL 
+    })
+    
     if (is.null(res)) {
       data_all(NULL)
       output$statusText <- renderText("Clustering failed to return a result. See diagnostics.")
-      output$diagText <- renderText(if (!is.null(err_top)) paste("error:", err_top) else "(no result from run)")
+      
+      # Enhanced error diagnostics
+      error_debug_info <- c(
+        paste("=== ERROR DIAGNOSTICS ==="),
+        paste("Error message:", if (!is.null(err_top)) err_top else "(no result from run)"),
+        paste("=== BIOSAMPLE MODE DEBUG ==="),
+        paste("Current biosample mode:", input$biosampleMode),
+        paste("Biosample checkboxes:", if(is.null(input$biosampleCheckboxes)) "NULL" else paste(input$biosampleCheckboxes, collapse = ", ")),
+        paste("Approved biosamples:", if(is.null(approved_biosamples())) "NULL" else paste(approved_biosamples(), collapse = ", ")),
+        paste("=== ACCESSION METADATA DEBUG ==="),
+        paste("Accession metadata loaded:", if(is.null(accession_metadata())) "NO" else "YES"),
+        if(!is.null(accession_metadata())) {
+          acc_meta <- accession_metadata()
+          c(
+            paste("Available biosamples:", paste(acc_meta$biosamples, collapse = ", ")),
+            paste("Available lifestages:", paste(acc_meta$lifestages, collapse = ", ")),
+            paste("=== REGULAR TISSUE CHECK ==="),
+            paste("Regular tissues to check: kidney, lung, heart, brain, large intestine, liver, stomach"),
+            paste("Has regular tissues:", any(sapply(c("kidney", "lung", "heart", "brain", "large intestine", "liver", "stomach"), 
+                                                    function(t) any(grepl(paste0("\\b", t, "\\b"), acc_meta$biosamples, ignore.case = TRUE)))))
+          )
+        } else {
+          "No accession metadata available"
+        }
+      )
+      
+      output$diagText <- renderText(paste(error_debug_info, collapse = "\n"))
       return()
     }
     if (is.null(res$df)) {
@@ -1311,8 +1680,51 @@ server <- function(input, output, session) {
       output$diagText <- renderText(paste(res$diag, collapse = "\n"))
       return()
     }
+    
+    # Set data immediately
     data_all(res$df)
-    output$diagText <- renderText(paste(res$diag, collapse = "\n"))
+    
+    # Enhanced diagnostics with debugging information
+    debug_info <- c(
+      paste("=== LOADING DIAGNOSTICS ==="),
+      paste("Data loaded successfully:", length(unique(res$df$source_file)), "files,", nrow(res$df), "rows"),
+      paste("Accession key:", ak),
+      paste("Cache enabled:", isTRUE(input$useCache)),
+      paste("=== BIOSAMPLE MODE DEBUG ==="),
+      paste("Current biosample mode:", input$biosampleMode),
+      paste("Biosample checkboxes:", if(is.null(input$biosampleCheckboxes)) "NULL" else paste(input$biosampleCheckboxes, collapse = ", ")),
+      paste("Approved biosamples:", if(is.null(approved_biosamples())) "NULL" else paste(approved_biosamples(), collapse = ", ")),
+      paste("=== ACCESSION METADATA DEBUG ==="),
+      paste("Accession metadata loaded:", if(is.null(acc_meta)) "NO" else "YES"),
+      if(!is.null(acc_meta)) {
+        c(
+          paste("Available biosamples:", paste(acc_meta$biosamples, collapse = ", ")),
+          paste("Available lifestages:", paste(acc_meta$lifestages, collapse = ", ")),
+          paste("=== REGULAR TISSUE CHECK ==="),
+          paste("Regular tissues to check: kidney, lung, heart, brain, large intestine, liver, stomach"),
+                      paste("Has regular tissues:", any(sapply(c("kidney", "lung", "heart", "brain", "large intestine", "liver", "stomach"), 
+                                                    function(t) any(grepl(paste0("\\b", t, "\\b"), acc_meta$biosamples, ignore.case = TRUE))))),
+          paste("=== EFFECTIVE BIOSAMPLES DEBUG ==="),
+          paste("Effective biosamples (ALL mode):", paste(acc_meta$biosamples, collapse = ", ")),
+          if(input$biosampleMode == "REGULAR") {
+            paste("Effective biosamples (REGULAR mode):", 
+                  if(is.null(input$biosampleCheckboxes) || length(input$biosampleCheckboxes) == 0) "NULL/EMPTY" 
+                  else paste(input$biosampleCheckboxes, collapse = ", "))
+          } else NULL,
+          if(input$biosampleMode == "SUBSET") {
+            paste("Effective biosamples (SUBSET mode):", 
+                  if(is.null(approved_biosamples()) || length(approved_biosamples()) == 0) "NULL/EMPTY" 
+                  else paste(approved_biosamples(), collapse = ", "))
+          } else NULL
+        )
+      } else {
+        "No accession metadata available"
+      },
+      paste("=== ORIGINAL DIAGNOSTICS ==="),
+      res$diag
+    )
+    
+    output$diagText <- renderText(paste(debug_info, collapse = "\n"))
     
     # Extract and store accession metadata for filtering
     cat(sprintf("Extracting accession metadata from: %s\n", ak))
@@ -1321,9 +1733,21 @@ server <- function(input, output, session) {
     accession_metadata(acc_meta)
     
     # Cache similarity matrices for each source file for real-time recalculation
+    # Note: When cache is enabled, run_clustering_on_dir already loads the data efficiently
+    # We still need to load similarity matrices for filtering, but we can optimize this
+    output$statusText <- renderText("Loading similarity matrices for filtering...")
     similarity_cache <- list()
-    cat(sprintf("Caching similarity matrices for %d source files\n", length(unique(res$df$source_file))))
-    for (src_file in unique(res$df$source_file)) {
+    source_files <- unique(res$df$source_file)
+    cat(sprintf("Loading similarity matrices for %d source files\n", length(source_files)))
+    
+    # Load similarity matrices efficiently
+    for (i in seq_along(source_files)) {
+      src_file <- source_files[i]
+      
+      if (i %% 10 == 0) {  # Update progress every 10 files for better performance
+        output$statusText <- renderText(sprintf("Loading similarity matrices... (%d/%d)", i, length(source_files)))
+      }
+      
       candidate_path <- file.path(path, src_file)
       if (!file.exists(candidate_path)) {
         hits <- Sys.glob(file.path(path, "**", src_file))
@@ -1331,11 +1755,11 @@ server <- function(input, output, session) {
       }
       
       if (file.exists(candidate_path)) {
-        # Try to load from cache first
+        # Try to load from cache first (if cache is enabled)
         cache_path <- file.path(dirname(candidate_path), paste0(basename(candidate_path), ".prep.rds"))
         sim_matrix <- NULL
         
-        if (file.exists(cache_path)) {
+        if (isTRUE(input$useCache) && file.exists(cache_path)) {
           tryCatch({
             cached <- readRDS(cache_path)
             if (!is.null(cached$similarity)) {
@@ -1363,23 +1787,18 @@ server <- function(input, output, session) {
         }
       }
     }
+    
     cached_similarity_matrices(similarity_cache)
     
     # Clear clustering results cache when new data is loaded
     clustering_results_cache(list())
     
-    # Update biosample and lifestage choices
-    cat(sprintf("Updating UI with %d biosamples: %s\n", length(acc_meta$biosamples), paste(acc_meta$biosamples, collapse = ", ")))
-    updateCheckboxGroupInput(session, "biosampleCheckboxes", 
-                           choices = setNames(acc_meta$biosamples, acc_meta$biosamples),
-                           selected = character(0))  # Start with none selected
+    # Final UI updates
+    output$statusText <- renderText("Initializing UI controls...")
     
-    lifestage_choices <- c("ALL" = "ALL")
-    if (length(acc_meta$lifestages) > 0) {
-      lifestage_choices <- c(lifestage_choices, setNames(acc_meta$lifestages, acc_meta$lifestages))
-    }
-    cat(sprintf("Updating UI with %d lifestages: %s\n", length(lifestage_choices), paste(names(lifestage_choices), collapse = ", ")))
-    updateRadioButtons(session, "lifestageSelect", choices = lifestage_choices, selected = "ALL")
+    # Update biosample and lifestage choices (already done earlier, but ensure they're current)
+    cat(sprintf("Updating UI with %d biosamples: %s\n", length(acc_meta$biosamples), paste(acc_meta$biosamples, collapse = ", ")))
+    cat(sprintf("Updating UI with %d lifestages: %s\n", length(acc_meta$lifestages), paste(acc_meta$lifestages, collapse = ", ")))
     
     # Initialize controls
     modes <- sort(unique(na.omit(res$df$mode)))
@@ -1387,8 +1806,11 @@ server <- function(input, output, session) {
     linkages <- sort(unique(na.omit(res$df$linkage)))
     if (!length(linkages)) linkages <- c("average","complete","single","ward")
     updateSelectInput(session, "linkageMethod", choices = linkages, selected = if (length(linkages)) linkages[1] else NULL)
-    precisions <- sort(unique(na.omit(res$df$precision)))
-    updateSelectInput(session, "precision", choices = precisions, selected = if (length(precisions)) precisions[1] else NULL)
+    # Initialize precision based on first mode
+    if (length(modes) > 0) {
+      mode_precisions <- sort(unique(na.omit(res$df$precision[res$df$mode == modes[1]])))
+      updateSelectInput(session, "precision", choices = mode_precisions, selected = if (length(mode_precisions)) mode_precisions[1] else NULL)
+    }
     # Collect expA across files by re-parsing filenames if column missing or NA
     exp_vals <- suppressWarnings(as.numeric(na.omit(res$df$expA)))
     if (length(exp_vals) == 0 || all(is.na(exp_vals))) {
@@ -1402,7 +1824,8 @@ server <- function(input, output, session) {
     exp_vals <- sort(unique(exp_vals))
     exp_labels <- if (length(exp_vals)) sprintf("%.2f", exp_vals) else character(0)
     exp_choices <- if (length(exp_vals)) stats::setNames(as.character(exp_vals), exp_labels) else character(0)
-    updateSelectInput(session, "expA", choices = exp_choices, selected = if (length(exp_vals)) as.character(exp_vals[1]) else NULL)
+    updateSelectInput(session, "expA", choices = exp_choices, selected = if (length(exp_vals)) as.character(exp_vals[1]) else "0")
+    
     # Collect subB across files by re-parsing filenames if column missing or NA
     subB_vals <- suppressWarnings(as.numeric(na.omit(res$df$subB)))
     if (length(subB_vals) == 0 || all(is.na(subB_vals))) {
@@ -1416,12 +1839,13 @@ server <- function(input, output, session) {
     subB_vals <- sort(unique(subB_vals))
     subB_labels <- if (length(subB_vals)) sprintf("%.2f", subB_vals) else character(0)
     subB_choices <- if (length(subB_vals)) stats::setNames(as.character(subB_vals), subB_labels) else character(0)
-    updateSelectInput(session, "subB", choices = subB_choices, selected = if (length(subB_vals)) as.character(subB_vals[1]) else NULL)
+    updateSelectInput(session, "subB", choices = subB_choices, selected = if (length(subB_vals)) as.character(subB_vals[1]) else "1")
     k_choices <- sort(unique(na.omit(res$df$klen)))
     w_choices <- sort(unique(na.omit(res$df$window)))
     updateSelectInput(session, "klen", choices = k_choices, selected = if (length(k_choices)) k_choices[1] else NULL)
     updateSelectInput(session, "window", choices = w_choices, selected = if (length(w_choices)) w_choices[1] else NULL)
     srcs <- sort(unique(res$df$source_file))
+    cat("DEBUG: All source files:", paste(srcs, collapse = ", "), "\n")
     updateSelectInput(session, "sourceFile", choices = srcs, selected = if (length(srcs)) srcs[1] else NULL)
     updateSelectInput(session, "heatmapFile1", choices = srcs, selected = if (length(srcs)) srcs[1] else NULL)
     updateSelectInput(session, "heatmapFile2", choices = srcs, selected = if (length(srcs) >= 2) srcs[2] else if (length(srcs)) srcs[1] else NULL)
@@ -1431,9 +1855,21 @@ server <- function(input, output, session) {
     # Update PCA file selectors
     updateSelectInput(session, "pcaFile1", choices = srcs, selected = if (length(srcs)) srcs[1] else NULL)
     updateSelectInput(session, "pcaFile2", choices = srcs, selected = if (length(srcs) >= 2) srcs[2] else if (length(srcs)) srcs[1] else NULL)
+    
+    # Update bedtools file selector and auto-select for BEDTOOLS mode
+    bedtools_files <- srcs[grepl("bedtools", srcs, ignore.case = TRUE)]
+    cat("DEBUG: Found bedtools files:", paste(bedtools_files, collapse = ", "), "\n")
+    updateSelectInput(session, "bedtoolsFile", choices = bedtools_files, 
+                     selected = if (length(bedtools_files)) bedtools_files[1] else NULL)
+    
+    # Auto-select bedtools file in sourceFile when BEDTOOLS mode is selected
+    if (!is.null(input$modeSelect) && input$modeSelect == "BEDTOOLS" && length(bedtools_files) > 0) {
+      updateSelectInput(session, "sourceFile", selected = bedtools_files[1])
+    }
+    
     # Keep diagnostics minimal (overlap/expA from run_clustering_on_dir)
     output$diagText <- renderText(paste(res$diag, collapse = "\n"))
-    output$statusText <- renderText(sprintf("Computed long-tables from %d files (%d rows) using key: %s", length(unique(res$df$source_file)), nrow(res$df), ak))
+    output$statusText <- renderText(sprintf("✓ Data loaded successfully! %d files (%d rows) using key: %s", length(unique(res$df$source_file)), nrow(res$df), ak))
   })
 
   # Reactive that recomputes clustering on filtered similarity matrices with caching
@@ -1447,20 +1883,87 @@ server <- function(input, output, session) {
     # Get effective biosample selection based on mode
     effective_biosamples <- if (input$biosampleMode == "ALL") {
       acc_meta$biosamples
+    } else if (input$biosampleMode == "REGULAR") {
+      # For REGULAR mode, use the selected checkboxes directly
+      # Add NULL check to prevent errors when no regular tissues are available
+      if (!is.null(input$biosampleCheckboxes) && length(input$biosampleCheckboxes) > 0) {
+        input$biosampleCheckboxes
+      } else {
+        # Fallback to all biosamples if no checkboxes are selected
+        acc_meta$biosamples
+      }
     } else {
+      # For SUBSET mode, use approved_biosamples
       approved_biosamples()
     }
     
     # Check if we have biological filtering active
-    has_biosample_filter <- input$biosampleMode == "SUBSET" && !is.null(effective_biosamples) && 
-                           length(effective_biosamples) > 0 && 
-                           !is.null(acc_meta) && !setequal(effective_biosamples, acc_meta$biosamples)
+    has_biosample_filter <- FALSE
+    if ((input$biosampleMode == "SUBSET" || input$biosampleMode == "REGULAR") && 
+        !is.null(effective_biosamples) && 
+        length(effective_biosamples) > 0 && 
+        !is.null(acc_meta) && 
+        !is.null(acc_meta$biosamples)) {
+      has_biosample_filter <- !setequal(effective_biosamples, acc_meta$biosamples)
+    }
     has_lifestage_filter <- !is.null(input$lifestageSelect) && input$lifestageSelect != "ALL"
     
-    # If no biological filtering is active, return original data
-    if (!has_biosample_filter && !has_lifestage_filter) {
+    # Special case: Check if filtering would produce the same matrix (e.g., all samples are fetal)
+    if (has_lifestage_filter && !is.null(acc_meta$full_data) && "Life_stage" %in% names(acc_meta$full_data)) {
+      acc_df <- acc_meta$full_data
+      selected_lifestage <- input$lifestageSelect
+      
+      # Check if all samples in all matrices are already of the selected lifestage
+      all_matrices_same_lifestage <- TRUE
+      for (src_file in names(sim_matrices)) {
+        sim_matrix <- sim_matrices[[src_file]]
+        if (!is.null(sim_matrix)) {
+          sample_names <- rownames(sim_matrix)
+          lifestage_samples <- acc_df[acc_df$Life_stage == selected_lifestage, "file_base", drop = FALSE]
+          all_samples_same_lifestage <- all(sample_names %in% lifestage_samples$file_base)
+          if (!all_samples_same_lifestage) {
+            all_matrices_same_lifestage <- FALSE
+            break
+          }
+        }
+      }
+      
+      if (all_matrices_same_lifestage) {
+        cat(sprintf("DEBUG: All samples are already %s, returning original data\n", selected_lifestage))
+        return(original_data)
+      }
+    }
+    
+      # Special case: Check if filtering would produce the same matrix (e.g., all samples are fetal)
+  if (has_lifestage_filter && !is.null(acc_meta$full_data) && "Life_stage" %in% names(acc_meta$full_data)) {
+    acc_df <- acc_meta$full_data
+    selected_lifestage <- input$lifestageSelect
+    
+    # Check if all samples in all matrices are already of the selected lifestage
+    all_matrices_same_lifestage <- TRUE
+    for (src_file in names(sim_matrices)) {
+      sim_matrix <- sim_matrices[[src_file]]
+      if (!is.null(sim_matrix)) {
+        sample_names <- rownames(sim_matrix)
+        lifestage_samples <- acc_df[acc_df$Life_stage == selected_lifestage, "file_base", drop = FALSE]
+        all_samples_same_lifestage <- all(sample_names %in% lifestage_samples$file_base)
+        if (!all_samples_same_lifestage) {
+          all_matrices_same_lifestage <- FALSE
+          break
+        }
+      }
+    }
+    
+    if (all_matrices_same_lifestage) {
+      cat(sprintf("DEBUG: All samples are already %s, returning original data\n", selected_lifestage))
       return(original_data)
     }
+  }
+  
+  # If no biological filtering is active, return original data
+  if (!has_biosample_filter && !has_lifestage_filter) {
+    return(original_data)
+  }
     
     # Create cache key for this filter combination
     cache_key <- create_filter_cache_key(effective_biosamples, input$lifestageSelect)
@@ -1473,6 +1976,7 @@ server <- function(input, output, session) {
     }
     
     # Check RDS files for pre-computed filtered results (persistent cache)
+    # Cache effective_dir() call to avoid repeated computation
     dir_path <- effective_dir()
     if (!is.na(dir_path) && dir.exists(dir_path)) {
       all_rds_results <- list()
@@ -1511,6 +2015,7 @@ server <- function(input, output, session) {
     }
     
     # Load labels map for clustering
+    # Cache effective_acc() call to avoid repeated computation
     ak <- effective_acc()
     if (is.na(ak) || !file.exists(ak)) {
       return(original_data)
@@ -1603,16 +2108,121 @@ server <- function(input, output, session) {
     return(combined_data)
   })
 
-  filtered_data <- reactive({
+  # Optimized: Base filtered data with biological filtering only
+  base_filtered_data <- reactive({
     # Use recomputed clustering data when biological filters are active
     df <- filtered_clustering_data()
     if (is.null(df)) return(NULL)
     req_cols <- c("mode", "linkage", "precision", "n_clusters", "nmi", "silhouette")
-    if (!all(req_cols %in% names(df))) return(NULL)
+    if (!all(req_cols %in% names(df))) {
+      return(NULL)
+    }
     d <- df
     
+    # Only apply biological filtering, no technical filtering
+    # This ensures the NMI table shows all technical combinations for the selected biological subset
+    if (nrow(d) == 0) {
+      return(NULL)
+    }
+    d
+  })
+  
+  # Data with only biological filtering (for Inputs tab NMI table)
+  biologically_filtered_data <- reactive({
+    base_filtered_data()
+  })
+  
+  filtered_data <- reactive({
+    # Handle BEDTOOLS mode specially
+    if (!is.null(input$modeSelect) && input$modeSelect == "BEDTOOLS") {
+      cat("DEBUG: BEDTOOLS mode detected\n")
+      # For BEDTOOLS mode, we need to create clustering data from the selected bedtools file
+      bedtools_file <- input$bedtoolsFile
+      if (is.null(bedtools_file) || !nzchar(bedtools_file)) {
+        # Fallback: try to use sourceFile if it's a bedtools file
+        if (!is.null(input$sourceFile) && nzchar(input$sourceFile) && grepl("bedtools", input$sourceFile, ignore.case = TRUE)) {
+          bedtools_file <- input$sourceFile
+          cat("DEBUG: Using sourceFile as bedtools file:", bedtools_file, "\n")
+        } else {
+          cat("DEBUG: No bedtools file selected\n")
+          return(NULL)
+        }
+      } else {
+        cat("DEBUG: Selected bedtools file:", bedtools_file, "\n")
+      }
+      
+      # Get the bedtools file path
+      dir_path <- effective_dir()
+      if (is.na(dir_path) || !dir.exists(dir_path)) {
+        return(NULL)
+      }
+      
+              # Find the bedtools file
+        candidate_path <- file.path(dir_path, bedtools_file)
+        if (!file.exists(candidate_path)) {
+          hits <- Sys.glob(file.path(dir_path, "**", bedtools_file))
+          if (length(hits) >= 1) candidate_path <- hits[1]
+        }
+      
+      if (!file.exists(candidate_path)) {
+        return(NULL)
+      }
+      
+      # Load the bedtools file and create clustering data
+      tryCatch({
+        # Parse the bedtools file
+        sim_matrix <- parse_bedtools_format(candidate_path)
+        
+        # Get accession key for labels
+        ak <- effective_acc()
+        labels_map <- NULL
+        if (!is.na(ak) && file.exists(ak)) {
+          labels_map <- tryCatch(load_accession_key(ak), error = function(e) NULL)
+        }
+        
+                # Create clustering data for different numbers of clusters and selected linkage method
+        clusters_vec <- 2:30
+        linkage_method <- input$linkageMethod %||% "average"
+        linkage_methods <- c(linkage_method)
+        
+        # Use the evaluate_nmi_long_table function
+        long_table <- evaluate_nmi_long_table(sim_matrix, labels_map, clusters_vec, linkage_methods)
+      
+      cat("DEBUG: BEDTOOLS long_table created with", nrow(long_table), "rows\n")
+      cat("DEBUG: Columns:", paste(names(long_table), collapse = ", "), "\n")
+      
+              # Add metadata columns
+        long_table$source_file <- bedtools_file
+      long_table$mode <- "BEDTOOLS"
+      long_table$precision <- NA
+      long_table$expA <- NA
+      long_table$subA <- NA
+      long_table$subB <- NA
+      long_table$window <- NA
+      long_table$klen <- NA
+      long_table$sketch <- NA
+      
+      cat("DEBUG: Returning BEDTOOLS data with", nrow(long_table), "rows\n")
+      return(long_table)
+        
+      }, error = function(e) {
+        cat(sprintf("Error processing bedtools file %s: %s\n", candidate_path, conditionMessage(e)))
+        return(NULL)
+      })
+    }
+    
+    # Regular mode handling
+    # Use base filtered data and apply technical filtering
+    d <- base_filtered_data()
+    if (is.null(d)) return(NULL)
+    
     # Apply technical parameter filtering
-    if (!is.null(input$modeSelect) && nzchar(input$modeSelect)) d <- d[d$mode == input$modeSelect, , drop = FALSE]
+    if (!is.null(input$modeSelect) && nzchar(input$modeSelect)) {
+      cat("DEBUG: Filtering by mode:", input$modeSelect, "\n")
+      cat("DEBUG: Available modes:", unique(d$mode), "\n")
+      d <- d[d$mode == input$modeSelect, , drop = FALSE]
+      cat("DEBUG: After mode filtering:", nrow(d), "rows\n")
+    }
     if (!is.null(input$linkageMethod) && nzchar(input$linkageMethod)) d <- d[d$linkage == input$linkageMethod, , drop = FALSE]
     if (!is.null(input$precision) && nzchar(input$precision)) {
       suppressWarnings(pv <- as.numeric(input$precision)); if (!is.na(pv)) d <- d[!is.na(d$precision) & d$precision == pv, , drop = FALSE]
@@ -1642,8 +2252,15 @@ server <- function(input, output, session) {
       }
       
       d <- filtered_data()
+      cat("DEBUG: NMI plot - filtered_data returned", if(is.null(d)) "NULL" else paste(nrow(d), "rows"), "\n")
+      if (!is.null(d)) {
+        cat("DEBUG: NMI plot - columns:", paste(names(d), collapse = ", "), "\n")
+        cat("DEBUG: NMI plot - mode:", unique(d$mode), "\n")
+      }
       validate(need(!is.null(d), "No data to plot with the current filters."))
+      cat("DEBUG: NMI plot - before filtering:", nrow(d), "rows\n")
       d <- d[!is.na(d$n_clusters) & !is.na(d$nmi), , drop = FALSE]
+      cat("DEBUG: NMI plot - after filtering:", nrow(d), "rows\n")
       validate(need(nrow(d) > 0, "No rows with NMI and cluster numbers available."))
       limits <- silhouette_limits()
       
@@ -1801,35 +2418,453 @@ server <- function(input, output, session) {
     return(result)
   }, rownames = FALSE)
 
-  # Summary table: for each (source_file, linkage), show the row with the highest NMI
-  output$summaryTable <- renderTable({
-    df <- data_all()
-    validate(need(!is.null(df), "Load data to view summary."))
-    req_cols <- c("source_file", "linkage", "nmi", "n_clusters", "silhouette")
-    if (!all(req_cols %in% names(df))) return(data.frame())
-    # Ensure numeric types for metrics
-    suppressWarnings({
-      df$nmi <- as.numeric(df$nmi)
-      df$n_clusters <- as.numeric(df$n_clusters)
-      df$silhouette <- as.numeric(df$silhouette)
-    })
-    df <- df[is.finite(df$nmi), , drop = FALSE]
-    if (!nrow(df)) return(data.frame())
-    # group by file and linkage
-    df$key <- paste(df$source_file, df$linkage, sep = "\t")
-    parts <- split(df, df$key)
-    pick_top <- function(d) {
-      d <- d[order(-d$nmi, -d$silhouette, d$n_clusters), , drop = FALSE]
-      d[1, c("source_file", "linkage", "nmi", "n_clusters", "silhouette"), drop = FALSE]
+  # Filtered data summary table: shows data based on current biological filter selections
+  output$filteredDataSummaryTable <- renderTable({
+    acc_meta <- accession_metadata()
+    sim_cache <- cached_similarity_matrices()
+    
+    if (is.null(acc_meta) || is.null(acc_meta$full_data) || is.null(sim_cache)) {
+      return(data.frame(Message = "Load data to view filtered summary"))
     }
-    best_list <- lapply(parts, pick_top)
-    best <- do.call(rbind, best_list)
-    best <- best[order(-best$nmi, -best$silhouette), , drop = FALSE]
-    rownames(best) <- NULL
-    names(best) <- c("File", "Linkage", "NMI", "Clusters", "Silhouette")
-    best
+    
+    acc_df <- acc_meta$full_data
+    if (!"file_base" %in% names(acc_df)) {
+      return(data.frame(Message = "No file mapping available"))
+    }
+    
+    if (length(sim_cache) == 0) {
+      return(data.frame(Message = "No similarity matrices cached"))
+    }
+    
+    # Get effective biosample selection based on mode
+    effective_biosamples <- if (input$biosampleMode == "ALL") {
+      acc_meta$biosamples
+    } else if (input$biosampleMode == "REGULAR") {
+      # For REGULAR mode, use the selected checkboxes directly
+      # Add NULL check to prevent errors when no regular tissues are available
+      if (!is.null(input$biosampleCheckboxes) && length(input$biosampleCheckboxes) > 0) {
+        input$biosampleCheckboxes
+      } else {
+        # Fallback to all biosamples if no checkboxes are selected
+        acc_meta$biosamples
+      }
+    } else {
+      # For SUBSET mode, use approved_biosamples
+      approved_biosamples()
+    }
+    
+    # Get effective lifestage selection
+    effective_lifestage <- if (is.null(input$lifestageSelect) || input$lifestageSelect == "ALL") {
+      acc_meta$lifestages
+    } else {
+      input$lifestageSelect
+    }
+    
+    # Filter samples based on biological selections
+    filtered_samples <- c()
+    for (src_file in names(sim_cache)) {
+      sim_matrix <- sim_cache[[src_file]]
+      if (!is.null(sim_matrix)) {
+        file_samples <- rownames(sim_matrix)
+        
+        # Apply biological filtering to samples
+        for (sample in file_samples) {
+          meta_row <- acc_df[acc_df$file_base == sample, , drop = FALSE]
+          if (nrow(meta_row) > 0) {
+            biosample <- if ("Biosample_term_name" %in% names(meta_row)) {
+              meta_row$Biosample_term_name[1]
+            } else {
+              "unknown"
+            }
+            
+            lifestage <- if ("Life_stage" %in% names(meta_row)) {
+              meta_row$Life_stage[1]
+            } else {
+              "unknown"
+            }
+            
+            # Check if sample passes biological filters
+            biosample_match <- biosample %in% effective_biosamples
+            lifestage_match <- lifestage %in% effective_lifestage
+            
+            if (biosample_match && lifestage_match) {
+              filtered_samples <- c(filtered_samples, sample)
+            }
+          }
+        }
+      }
+    }
+    
+    if (length(filtered_samples) == 0) {
+      return(data.frame(Message = "No samples match current biological filter selections"))
+    }
+    
+    # Get biological metadata for filtered samples
+    sample_meta_list <- list()
+    for (sample in filtered_samples) {
+      meta_row <- acc_df[acc_df$file_base == sample, , drop = FALSE]
+      if (nrow(meta_row) > 0) {
+        biosample <- if ("Biosample_term_name" %in% names(meta_row)) {
+          meta_row$Biosample_term_name[1]
+        } else {
+          "unknown"
+        }
+        
+        lifestage <- if ("Life_stage" %in% names(meta_row)) {
+          meta_row$Life_stage[1]
+        } else {
+          "unknown"
+        }
+        
+        sample_meta_list[[sample]] <- data.frame(
+          sample = sample,
+          biosample = biosample,
+          lifestage = lifestage,
+          stringsAsFactors = FALSE
+        )
+      }
+    }
+    
+    if (length(sample_meta_list) == 0) {
+      return(data.frame(Message = "No biological metadata found for filtered samples"))
+    }
+    
+    # Combine all metadata
+    all_meta <- do.call(rbind, sample_meta_list)
+    
+    # Count by biosample and lifestage
+    bio_counts <- table(all_meta$biosample, all_meta$lifestage, useNA = "ifany")
+    
+    # Convert to data frame
+    result_list <- list()
+    for (i in 1:nrow(bio_counts)) {
+      for (j in 1:ncol(bio_counts)) {
+        if (bio_counts[i, j] > 0) {
+          biosample <- rownames(bio_counts)[i]
+          lifestage <- colnames(bio_counts)[j]
+          count <- bio_counts[i, j]
+          
+          key <- paste(biosample, lifestage, sep = "_")
+          result_list[[key]] <- data.frame(
+            Biosample = biosample,
+            Life_Stage = lifestage,
+            Count = count,
+            stringsAsFactors = FALSE
+          )
+        }
+      }
+    }
+    
+    if (length(result_list) == 0) {
+      return(data.frame(Message = "No biological combinations found in filtered data"))
+    }
+    
+    result <- do.call(rbind, result_list)
+    rownames(result) <- NULL
+    
+    # Sort by biosample then lifestage
+    result <- result[order(result$Biosample, result$Life_Stage), ]
+    
+    # Add totals row
+    totals_row <- data.frame(
+      Biosample = "TOTAL",
+      Life_Stage = "",
+      Count = sum(result$Count),
+      stringsAsFactors = FALSE
+    )
+    
+    result <- rbind(result, totals_row)
+    
+    # Clean up column names for display
+    names(result) <- c("Biosample", "Life Stage", "Samples")
+    
+    return(result)
+  }, rownames = FALSE)
+
+  # Filter summary outputs for all tabs
+  output$filterSummaryInputs <- renderText({
+    # For Inputs tab, only show biological filters and data summary
+    summary_parts <- c()
+    
+    # Biological filters
+    bio_summary <- biological_filter_summary()
+    summary_parts <- c(summary_parts, bio_summary)
+    
+    # Data summary
+    data_summary_text <- data_summary()
+    if (nzchar(data_summary_text)) {
+      summary_parts <- c(summary_parts, data_summary_text)
+    }
+    
+    if (length(summary_parts) == 0) {
+      return("No biological filters applied")
+    }
+    
+    paste(summary_parts, collapse = " | ")
+  })
+  
+  output$filterSummaryResults <- renderText({
+    # Results tab: show all filters (technical + biological + data)
+    filter_summary()
+  })
+  
+  output$filterSummaryHeatmaps <- renderText({
+    # Heatmaps tab: show only biological filters and data summary
+    summary_parts <- c()
+    
+    # Biological filters
+    bio_summary <- biological_filter_summary()
+    summary_parts <- c(summary_parts, bio_summary)
+    
+    # Data summary
+    data_summary_text <- data_summary()
+    if (nzchar(data_summary_text)) {
+      summary_parts <- c(summary_parts, data_summary_text)
+    }
+    
+    if (length(summary_parts) == 0) {
+      return("No biological filters applied")
+    }
+    
+    paste(summary_parts, collapse = " | ")
+  })
+  
+  output$filterSummaryDendrograms <- renderText({
+    # Dendrograms tab: show only biological filters and data summary
+    summary_parts <- c()
+    
+    # Biological filters
+    bio_summary <- biological_filter_summary()
+    summary_parts <- c(summary_parts, bio_summary)
+    
+    # Data summary
+    data_summary_text <- data_summary()
+    if (nzchar(data_summary_text)) {
+      summary_parts <- c(summary_parts, data_summary_text)
+    }
+    
+    if (length(summary_parts) == 0) {
+      return("No biological filters applied")
+    }
+    
+    paste(summary_parts, collapse = " | ")
+  })
+  
+  output$filterSummaryPCA <- renderText({
+    # PCA tab: show only biological filters and data summary
+    summary_parts <- c()
+    
+    # Biological filters
+    bio_summary <- biological_filter_summary()
+    summary_parts <- c(summary_parts, bio_summary)
+    
+    # Data summary
+    data_summary_text <- data_summary()
+    if (nzchar(data_summary_text)) {
+      summary_parts <- c(summary_parts, data_summary_text)
+    }
+    
+    if (length(summary_parts) == 0) {
+      return("No biological filters applied")
+    }
+    
+    paste(summary_parts, collapse = " | ")
+  })
+  
+  # Summary table: for each (source_file, linkage), show the row with the highest NMI
+  # Uses biologically_filtered_data() to reflect only biological filtering (biosample/lifestage selection)
+  output$summaryTable <- renderTable({
+    tryCatch({
+      df <- biologically_filtered_data()
+      validate(need(!is.null(df), "Load data to view summary."))
+      req_cols <- c("source_file", "linkage", "nmi", "n_clusters", "silhouette")
+      if (!all(req_cols %in% names(df))) {
+        return(data.frame())
+      }
+      # Ensure numeric types for metrics
+      suppressWarnings({
+        df$nmi <- as.numeric(df$nmi)
+        df$n_clusters <- as.numeric(df$n_clusters)
+        df$silhouette <- as.numeric(df$silhouette)
+      })
+      df <- df[is.finite(df$nmi), , drop = FALSE]
+      if (!nrow(df)) return(data.frame())
+      # group by file and linkage
+      df$key <- paste(df$source_file, df$linkage, sep = "\t")
+      parts <- split(df, df$key)
+      pick_top <- function(d) {
+        d <- d[order(-d$nmi, -d$silhouette, d$n_clusters), , drop = FALSE]
+        d[1, c("source_file", "linkage", "nmi", "n_clusters", "silhouette"), drop = FALSE]
+      }
+      best_list <- lapply(parts, pick_top)
+      best <- do.call(rbind, best_list)
+      best <- best[order(-best$nmi, -best$silhouette), , drop = FALSE]
+      rownames(best) <- NULL
+      names(best) <- c("File", "Linkage", "NMI", "Clusters", "Silhouette")
+      best
+    }, error = function(e) {
+      data.frame(Error = paste("Error:", conditionMessage(e)))
+    })
   }, rownames = FALSE, digits = 4)
 
+  # Optimized: Shared biological filter logic
+  biological_filter_summary <- reactive({
+    bio_filters <- c()
+    
+    # Biosample filtering
+    if (!is.null(input$biosampleMode) && input$biosampleMode != "ALL") {
+      approved_bs <- approved_biosamples()
+      if (!is.null(approved_bs) && length(approved_bs) > 0) {
+        bio_filters <- c(bio_filters, paste("Biosamples:", paste(approved_bs, collapse = ", ")))
+      } else {
+        bio_filters <- c(bio_filters, "Biosamples: Custom subset")
+      }
+    } else {
+      bio_filters <- c(bio_filters, "Biosamples: All")
+    }
+    
+    # Lifestage filtering
+    if (!is.null(input$lifestageSelect) && input$lifestageSelect != "ALL") {
+      bio_filters <- c(bio_filters, paste("Life Stage:", input$lifestageSelect))
+    } else {
+      bio_filters <- c(bio_filters, "Life Stage: All")
+    }
+    
+    if (length(bio_filters) == 0) {
+      return("Biological: All")
+    }
+    
+    paste("Biological:", paste(bio_filters, collapse = ", "))
+  })
+  
+  # Optimized: Shared technical filter logic
+  technical_filter_summary <- reactive({
+    tech_filters <- c()
+    if (!is.null(input$modeSelect) && nzchar(input$modeSelect)) {
+      tech_filters <- c(tech_filters, paste("Mode:", input$modeSelect))
+    }
+    if (!is.null(input$linkageMethod) && nzchar(input$linkageMethod)) {
+      tech_filters <- c(tech_filters, paste("Linkage:", input$linkageMethod))
+    }
+    if (!is.null(input$precision) && nzchar(input$precision)) {
+      tech_filters <- c(tech_filters, paste("Precision:", input$precision))
+    }
+    if (identical(input$modeSelect, "C")) {
+      if (!is.null(input$expA) && nzchar(input$expA)) {
+        tech_filters <- c(tech_filters, paste("expA:", input$expA))
+      }
+      if (!is.null(input$subB) && nzchar(input$subB)) {
+        tech_filters <- c(tech_filters, paste("subB:", input$subB))
+      }
+    }
+    if (identical(input$modeSelect, "D")) {
+      if (!is.null(input$klen) && nzchar(input$klen)) {
+        tech_filters <- c(tech_filters, paste("k:", input$klen))
+      }
+      if (!is.null(input$window) && nzchar(input$window)) {
+        tech_filters <- c(tech_filters, paste("w:", input$window))
+      }
+    }
+    
+    if (length(tech_filters) == 0) {
+      return("")
+    }
+    
+    paste("Technical:", paste(tech_filters, collapse = ", "))
+  })
+  
+  # Optimized: Shared data summary logic
+  data_summary <- reactive({
+    df <- base_filtered_data()
+    if (!is.null(df) && nrow(df) > 0) {
+      unique_files <- length(unique(df$source_file))
+      total_rows <- nrow(df)
+      paste("Data:", unique_files, "files,", total_rows, "rows")
+    } else {
+      ""
+    }
+  })
+  
+  # Reactive function to generate filter summary text
+  filter_summary <- reactive({
+    # Handle BEDTOOLS mode
+    if (!is.null(input$modeSelect) && input$modeSelect == "BEDTOOLS") {
+      summary_parts <- c("Mode: BEDTOOLS")
+      
+      if (!is.null(input$bedtoolsFile) && nzchar(input$bedtoolsFile)) {
+        summary_parts <- c(summary_parts, paste("File:", input$bedtoolsFile))
+      }
+      
+      # Biological filters (still apply to bedtools data)
+      bio_summary <- biological_filter_summary()
+      summary_parts <- c(summary_parts, bio_summary)
+      
+      # Data summary
+      data_summary_text <- data_summary()
+      if (nzchar(data_summary_text)) {
+        summary_parts <- c(summary_parts, data_summary_text)
+      }
+      
+      return(paste(summary_parts, collapse = " | "))
+    }
+    
+    # Regular mode
+    summary_parts <- c()
+    
+    # Technical filters
+    tech_summary <- technical_filter_summary()
+    if (nzchar(tech_summary)) {
+      summary_parts <- c(summary_parts, tech_summary)
+    }
+    
+    # Biological filters
+    bio_summary <- biological_filter_summary()
+    summary_parts <- c(summary_parts, bio_summary)
+    
+    # Data summary
+    data_summary_text <- data_summary()
+    if (nzchar(data_summary_text)) {
+      summary_parts <- c(summary_parts, data_summary_text)
+    }
+    
+    if (length(summary_parts) == 0) {
+      return("No filters applied")
+    }
+    
+    paste(summary_parts, collapse = " | ")
+  })
+  
+  # Auto-select bedtools file when BEDTOOLS mode is selected
+  observeEvent(input$modeSelect, {
+    if (!is.null(input$modeSelect) && input$modeSelect == "BEDTOOLS") {
+      # Get available bedtools files
+      df <- data_all()
+      if (!is.null(df) && nrow(df) > 0) {
+        srcs <- sort(unique(df$source_file))
+        bedtools_files <- srcs[grepl("bedtools", srcs, ignore.case = TRUE)]
+        if (length(bedtools_files) > 0) {
+          updateSelectInput(session, "sourceFile", selected = bedtools_files[1])
+        }
+      }
+    }
+  })
+  
+  # Update precision choices when mode changes
+  observeEvent(input$modeSelect, {
+    if (!is.null(input$modeSelect) && input$modeSelect != "BEDTOOLS") {
+      df <- data_all()
+      if (!is.null(df) && nrow(df) > 0) {
+        # Get precision values for the selected mode
+        mode_precisions <- sort(unique(na.omit(df$precision[df$mode == input$modeSelect])))
+        if (length(mode_precisions) > 0) {
+          updateSelectInput(session, "precision", choices = mode_precisions, selected = mode_precisions[1])
+        } else {
+          updateSelectInput(session, "precision", choices = character(0))
+        }
+      }
+    }
+  })
+  
   # Auto-select a matching file for the dendrogram when NMI parameters change
   observeEvent(list(input$modeSelect, input$linkageMethod, input$precision,
                     input$expA, input$subB, input$klen, input$window, filtered_data()), {
@@ -1861,13 +2896,11 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
 
   output$dendPlot <- renderPlot({
-    df <- data_all()
-    validate(need(!is.null(df), "Load data to view dendrogram."))
     sf <- input$sourceFile
     lk <- input$dendLinkage %||% "average"
     validate(need(!is.null(sf) && nzchar(sf), "Select an input file for dendrogram."))
+    
     # find matching original file path by name from current directory
-    # Try both pasted dir and picker dir
     base_dir <- effective_dir()
     candidate <- file.path(base_dir, sf)
     if (!file.exists(candidate)) {
@@ -1878,12 +2911,37 @@ server <- function(input, output, session) {
     if (!file.exists(candidate)) {
       plot.new(); title(sprintf("Cannot find file: %s", sf)); return(invisible())
     }
-    draw_dendrogram_for(candidate, effective_acc(), lk)
+    
+    # Handle BEDTOOLS mode specially
+    if (!is.null(input$modeSelect) && input$modeSelect == "BEDTOOLS") {
+      cat("DEBUG: Dendrogram - BEDTOOLS mode detected\n")
+      # For BEDTOOLS mode, we need to parse the file and create dendrogram directly
+      tryCatch({
+        # Parse the bedtools file
+        sim_matrix <- parse_bedtools_format(candidate)
+        
+        # Get accession key for labels
+        ak <- effective_acc()
+        labels_map <- NULL
+        if (!is.na(ak) && file.exists(ak)) {
+          labels_map <- tryCatch(load_accession_key(ak), error = function(e) NULL)
+        }
+        
+        # Create dendrogram using the same logic as draw_dendrogram_for but for bedtools
+        draw_dendrogram_from_matrix(sim_matrix, labels_map, lk, "BEDTOOLS")
+        
+      }, error = function(e) {
+        plot.new(); title(sprintf("Error processing bedtools file: %s", conditionMessage(e)))
+      })
+    } else {
+      # Regular mode - use existing function
+      draw_dendrogram_for(candidate, effective_acc(), lk)
+    }
   })
 
   # Paired dendrograms tab
   output$dendPlotA <- renderPlot({
-    df <- data_all()
+    df <- filtered_data()
     validate(need(!is.null(df), "Load data to view dendrograms."))
     sf <- input$dendFile1
     lk <- input$dendLinkage1 %||% "average"
@@ -1899,7 +2957,7 @@ server <- function(input, output, session) {
   })
 
   output$dendPlotB <- renderPlot({
-    df <- data_all()
+    df <- filtered_data()
     validate(need(!is.null(df), "Load data to view dendrograms."))
     sf <- input$dendFile2
     lk <- input$dendLinkage2 %||% "complete"
@@ -1916,7 +2974,7 @@ server <- function(input, output, session) {
 
   # Heatmap info panel
   output$heatmapInfo <- renderText({
-    df <- data_all()
+    df <- filtered_data()
     if (is.null(df)) return("Load data to view heatmap details.")
     files <- c(input$heatmapFile1, input$heatmapFile2)
     files <- files[nzchar(files)]
@@ -1946,7 +3004,7 @@ server <- function(input, output, session) {
   })
 
   output$heatmap1 <- renderPlot({
-    df <- data_all()
+    df <- filtered_data()
     validate(need(!is.null(df), "Load data to view heatmaps."))
     sf <- input$heatmapFile1
     validate(need(!is.null(sf) && nzchar(sf), "Select an input file for Heatmap A."))
@@ -1961,7 +3019,7 @@ server <- function(input, output, session) {
   })
 
   output$heatmap2 <- renderPlot({
-    df <- data_all()
+    df <- filtered_data()
     validate(need(!is.null(df), "Load data to view heatmaps."))
     sf <- input$heatmapFile2
     validate(need(!is.null(sf) && nzchar(sf), "Select an input file for Heatmap B."))
