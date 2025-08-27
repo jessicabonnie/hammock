@@ -149,7 +149,12 @@ get_life_stage_from_enhanced_label <- function(enhanced_label) {
 
 has_life_stage_info <- function(label_map) {
   # Check if the label map includes life stage information
-  !is.null(attr(label_map, "has_life_stage")) && attr(label_map, "has_life_stage")
+  # Handle NULL values properly to avoid "missing value where TRUE/FALSE needed" error
+  has_attr <- !is.null(attr(label_map, "has_life_stage"))
+  if (!has_attr) return(FALSE)
+  attr_value <- attr(label_map, "has_life_stage")
+  if (is.null(attr_value) || is.na(attr_value)) return(FALSE)
+  return(isTRUE(attr_value))
 }
 
 create_color_palette_with_life_stage <- function(enhanced_labels, base_palette_fun = NULL) {
@@ -239,6 +244,38 @@ detect_hammock_expA <- function(filepath) {
   NA_real_
 }
 
+detect_hammock_subA <- function(filepath) {
+  head <- tryCatch(utils::read.csv(filepath, nrows = 10), error = function(e) NULL)
+  if (is.null(head)) return(NA_real_)
+  for (col in names(head)) {
+    low <- tolower(col)
+    if (low %in% c('suba', 'sub_a')) {
+      vals <- unique(na.omit(head[[col]]))
+      if (length(vals) > 0) {
+        v <- suppressWarnings(as.numeric(vals[1]))
+        if (!is.na(v)) return(v)
+      }
+    }
+  }
+  NA_real_
+}
+
+detect_hammock_subB <- function(filepath) {
+  head <- tryCatch(utils::read.csv(filepath, nrows = 10), error = function(e) NULL)
+  if (is.null(head)) return(NA_real_)
+  for (col in names(head)) {
+    low <- tolower(col)
+    if (low %in% c('subb', 'sub_b')) {
+      vals <- unique(na.omit(head[[col]]))
+      if (length(vals) > 0) {
+        v <- suppressWarnings(as.numeric(vals[1]))
+        if (!is.na(v)) return(v)
+      }
+    }
+  }
+  NA_real_
+}
+
 extract_params_from_filename <- function(filename) {
   name <- basename(filename)
   # Mode token
@@ -284,6 +321,8 @@ extract_params_from_filename <- function(filename) {
   if (length(r_b) > 0 && length(r_b[[1]]) > 2) {
     subB <- suppressWarnings(as.numeric(r_b[[1]][3]))
   }
+
+  
   list(mode = ifelse(is.na(mode), NA, mode),
        klen = ifelse(is.na(klen), NA, klen),
        window = ifelse(is.na(window), NA, window),

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Script to calculate Robinson-Foulds distances between hammock output trees.
+Script to calculate matrix distances between hammock output similarity matrices.
 
-Compares mode C output trees (precision 24) against:
-1. Mode A output trees (precision 24) 
-2. Mode B output trees (precision 24)
+Compares mode C output similarity matrices (precision 24) against:
+1. Mode A output similarity matrices (precision 24) 
+2. Mode B output similarity matrices (precision 24)
 
 For each comparison, tracks the expA value and outputs:
-File1, File2, expA, RFA, RFB
+File, expA, Frobenius_C_vs_A, Frobenius_C_vs_B, Frobenius_A_vs_B, Euclidean_C_vs_A, Euclidean_C_vs_B, Euclidean_A_vs_B, Manhattan_C_vs_A, Manhattan_C_vs_B, Manhattan_A_vs_B, Cosine_C_vs_A, Cosine_C_vs_B, Cosine_A_vs_B, nRF_C_vs_A, nRF_C_vs_B, nRF_A_vs_B
 
-Also generates a line graph showing RF distances vs expA values.
+Also generates line graphs showing both matrix distances and normalized RF distances vs expA values.
 """
 
 import os
@@ -133,6 +133,81 @@ def simple_robinson_foulds(tree1_newick, tree2_newick):
     print("Warning: Using simplified RF distance approximation. Install ete3 or dendropy for accurate results.", file=sys.stderr)
     
     return rf, max_rf, normalized_rf, n_leaves
+
+
+def calculate_all_matrix_distances(sim_matrix1, sim_matrix2):
+    """
+    Calculate all available distance metrics between two similarity matrices.
+    
+    Args:
+        sim_matrix1 (pandas.DataFrame): First similarity matrix
+        sim_matrix2 (pandas.DataFrame): Second similarity matrix
+        
+    Returns:
+        dict: Dictionary containing all distance metrics
+    """
+    # Ensure matrices have the same dimensions and order
+    common_indices = sim_matrix1.index.intersection(sim_matrix2.index)
+    if len(common_indices) < 2:
+        return {
+            'frobenius': float('inf'),
+            'euclidean': float('inf'),
+            'manhattan': float('inf'),
+            'cosine': float('inf')
+        }
+    
+    # Align matrices to common indices
+    sim1 = sim_matrix1.loc[common_indices, common_indices]
+    sim2 = sim_matrix2.loc[common_indices, common_indices]
+    
+    # Convert to numpy arrays for calculations
+    arr1 = sim1.values
+    arr2 = sim2.values
+    
+    distances = {}
+    
+    # Frobenius norm (Euclidean norm for matrices)
+    distance = np.linalg.norm(arr1 - arr2, ord='fro')
+    distances['frobenius'] = distance / np.sqrt(arr1.size)
+    
+    # Element-wise Euclidean distance
+    distance = np.sqrt(np.sum((arr1 - arr2) ** 2))
+    distances['euclidean'] = distance / np.sqrt(arr1.size)
+    
+    # Element-wise Manhattan distance
+    distance = np.sum(np.abs(arr1 - arr2))
+    distances['manhattan'] = distance / arr1.size
+    
+    # Cosine distance between flattened matrices
+    flat1 = arr1.flatten()
+    flat2 = arr2.flatten()
+    # Cosine similarity
+    cos_sim = np.dot(flat1, flat2) / (np.linalg.norm(flat1) * np.linalg.norm(flat2))
+    # Convert to distance (1 - similarity)
+    distances['cosine'] = 1 - cos_sim
+    
+    return distances
+
+
+def calculate_matrix_distance(sim_matrix1, sim_matrix2, distance_metric='frobenius'):
+    """
+    Calculate distance between two similarity matrices.
+    
+    Args:
+        sim_matrix1 (pandas.DataFrame): First similarity matrix
+        sim_matrix2 (pandas.DataFrame): Second similarity matrix
+        distance_metric (str): Distance metric to use ('frobenius', 'euclidean', 'manhattan', 'cosine')
+        
+    Returns:
+        float: Distance between the matrices
+    """
+    # Use the new function to get all distances
+    all_distances = calculate_all_matrix_distances(sim_matrix1, sim_matrix2)
+    
+    if distance_metric not in all_distances:
+        raise ValueError(f"Unknown distance metric: {distance_metric}")
+    
+    return all_distances[distance_metric]
 
 
 def similarity_to_distance_matrix(sim_matrix):
@@ -262,35 +337,57 @@ def create_two_page_plot(results_expa, results_subb, output_basename):
     sns.set_palette("husl")
     
     # Create figure with two pages
-    fig = plt.figure(figsize=(12, 8))
+    fig = plt.figure(figsize=(16, 10))
     
-    # Page 1: expA plot
+    # Page 1: expA plots (Matrix Distance and nRF)
     if results_expa:
-        ax1 = plt.subplot(111)
         df_expa = pd.DataFrame(results_expa)
         df_sorted = df_expa.sort_values('expA')
         
-        # Plot baseline (A vs B distance)
-        ax1.plot(df_sorted['expA'], df_sorted['RFA'], 
+        # Create subplots for expA
+        fig1, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 10))
+        
+        # Subplot 1: Matrix Distances (Frobenius)
+        ax1.plot(df_sorted['expA'], df_sorted['Frobenius_C_vs_A'], 
                 marker='o', linewidth=2, markersize=6, 
-                label='Baseline: Mode A vs Mode B', color='blue')
+                label='Mode C vs Mode A', color='blue')
+        ax1.plot(df_sorted['expA'], df_sorted['Frobenius_C_vs_B'], 
+                marker='s', linewidth=2, markersize=6, 
+                label='Mode C vs Mode B', color='red')
         
         # Add a horizontal line to show the baseline level
-        baseline_value = df_sorted['RFA'].iloc[0]  # All values should be the same
+        baseline_value = df_sorted['Frobenius_A_vs_B'].iloc[0]  # All values should be the same
         ax1.axhline(y=baseline_value, color='gray', linestyle='--', alpha=0.7, 
-                   label=f'Baseline Level: {baseline_value:.3f}')
+                   label=f'Baseline: Mode A vs Mode B: {baseline_value:.3f}')
         
-        # Customize the plot
+        # Customize the first subplot
         ax1.set_xlabel('expA', fontsize=12, fontweight='bold')
-        ax1.set_ylabel('Normalized Robinson-Foulds Distance', fontsize=12, fontweight='bold')
-        ax1.set_title('Baseline Normalized RF Distance vs expA: Mode A vs Mode B', 
+        ax1.set_ylabel('Frobenius Matrix Distance', fontsize=12, fontweight='bold')
+        ax1.set_title('Frobenius Matrix Distances vs expA: Mode C vs Mode A/B', 
                      fontsize=14, fontweight='bold', pad=20)
-        
-        # Add grid
         ax1.grid(True, alpha=0.3)
-        
-        # Add legend
         ax1.legend(fontsize=11, frameon=True, fancybox=True, shadow=True)
+        
+        # Subplot 2: nRF Distances
+        ax2.plot(df_sorted['expA'], df_sorted['nRF_C_vs_A'], 
+                marker='o', linewidth=2, markersize=6, 
+                label='Mode C vs Mode A', color='blue')
+        ax2.plot(df_sorted['expA'], df_sorted['nRF_C_vs_B'], 
+                marker='s', linewidth=2, markersize=6, 
+                label='Mode C vs Mode B', color='red')
+        
+        # Add a horizontal line to show the baseline level
+        baseline_nrf_value = df_sorted['nRF_A_vs_B'].iloc[0]  # All values should be the same
+        ax2.axhline(y=baseline_nrf_value, color='gray', linestyle='--', alpha=0.7, 
+                   label=f'Baseline: Mode A vs Mode B: {baseline_nrf_value:.3f}')
+        
+        # Customize the second subplot
+        ax2.set_xlabel('expA', fontsize=12, fontweight='bold')
+        ax2.set_ylabel('Normalized RF Distance', fontsize=12, fontweight='bold')
+        ax2.set_title('Normalized RF Distances vs expA: Mode C vs Mode A/B', 
+                     fontsize=14, fontweight='bold', pad=20)
+        ax2.grid(True, alpha=0.3)
+        ax2.legend(fontsize=11, frameon=True, fancybox=True, shadow=True)
         
         # Adjust layout
         plt.tight_layout()
@@ -302,34 +399,55 @@ def create_two_page_plot(results_expa, results_subb, output_basename):
         
         plt.close()
     
-    # Page 2: subB plot
+    # Page 2: subB plots (Matrix Distance and nRF)
     if results_subb:
-        fig2 = plt.figure(figsize=(12, 8))
-        ax2 = plt.subplot(111)
         df_subb = pd.DataFrame(results_subb)
         df_sorted = df_subb.sort_values('subB')
         
-        # Plot baseline (A vs B distance)
-        ax2.plot(df_sorted['subB'], df_sorted['RFA'], 
+        # Create subplots for subB
+        fig2, (ax3, ax4) = plt.subplots(2, 1, figsize=(16, 10))
+        
+        # Subplot 1: Matrix Distances (Frobenius)
+        ax3.plot(df_sorted['subB'], df_sorted['Frobenius_C_vs_A'], 
+                marker='o', linewidth=2, markersize=6, 
+                label='Mode C vs Mode A', color='blue')
+        ax3.plot(df_sorted['subB'], df_sorted['Frobenius_C_vs_B'], 
                 marker='s', linewidth=2, markersize=6, 
-                label='Baseline: Mode A vs Mode B', color='red')
+                label='Mode C vs Mode B', color='red')
         
         # Add a horizontal line to show the baseline level
-        baseline_value = df_sorted['RFA'].iloc[0]  # All values should be the same
-        ax2.axhline(y=baseline_value, color='gray', linestyle='--', alpha=0.7, 
-                   label=f'Baseline Level: {baseline_value:.3f}')
+        baseline_value = df_sorted['Frobenius_A_vs_B'].iloc[0]  # All values should be the same
+        ax3.axhline(y=baseline_value, color='gray', linestyle='--', alpha=0.7, 
+                   label=f'Baseline: Mode A vs Mode B: {baseline_value:.3f}')
         
-        # Customize the plot
-        ax2.set_xlabel('subB', fontsize=12, fontweight='bold')
-        ax2.set_ylabel('Normalized Robinson-Foulds Distance', fontsize=12, fontweight='bold')
-        ax2.set_title('Baseline Normalized RF Distance vs subB: Mode A vs Mode B', 
+        # Customize the first subplot
+        ax3.set_xlabel('subB', fontsize=12, fontweight='bold')
+        ax3.set_ylabel('Frobenius Matrix Distance', fontsize=12, fontweight='bold')
+        ax3.set_title('Frobenius Matrix Distances vs subB: Mode C vs Mode A/B', 
                      fontsize=14, fontweight='bold', pad=20)
+        ax3.grid(True, alpha=0.3)
+        ax3.legend(fontsize=11, frameon=True, fancybox=True, shadow=True)
         
-        # Add grid
-        ax2.grid(True, alpha=0.3)
+        # Subplot 2: nRF Distances
+        ax4.plot(df_sorted['subB'], df_sorted['nRF_C_vs_A'], 
+                marker='o', linewidth=2, markersize=6, 
+                label='Mode C vs Mode A', color='blue')
+        ax4.plot(df_sorted['subB'], df_sorted['nRF_C_vs_B'], 
+                marker='s', linewidth=2, markersize=6, 
+                label='Mode C vs Mode B', color='red')
         
-        # Add legend
-        ax2.legend(fontsize=11, frameon=True, fancybox=True, shadow=True)
+        # Add a horizontal line to show the baseline level
+        baseline_nrf_value = df_sorted['nRF_A_vs_B'].iloc[0]  # All values should be the same
+        ax4.axhline(y=baseline_nrf_value, color='gray', linestyle='--', alpha=0.7, 
+                   label=f'Baseline: Mode A vs Mode B: {baseline_nrf_value:.3f}')
+        
+        # Customize the second subplot
+        ax4.set_xlabel('subB', fontsize=12, fontweight='bold')
+        ax4.set_ylabel('Normalized RF Distance', fontsize=12, fontweight='bold')
+        ax4.set_title('Normalized RF Distances vs subB: Mode C vs Mode A/B', 
+                     fontsize=14, fontweight='bold', pad=20)
+        ax4.grid(True, alpha=0.3)
+        ax4.legend(fontsize=11, frameon=True, fancybox=True, shadow=True)
         
         # Adjust layout
         plt.tight_layout()
@@ -347,67 +465,145 @@ def create_two_page_plot(results_expa, results_subb, output_basename):
         
         pdf_filename = f"{output_basename}.pdf"
         with PdfPages(pdf_filename) as pdf:
-            # Page 1: expA
+            # Page 1: expA (Matrix Distance and nRF)
             if results_expa:
-                fig1 = plt.figure(figsize=(12, 8))
-                ax1 = plt.subplot(111)
+                fig1, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 10))
                 df_expa = pd.DataFrame(results_expa)
                 df_sorted = df_expa.sort_values('expA')
                 
-                ax1.plot(df_sorted['expA'], df_sorted['RFA'], 
+                # Subplot 1: Matrix Distances (Frobenius)
+                ax1.plot(df_sorted['expA'], df_sorted['Frobenius_C_vs_A'], 
                         marker='o', linewidth=2, markersize=6, 
-                        label='Baseline: Mode A vs Mode B', color='blue')
+                        label='Mode C vs Mode A', color='blue')
+                ax1.plot(df_sorted['expA'], df_sorted['Frobenius_C_vs_B'], 
+                        marker='s', linewidth=2, markersize=6, 
+                        label='Mode C vs Mode B', color='red')
                 
-                baseline_value = df_sorted['RFA'].iloc[0]
+                baseline_value = df_sorted['Frobenius_A_vs_B'].iloc[0]
                 ax1.axhline(y=baseline_value, color='gray', linestyle='--', alpha=0.7, 
-                           label=f'Baseline Level: {baseline_value:.3f}')
+                           label=f'Baseline: Mode A vs Mode B: {baseline_value:.3f}')
                 
                 ax1.set_xlabel('expA', fontsize=12, fontweight='bold')
-                ax1.set_ylabel('Normalized Robinson-Foulds Distance', fontsize=12, fontweight='bold')
-                ax1.set_title('Baseline Normalized RF Distance vs expA: Mode A vs Mode B', 
+                ax1.set_ylabel('Frobenius Matrix Distance', fontsize=12, fontweight='bold')
+                ax1.set_title('Frobenius Matrix Distances vs expA: Mode C vs Mode A/B', 
                              fontsize=14, fontweight='bold', pad=20)
                 ax1.grid(True, alpha=0.3)
                 ax1.legend(fontsize=11, frameon=True, fancybox=True, shadow=True)
+                
+                # Subplot 2: nRF Distances
+                ax2.plot(df_sorted['expA'], df_sorted['nRF_C_vs_A'], 
+                        marker='o', linewidth=2, markersize=6, 
+                        label='Mode C vs Mode A', color='blue')
+                ax2.plot(df_sorted['expA'], df_sorted['nRF_C_vs_B'], 
+                        marker='s', linewidth=2, markersize=6, 
+                        label='Mode C vs Mode B', color='red')
+                
+                baseline_nrf_value = df_sorted['nRF_A_vs_B'].iloc[0]
+                ax2.axhline(y=baseline_nrf_value, color='gray', linestyle='--', alpha=0.7, 
+                           label=f'Baseline: Mode A vs Mode B: {baseline_nrf_value:.3f}')
+                
+                ax2.set_xlabel('expA', fontsize=12, fontweight='bold')
+                ax2.set_ylabel('Normalized RF Distance', fontsize=12, fontweight='bold')
+                ax2.set_title('Normalized RF Distances vs expA: Mode C vs Mode A/B', 
+                             fontsize=14, fontweight='bold', pad=20)
+                ax2.grid(True, alpha=0.3)
+                ax2.legend(fontsize=11, frameon=True, fancybox=True, shadow=True)
+                
                 plt.tight_layout()
                 pdf.savefig(fig1)
                 plt.close()
             
-            # Page 2: subB
+            # Page 2: subB (Matrix Distance and nRF)
             if results_subb:
-                fig2 = plt.figure(figsize=(12, 8))
-                ax2 = plt.subplot(111)
+                fig2, (ax3, ax4) = plt.subplots(2, 1, figsize=(16, 10))
                 df_subb = pd.DataFrame(results_subb)
                 df_sorted = df_subb.sort_values('subB')
                 
-                ax2.plot(df_sorted['subB'], df_sorted['RFA'], 
+                # Subplot 1: Matrix Distances (Frobenius)
+                ax3.plot(df_sorted['subB'], df_sorted['Frobenius_C_vs_A'], 
+                        marker='o', linewidth=2, markersize=6, 
+                        label='Mode C vs Mode A', color='blue')
+                ax3.plot(df_sorted['subB'], df_sorted['Frobenius_C_vs_B'], 
                         marker='s', linewidth=2, markersize=6, 
-                        label='Baseline: Mode A vs Mode B', color='red')
+                        label='Mode C vs Mode B', color='red')
                 
-                baseline_value = df_sorted['RFA'].iloc[0]
-                ax2.axhline(y=baseline_value, color='gray', linestyle='--', alpha=0.7, 
-                           label=f'Baseline Level: {baseline_value:.3f}')
+                baseline_value = df_sorted['Frobenius_A_vs_B'].iloc[0]
+                ax3.axhline(y=baseline_value, color='gray', linestyle='--', alpha=0.7, 
+                           label=f'Baseline: Mode A vs Mode B: {baseline_value:.3f}')
                 
-                ax2.set_xlabel('subB', fontsize=12, fontweight='bold')
-                ax2.set_ylabel('Normalized Robinson-Foulds Distance', fontsize=12, fontweight='bold')
-                ax2.set_title('Baseline Normalized RF Distance vs subB: Mode A vs Mode B', 
+                ax3.set_xlabel('subB', fontsize=12, fontweight='bold')
+                ax3.set_ylabel('Frobenius Matrix Distance', fontsize=12, fontweight='bold')
+                ax3.set_title('Frobenius Matrix Distances vs subB: Mode C vs Mode A/B', 
                              fontsize=14, fontweight='bold', pad=20)
-                ax2.grid(True, alpha=0.3)
-                ax2.legend(fontsize=11, frameon=True, fancybox=True, shadow=True)
+                ax3.grid(True, alpha=0.3)
+                ax3.legend(fontsize=11, frameon=True, fancybox=True, shadow=True)
+                
+                # Subplot 2: nRF Distances
+                ax4.plot(df_sorted['subB'], df_sorted['nRF_C_vs_A'], 
+                        marker='o', linewidth=2, markersize=6, 
+                        label='Mode C vs Mode A', color='blue')
+                ax4.plot(df_sorted['subB'], df_sorted['nRF_C_vs_B'], 
+                        marker='s', linewidth=2, markersize=6, 
+                        label='Mode C vs Mode B', color='red')
+                
+                baseline_nrf_value = df_sorted['nRF_A_vs_B'].iloc[0]
+                ax4.axhline(y=baseline_nrf_value, color='gray', linestyle='--', alpha=0.7, 
+                           label=f'Baseline: Mode A vs Mode B: {baseline_nrf_value:.3f}')
+                
+                ax4.set_xlabel('subB', fontsize=12, fontweight='bold')
+                ax4.set_ylabel('Normalized RF Distance', fontsize=12, fontweight='bold')
+                ax4.set_title('Normalized RF Distances vs subB: Mode C vs Mode A/B', 
+                             fontsize=14, fontweight='bold', pad=20)
+                ax4.grid(True, alpha=0.3)
+                ax4.legend(fontsize=11, frameon=True, fancybox=True, shadow=True)
+                
                 plt.tight_layout()
                 pdf.savefig(fig2)
                 plt.close()
+            
+            # Page 3: nRF Distances vs expA (single plot)
+            if results_expa:
+                fig3, ax5 = plt.subplots(1, 1, figsize=(16, 10))
+                df_expa = pd.DataFrame(results_expa)
+                df_sorted = df_expa.sort_values('expA')
+                
+                # Plot nRF Distances only
+                ax5.plot(df_sorted['expA'], df_sorted['nRF_C_vs_A'], 
+                        marker='o', linewidth=3, markersize=8, 
+                        label='Mode C vs Mode A', color='blue')
+                ax5.plot(df_sorted['expA'], df_sorted['nRF_C_vs_B'], 
+                        marker='s', linewidth=3, markersize=8, 
+                        label='Mode C vs Mode B', color='red')
+                
+                # Add a horizontal line to show the baseline level
+                baseline_nrf_value = df_sorted['nRF_A_vs_B'].iloc[0]
+                ax5.axhline(y=baseline_nrf_value, color='gray', linestyle='--', alpha=0.7, 
+                           label=f'Baseline: Mode A vs Mode B: {baseline_nrf_value:.3f}')
+                
+                # Customize the plot
+                ax5.set_xlabel('expA', fontsize=14, fontweight='bold')
+                ax5.set_ylabel('Normalized RF Distance', fontsize=14, fontweight='bold')
+                ax5.set_title('Normalized RF Distances vs expA: Mode C vs Mode A/B', 
+                             fontsize=16, fontweight='bold', pad=20)
+                ax5.grid(True, alpha=0.3)
+                ax5.legend(fontsize=12, frameon=True, fancybox=True, shadow=True)
+                
+                plt.tight_layout()
+                pdf.savefig(fig3)
+                plt.close()
         
         print(f"Combined PDF saved as: {pdf_filename}")
+        print(f"Added third page with nRF distances vs expA to: {pdf_filename}")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Calculate Robinson-Foulds distances between hammock output trees and create interpolation plots',
+        description='Calculate all distance metrics (Frobenius, Euclidean, Manhattan, Cosine) and normalized RF distances between hammock output similarity matrices and create interpolation plots',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   python interpolateABC.py /path/to/hammock/outputs --output ABC_interpolation.tsv
-  python interpolateABC.py /path/to/hammock/outputs --precision 24 --linkage average
+  python interpolateABC.py /path/to/hammock/outputs --precision 24
   python interpolateABC.py /path/to/hammock/outputs --output-tag test_run
   python interpolateABC.py /path/to/hammock/outputs --output my_results.tsv --output-tag experiment1
         """
@@ -422,6 +618,7 @@ Examples:
                        help='Precision value to filter files (default: 24)')
     parser.add_argument('--linkage', '-l', choices=['single', 'complete', 'average', 'ward'],
                        default='average', help='Linkage method for clustering (default: average)')
+
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Verbose output')
     
@@ -432,7 +629,8 @@ Examples:
         sys.exit(1)
     
     print(f"Searching for hammock output files in {args.directory}")
-    print(f"Precision: {args.precision}, Linkage method: {args.linkage}")
+    print(f"Precision: {args.precision}")
+    print(f"Calculating all distance metrics: Frobenius, Euclidean, Manhattan, Cosine")
     
     # Find all mode C files with the specified precision
     mode_c_files = find_matching_files(args.directory, 'C', args.precision)
@@ -497,21 +695,44 @@ Examples:
             sim_matrix_a = parse_hammock_format(mode_a_file)
             sim_matrix_b = parse_hammock_format(mode_b_file)
             
-            # Build trees
+            # Calculate all matrix distances
+            distances_c_vs_a = calculate_all_matrix_distances(sim_matrix_c, sim_matrix_a)
+            distances_c_vs_b = calculate_all_matrix_distances(sim_matrix_c, sim_matrix_b)
+            distances_a_vs_b = calculate_all_matrix_distances(sim_matrix_a, sim_matrix_b)
+            
+            # Build trees for nRF comparison
             tree_c = build_tree_from_similarity_matrix(sim_matrix_c, args.linkage)
             tree_a = build_tree_from_similarity_matrix(sim_matrix_a, args.linkage)
             tree_b = build_tree_from_similarity_matrix(sim_matrix_b, args.linkage)
             
-            # Calculate RF distances
-            rf_c_vs_a, max_rf_a, norm_rf_a, n_leaves_a = calculate_robinson_foulds_distance(tree_c, tree_a)
-            rf_c_vs_b, max_rf_b, norm_rf_b, n_leaves_b = calculate_robinson_foulds_distance(tree_c, tree_b)
-            rf_a_vs_b, max_rf_ab, norm_rf_ab, n_leaves_ab = calculate_robinson_foulds_distance(tree_a, tree_b)
+            # Calculate nRF distances
+            nrf_c_vs_a, max_rf_a, norm_rf_a, n_leaves_a = calculate_robinson_foulds_distance(tree_c, tree_a)
+            nrf_c_vs_b, max_rf_b, norm_rf_b, n_leaves_b = calculate_robinson_foulds_distance(tree_c, tree_b)
+            nrf_a_vs_b, max_rf_ab, norm_rf_ab, n_leaves_ab = calculate_robinson_foulds_distance(tree_a, tree_b)
             
             # Store results based on parameter type
             result_entry = {
                 'File': os.path.basename(mode_c_file),
-                'RFA': norm_rf_ab,  # Normalized RF distance between mode A and mode B
-                'RFB': norm_rf_ab   # Normalized RF distance between mode A and mode B
+                # Frobenius distances
+                'Frobenius_C_vs_A': distances_c_vs_a['frobenius'],
+                'Frobenius_C_vs_B': distances_c_vs_b['frobenius'],
+                'Frobenius_A_vs_B': distances_a_vs_b['frobenius'],
+                # Euclidean distances
+                'Euclidean_C_vs_A': distances_c_vs_a['euclidean'],
+                'Euclidean_C_vs_B': distances_c_vs_b['euclidean'],
+                'Euclidean_A_vs_B': distances_a_vs_b['euclidean'],
+                # Manhattan distances
+                'Manhattan_C_vs_A': distances_c_vs_a['manhattan'],
+                'Manhattan_C_vs_B': distances_c_vs_b['manhattan'],
+                'Manhattan_A_vs_B': distances_a_vs_b['manhattan'],
+                # Cosine distances
+                'Cosine_C_vs_A': distances_c_vs_a['cosine'],
+                'Cosine_C_vs_B': distances_c_vs_b['cosine'],
+                'Cosine_A_vs_B': distances_a_vs_b['cosine'],
+                # Normalized RF distances
+                'nRF_C_vs_A': norm_rf_a,      # Normalized RF distance between mode C and A
+                'nRF_C_vs_B': norm_rf_b,      # Normalized RF distance between mode C and B
+                'nRF_A_vs_B': norm_rf_ab,     # Baseline normalized RF distance between mode A and B
             }
             
             if expA is not None:
@@ -523,10 +744,21 @@ Examples:
                 results_subb.append(result_entry.copy())
             
             if args.verbose:
-                print(f"  RF distance C vs A: {rf_c_vs_a} (normalized: {norm_rf_a:.4f})")
-                print(f"  RF distance C vs B: {rf_c_vs_b} (normalized: {norm_rf_b:.4f})")
-                print(f"  RF distance A vs B: {rf_a_vs_b} (normalized: {norm_rf_ab:.4f})")
-                print(f"  Using normalized RF distance: {norm_rf_ab:.4f}")
+                print(f"  Frobenius distance C vs A: {distances_c_vs_a['frobenius']:.4f}")
+                print(f"  Frobenius distance C vs B: {distances_c_vs_b['frobenius']:.4f}")
+                print(f"  Frobenius distance A vs B: {distances_a_vs_b['frobenius']:.4f}")
+                print(f"  Euclidean distance C vs A: {distances_c_vs_a['euclidean']:.4f}")
+                print(f"  Euclidean distance C vs B: {distances_c_vs_b['euclidean']:.4f}")
+                print(f"  Euclidean distance A vs B: {distances_a_vs_b['euclidean']:.4f}")
+                print(f"  Manhattan distance C vs A: {distances_c_vs_a['manhattan']:.4f}")
+                print(f"  Manhattan distance C vs B: {distances_c_vs_b['manhattan']:.4f}")
+                print(f"  Manhattan distance A vs B: {distances_a_vs_b['manhattan']:.4f}")
+                print(f"  Cosine distance C vs A: {distances_c_vs_a['cosine']:.4f}")
+                print(f"  Cosine distance C vs B: {distances_c_vs_b['cosine']:.4f}")
+                print(f"  Cosine distance A vs B: {distances_a_vs_b['cosine']:.4f}")
+                print(f"  nRF distance C vs A: {norm_rf_a:.4f}")
+                print(f"  nRF distance C vs B: {norm_rf_b:.4f}")
+                print(f"  nRF distance A vs B: {norm_rf_ab:.4f}")
                 
         except Exception as e:
             print(f"Error processing {mode_c_file}: {e}", file=sys.stderr)
@@ -547,7 +779,8 @@ Examples:
         # Save expA results if any
         if results_expa:
             df_expa = pd.DataFrame(results_expa)
-            expa_output = output_file.parent / f"{Path(output_file).stem}_expA{Path(output_file).suffix}"
+            output_path = Path(output_file)
+            expa_output = output_path.parent / f"{output_path.stem}_expA{output_path.suffix}"
             df_expa.to_csv(expa_output, sep='\t', index=False)
             print(f"\nexpA results saved to {expa_output}")
             print(f"Processed {len(results_expa)} expA comparisons")
@@ -555,7 +788,8 @@ Examples:
         # Save subB results if any
         if results_subb:
             df_subb = pd.DataFrame(results_subb)
-            subb_output = output_file.parent / f"{Path(output_file).stem}_subB{Path(output_file).suffix}"
+            output_path = Path(output_file)
+            subb_output = output_path.parent / f"{output_path.stem}_subB{output_path.suffix}"
             df_subb.to_csv(subb_output, sep='\t', index=False)
             print(f"subB results saved to {subb_output}")
             print(f"Processed {len(results_subb)} subB comparisons")
@@ -569,14 +803,42 @@ Examples:
         if results_expa:
             df_expa = pd.DataFrame(results_expa)
             print(f"expA results: {len(results_expa)} comparisons")
-            print(f"  Average normalized RF distance A vs B: {df_expa['RFA'].mean():.4f}")
+            print(f"  Average Frobenius distance C vs A: {df_expa['Frobenius_C_vs_A'].mean():.4f}")
+            print(f"  Average Frobenius distance C vs B: {df_expa['Frobenius_C_vs_B'].mean():.4f}")
+            print(f"  Baseline Frobenius distance A vs B: {df_expa['Frobenius_A_vs_B'].mean():.4f}")
+            print(f"  Average Euclidean distance C vs A: {df_expa['Euclidean_C_vs_A'].mean():.4f}")
+            print(f"  Average Euclidean distance C vs B: {df_expa['Euclidean_C_vs_B'].mean():.4f}")
+            print(f"  Baseline Euclidean distance A vs B: {df_expa['Euclidean_A_vs_B'].mean():.4f}")
+            print(f"  Average Manhattan distance C vs A: {df_expa['Manhattan_C_vs_A'].mean():.4f}")
+            print(f"  Average Manhattan distance C vs B: {df_expa['Manhattan_C_vs_B'].mean():.4f}")
+            print(f"  Baseline Manhattan distance A vs B: {df_expa['Manhattan_A_vs_B'].mean():.4f}")
+            print(f"  Average Cosine distance C vs A: {df_expa['Cosine_C_vs_A'].mean():.4f}")
+            print(f"  Average Cosine distance C vs B: {df_expa['Cosine_C_vs_B'].mean():.4f}")
+            print(f"  Baseline Cosine distance A vs B: {df_expa['Cosine_A_vs_B'].mean():.4f}")
+            print(f"  Average nRF C vs A: {df_expa['nRF_C_vs_A'].mean():.4f}")
+            print(f"  Average nRF C vs B: {df_expa['nRF_C_vs_B'].mean():.4f}")
+            print(f"  Baseline nRF A vs B: {df_expa['nRF_A_vs_B'].mean():.4f}")
             print(f"  expA range: {df_expa['expA'].min()} to {df_expa['expA'].max()}")
         if results_subb:
             df_subb = pd.DataFrame(results_subb)
             print(f"subB results: {len(results_subb)} comparisons")
-            print(f"  Average normalized RF distance A vs B: {df_subb['RFA'].mean():.4f}")
+            print(f"  Average Frobenius distance C vs A: {df_subb['Frobenius_C_vs_A'].mean():.4f}")
+            print(f"  Average Frobenius distance C vs B: {df_subb['Frobenius_C_vs_B'].mean():.4f}")
+            print(f"  Baseline Frobenius distance A vs B: {df_subb['Frobenius_A_vs_B'].mean():.4f}")
+            print(f"  Average Euclidean distance C vs A: {df_subb['Euclidean_C_vs_A'].mean():.4f}")
+            print(f"  Average Euclidean distance C vs B: {df_subb['Euclidean_C_vs_B'].mean():.4f}")
+            print(f"  Baseline Euclidean distance A vs B: {df_subb['Euclidean_A_vs_B'].mean():.4f}")
+            print(f"  Average Manhattan distance C vs A: {df_subb['Manhattan_C_vs_A'].mean():.4f}")
+            print(f"  Average Manhattan distance C vs B: {df_subb['Manhattan_C_vs_B'].mean():.4f}")
+            print(f"  Baseline Manhattan distance A vs B: {df_subb['Manhattan_A_vs_B'].mean():.4f}")
+            print(f"  Average Cosine distance C vs A: {df_subb['Cosine_C_vs_A'].mean():.4f}")
+            print(f"  Average Cosine distance C vs B: {df_subb['Cosine_C_vs_B'].mean():.4f}")
+            print(f"  Baseline Cosine distance A vs B: {df_subb['Cosine_A_vs_B'].mean():.4f}")
+            print(f"  Average nRF C vs A: {df_subb['nRF_C_vs_A'].mean():.4f}")
+            print(f"  Average nRF C vs B: {df_subb['nRF_C_vs_B'].mean():.4f}")
+            print(f"  Baseline nRF A vs B: {df_subb['nRF_A_vs_B'].mean():.4f}")
             print(f"  subB range: {df_subb['subB'].min()} to {df_subb['subB'].max()}")
-        print(f"Note: RFA and RFB columns both contain the normalized RF distance between mode A and mode B files")
+        print(f"Note: Output includes all distance metrics (Frobenius, Euclidean, Manhattan, Cosine) and normalized RF distances")
         
     else:
         print("No valid comparisons found", file=sys.stderr)

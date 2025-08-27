@@ -6,6 +6,7 @@ Shared functions used across multiple analysis scripts.
 
 import pandas as pd
 import numpy as np
+import os
 from pathlib import Path
 
 
@@ -209,6 +210,52 @@ def detect_hammock_exp(filepath):
     return None
 
 
+def detect_hammock_subA(filepath):
+    """
+    Detect subA parameter for mode C outputs from the hammock CSV content.
+    Looks for columns like 'subA' or 'sub_a', returns a representative value.
+
+    Args:
+        filepath (str): Path to hammock CSV
+
+    Returns:
+        float|None: subA value if detected, else None
+    """
+    df_head = pd.read_csv(filepath, nrows=10)
+    candidate_cols = [c for c in df_head.columns if c.lower() in {'suba', 'sub_a'}]
+    for col in candidate_cols:
+        values = df_head[col].dropna().unique()
+        if len(values) > 0:
+            try:
+                return float(values[0])
+            except Exception:
+                return None
+    return None
+
+
+def detect_hammock_subB(filepath):
+    """
+    Detect subB parameter for mode C outputs from the hammock CSV content.
+    Looks for columns like 'subB' or 'sub_b', returns a representative value.
+
+    Args:
+        filepath (str): Path to hammock CSV
+
+    Returns:
+        float|None: subB value if detected, else None
+    """
+    df_head = pd.read_csv(filepath, nrows=10)
+    candidate_cols = [c for c in df_head.columns if c.lower() in {'subb', 'sub_b'}]
+    for col in candidate_cols:
+        values = df_head[col].dropna().unique()
+        if len(values) > 0:
+            try:
+                return float(values[0])
+            except Exception:
+                return None
+    return None
+
+
 def extract_hammock_parameters_from_filename(filename):
     """
     Extract mode (A-D), klen (k), window (w), and precision (p) from a hammock output filename.
@@ -268,7 +315,9 @@ def extract_hammock_parameters_from_filename(filename):
 
     # Tokenize to capture leading descriptive tags
     base_no_ext = Path(name).stem
-    tokens = re.split(r'[_\.-]+', base_no_ext)
+    # Use a more sophisticated split that preserves decimal numbers
+    # Split on underscores and dashes, but not on dots that are part of decimal numbers
+    tokens = re.split(r'[_\-]+(?![0-9])', base_no_ext)
 
     # Helper to identify parameter tokens
     def is_param_token(tok: str) -> bool:
@@ -356,11 +405,64 @@ def extract_hammock_parameters_from_filename(filename):
             except Exception:
                 pass
             continue
+        
+
 
     non_param_tokens = [t for t in tokens if t and not is_param_token(t)]
     species_scope = non_param_tokens[0] if len(non_param_tokens) >= 1 else None
     subset_tag = non_param_tokens[1] if len(non_param_tokens) >= 2 else None
     tags_joined = '_'.join(non_param_tokens) if non_param_tokens else None
+
+    # For mode C files, if parameters are not in filename, try to read from CSV headers
+    if mode == "C" and os.path.exists(filename):
+        try:
+            # Read just the header line
+            with open(filename, 'r') as f:
+                header_line = f.readline().strip()
+                if header_line:
+                    # Split by comma and look for parameter columns
+                    headers = [h.strip() for h in header_line.split(',')]
+                    
+                    # Find parameter column indices
+                    subA_idx = None
+                    subB_idx = None
+                    expA_idx = None
+                    
+                    for i, header in enumerate(headers):
+                        header_lower = header.lower()
+                        if header_lower == 'suba':
+                            subA_idx = i
+                        elif header_lower == 'subb':
+                            subB_idx = i
+                        elif header_lower == 'expa':
+                            expA_idx = i
+                    
+                    # If we found the columns, read the first data row to get the values
+                    if subA_idx is not None or subB_idx is not None or expA_idx is not None:
+                        # Read first data row
+                        data_line = f.readline().strip()
+                        if data_line:
+                            values = [v.strip() for v in data_line.split(',')]
+                            
+                            # Extract values for parameters not found in filename
+                            if subA_idx is not None and subA is None:
+                                try:
+                                    subA = float(values[subA_idx])
+                                except (ValueError, IndexError):
+                                    pass
+                            if subB_idx is not None and subB is None:
+                                try:
+                                    subB = float(values[subB_idx])
+                                except (ValueError, IndexError):
+                                    pass
+                            if expA_idx is not None and expA is None:
+                                try:
+                                    expA = float(values[expA_idx])
+                                except (ValueError, IndexError):
+                                    pass
+        except Exception:
+            # Silently ignore errors - fall back to filename parsing only
+            pass
 
     return {
         'mode': mode,

@@ -28,6 +28,8 @@ from utils import (
     detect_file_format,
     parse_bedtools_format,
     detect_hammock_exp,
+    detect_hammock_subA,
+    detect_hammock_subB,
 )
 
 
@@ -411,16 +413,25 @@ def main():
     # Only include requested parameter fields in the output
     mode_token = filename_params.get('mode')
     expA_value = filename_params.get('expA')
-    if expA_value is None and file_format == 'hammock' and mode_token == 'C':
-        expA_value = detect_hammock_exp(hammock_output)
+    subA_value = filename_params.get('subA')
+    subB_value = filename_params.get('subB')
+    
+    # For mode C files, try to detect missing parameters from CSV headers
+    if file_format == 'hammock' and mode_token == 'C':
+        if expA_value is None:
+            expA_value = detect_hammock_exp(hammock_output)
+        if subA_value is None:
+            subA_value = detect_hammock_subA(hammock_output)
+        if subB_value is None:
+            subB_value = detect_hammock_subB(hammock_output)
 
     long_table_df.insert(0, 'sketch', filename_params.get('sketch'))
     long_table_df.insert(1, 'mode', mode_token)
     # For mode C, include 'exp' alongside precision; otherwise, leave exp blank
     long_table_df.insert(2, 'precision', filename_params.get('precision'))
     long_table_df.insert(3, 'expA', expA_value)
-    long_table_df.insert(4, 'subA', filename_params.get('subA'))
-    long_table_df.insert(5, 'subB', filename_params.get('subB'))
+    long_table_df.insert(4, 'subA', subA_value)
+    long_table_df.insert(5, 'subB', subB_value)
     long_table_df.insert(6, 'window', filename_params.get('window'))
     long_table_df.insert(7, 'klen', filename_params.get('klen'))
 

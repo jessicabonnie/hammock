@@ -176,8 +176,17 @@ clustering_analysis <- function(hammock_output, accession_key,
   # Attach filename-derived parameters
   params <- if (file_format == 'hammock') extract_params_from_filename(hammock_output) else
     list(mode = NA, klen = NA, window = NA, precision = NA, sketch = NA, subA = NA, subB = NA, expA = NA)
-  if (isTRUE(toupper(params$mode) == 'C') && (is.na(params$expA) || !is.finite(params$expA))) {
-    params$expA <- detect_hammock_expA(hammock_output)
+  if (isTRUE(toupper(params$mode) == 'C')) {
+    # Try to detect missing parameters from file header if not present in name
+    if (is.na(params$expA) || !is.finite(params$expA)) {
+      params$expA <- detect_hammock_expA(hammock_output)
+    }
+    if (is.na(params$subA) || !is.finite(params$subA)) {
+      params$subA <- detect_hammock_subA(hammock_output)
+    }
+    if (is.na(params$subB) || !is.finite(params$subB)) {
+      params$subB <- detect_hammock_subB(hammock_output)
+    }
   }
 
   # Insert parameter columns at the front in the specified order
