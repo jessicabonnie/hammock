@@ -146,8 +146,24 @@ for file1 in "${BED_FILES[@]}"; do
             echo "[$current_comparison/$total_comparisons] Comparing $(basename "$file1") vs $(basename "$file2")"
         fi
         
-        # Compute the jaccard statistic for these two files
-        bvalues=$(bedtools jaccard -a "$file1" -b "$file2" | awk 'NR==2 {print $0}')
+        # Sort files before computing jaccard (Option 1: bedtools sort)
+        if [[ "$VERBOSE" == true ]]; then
+            echo "  Sorting files..."
+        fi
+        
+        # Create temporary sorted files
+        temp_file1=$(mktemp)
+        temp_file2=$(mktemp)
+        
+        # Sort the files using bedtools sort
+        bedtools sort -i "$file1" > "$temp_file1"
+        bedtools sort -i "$file2" > "$temp_file2"
+        
+        # Compute the jaccard statistic for these two sorted files
+        bvalues=$(bedtools jaccard -a "$temp_file1" -b "$temp_file2" | awk 'NR==2 {print $0}')
+        
+        # Clean up temporary files
+        rm -f "$temp_file1" "$temp_file2"
         
         # Extract just the filenames (not full paths) for output
         file1_name=$(basename "$file1")
