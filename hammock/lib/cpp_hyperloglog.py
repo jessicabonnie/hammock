@@ -50,8 +50,11 @@ class CppHyperLogLogSketch(AbstractSketch):
         super().__init__()
         
         # Validate parameters
-        if precision < 4 or precision > 24:
-            raise ValueError("Precision must be between 4 and 24")
+        if precision < 4:
+            raise ValueError("Precision must be at least 4")
+        # Note: Upper precision limit removed for better flexibility
+        # if precision > 24:
+        #     raise ValueError("Precision must be at most 24")
         if hash_size not in [32, 64]:
             raise ValueError("hash_size must be 32 or 64")
         if kmer_size < 0:
