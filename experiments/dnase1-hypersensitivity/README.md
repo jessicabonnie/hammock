@@ -34,7 +34,6 @@ The dataset represents high-confidence DNase I hypersensitive sites identified u
 
 The experiment uses hammock to compute pairwise Jaccard indices between all tissue samples, providing a quantitative measure of regulatory element overlap between different fetal tissues. It compares these results against those calculated by bedtools as seen in the [bedtools demo](http://quinlanlab.org/tutorials/bedtools.html)
 
-## Code Used
 
 ### Data Acquisition
 
@@ -61,6 +60,8 @@ rm maurano.dnaseI.tgz
 # create an accession key from the filenames
 echo -e echo -e "Accession\tFile\tTarget_of_Assay\tBiosample_term_name\tOrganism\tLife_stage" > maurano_filenames_key.tsv && ls maurano.dnaseI | awk -F'-' '{split($2,a,"\\."); print a[1] "\t" $0 "\t\t" $1 "\tHomo sapiens\tfetal"}' >> maurano_filenames_key.tsv
 
+cut -f2 maurano_filenames_key.tsv > maurano_filenames.txt
+
 ```
 
 **Additional files included:**
@@ -72,29 +73,66 @@ echo -e echo -e "Accession\tFile\tTarget_of_Assay\tBiosample_term_name\tOrganism
 
 These additional files enable comparative analyses between DNase I hypersensitive sites and other genomic features such as CpG islands, exonic regions, disease-associated variants, and chromatin states.
 
+### Prepare Fasta Files
+
+Create a fasta file for each bed file
+```bash
+grch37=/data/blangme2/fasta/grch37/hg19.fa
+tag=""
+# Create directories for fasta files in the data dir
+mkdir -p fastas
+# Process human files using corrext reference  
+while read -r bedfile; do
+    outfile=$(basename "$bedfile" .bed)
+    bedtools getfasta -fi $grch37 -bed "$bedfile" -fo "fastas/${outfile}.fa";
+    echo $(realpath fastas/${outfile}.fa)
+done < maurano_files.txt > maurano_fastas.txt
+
+```
+
 ### Pairwise Jaccard Analysis
 
+Generate bedtools pairwise comparison of bedfiles.
 ```bash
-#!/bin/bash
 # Compute pairwise Jaccard similarity for all DNase I hypersensitivity BED files
+    mkdir -p ../cluster_analysis
+    cd ../results
+    # Bedtools
+    bfile=../data/maurano_files.txt
+    bedtools_pairwise.sh -f $bfile
 
-echo "file1 file2 intersection union jaccard n_intersections" > bedtools_pairwise_jaccard.txt
-
-for file1 in `ls maurano.dnaseI/*.bed`
-do
-    for file2 in `ls maurano.dnaseI/*.bed`;
-    do
-        # Compute the jaccard statistic for these two files
-        bvalues=`bedtools jaccard \
-                   -a $file1 \
-                   -b $file2 \
-                   | awk 'NR==2 {print $0}'`
-
-        echo $file1 $file2 $bvalues >> bedtools_pairwise_jaccard.txt
-    done
-    
-done
 ```
+
+Sweep the parameter spaces for cluster analysis
+
+```bash
+# still in cluster_analysis dir
+    bfile=../data/maurano_files.txt
+    ffile=../data/maurano_fastas.txt
+    sweepABC.sh -f $bfile
+    sweepD.sh -f $ffile
+```
+## Shiny App
+Point the shiny app to the cluster_analysis directory and the maurano_filenames_key.tsv for analysis. Otherwise there are scripts in both python and R in the toplevel scripts directory to generate PCA plots, dendrograms, similarity matrices, and heatmaps for individual hammock output files.
+
+## Interpolate between A and B
+This script will default to looking for precision 24 outputs in the provided directory. It will use whatever mode C outputs which have subB or expA parameters as well as the basic modeA run and modeB run with default names. It's lazy that way.
+
+```bash
+    # I'm assuming you were still in cluster_analysis directory ... but you know how to use relative paths
+    cd ..
+    interpolateABC.py cluster_analysis/ -t maurano 
+
+```
+
+
+Optional Additional Query:
+   ```bash
+   
+   # Optional: Use other tutorial files for comparative analysis
+   bedtools intersect -a ../cpg.bed -b fBrain-DS14718.hotspot.twopass.fdr0.05.merge.bed
+   ```
+
 
 ## File Structure
 
@@ -113,11 +151,13 @@ experiments/dnase1-hypersensitivity/
 │   ├── hesc.chromHmm.bed        # Chromatin states in hESCs
 │   ├── genome.txt               # Genome coordinates file
 │   ├── maurano_files.txt        # List of input file paths
-│   ├── maurano_files_key.tsv    # Key of accessions and biosamples etc.
-│   ├── bedtools_pairwise.sh     # Pairwise analysis script
-│   └── bedtools_pairwise_jaccard.txt  # Output similarity matrix
-├── results/
-│   └── maurano.R               # R analysis scripts
+│   └── maurano_files_key.tsv    # Key of accessions and biosamples etc.
+│   ├── bedtools_pairwise.sh     # Old Pairwise analysis script
+├── cluster_analysis/
+│   ├── bedtools_pairwise_jaccard.tsv
+│   ├── hammock_hll_p20_jaccA.csv
+│   ├── hammock_hll_p20_jaccB.csv
+│   └── ... (all hammock output files from different parameter and mode combinations)
 └── debug/                      # Debug and intermediate files
 ```
 
@@ -129,33 +169,6 @@ The analysis generates a pairwise similarity matrix showing Jaccard indices betw
 - **Developmental signatures**: Fetal tissues may show distinct accessibility patterns compared to adult tissues
 - **Regulatory conservation**: Core regulatory elements may be conserved across multiple tissue types
 
-## Usage
-
-1. Set up the data directory and download files:
-   ```bash
-   # Create data directory if it doesn't exist
-   mkdir -p experiments/dnase1-hypersensitivity/data/
-   cd experiments/dnase1-hypersensitivity/data/
-   
-   # Follow data acquisition steps above
-   ```
-
-2. Run the pairwise analysis:
-   ```bash
-   # Follow pairwise jaccard analysis as described above
-   ```
-
-3. Analyze results:
-   ```bash
-   # View the similarity matrix
-   head -10 ../bedtools_pairwise_jaccard.txt
-   
-   # Run R analysis (if available)
-   Rscript ../../results/maurano.R
-   
-   # Optional: Use other tutorial files for comparative analysis
-   bedtools intersect -a ../cpg.bed -b fBrain-DS14718.hotspot.twopass.fdr0.05.merge.bed
-   ```
 
 ## Dependencies
 
@@ -172,42 +185,13 @@ The analysis generates a pairwise similarity matrix showing Jaccard indices betw
 
 ## Analysis
 
-Create a fasta file for each bed file
-```bash
-grch37=/data/blangme2/fasta/grch37/hg19.fa
-tag=""
-# Create directories for fasta files
-mkdir -p fastas${tag}
-# Process human files using hg38 reference  
-while read -r bedfile; do
-    outfile=$(basename "$bedfile" .bed)
-    bedtools getfasta -fi $grch37 -bed "$bedfile" -fo "fastas${tag}/${outfile}.fa";
-    echo $(realpath fastas${tag}/${outfile}.fa)
-done < maurano_files.txt > maurano_fastas.txt
 
-```
 Do a parameter sweep to look at how everything compares to the bedtools output for different parameter combos
 
-```bash
-# mkdir -p parameter_scan
-# cd parameter_scan
-# complete_parameter_sweep.sh -b ../data/maurano_files.txt -f ../data/maurano_fastas.txt -o maurano  -v --window 8,10,20,30,50,100,200 --klen 8,10,15,20,25 --precision 20,22,23,24 2> scan.log
-
-#still in data folder
-bfile=$(pwd)/maurano_files.txt
-ffile=$(pwd)/maurano_fastas.txt
-
-cd ..
-mkdir -p cluster_analysis
-cd cluster_analysis
-ml parallel
-sweepABC.sh $bfile
-
-```
 
 
 ## Citation
 
-If you use this analysis or data, please cite:
+If you use this data, you should cite:
 
 Maurano MT, Humbert R, Rynes E, et al. Systematic localization of common disease-associated variation in regulatory DNA. Science. 2012;337(6099):1190-1195. doi:10.1126/science.1222794
