@@ -100,7 +100,6 @@ class SequenceSketch(AbstractSketch):
     def add_string(self, s: str) -> None:
         """Add a string to the sketch."""
         self.sketch.add_string(s)
-    
     def add_batch(self, strings: List[str]) -> None:
         """Add multiple strings to the sketch.
         

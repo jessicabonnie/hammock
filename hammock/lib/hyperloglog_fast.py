@@ -8,7 +8,7 @@ acceleration when available, with graceful fallback to pure Python.
 
 import warnings
 import numpy as np
-from typing import Optional, List
+from typing import Optional, List, Dict
 from hammock.lib.hyperloglog import HyperLogLog
 
 # Try to import the C++ extension we built
@@ -284,7 +284,7 @@ class FastHyperLogLog(HyperLogLog):
             return self._cpp_sketch.jaccard_similarity(other._cpp_sketch)
         else:
             # Fall back to parent implementation
-            return super().estimate_jaccard(other, method)
+            return super().estimate_jaccard(other)
     
     def estimate_intersection(self, other: 'FastHyperLogLog', method: str = 'ertl_improved') -> float:
         """Estimate intersection size, using C++ implementation when available."""
@@ -303,7 +303,26 @@ class FastHyperLogLog(HyperLogLog):
             return union_sketch.cardinality()
         else:
             # Fall back to parent implementation
-            return super().estimate_union(other, method)
+            return super().estimate_union(other)
+    
+    def similarity_values(self, other: 'AbstractSketch') -> Dict[str, float]:
+        """Calculate similarity values using FastHyperLogLog.
+        
+        Returns:
+            Dictionary containing 'jaccard_similarity'
+        """
+        if not isinstance(other, FastHyperLogLog):
+            raise ValueError("Can only compare with another FastHyperLogLog sketch")
+        if self.kmer_size != other.kmer_size:
+            raise ValueError(f"Cannot compare FastHyperLogLog sketches with different k-mer sizes ({self.kmer_size} vs {other.kmer_size})")
+        
+        # Use C++ implementation when available
+        if self._acceleration_type == 'C++' and other._acceleration_type == 'C++':
+            jaccard = self.estimate_jaccard(other)
+            return {'jaccard_similarity': jaccard}
+        
+        # Fall back to parent implementation
+        return super().similarity_values(other)
     
     def get_performance_info(self) -> dict:
         """

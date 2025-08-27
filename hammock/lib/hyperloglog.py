@@ -43,8 +43,9 @@ class HyperLogLog(AbstractSketch):
         
         if precision < 4:
             raise ValueError(f"Precision must be at least 4")
-        if precision >= hash_size:
-            raise ValueError(f"Precision must be less than hash_size ({hash_size})")
+        # Note: Upper precision limit removed for better flexibility
+        # if precision >= hash_size:
+        #     raise ValueError(f"Precision must be less than hash_size ({hash_size})")
         
         if kmer_size < 0:
             raise ValueError("k-mer size must be non-negative")

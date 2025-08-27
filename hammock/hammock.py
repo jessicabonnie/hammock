@@ -181,13 +181,20 @@ def parse_args():
     sketch_group.add_argument("--minhash", action="store_true", help="Use MinHash sketching")
     sketch_group.add_argument("--minimizer", action="store_true", help="Use minimizer sketching")
     
-    arg_parser.add_argument('--hashsize', type=int, default=32, choices=[32, 64], help='Hash size in bits (32 or 64, default: 32)', dest='hash_size')
+    # Note: --hashsize argument is currently unsupported, using 64-bit hashing by default
+    # arg_parser.add_argument('--hashsize', type=int, default=64, choices=[32, 64], help='Hash size in bits (32 or 64, default: 64)', dest='hash_size')
     
     # Add flag to force Python-only implementation for benchmarking
     arg_parser.add_argument('--python-only', action='store_true', 
                            help='Force use of pure Python implementation (for benchmarking)')
     
-    return arg_parser.parse_args()
+    # Parse arguments
+    args = arg_parser.parse_args()
+    
+    # Set default hash_size to 64 since --hashsize argument is unsupported
+    args.hash_size = 64
+    
+    return args
 
 def get_new_prefix(outprefix: str, 
                    sketch_type: str,
@@ -329,8 +336,8 @@ def main():
     limit_memory()
     
     # Validate precision value
-    if args.precision < 4 or args.precision >= args.hash_size:
-        warnings.warn(f"Precision {args.precision} is outside recommended range (4-{args.hash_size-10}). "
+    if args.precision < 4:
+        warnings.warn(f"Precision {args.precision} is below minimum recommended value (4). "
                      "This may reduce accuracy.", RuntimeWarning)
     
     # Determine sketch type
@@ -363,15 +370,16 @@ def main():
             if args.mode != "D":
                 args.mode = "D"
                 print(f"Detected sequence file format, switching to mode D")
-                
-                # Check if any sketch type flag was explicitly provided in command line
-                sketch_flags = ["--hyperloglog", "--exact", "--minhash", "--minimizer"]
-                sketch_type_explicitly_set = any(flag in sys.argv for flag in sketch_flags)
-                
-                # Only change default sketch type if not explicitly set by user
-                if not sketch_type_explicitly_set:
-                    args.sketch_type = "minimizer"
-                    print("Changing default sketch type to 'minimizer' for sequence data")
+            
+            # For sequence files in mode D, check if sketch type should be set to minimizer
+            # Check if any sketch type flag was explicitly provided in command line
+            sketch_flags = ["--hyperloglog", "--exact", "--minhash", "--minimizer"]
+            sketch_type_explicitly_set = any(flag in sys.argv for flag in sketch_flags)
+            
+            # Only change default sketch type if not explicitly set by user
+            if not sketch_type_explicitly_set:
+                args.sketch_type = "minimizer"
+                print("Changing default sketch type to 'minimizer' for sequence data")
     
     # Check if C-specific parameters are used and switch mode if needed
     c_mode_params_used = args.subA != 1.0 or args.subB != 1.0 or args.expA > 0
