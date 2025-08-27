@@ -1,0 +1,6 @@
+/vast/blangme2/jbonnie/report2025_0818/beds/ENCFF028CAI.bed.gz
+/vast/blangme2/jbonnie/report2025_0818/beds/ENCFF081WNU.bed.gz
+/vast/blangme2/jbonnie/report2025_0818/beds/ENCFF488BRH.bed.gz
+/vast/blangme2/jbonnie/report2025_0818/beds/ENCFF818EYD.bed.gz
+/vast/blangme2/jbonnie/report2025_0818/beds/ENCFF845OZO.bed.gz
+/vast/blangme2/jbonnie/report2025_0818/beds/ENCFF880EHI.bed.gz
