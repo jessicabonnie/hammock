@@ -113,7 +113,7 @@ class IntervalSketch(AbstractSketch):
         # Extract parameters with defaults
         precision = kwargs.get('precision', 12)
         debug = kwargs.get('debug', False)
-        use_rust = kwargs.get('use_rust', False)
+        use_cpp = kwargs.get('use_cpp', False)
         # Store mode and validation
         self.mode = kwargs.get('mode', 'A')
         if self.mode not in ['A', 'B', 'C', 'D']:
@@ -135,16 +135,23 @@ class IntervalSketch(AbstractSketch):
         if not all(isinstance(x, (int, float)) and 0 <= x <= 1 for x in self.subsample):
             raise ValueError(f"subsample values must be between 0 and 1, got {self.subsample}")
         
-        # Choose sketch implementation based on use_rust flag and availability
-        if use_rust:
-            self.sketch = RustHLL(precision=precision)
-        elif FAST_HLL_AVAILABLE and kwargs.get('use_fast_hll', True):
-            # Use FastHyperLogLog for better performance when available
-            self.sketch = FastHyperLogLog(precision=precision, debug=debug)
-            if debug:
-                print("Using FastHyperLogLog with optional Cython acceleration")
+        # Choose sketch implementation based on use_cpp flag and availability
+        if use_cpp:
+            # Use FastHyperLogLog for C++ acceleration
+            if FAST_HLL_AVAILABLE:
+                self.sketch = FastHyperLogLog(precision=precision, debug=debug)
+                if debug:
+                    print("Using FastHyperLogLog with C++ acceleration")
+            else:
+                # Fallback to RustHLL if FastHyperLogLog not available
+                self.sketch = RustHLL(precision=precision)
+                if debug:
+                    print("Using RustHLL (FastHyperLogLog not available)")
         else:
+            # Use pure Python HyperLogLog implementation
             self.sketch = HyperLogLog(precision=precision, debug=debug)
+            if debug:
+                print("Using pure Python HyperLogLog implementation")
         
         # Initialize other instance variables
         self.num_intervals = 0
@@ -166,7 +173,7 @@ class IntervalSketch(AbstractSketch):
                 - subsample: Subsampling rate for points
                 - expA: Power of 10 exponent to use to multiply contribution of A-type intervals
                 - debug: Whether to enable debug mode
-                - use_rust: Whether to use Rust implementation
+                - use_cpp: Whether to use C++-accelerated implementation
         """
         debug = kwargs.get('debug', False)
         expA = kwargs.get('expA', 0)
@@ -301,17 +308,17 @@ class IntervalSketch(AbstractSketch):
             expA = kwargs.get('expA', 0)
             sketch = kwargs['sketch']
             debug = kwargs.get('debug', False)
-            use_rust = kwargs.get('use_rust', False)
+            use_cpp = kwargs.get('use_cpp', False)
             
-            # If using Rust implementation, be more conservative with Python-level threading
-            if use_rust:
+            # If using C++ implementation, be more conservative with Python-level threading
+            if use_cpp:
                 num_threads = 1  # Let Rust handle the threading
             else:
                 num_threads = min(cpu_count(), 4)  # Limit Python threads
             
             if debug:
                 print(f"Processing BED file {filename} with mode={mode}, subsample={subsample}, debug={debug}")
-                print(f"Using {num_threads} Python threads (Rust threading: {use_rust})")
+                print(f"Using {num_threads} Python threads (C++ threading: {use_cpp})")
             
             # Open file with gzip if it ends in .gz, otherwise normal open
             opener = gzip.open if filename.endswith('.gz') else open
@@ -343,8 +350,8 @@ class IntervalSketch(AbstractSketch):
             if debug:
                 print(f"Using {num_threads} threads with chunk size {chunk_size}")
             
-            # If using Rust, process in a single chunk to let Rust handle threading
-            if use_rust:
+            # If using C++, process in a single chunk to let C++ handle threading
+            if use_cpp:
                 chunk_args = [(lines, mode, subsample, expA, sep, sketch.sketch.precision, debug)]
             else:
                 # Prepare arguments for each chunk
@@ -618,7 +625,7 @@ class IntervalSketch(AbstractSketch):
             # Then try as RustHLL
             try:
                 sketch = RustHLL.load(f)
-                interval_sketch = cls(mode="A", sketch_type="hyperloglog", use_rust=True)
+                interval_sketch = cls(mode="A", sketch_type="hyperloglog", use_cpp=True)
                 interval_sketch.sketch = sketch
                 return interval_sketch
             except:
