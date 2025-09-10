@@ -452,6 +452,15 @@ class FastHyperLogLog(HyperLogLog):
             })
         
         return results
+    
+    def is_empty(self) -> bool:
+        """Check if sketch is empty, using C++ implementation when available."""
+        if self._acceleration_type == 'C++' and self._cpp_sketch is not None:
+            # Use C++ implementation to check if sketch has data
+            return self._cpp_sketch.cardinality() == 0.0
+        else:
+            # Fall back to parent implementation (checks Python registers)
+            return super().is_empty()
 
 
 def create_fast_hyperloglog(precision: int = 12, **kwargs) -> FastHyperLogLog:
