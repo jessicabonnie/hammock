@@ -30,6 +30,7 @@ cdef extern from "hll/hll.h" namespace "hll":
         void resize(size_t new_size)
         void free()
         bool within_bounds(uint64_t actual_size) const
+        double jaccard_similarity_registers(const hll_t& other) const
     
     # Global functions for set operations
     double operator^(hll_t& first, hll_t& other)
@@ -242,6 +243,13 @@ cdef class CppHyperLogLog:
             return 0.0
         
         return intersection / union_size
+    
+    def jaccard_similarity_registers(self, CppHyperLogLog other):
+        """Calculate Jaccard similarity using register-based comparison."""
+        if not self._initialized or not other._initialized:
+            raise RuntimeError("HyperLogLog not initialized")
+        
+        return self._hll[0].jaccard_similarity_registers(other._hll[0])
     
     @property
     def precision(self):

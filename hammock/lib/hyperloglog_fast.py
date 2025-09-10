@@ -286,6 +286,15 @@ class FastHyperLogLog(HyperLogLog):
             # Fall back to parent implementation
             return super().estimate_jaccard(other)
     
+    def estimate_jaccard_registers(self, other: 'FastHyperLogLog') -> float:
+        """Estimate Jaccard similarity using register-based comparison, using C++ implementation when available."""
+        if self._acceleration_type == 'C++' and other._acceleration_type == 'C++':
+            # Use C++ implementation for register-based comparison
+            return self._cpp_sketch.jaccard_similarity_registers(other._cpp_sketch)
+        else:
+            # Fall back to parent implementation
+            return super().estimate_jaccard_registers(other)
+    
     def estimate_intersection(self, other: 'FastHyperLogLog', method: str = 'ertl_improved') -> float:
         """Estimate intersection size, using C++ implementation when available."""
         if self._acceleration_type == 'C++' and other._acceleration_type == 'C++':
