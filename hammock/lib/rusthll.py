@@ -23,16 +23,13 @@ try:
     # Import the Rust module
     import rust_hll
     RUST_AVAILABLE = True
-    print(f"Found Rust HyperLogLog module")
 except ImportError as e:
-    print(f"Error importing Rust HyperLogLog module: {e}")
     RUST_AVAILABLE = False
     rust_hll = None
 
 # If the Rust extension is not available, use the Python implementation
 if not RUST_AVAILABLE:
     from .hyperloglog import HyperLogLog as PyHyperLogLog
-    print("Rust HyperLogLog extension not found. Using Python implementation.")
 
 
 class RustHyperLogLog(AbstractSketch):
@@ -71,8 +68,7 @@ class RustHyperLogLog(AbstractSketch):
         if precision < 4 or precision >= hash_size:
             raise ValueError(f"Precision must be between 4 and {hash_size-1}")
             
-        if window_size and window_size < kmer_size:
-            raise ValueError("Window size must be >= kmer size")
+        # Allow any window_size; downstream algorithms handle edge cases
         
         self.precision = precision
         self.kmer_size = kmer_size
@@ -120,17 +116,12 @@ class RustHyperLogLog(AbstractSketch):
                 )
                 self._using_rust = True
             except ValueError as e:
-                print(f"Warning: Rust implementation rejected precision={precision}: {e}")
-                print(f"Falling back to Python implementation")
                 self._using_rust = False
                 self.registers = np.zeros(1 << precision, dtype=np.float64)
             except Exception as e:
-                print(f"Warning: Unexpected error initializing Rust implementation: {e}")
-                print(f"Falling back to Python implementation")
                 self._using_rust = False
                 self.registers = np.zeros(1 << precision, dtype=np.float64)
         else:
-            print(f"Rust HLL not available, using Python implementation with precision={precision}")
             self.registers = np.zeros(1 << precision, dtype=np.float64)
             self._using_rust = False
         

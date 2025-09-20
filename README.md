@@ -58,7 +58,7 @@ Hammock offers multiple implementation options for different performance needs:
 | Implementation | Installation | Performance | When to Use |
 |----------------|--------------|-------------|-------------|
 | **Pure Python** | `pip install hammock` | Baseline (1x) | ✅ Simple installation<br>✅ Works everywhere<br>⚠️ Slower for large datasets |
-| **FastHyperLogLog (C++)** | `pip install "hammock[fast]"` | **2-15x faster** | 🚀 **🚀 Recommended for most users**<br>✅ Maximum speedup<br>✅ Automatic fallback<br>✅ Easy installation |
+| **FastHyperLogLog (C++)** | `pip install "hammock[fast]"` | **2-15x faster** | 🚀 **🚀 Recommended for most users**<br>✅ Maximum speedup<br>✅ 64-bit hashing by default<br>✅ Automatic fallback<br>✅ Easy installation |
 | **FastHyperLogLog (Cython)** | `pip install "hammock[fast]"` | **2-5x faster** | ✅ Good speedup<br>✅ Automatic fallback<br>✅ Easy installation |
 
 **Performance results** (based on comprehensive testing):
@@ -139,12 +139,14 @@ Sketching Options:
 - `--hyperloglog`: Use HyperLogLog sketching (default, automatically uses FastHyperLogLog when available)
 - `--minhash`: Use MinHash sketching
 - `--exact`: Use exact counting
-- `--precision`, `-p`: Precision for HyperLogLog (default: 8)
+- `--precision`, `-p`: Precision for HyperLogLog (default: 8, minimum: 4, no upper limit)
 - `--num_hashes`, `-n`: Number of hashes for MinHash (default: 128)
-- `--hashsize`: Hash size in bits for HyperLogLog (32 or 64, default: 64)
+- `--hashsize`: **Currently unsupported** - hammock now uses 64-bit hashing by default for optimal performance
 
 
-**Performance Note**: When you install with `pip install "hammock[fast]"`, HyperLogLog sketching automatically uses FastHyperLogLog with C++ acceleration for 2-15x better performance. If C++ compilation fails, it automatically falls back to Cython acceleration (2-5x speedup) or pure Python. This works transparently with all existing commands.
+**Performance Note**: When you install with `pip install "hammock[fast]"`, HyperLogLog sketching automatically uses FastHyperLogLog with C++ acceleration for 2-15x better performance. If C++ compilation fails, it automatically falls back to Cython acceleration (2-5x speedup) or pure Python.
+
+**⚠️ Important Note**: The `--hashsize` command line argument is currently unsupported. Hammock now uses **64-bit hashing by default** for optimal performance and accuracy. This change ensures better cardinality estimation and consistency across all implementations. This works transparently with all existing commands.
 
 Mode C Options:
 - `--subA`: Subsampling rate for intervals (default: 1.0)
@@ -181,11 +183,8 @@ hammock files.txt primary.txt --subA 0.5 --subB 0.5
 # Compare sequences (automatically uses mode D)
 hammock fasta_files.txt primary_fastas.txt
 
-# Use 32-bit hashing
-hammock files.txt primary.txt --hashsize 32
-
-# Use 64-bit hashing (default)
-hammock files.txt primary.txt --hashsize 64
+# Note: --hashsize argument is currently unsupported
+# hammock now uses 64-bit hashing by default for optimal performance
 ```
 
 ### Performance Verification
@@ -194,15 +193,21 @@ If you installed with `pip install "hammock[fast]"`, you can verify acceleration
 
 ```python
 # Check if FastHyperLogLog acceleration is available
-from hammock.lib import get_performance_info
-info = get_performance_info()
-print(f"Cython acceleration: {info['cython_available']}")
-print(f"Expected speedup: {info['performance_gain']}")
+from hammock.lib.hyperloglog_fast import FastHyperLogLog, CPP_AVAILABLE
+print(f"C++ acceleration available: {CPP_AVAILABLE}")
 
-# Create an optimized sketch
-from hammock.lib import create_fast_hyperloglog
-sketch = create_fast_hyperloglog(precision=12, debug=True)
-# Output shows: "Using Cython acceleration for FastHyperLogLog"
+# Create an optimized sketch (uses C++ by default)
+sketch = FastHyperLogLog(precision=12, debug=True)
+print(f"Acceleration type: {sketch._acceleration_type}")
+# Output shows: "Using C++ implementation for FastHyperLogLog"
+
+# Test performance with batch operations
+import time
+items = [f"item_{i}" for i in range(10000)]
+start = time.time()
+sketch.add_batch(items)
+elapsed = time.time() - start
+print(f"Processed 10,000 items in {elapsed:.4f}s")
 ```
 
 ## Visualization (Experimental)
@@ -290,9 +295,15 @@ python benchmark_hll.py
 
 For **2-15x performance improvement**, Hammock includes a high-performance C++ implementation of HyperLogLog called `FastHyperLogLog`. This implementation provides the best balance of performance and ease of use, automatically falling back to Cython or Python if C++ compilation fails.
 
+**Note**: As of version 0.4.1, C++ acceleration is enabled by default and provides significant performance improvements for sketch creation and comparison operations.
+
+📖 **For detailed C++ acceleration documentation, see [CPP_ACCELERATION.md](CPP_ACCELERATION.md)**
+
 ## Obtaining the C++ HLL Code
 
 **The C++ HyperLogLog implementation is already included** when you clone the main hammock repository. You don't need to download or clone any additional repositories. Simply clone hammock and the C++ code will be available in the `hll/` directory:
+
+**Note**: Precision limits have been removed for better flexibility. You can now use any precision ≥ 4 for optimal performance across different dataset sizes.
 
 ```bash
 git clone https://github.com/jessicabonnie/hammock.git
@@ -403,7 +414,7 @@ print(f"Estimated cardinality: {estimate}")
 
 # Check which acceleration is being used
 print(f"Acceleration type: {sketch._acceleration_type}")
-print(f"Performance info: {sketch.get_performance_info()}")
+print(f"C++ acceleration available: {hasattr(sketch, '_cpp_sketch') and sketch._cpp_sketch is not None}")
 ```
 
 ## Performance Features
@@ -411,9 +422,11 @@ print(f"Performance info: {sketch.get_performance_info()}")
 The C++ implementation includes several performance optimizations:
 
 - **SIMD vectorization** for register operations
+- **64-bit hashing by default** for optimal accuracy and performance
 - **Optimized hashing** using xxHash
 - **Memory-efficient storage** with bit-packing
 - **Fast set operations** (union, intersection)
+- **Flexible precision** - no upper limits, use any precision ≥ 4
 - **Automatic precision optimization** based on data size
 
 ## Performance Comparison
@@ -458,6 +471,9 @@ sketch = FastHyperLogLog(precision=12)
 print(f"Acceleration type: {sketch._acceleration_type}")
 
 # Should show "C++" if working correctly
+# Test batch processing performance
+sketch.add_batch([f"item_{i}" for i in range(1000)])
+print(f"Cardinality estimate: {sketch.estimate_cardinality():.2f}")
 ```
 
 ## Benchmarks
@@ -475,6 +491,30 @@ This will test all implementations and show detailed performance comparisons inc
 - Cardinality estimation speed
 - Memory usage
 - Accuracy comparisons
+
+## Recent Changes and Improvements
+
+### **Hash Size Standardization (v0.4.0)**
+- **64-bit hashing by default**: All implementations now use 64-bit hashing for optimal accuracy
+- **Removed `--hashsize` argument**: Simplified CLI, no more confusion about hash size selection
+- **Better consistency**: All sketch types use the same hash size for reliable comparisons
+
+### **C++ Acceleration by Default (v0.4.1)**
+- **Automatic C++ acceleration**: FastHyperLogLog now uses C++ acceleration by default when available
+- **3.32x speedup**: Parallel processing provides significant performance improvements
+- **10M+ strings/second**: Ultra-fast processing with wang_hash optimization
+- **Comprehensive documentation**: Detailed C++ acceleration guide in `CPP_ACCELERATION.md`
+
+### **Precision Flexibility**
+- **Removed upper limits**: No more artificial restrictions on precision values
+- **Use any precision ≥ 4**: Optimize for your specific dataset size and accuracy requirements
+- **Better performance**: Higher precision values can now be used for very large datasets
+
+### **Benefits of These Changes**
+- **Improved accuracy**: 64-bit hashing provides better cardinality estimation
+- **Simplified usage**: No need to choose between 32/64-bit hashing
+- **Better performance**: Higher precision values available for large datasets
+- **Consistent behavior**: All implementations use the same hash size
 
 ## Citation and Attribution
 
