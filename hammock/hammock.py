@@ -458,7 +458,8 @@ def main():
                 'expA': args.expA,
                 'debug': args.debug,
                 'use_rust': False,  # Default to not using Rust implementation
-                'use_fast_hll': not args.python_only  # Use Cython if available, unless --python-only is set
+                'use_fast_hll': not args.python_only,  # Use Cython if available, unless --python-only is set
+                'use_cpp': not args.python_only  # Use C++ if available, unless --python-only is set
             }
             primary_sets[basename] = IntervalSketch.from_file(
                 filename=filepath,

@@ -15,6 +15,14 @@ try:
 except ImportError:
     FAST_HLL_AVAILABLE = False
     FastHyperLogLog = None
+
+# Try to import C++ BED parser for accelerated file reading
+try:
+    from hammock.lib.cpp_bed_parser import CppBedParser
+    CPP_BED_PARSER_AVAILABLE = True
+except ImportError:
+    CPP_BED_PARSER_AVAILABLE = False
+    CppBedParser = None
 import pyBigWig  # type: ignore  # no type stubs available
 from numpy import floor  # type: ignore  # no type stubs available
 import gzip
@@ -209,38 +217,114 @@ class IntervalSketch(AbstractSketch):
         # Get separator from kwargs, default to tab
         sep = kwargs.get('sep', '\t')
         
+        # LAYER 1 DECISION: Check if we should use C++ accelerated file reading
+        # This determines whether to use the high-performance C++ BED parser
+        use_cpp_file_reading = kwargs.get('use_cpp', True) and CPP_BED_PARSER_AVAILABLE and not file_ext.endswith('.gz')
+        
+        if use_cpp_file_reading and debug:
+            print("Using C++ accelerated file reading")
+        
         # Read file and add intervals
         try:
-            opener = gzip.open if file_ext.endswith('.gz') else open
-            mode = 'rt' if file_ext.endswith('.gz') else 'r'
-            
-            with opener(filename, mode) as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith('#'):
-                        continue
-                    # Skip header lines that start with common header words
-                    first_word = line.split()[0].lower() if line.split() else ""
-                    if first_word in ['chromosome', 'start', 'end', 'chrom', 'chromosome_name']:
-                        continue
-                    try:
-                        interval, points, size = sketch.bedline(line, mode=kwargs.get('mode', 'A'), sep=sep, subsample=kwargs.get('subsample', (1.0, 1.0)))
-                        if interval:
-                            sketch.sketch.add_string(interval)
-                            # Add multiple copies of the interval if expA is set
-                            if expA > 0:
+            if use_cpp_file_reading:
+                # LAYER 2 ACCESS: Use C++ accelerated file reading
+                # This creates a CppBedParser instance that uses Cython for high-performance BED parsing
+                cpp_parser = CppBedParser(
+                    precision=kwargs.get('precision', 12),
+                    hash_size=64,
+                    seed=42,
+                    mode=kwargs.get('mode', 'A'),
+                    subsample_a=kwargs.get('subsample', (1.0, 1.0))[0],
+                    subsample_b=kwargs.get('subsample', (1.0, 1.0))[1],
+                    separator=sep
+                )
+                
+                # LAYER 2 CALL: Parse file with C++ BED parser
+                # This uses cpp_bed_parser.pyx for high-performance BED file processing
+                interval_strings = cpp_parser.parse_file(filename, debug=debug)
+                
+                # LAYER 1 CALL: Add to sketch using batch processing
+                # This calls FastHyperLogLog.add_batch() which automatically selects optimal C++ acceleration
+                if interval_strings:
+                    # Handle different modes correctly
+                    current_mode = kwargs.get('mode', 'A')
+                    if current_mode == 'A':
+                        # Mode A: All strings are interval strings
+                        # This will use wang_hash optimization and parallel processing for large batches
+                        sketch.sketch.add_batch(interval_strings)
+                        sketch.num_intervals = len(interval_strings)
+                        sketch.total_interval_size = len(interval_strings)
+                        
+                        # Handle expA if set (expA only works with mode C, so this should never happen)
+                        if expA > 0:
+                            raise ValueError("expA can only be used with mode C")
+                    
+                    elif current_mode == 'B':
+                        # Mode B: All strings are point strings
+                        sketch.sketch.add_batch(interval_strings)
+                        sketch.num_intervals = 0  # No intervals in mode B
+                        sketch.total_interval_size = len(interval_strings)
+                        
+                        # Handle expA if set (expA only works with mode C, so this should never happen)
+                        if expA > 0:
+                            raise ValueError("expA can only be used with mode C")
+                    
+                    elif current_mode == 'C':
+                        # Mode C: Separate interval strings (end with 'A') from point strings
+                        interval_strings_only = [s for s in interval_strings if s.endswith('A')]
+                        point_strings = [s for s in interval_strings if not s.endswith('A')]
+                        
+                        # Add original interval strings
+                        if interval_strings_only:
+                            sketch.sketch.add_batch(interval_strings_only)
+                        
+                        # Add point strings
+                        if point_strings:
+                            sketch.sketch.add_batch(point_strings)
+                        
+                        sketch.num_intervals = len(interval_strings_only)
+                        sketch.total_interval_size = len(interval_strings)
+                        
+                        # Handle expA if set (add expanded interval strings only)
+                        if expA > 0 and interval_strings_only:
+                            expanded_strings = []
+                            for interval in interval_strings_only:
                                 for i in range(1, int(10**expA) + 1):
-                                    sketch.sketch.add_string(interval + str(i))
-                            sketch.num_intervals += 1  # Increment counter for each interval
-                            sketch.total_interval_size += size
-                        if points:
-                            for point in points:
-                                if point is not None:
-                                    sketch.sketch.add_string(point)
-                    except ValueError as e:
-                        if debug:
-                            print(f"Skipping invalid line: {line.strip()[:50]}... (Error: {e})")
-                        continue
+                                    expanded_strings.append(interval + str(i))
+                            if expanded_strings:
+                                sketch.sketch.add_batch(expanded_strings)
+            else:
+                # Use original Python file reading
+                opener = gzip.open if file_ext.endswith('.gz') else open
+                mode = 'rt' if file_ext.endswith('.gz') else 'r'
+                
+                with opener(filename, mode) as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith('#'):
+                            continue
+                        # Skip header lines that start with common header words
+                        first_word = line.split()[0].lower() if line.split() else ""
+                        if first_word in ['chromosome', 'start', 'end', 'chrom', 'chromosome_name']:
+                            continue
+                        try:
+                            interval, points, size = sketch.bedline(line, mode=kwargs.get('mode', 'A'), sep=sep, subsample=kwargs.get('subsample', (1.0, 1.0)))
+                            if interval:
+                                sketch.sketch.add_string(interval)
+                                # Add multiple copies of the interval if expA is set
+                                if expA > 0:
+                                    for i in range(1, int(10**expA) + 1):
+                                        sketch.sketch.add_string(interval + str(i))
+                                sketch.num_intervals += 1  # Increment counter for each interval
+                                sketch.total_interval_size += size
+                            if points:
+                                for point in points:
+                                    if point is not None:
+                                        sketch.sketch.add_string(point)
+                        except ValueError as e:
+                            if debug:
+                                print(f"Skipping invalid line: {line.strip()[:50]}... (Error: {e})")
+                            continue
             
             # Print completion of file processing only in debug mode
             if debug:
