@@ -67,6 +67,31 @@ def get_extensions():
             ],
             extra_link_args=["-pthread"],
             language="c++",
+        ),
+        Extension(
+            "hammock.lib.cpp_bed_parser",
+            sources=[
+                "hammock/lib/cpp_bed_parser.pyx",
+                "hll/hll.cpp",
+                "hll/kthread.c"
+            ],
+            include_dirs=[
+                np.get_include(),
+                "."
+            ],
+            extra_compile_args=[
+                "-O3", 
+                "-funroll-loops", 
+                "-pipe", 
+                "-march=native",
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-DNDEBUG",
+                "-DTHREADSAFE"
+            ],
+            extra_link_args=["-pthread"],
+            language="c++",
         )
     ]
     

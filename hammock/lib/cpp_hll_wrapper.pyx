@@ -138,6 +138,38 @@ cdef class CppHyperLogLog:
                 # Convert to string and hash
                 self.add_string(str(element))
     
+    def add_batch_strings_optimized(self, list strings):
+        """Optimized batch processing for strings only - avoids type checking overhead."""
+        if not self._initialized:
+            raise RuntimeError("HyperLogLog not initialized")
+        
+        cdef str string
+        cdef bytes string_bytes
+        cdef uint64_t hash_val
+        cdef int i
+        
+        for i in range(len(strings)):
+            string = strings[i]
+            string_bytes = string.encode('utf-8')
+            if self.hash_size == 32:
+                hash_val = xxhash.xxh32(string_bytes, seed=self.seed).intdigest()
+            else:
+                hash_val = xxhash.xxh64(string_bytes, seed=self.seed).intdigest()
+            
+            self._hll.add(hash_val)
+    
+    def add_batch_strings_chunked(self, list strings, int chunk_size=10000):
+        """Process strings in chunks to manage memory usage."""
+        if not self._initialized:
+            raise RuntimeError("HyperLogLog not initialized")
+        
+        cdef int i, start_idx, end_idx
+        
+        for start_idx in range(0, len(strings), chunk_size):
+            end_idx = min(start_idx + chunk_size, len(strings))
+            chunk = strings[start_idx:end_idx]
+            self.add_batch_strings_optimized(chunk)
+    
     def cardinality(self):
         """Get the estimated cardinality."""
         if not self._initialized:

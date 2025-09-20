@@ -6,6 +6,14 @@ from hammock.lib.abstractsketch import AbstractSketch
 from hammock.lib.hyperloglog import HyperLogLog
 import numpy as np # type: ignore
 
+# Try to import FastHyperLogLog for better performance
+try:
+    from hammock.lib.hyperloglog_fast import FastHyperLogLog
+    FAST_HLL_AVAILABLE = True
+except ImportError:
+    FAST_HLL_AVAILABLE = False
+    FastHyperLogLog = None
+
 def canonicalize_kmer(kmer: str) -> str:
     """Canonicalize a k-mer by returning the lexicographically smaller of the original and its reverse complement.
     
@@ -56,8 +64,13 @@ class MinimizerSketch(AbstractSketch):
         self.debug = debug
         self.use_sets = use_sets
         # Initialize HyperLogLog sketches with proper parameters
-        self.minimizer_sketch = HyperLogLog(precision=precision, kmer_size=kmer_size, window_size=window_size, seed=seed)
-        self.startend_sketch = HyperLogLog(precision=precision, kmer_size=kmer_size, window_size=window_size, seed=seed)
+        # Use FastHyperLogLog if available for better performance
+        if FAST_HLL_AVAILABLE:
+            self.minimizer_sketch = FastHyperLogLog(precision=precision, kmer_size=kmer_size, window_size=window_size, seed=seed, debug=debug)
+            self.startend_sketch = FastHyperLogLog(precision=precision, kmer_size=kmer_size, window_size=window_size, seed=seed, debug=debug)
+        else:
+            self.minimizer_sketch = HyperLogLog(precision=precision, kmer_size=kmer_size, window_size=window_size, seed=seed)
+            self.startend_sketch = HyperLogLog(precision=precision, kmer_size=kmer_size, window_size=window_size, seed=seed)
         # Initialize sets only if use_sets is True
         if self.use_sets:
             self.startend_kmers = set()

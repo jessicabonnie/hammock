@@ -22,6 +22,7 @@ import pysam  # type: ignore  # no type stubs available
 from multiprocessing import Pool, cpu_count
 from itertools import islice
 import os
+import random
 import xxhash  # type: ignore
 import numpy as np  # type: ignore
 import mmh3  # type: ignore
@@ -688,4 +689,5 @@ class IntervalSketch(AbstractSketch):
             containment = containment ** self.expA
         
         return containment
+    
             

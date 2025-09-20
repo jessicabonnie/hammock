@@ -11,15 +11,15 @@ import numpy as np
 from typing import Optional, List, Dict
 from hammock.lib.hyperloglog import HyperLogLog
 
-# Try to import the C++ extension we built
+# Try to import the C++ HyperLogLog implementation
 try:
-    from hammock.lib.cpp_hll_wrapper import CppHyperLogLog
-    CPP_AVAILABLE = True
+    from hammock.lib.cpp_hyperloglog import CppHyperLogLogSketch, CPP_HLL_AVAILABLE
+    CPP_AVAILABLE = CPP_HLL_AVAILABLE
     _cpp_import_error = None
 except ImportError as e:
     CPP_AVAILABLE = False
     _cpp_import_error = str(e)
-    CppHyperLogLog = None
+    CppHyperLogLogSketch = None
 
 # Legacy support - also try to import the old Cython extension
 try:
@@ -105,10 +105,13 @@ class FastHyperLogLog(HyperLogLog):
                 )
             return {
                 'type': 'C++',
-                'cpp_sketch': CppHyperLogLog(
+                'cpp_sketch': CppHyperLogLogSketch(
                     precision=self.precision,
                     hash_size=self.hash_size,
-                    seed=self.seed
+                    seed=self.seed,
+                    kmer_size=self.kmer_size,
+                    window_size=self.window_size,
+                    debug=self.debug
                 )
             }
         
@@ -143,10 +146,13 @@ class FastHyperLogLog(HyperLogLog):
                 print("Auto-detected C++ acceleration - using optimized implementation")
             return {
                 'type': 'C++',
-                'cpp_sketch': CppHyperLogLog(
+                'cpp_sketch': CppHyperLogLogSketch(
                     precision=self.precision,
                     hash_size=self.hash_size,
-                    seed=self.seed
+                    seed=self.seed,
+                    kmer_size=self.kmer_size,
+                    window_size=self.window_size,
+                    debug=self.debug
                 )
             }
         elif use_cython is not False and CYTHON_AVAILABLE:
@@ -198,9 +204,8 @@ class FastHyperLogLog(HyperLogLog):
                 for s in strings:
                     self.add_string_with_minimizers(s)
             else:
-                # Use efficient batch processing
-                for s in strings:
-                    self._cpp_sketch.add_string(s)
+                # Use efficient C++ batch processing
+                self._cpp_sketch.add_batch(strings)
             self.item_count += len(strings)
             
         elif self._acceleration_type == 'Cython':
@@ -278,10 +283,11 @@ class FastHyperLogLog(HyperLogLog):
             return super().estimate_cardinality(method)
     
     def estimate_jaccard(self, other: 'FastHyperLogLog', method: str = 'ertl_improved') -> float:
-        """Estimate Jaccard similarity, using C++ implementation when available."""
+        """Estimate Jaccard similarity, using C++ register-based implementation when available."""
         if self._acceleration_type == 'C++' and other._acceleration_type == 'C++':
-            # Use C++ implementation directly
-            return self._cpp_sketch.jaccard_similarity(other._cpp_sketch)
+            # Use C++ register-based implementation for superior accuracy and performance
+            return self._cpp_sketch.jaccard_similarity_registers(other._cpp_sketch)
+            # return self._cpp_sketch.jaccard_similarity(other._cpp_sketch)
         else:
             # Fall back to parent implementation
             return super().estimate_jaccard(other)

@@ -140,6 +140,7 @@ class SequenceSketch(AbstractSketch):
     def from_file(cls, filename: str, **kwargs) -> Optional['SequenceSketch']:
         """Create a sketch from a FASTA/FASTQ file."""
         try:
+            
             # Create a SequenceSketch with the appropriate sketch type
             sketch = cls(
                 sketch_type=kwargs.get('sketch_type', 'minimizer'),
@@ -166,6 +167,7 @@ class SequenceSketch(AbstractSketch):
         except Exception as e:
             print(f"Error processing file {filename}: {str(e)}")
             return None
+    
 
     def write(self, filepath: str) -> None:
         """Write sketch to file."""
