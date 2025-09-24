@@ -99,7 +99,11 @@ class MinimizerSketch(AbstractSketch):
             for _, hash_val in minimizers:
                 if self.use_sets:
                     self.minimizers.add(hash_val)
-                self.minimizer_sketch.add_string(str(hash_val))
+                # Use fast path when available to avoid string conversions
+                if FAST_HLL_AVAILABLE and hasattr(self.minimizer_sketch, 'add_hash64'):
+                    self.minimizer_sketch.add_hash64(np.uint64(hash_val))
+                else:
+                    self.minimizer_sketch.add_string(str(hash_val))
             
             # Add start and end k-mers (canonicalized)
             if len(s) >= 2 * self.kmer_size:

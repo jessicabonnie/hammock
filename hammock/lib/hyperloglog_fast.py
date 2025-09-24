@@ -322,6 +322,30 @@ class FastHyperLogLog(HyperLogLog):
         else:
             # Use parent implementation
             super().add_string(s)
+
+    def add_hash64(self, hashval: int) -> None:
+        """Add a precomputed 64-bit hash directly (fast path)."""
+        if self._acceleration_type == 'C++' and hasattr(self._cpp_sketch, 'add_hash64'):
+            self._cpp_sketch.add_hash64(np.uint64(hashval))
+            self.item_count += 1
+        else:
+            # Fallback: treat as opaque integer and rely on parent hashing
+            # Parent add() expects strings; use add_element if available via Python HLL
+            # Convert hash to bytes to avoid Python hash perturbation
+            super().add_string(str(np.uint64(hashval)))
+
+    def add_hash64_batch(self, hashes: np.ndarray) -> None:
+        """Add a batch of precomputed 64-bit hashes directly (fast path)."""
+        if hashes is None or len(hashes) == 0:
+            return
+        if hashes.dtype != np.uint64:
+            hashes = hashes.astype(np.uint64, copy=False)
+        if self._acceleration_type == 'C++' and hasattr(self._cpp_sketch, 'add_hash64_batch'):
+            self._cpp_sketch.add_hash64_batch(hashes)
+            self.item_count += int(hashes.shape[0])
+        else:
+            # Fallback: stringify hashes (slower)
+            self.add_batch([str(h) for h in hashes.tolist()])
     
     def estimate_cardinality(self, method: str = 'ertl_improved') -> float:
         """Estimate the cardinality, using C++ implementation when available."""
@@ -370,7 +394,7 @@ class FastHyperLogLog(HyperLogLog):
             # Fall back to parent implementation
             return super().estimate_union(other)
     
-    def similarity_values(self, other: 'AbstractSketch') -> Dict[str, float]:
+    def similarity_values(self, other: 'FastHyperLogLog') -> Dict[str, float]:
         """Calculate similarity values using FastHyperLogLog.
         
         Returns:

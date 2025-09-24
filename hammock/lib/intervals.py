@@ -87,10 +87,12 @@ def _process_chunk(chunk: List[str], mode: str, subsample: Tuple[float, float], 
                     
                     # Process interval
                     if interval:
-                        intervals.append(interval)
                         if expA > 0:
-                            for i in range(1, int(10**expA)+1):
-                                intervals.append(interval + str(i))
+                            mult = int(10**expA)
+                            for i in range(mult):
+                                intervals.append(interval + str(i+1))
+                        else:
+                            intervals.append(interval)
                     
                     # Process points - always extend points list in mode B or C
                     if mode in ["B", "C"] and point_list:
@@ -227,72 +229,36 @@ class IntervalSketch(AbstractSketch):
         # Read file and add intervals
         try:
             if use_cpp_file_reading:
-                # LAYER 2 ACCESS: Use C++ accelerated file reading
-                # This creates a CppBedParser instance that uses Cython for high-performance BED parsing
+                # C++ path: choose the fastest ingestion strategy
                 cpp_parser = CppBedParser(
                     precision=kwargs.get('precision', 12),
                     hash_size=64,
-                    seed=42,
+                    seed=kwargs.get('seed', 42),
                     mode=kwargs.get('mode', 'A'),
                     subsample_a=kwargs.get('subsample', (1.0, 1.0))[0],
                     subsample_b=kwargs.get('subsample', (1.0, 1.0))[1],
                     separator=sep
                 )
-                
-                # LAYER 2 CALL: Parse file with C++ BED parser
-                # This uses cpp_bed_parser.pyx for high-performance BED file processing
-                interval_strings = cpp_parser.parse_file(filename, debug=debug)
-                
-                # LAYER 1 CALL: Add to sketch using batch processing
-                # This calls FastHyperLogLog.add_batch() which automatically selects optimal C++ acceleration
-                if interval_strings:
-                    # Handle different modes correctly
-                    current_mode = kwargs.get('mode', 'A')
-                    if current_mode == 'A':
-                        # Mode A: All strings are interval strings
-                        # This will use wang_hash optimization and parallel processing for large batches
+                mode_cur = kwargs.get('mode', 'A')
+                # Heuristic:
+                # - Mode A: number of items is modest → use batch string path leveraging C++ wang_hash
+                # - Mode C with subB == 0: also use batch string path
+                # - Otherwise (Mode B or C with points): stream to avoid huge Python lists
+                if mode_cur == 'A' or (mode_cur == 'C' and kwargs.get('subsample', (1.0, 1.0))[1] == 0):
+                    interval_strings = cpp_parser.parse_file(filename, debug=debug)
+                    if interval_strings:
+                        # Ensure FastHyperLogLog to leverage C++ batch ingestion
+                        if not isinstance(sketch.sketch, FastHyperLogLog):
+                            sketch.sketch = FastHyperLogLog(precision=kwargs.get('precision', 12), debug=debug)
                         sketch.sketch.add_batch(interval_strings)
-                        sketch.num_intervals = len(interval_strings)
+                        # Approximate counters for reporting consistency
+                        sketch.num_intervals = sum(1 for s in interval_strings if s.endswith('A'))
                         sketch.total_interval_size = len(interval_strings)
-                        
-                        # Handle expA if set (expA only works with mode C, so this should never happen)
-                        if expA > 0:
-                            raise ValueError("expA can only be used with mode C")
-                    
-                    elif current_mode == 'B':
-                        # Mode B: All strings are point strings
-                        sketch.sketch.add_batch(interval_strings)
-                        sketch.num_intervals = 0  # No intervals in mode B
-                        sketch.total_interval_size = len(interval_strings)
-                        
-                        # Handle expA if set (expA only works with mode C, so this should never happen)
-                        if expA > 0:
-                            raise ValueError("expA can only be used with mode C")
-                    
-                    elif current_mode == 'C':
-                        # Mode C: Separate interval strings (end with 'A') from point strings
-                        interval_strings_only = [s for s in interval_strings if s.endswith('A')]
-                        point_strings = [s for s in interval_strings if not s.endswith('A')]
-                        
-                        # Add original interval strings
-                        if interval_strings_only:
-                            sketch.sketch.add_batch(interval_strings_only)
-                        
-                        # Add point strings
-                        if point_strings:
-                            sketch.sketch.add_batch(point_strings)
-                        
-                        sketch.num_intervals = len(interval_strings_only)
-                        sketch.total_interval_size = len(interval_strings)
-                        
-                        # Handle expA if set (add expanded interval strings only)
-                        if expA > 0 and interval_strings_only:
-                            expanded_strings = []
-                            for interval in interval_strings_only:
-                                for i in range(1, int(10**expA) + 1):
-                                    expanded_strings.append(interval + str(i))
-                            if expanded_strings:
-                                sketch.sketch.add_batch(expanded_strings)
+                else:
+                    # Stream hashed items directly to HLL to avoid materializing giant lists
+                    if not isinstance(sketch.sketch, FastHyperLogLog):
+                        sketch.sketch = FastHyperLogLog(precision=kwargs.get('precision', 12), debug=debug)
+                    cpp_parser.parse_into_hll(filename, sketch.sketch, debug=debug, expA=int(expA) if expA else 0)
             else:
                 # Use original Python file reading
                 opener = gzip.open if file_ext.endswith('.gz') else open
@@ -310,11 +276,13 @@ class IntervalSketch(AbstractSketch):
                         try:
                             interval, points, size = sketch.bedline(line, mode=kwargs.get('mode', 'A'), sep=sep, subsample=kwargs.get('subsample', (1.0, 1.0)))
                             if interval:
-                                sketch.sketch.add_string(interval)
-                                # Add multiple copies of the interval if expA is set
+                                # Add exactly 10^expA total copies when expA>0; otherwise add once
                                 if expA > 0:
-                                    for i in range(1, int(10**expA) + 1):
-                                        sketch.sketch.add_string(interval + str(i))
+                                    mult = int(10**expA)
+                                    for i in range(mult):
+                                        sketch.sketch.add_string(interval + str(i+1))
+                                else:
+                                    sketch.sketch.add_string(interval)
                                 sketch.num_intervals += 1  # Increment counter for each interval
                                 sketch.total_interval_size += size
                             if points:
@@ -570,8 +538,9 @@ class IntervalSketch(AbstractSketch):
                 interval = sep.join([chrval, str(start), str(end), "A"])
         
         if mode in ["B", "C"]:
-            # Apply point subsampling in both modes B and C
-            points = self.generate_points(chrval, start, end, sep=sep, subsample=subsample[1], debug=debug)
+            # Subsampling is only valid in mode C
+            point_subsample = subsample[1] if mode == "C" else 1.0
+            points = self.generate_points(chrval, start, end, sep=sep, subsample=point_subsample, debug=debug)
         
         return interval, points, interval_size
 

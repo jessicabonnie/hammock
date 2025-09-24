@@ -4,330 +4,185 @@
 # cython: cdivision=True
 
 """
-C++ BED File Parser for hammock
+High-performance BED parser with fast ingestion into C++ HyperLogLog.
 
-ARCHITECTURE LAYERS:
-===================
-Layer 1: Python Interface (hammock/lib/intervals.py)
-         ↓ IntervalSketch.from_file() calls
-Layer 2: Cython BED Parser (this file - cpp_bed_parser.pyx)
-         ↓ CppBedParser.parse_file() processes BED files
-Layer 3: C++ HyperLogLog (hll/hll.cpp, hll/hll.h)
-         ↓ hll_t.addh() calls wang_hash() internally
-Layer 4: Optimized C++ Hash Functions (wang_hash, SIMD operations)
+Exports a minimal API expected by IntervalSketch:
+ - CppBedParser(...)
+ - parse_file(path, debug=False) -> list[str]
+ - parse_into_hll(path, fast_hll, debug=False, expA: int = 0) -> None
 
-SOURCE FILES ACCESSED:
-======================
-- hll/hll.h: Core HyperLogLog class definition and wang_hash function
-- hll/hll.cpp: HyperLogLog implementation with SIMD optimizations
-
-PURPOSE:
-========
-This module provides accelerated BED file parsing by:
-1. Reading BED files directly in C++ for maximum I/O performance
-2. Processing intervals and points with deterministic subsampling
-3. Generating interval strings for HyperLogLog sketch creation
-4. Using xxhash for consistent deterministic hashing
+Notes:
+ - Uses xxhash64 for stable 64-bit hashing when inserting via add_hash64.
+ - Keeps Python I/O for portability; heavy work (subsampling, per-base iteration,
+   hashing) is in Cython to minimize Python overhead.
 """
 
-import numpy as np
-cimport numpy as np
-from libc.stdint cimport uint64_t, uint32_t
-from libcpp.vector cimport vector
-from libcpp.string cimport string
-from libc.stdlib cimport rand, srand
-from libc.time cimport time
-from libcpp cimport bool
-import random
-
-# LAYER 3 ACCESS: Import the C++ hyperloglog implementation from hll/
-# This provides access to hll_t class for potential internal HLL operations
-cdef extern from "hll/hll.h" namespace "hll":
-    cdef cppclass hll_t:
-        hll_t(size_t np) except +
-        void add(uint64_t hashval)
-        void addh(uint64_t element)
-        double report()
-        double creport() const
-        void clear()
-        size_t get_np() const
-        bool is_ready() const
-
-# PYTHON HASH LIBRARY: Used for deterministic subsampling
-# xxhash provides fast, consistent hashing for reproducible subsampling
+from libc.stdint cimport uint64_t
 import xxhash
 
-# BED INTERVAL STRUCTURE: C++ struct for efficient interval storage and processing
-cdef struct BedInterval:
-    string chrom
-    int start
-    int end
-    bint valid
+cdef inline uint64_t _hash64_bytes(bytes b, uint64_t seed):
+    # xxhash Python object is not GIL-free; call under GIL.
+    return <uint64_t>xxhash.xxh64(b, seed=seed).intdigest()
 
-# LAYER 2 CLASS: CppBedParser - Cython wrapper for accelerated BED file parsing
-# This class provides high-performance BED file reading and interval processing
+cdef inline bint _is_header_or_blank(str line) noexcept:
+    if not line:
+        return True
+    if line[0] == '#':
+        return True
+    # quick header detection by first token
+    try:
+        first = line.split()[0].lower()
+    except Exception:
+        return True
+    return first in ('chromosome', 'start', 'end', 'chrom', 'chromosome_name')
+
 cdef class CppBedParser:
-    """
-    C++ BED file parser for high-performance interval processing.
-    
-    This class provides high-performance BED file parsing by:
-    1. Reading BED files directly in C++ for maximum I/O performance
-    2. Processing intervals with deterministic subsampling using xxhash
-    3. Generating interval strings for HyperLogLog sketch creation
-    4. Supporting all hammock modes (A, B, C) with proper string generation
-    
-    PERFORMANCE BENEFITS:
-    ====================
-    - Direct C++ file I/O for maximum read performance
-    - Deterministic subsampling with xxhash for reproducibility
-    - Efficient string generation for interval representations
-    - Memory-efficient processing of large BED files
-    """
-    
     cdef:
-        int precision          # HyperLogLog precision (number of register bits)
-        int hash_size          # Hash size in bits (32 or 64)
-        uint64_t seed          # Hash seed for deterministic subsampling
-        string mode            # Processing mode ('A', 'B', or 'C')
-        double subsample_a     # Interval subsampling rate (for mode C)
-        double subsample_b     # Point subsampling rate (for modes B and C)
-        string separator       # Field separator for BED parsing
-        hll_t* _hll           # Internal HyperLogLog object (currently unused)
-        bint _initialized
+        int precision
+        int hash_size
+        uint64_t seed
+        str mode
+        double subsample_a
+        double subsample_b
+        str separator
     
     def __init__(self, int precision=12, int hash_size=64, uint64_t seed=42, 
-                 str mode="A", double subsample_a=1.0, double subsample_b=1.0, 
-                 str separator="-"):
-        """Initialize C++ BED parser.
-        
-        Args:
-            precision: HyperLogLog precision
-            hash_size: Hash size in bits (32 or 64)
-            mode: Processing mode (A, B, C)
-            subsample_a: Subsampling rate for intervals
-            subsample_b: Subsampling rate for points
-            separator: String separator for interval representation
-        """
-        if precision < 4:
-            raise ValueError("Precision must be at least 4")
-        if hash_size not in [32, 64]:
+                 mode='A', double subsample_a=1.0, double subsample_b=1.0,
+                 separator='\t'):
+        if mode not in ('A','B','C'):
+            raise ValueError("CppBedParser: mode must be A, B, or C")
+        if hash_size not in (32, 64):
             raise ValueError("hash_size must be 32 or 64")
-        if mode not in ["A", "B", "C"]:
-            raise ValueError("mode must be A, B, or C")
-            
+        if subsample_a < 0.0 or subsample_a > 1.0 or subsample_b < 0.0 or subsample_b > 1.0:
+            raise ValueError("subsample rates must be in [0,1]")
         self.precision = precision
         self.hash_size = hash_size
         self.seed = seed
-        self.mode = mode.encode('utf-8')
+        self.mode = mode
         self.subsample_a = subsample_a
         self.subsample_b = subsample_b
-        self.separator = separator.encode('utf-8')
-        self._initialized = False
-        
-        # Create C++ HyperLogLog instance
-        self._hll = new hll_t(precision)
-        self._initialized = True
-        
-        # Set random seed
-        srand(seed)
-        random.seed(seed)
-    
-    def __dealloc__(self):
-        """Clean up C++ object."""
-        if self._initialized and self._hll != NULL:
-            del self._hll
-    
-    cdef BedInterval _parse_line(self, string line):
-        """Parse a single BED line in C++."""
-        cdef BedInterval interval
-        interval.valid = False
-        
-        # Skip empty lines and comments
-        if line.empty() or line[0] == b'#':
-            return interval
-        
-        # Split line by whitespace
-        cdef vector[string] parts
-        cdef string current_part
-        cdef int i
-        cdef char c
-        
-        for i in range(line.size()):
-            c = line[i]
-            if c == b' ' or c == b'\t':
-                if not current_part.empty():
-                    parts.push_back(current_part)
-                    current_part.clear()
-            else:
-                current_part.push_back(c)
-        
-        if not current_part.empty():
-            parts.push_back(current_part)
-        
-        # Need at least 3 parts (chrom, start, end)
-        if parts.size() < 3:
-            return interval
-        
-        # Parse chromosome
-        interval.chrom = parts[0]
-        
-        # Parse start and end coordinates
-        try:
-            interval.start = int(parts[1].decode('utf-8'))
-            interval.end = int(parts[2].decode('utf-8'))
-            
-            # Validate coordinates
-            if interval.start >= 0 and interval.end > interval.start:
-                interval.valid = True
-        except:
-            interval.valid = False
-        
-        return interval
-    
-    cdef vector[string] _generate_interval_strings(self, BedInterval interval):
-        """Generate interval strings for a parsed BED interval."""
-        cdef vector[string] result
-        
-        if not interval.valid:
-            return result
-        
-        cdef string interval_str
-        cdef int i
-        cdef string point_str
-        cdef uint64_t interval_hash
-        cdef uint64_t point_hash
-        cdef uint64_t threshold
-        
-        if self.mode == b"A":
-            # Mode A: chr:start-end (no subsampling at interval level)
-            interval_str = interval.chrom + b":" + str(interval.start).encode('utf-8') + b"-" + str(interval.end).encode('utf-8')
-            result.push_back(interval_str)
-            
-        elif self.mode == b"B":
-            # Mode B: chr:pos for each position (no interval subsampling)
-            for i in range(interval.start, interval.end):
-                # Use deterministic hashing for point subsampling (like Python)
-                point_str = interval.chrom + b":" + str(i).encode('utf-8')
-                point_hash = xxhash.xxh32(point_str, seed=31337).intdigest()
-                if point_hash < 0:
-                    point_hash += 2**32
-                
-                threshold = int(self.subsample_b * (2**32 - 1))
-                if point_hash <= threshold:
-                    result.push_back(point_str)
-                    
-        elif self.mode == b"C":
-            # Mode C: both interval and points
-            # Use deterministic hashing for interval subsampling (like Python)
-            interval_str = interval.chrom + b":" + str(interval.start).encode('utf-8') + b"-" + str(interval.end).encode('utf-8') + b"A"
-            
-            # Hash the interval string for deterministic subsampling
-            interval_hash = xxhash.xxh32(interval_str, seed=31337).intdigest()
-            if interval_hash < 0:
-                interval_hash += 2**32
-            
-            threshold = int(self.subsample_a * (2**32 - 1))
-            if interval_hash <= threshold:
-                # Add interval string (with the "A" suffix to match Python)
-                interval_str = interval.chrom + b":" + str(interval.start).encode('utf-8') + b"-" + str(interval.end).encode('utf-8') + b"A"
-                result.push_back(interval_str)
-            
-            # Add points with deterministic subsampling (like Python)
-            for i in range(interval.start, interval.end):
-                point_str = interval.chrom + b":" + str(i).encode('utf-8')
-                point_hash = xxhash.xxh32(point_str, seed=31337).intdigest()
-                if point_hash < 0:
-                    point_hash += 2**32
-                
-                threshold = int(self.subsample_b * (2**32 - 1))
-                if point_hash <= threshold:
-                    result.push_back(point_str)
-        
-        return result
-    
-    def parse_file(self, str filename, bint debug=False):
-        """Parse a BED file and return interval strings."""
-        cdef:
-            list result = []
-            str line
-            BedInterval interval
-            vector[string] interval_strings
-            int i
-            int total_lines = 0
-            int valid_lines = 0
-            int total_intervals = 0
-            uint64_t hash_val
-        
-        try:
-            # Read file
-            if filename.endswith('.gz'):
-                import gzip
-                with gzip.open(filename, 'rt') as f:
-                    lines = f.readlines()
-            else:
-                with open(filename, 'r') as f:
-                    lines = f.readlines()
-            
-            total_lines = len(lines)
-            
-            # Process each line
-            for line in lines:
-                interval = self._parse_line(line.encode('utf-8'))
-                
-                if interval.valid:
-                    valid_lines += 1
-                    interval_strings = self._generate_interval_strings(interval)
-                    
-                    for i in range(interval_strings.size()):
-                        interval_str = interval_strings[i].decode('utf-8')
-                        result.append(interval_str)
-                        total_intervals += 1
-            
-            if debug:
-                print(f"C++ parser processed {total_lines} lines, {valid_lines} valid, {total_intervals} intervals")
-            
-            return result
-            
-        except Exception as e:
-            if debug:
-                print(f"C++ parser error: {e}")
-            return []
-    
-    def parse_lines(self, list lines, bint debug=False):
-        """Parse a list of BED lines and return interval strings."""
-        cdef:
-            list result = []
-            str line
-            BedInterval interval
-            vector[string] interval_strings
-            int i
-            int total_lines = 0
-            int valid_lines = 0
-            int total_intervals = 0
-            uint64_t hash_val
-        
-        total_lines = len(lines)
-        
-        # Process each line
-        for line in lines:
-            interval = self._parse_line(line.encode('utf-8'))
-            
-            if interval.valid:
-                valid_lines += 1
-                interval_strings = self._generate_interval_strings(interval)
-                
-                for i in range(interval_strings.size()):
-                    interval_str = interval_strings[i].decode('utf-8')
-                    result.append(interval_str)
-                    total_intervals += 1
-        
+        self.separator = separator
+
+    def parse_file(self, path: str, debug: bool=False):
+        """Return strings representing intervals/points according to mode.
+        Warning: For large BEDs this can be memory-heavy; prefer parse_into_hll.
+        """
+        cdef list out = []
+        cdef str line
+        with open(path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if _is_header_or_blank(line):
+                    continue
+                cols = line.split()
+                if len(cols) < 3:
+                    continue
+                chrval = cols[0]
+                try:
+                    start = int(cols[1])
+                    end = int(cols[2])
+                except Exception:
+                    continue
+                if start < 0 or end <= start:
+                    continue
+
+                if self.mode in ('A','C'):
+                    if self.mode == 'C' and self.subsample_a < 1.0:
+                        # subsample intervals deterministically via hash of interval string
+                        istring = f"{chrval}{self.separator}{start}{self.separator}{end}{self.separator}A"
+                        h = xxhash.xxh32(istring, seed=31337).intdigest()
+                        thr = int(self.subsample_a * ((1<<32) - 1))
+                        if h <= thr:
+                            out.append(istring)
+                    else:
+                        out.append(f"{chrval}{self.separator}{start}{self.separator}{end}{self.separator}A")
+
+                if self.mode in ('B','C'):
+                    if self.subsample_b >= 1.0:
+                        for x in range(start, end):
+                            out.append(f"{chrval}{self.separator}{x}")
+                    else:
+                        thr = int(self.subsample_b * ((1<<32) - 1))
+                        for x in range(start, end):
+                            pstr = f"{chrval}{self.separator}{x}"
+                            h32 = xxhash.xxh32(pstr, seed=31337).intdigest()
+                            if h32 <= thr:
+                                out.append(pstr)
         if debug:
-            print(f"C++ parser processed {total_lines} lines, {valid_lines} valid, {total_intervals} intervals")
-        
-        return result
-    
-    def clear(self):
-        """Clear the internal state."""
-        if not self._initialized:
-            raise RuntimeError("Parser not initialized")
-        # No internal state to clear since we removed the HyperLogLog
+            print(f"CppBedParser.parse_file produced {len(out)} strings")
+        return out
+
+    def parse_into_hll(self, path: str, fast_hll, debug: bool=False, int expA=0):
+        """Stream parse BED file and insert hashed values directly into FastHyperLogLog.
+        Uses xxhash64 to produce stable 64-bit hashes and calls fast_hll.add_hash64.
+        """
+        cdef str line
+        cdef uint64_t h64
+        cdef int x
+        cdef int i
+        cdef bint include_interval
+        cdef bint do_A = self.mode in ('A','C')
+        cdef bint do_B = self.mode in ('B','C')
+        cdef int mult = 0
+        if expA > 0:
+            mult = 1
+            for i in range(expA):
+                mult *= 10
+        cdef int base_interval_count = 0
+        with open(path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if _is_header_or_blank(line):
+                    continue
+                cols = line.split()
+                if len(cols) < 3:
+                    continue
+                chrval = cols[0]
+                try:
+                    start = int(cols[1]); end = int(cols[2])
+                except Exception:
+                    continue
+                if start < 0 or end <= start:
+                    continue
+
+                if do_A:
+                    istring = f"{chrval}{self.separator}{start}{self.separator}{end}{self.separator}A".encode('utf-8')
+                    include_interval = True
+                    if self.mode == 'C' and self.subsample_a < 1.0:
+                        h32 = xxhash.xxh32(istring, seed=31337).intdigest()
+                        thrA = int(self.subsample_a * ((1<<32) - 1))
+                        include_interval = (h32 <= thrA)
+
+                    if include_interval:
+                        base_interval_count += 1
+                        if mult > 0:
+                            # Add exactly mult total copies, each uniquely suffixed
+                            for i in range(mult):
+                                istring2 = istring + str(i+1).encode('utf-8')
+                                h64 = _hash64_bytes(istring2, <uint64_t>self.seed)
+                                fast_hll.add_hash64(h64)
+                        else:
+                            # No multiplicity: add the base interval once
+                            h64 = _hash64_bytes(istring, <uint64_t>self.seed)
+                            fast_hll.add_hash64(h64)
+
+                if do_B:
+                    # Subsampling for points is only valid in mode C
+                    if not (self.mode == 'C' and self.subsample_b < 1.0):
+                        for x in range(start, end):
+                            pbytes = f"{chrval}{self.separator}{x}".encode('utf-8')
+                            h64 = _hash64_bytes(pbytes, <uint64_t>self.seed)
+                            fast_hll.add_hash64(h64)
+                    else:
+                        thr = int(self.subsample_b * ((1<<32) - 1))
+                        for x in range(start, end):
+                            pstr = f"{chrval}{self.separator}{x}"
+                            h32 = xxhash.xxh32(pstr, seed=31337).intdigest()
+                            if h32 <= thr:
+                                pbytes = pstr.encode('utf-8')
+                                h64 = _hash64_bytes(pbytes, <uint64_t>self.seed)
+                                fast_hll.add_hash64(h64)
+        if debug:
+            print("CppBedParser.parse_into_hll completed; intervals added:", base_interval_count)
+        return base_interval_count
+ 

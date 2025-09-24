@@ -200,6 +200,21 @@ cdef class CppHyperLogLog:
         if not self._initialized:
             raise RuntimeError("HyperLogLog not initialized")
         self._hll.add(hashval)
+
+    def add_hash64(self, uint64_t hashval):
+        """Alias for add_hash to emphasize 64-bit pre-hash ingestion."""
+        if not self._initialized:
+            raise RuntimeError("HyperLogLog not initialized")
+        self._hll.add(hashval)
+
+    def add_hash64_batch(self, np.ndarray[np.uint64_t, ndim=1] hashes):
+        """Add a batch of 64-bit precomputed hashes efficiently."""
+        if not self._initialized:
+            raise RuntimeError("HyperLogLog not initialized")
+        cdef uint64_t[:] view = hashes
+        cdef Py_ssize_t i, n = view.shape[0]
+        for i in range(n):
+            self._hll.add(view[i])
     
     def add_element(self, uint64_t element):
         """Add an element directly using C++'s wang_hash (faster than Python hashing).
