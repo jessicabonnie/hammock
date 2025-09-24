@@ -73,8 +73,8 @@ def get_system_info() -> Dict[str, Any]:
     }
 
 # Constants for benchmarking
-NUM_INTERVALS = 1000  # Fixed number of intervals per file
-NUM_FILES_LIST = [2, 4, 8, 16, 32]  # Number of files to compare
+NUM_INTERVALS = 5000  # Fixed number of intervals per file
+NUM_FILES_LIST = [2, 4, 8, 16, 32, 64, 128]  # Number of files to compare
 NUM_RUNS = 5
 
 def generate_bed_file(num_intervals: int, output_file: str):
@@ -284,7 +284,7 @@ def run_benchmark_separated(num_files_list: List[int] = NUM_FILES_LIST, num_runs
             hammock_results = {}
             for mode in ['A', 'B', 'C']:
                 for sketch_type in ['hyperloglog']:  # Focus on HyperLogLog for now
-                    for precision in [8, 12, 16]:
+                    for precision in [8, 12, 16, 20]:
                         print(f"    Testing {mode} mode, {sketch_type} p{precision}...")
                         # Run with C++/Cython acceleration
                         key = f"hammock_{mode}_{sketch_type}_p{precision}"
@@ -446,13 +446,13 @@ def plot_results_separated(results, timestamp=None):
     bedtools_mean = [r['bedtools']['mean_cpu_time'] for r in results]
     bedtools_std = [r['bedtools']['std_cpu_time'] for r in results]
     ax.errorbar(num_files, bedtools_mean, yerr=bedtools_std, 
-               fmt='ko-', capsize=5, label='bedtools (total time)', linewidth=3, markersize=10)
+               fmt='ko-', capsize=5, label='bedtools (total time)', linewidth=3, markersize=5)
     
     # Plot hammock comparison times for different configurations
     color_idx = 0
     
     # Focus on Mode B HyperLogLog for comparison
-    for precision in [8, 12, 16]:
+    for precision in [8, 12, 16, 20]:
         # C++/Cython version comparison times
         key = f"hammock_B_hyperloglog_p{precision}"
         if all(key in r and not np.isnan(r[key]['comparison_cpu_mean']) for r in results):
@@ -461,7 +461,7 @@ def plot_results_separated(results, timestamp=None):
             label = f"hammock B HyperLogLog p{precision} (C++/Cython, comparison only)"
             ax.errorbar(num_files, comparison_times, yerr=comparison_stds,
                        fmt=f'{markers[color_idx]}:', capsize=5, 
-                       color=colors[color_idx], label=label, linewidth=2, markersize=8)
+                       color=colors[color_idx], label=label, linewidth=2, markersize=4)
             color_idx += 1
         
         # Python-only version comparison times
@@ -472,7 +472,7 @@ def plot_results_separated(results, timestamp=None):
             label = f"hammock B HyperLogLog p{precision} (Python, comparison only)"
             ax.errorbar(num_files, comparison_times, yerr=comparison_stds,
                        fmt=f'{markers[color_idx-1]}-', capsize=5, 
-                       color=colors[color_idx-1], label=label, linewidth=2, markersize=8)
+                       color=colors[color_idx-1], label=label, linewidth=2, markersize=4)
     
     ax.set_xlabel('Number of Files', fontsize=12)
     ax.set_ylabel('CPU Time (seconds)', fontsize=12)
@@ -495,7 +495,7 @@ def plot_results_separated(results, timestamp=None):
     ax1.set_title('Sketch Creation Times', fontsize=14)
     color_idx = 0
     
-    for precision in [8, 12, 16]:
+    for precision in [8, 12, 16, 20]:
         # C++/Cython version creation times
         key = f"hammock_B_hyperloglog_p{precision}"
         if all(key in r and not np.isnan(r[key]['creation_cpu_mean']) for r in results):
@@ -527,7 +527,7 @@ def plot_results_separated(results, timestamp=None):
     ax2.set_title('Sketch Comparison Times', fontsize=14)
     color_idx = 0
     
-    for precision in [8, 12, 16]:
+    for precision in [8, 12, 16, 20]:
         # C++/Cython version comparison times
         key = f"hammock_B_hyperloglog_p{precision}"
         if all(key in r and not np.isnan(r[key]['comparison_cpu_mean']) for r in results):

@@ -613,6 +613,21 @@ ui <- fluidPage(
         ),
         column(4,
           tags$h4("Top NMI Results per File"),
+          fluidRow(
+            column(8,
+              textInput("downloadFilename", "Filename:", 
+                       value = "top_nmi_results", 
+                       placeholder = "Enter filename (without extension)",
+                       width = "100%")
+            ),
+            column(4,
+              br(),
+              downloadButton("downloadSummaryTable", "Download CSV", 
+                           class = "btn-primary", 
+                           style = "width: 100%;")
+            )
+          ),
+          br(),
           tableOutput("summaryTable")
         )
       ),
@@ -2707,6 +2722,95 @@ server <- function(input, output, session) {
       data.frame(Error = paste("Error:", conditionMessage(e)))
     })
   }, rownames = FALSE, digits = 4)
+
+  # Download handler for summary table
+  output$downloadSummaryTable <- downloadHandler(
+    filename = function() {
+      # Get the filename from input, default to "top_nmi_results" if empty
+      filename <- input$downloadFilename
+      if (is.null(filename) || nchar(trimws(filename)) == 0) {
+        filename <- "top_nmi_results"
+      }
+      # Ensure filename doesn't contain invalid characters
+      filename <- gsub("[^A-Za-z0-9_-]", "_", filename)
+      paste0(filename, ".csv")
+    },
+    content = function(file) {
+      tryCatch({
+        # Get the same data that's displayed in the table
+        df <- biologically_filtered_data()
+        if (is.null(df)) {
+          # Create empty data frame with proper structure if no data
+          empty_df <- data.frame(
+            File = character(0),
+            Linkage = character(0),
+            NMI = numeric(0),
+            Clusters = numeric(0),
+            Silhouette = numeric(0)
+          )
+          write.csv(empty_df, file, row.names = FALSE)
+          return()
+        }
+        
+        req_cols <- c("source_file", "linkage", "nmi", "n_clusters", "silhouette")
+        if (!all(req_cols %in% names(df))) {
+          # Create empty data frame with proper structure if columns missing
+          empty_df <- data.frame(
+            File = character(0),
+            Linkage = character(0),
+            NMI = numeric(0),
+            Clusters = numeric(0),
+            Silhouette = numeric(0)
+          )
+          write.csv(empty_df, file, row.names = FALSE)
+          return()
+        }
+        
+        # Process data the same way as the table
+        suppressWarnings({
+          df$nmi <- as.numeric(df$nmi)
+          df$n_clusters <- as.numeric(df$n_clusters)
+          df$silhouette <- as.numeric(df$silhouette)
+        })
+        df <- df[is.finite(df$nmi), , drop = FALSE]
+        
+        if (nrow(df) == 0) {
+          # Create empty data frame with proper structure if no valid data
+          empty_df <- data.frame(
+            File = character(0),
+            Linkage = character(0),
+            NMI = numeric(0),
+            Clusters = numeric(0),
+            Silhouette = numeric(0)
+          )
+          write.csv(empty_df, file, row.names = FALSE)
+          return()
+        }
+        
+        # Group by file and linkage, pick top NMI for each
+        df$key <- paste(df$source_file, df$linkage, sep = "\t")
+        parts <- split(df, df$key)
+        pick_top <- function(d) {
+          d <- d[order(-d$nmi, -d$silhouette, d$n_clusters), , drop = FALSE]
+          d[1, c("source_file", "linkage", "nmi", "n_clusters", "silhouette"), drop = FALSE]
+        }
+        best_list <- lapply(parts, pick_top)
+        best <- do.call(rbind, best_list)
+        best <- best[order(-best$nmi, -best$silhouette), , drop = FALSE]
+        rownames(best) <- NULL
+        names(best) <- c("File", "Linkage", "NMI", "Clusters", "Silhouette")
+        
+        # Write to CSV
+        write.csv(best, file, row.names = FALSE)
+      }, error = function(e) {
+        # Create error data frame if something goes wrong
+        error_df <- data.frame(
+          Error = paste("Error generating download:", conditionMessage(e))
+        )
+        write.csv(error_df, file, row.names = FALSE)
+      })
+    }
+  )
 
   # Optimized: Shared biological filter logic
   biological_filter_summary <- reactive({
