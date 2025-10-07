@@ -1,0 +1,9 @@
+# This is a test BED file with some overlapping intervals
+chr1	1000	2000
+chr1	2500	3500
+chr2	5000	6000
+chr3	10000	11000
+chr4	15000	16000
+chr8	50000	51000
+chrX	25000	26000
+
