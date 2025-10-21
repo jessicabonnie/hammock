@@ -265,15 +265,19 @@ CSV columns:
 ```
 hammock_cpp/
 ├── src/
-│   └── hammock.cpp          # Unified implementation (Modes A & B)
+│   └── hammock.cpp          # Unified implementation (Modes A, B & C)
 ├── test/
-│   └── test_hammock.cpp     # 21 unit tests
+│   └── test_hammock.cpp     # 39 unit tests
 ├── examples/
 │   ├── data/               # Sample BED files
+│   │   ├── example_primary.bed
+│   │   ├── example_test1.bed
+│   │   └── example_test2.bed
 │   ├── files_list.txt      # Input file list
 │   ├── primary_list.txt    # Reference file list
 │   ├── example_output_A.csv # Mode A results
-│   └── example_output_B.csv # Mode B results
+│   ├── example_output_B.csv # Mode B results
+│   └── example_output_C.csv # Mode C results
 ├── bin/
 │   ├── hammock             # Main binary
 │   └── test_hammock        # Test binary
@@ -516,7 +520,7 @@ for (pos = 1000; pos < 2000; pos++) {
 ### Design Decisions
 
 1. **Unified vs Separate Binaries**: Chose unified for code reuse and maintainability
-2. **String Formatting**: Simple string concatenation (can upgrade to xxHash later)
+2. **String Formatting**: XXHash64 implementation for high-quality hashing
 3. **Mode Suffix**: Added "-A" and "-B" suffixes to prevent cross-mode collisions
 4. **Processing Verbosity**: Different progress messages for intervals vs. points
 5. **Error Handling**: Shared validation for both modes
@@ -524,7 +528,6 @@ for (pos = 1000; pos < 2000; pos++) {
 ## Future Enhancements
 
 - Mode D: Sequence comparison with minimizers
-- xxHash integration for exact Python compatibility
 - Parallel file processing (multi-threaded)
 - Compressed file support (.gz, .bgz)
 - BigBed format support
@@ -541,10 +544,10 @@ for (pos = 1000; pos < 2000; pos++) {
 - 📦 Standalone (no Python dependencies)
 - 💾 Lower memory overhead
 - 🚀 SIMD-optimized HLL operations
+- 🔐 XXHash64 implementation for high-quality hashing
 
 ### Current Limitations
 - No Mode D support yet
-- Simplified hash function (not xxHash)
 - No subA (interval subsampling) yet
 
 ## Dependencies
