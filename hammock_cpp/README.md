@@ -73,7 +73,11 @@ chr1:1000-10000 →  1000, 1001, 1002, ..., 9999  (9000 elements)
 - `--subB 0.5`: Process 50% of points (faster)
 - `--subB 0.1`: Process 10% of points (much faster)
 
-**Key property**: Subsampling is **deterministic** - the same point is always selected or rejected across different files, preserving meaningful Jaccard similarities.
+**Subsampling Strategies**: Two deterministic methods available via `--mixed-stride`:
+- **Hash-threshold (default)**: Hash each point and include if hash ≤ threshold. Good for higher sampling rates (≥0.6).
+- **Mixed-stride (--mixed-stride)**: Skip points using stride-based selection. Faster for lower sampling rates (≤0.3) by avoiding per-point hashing.
+
+**Key property**: Both methods are **deterministic** - the same point is always selected or rejected across different files, preserving meaningful Jaccard similarities.
 
 ### Mode C: Combined Comparison
 
@@ -132,6 +136,9 @@ Options:
                            C = combined (intervals + points)
   --subB <float>         : Subsampling rate for points (0.0-1.0, default: 1.0)
                            Used in Mode B and Mode C
+  --mixed-stride         : Use mixed-stride subsampling (default: hash-threshold)
+                           Faster for low subB rates by avoiding per-point hashing
+  --seed <int>           : Random seed for hashing (default: 0)
   --expA <float>         : Interval expansion exponent (default: 0.0)
                            Adds 10^expA versions of each interval (Mode C only)
                            Accepts decimal values (e.g., 0.5, 1.5, 2.5)
@@ -153,6 +160,9 @@ Examples:
   
   # Mode B with subsampling (faster)
   ./bin/hammock files.txt primary.txt --mode B --subB 0.1 -o results_B.csv
+  
+  # Mode B with mixed-stride subsampling (faster for low subB)
+  ./bin/hammock files.txt primary.txt --mode B --subB 0.2 --mixed-stride -o results_B_ms.csv
   
   # Mode C: Combined intervals and points
   ./bin/hammock files.txt primary.txt --mode C -o results_C.csv
@@ -476,7 +486,9 @@ for (pos = start; pos < end; pos++) {
 - Slower: O(sum of interval lengths)
 - Size-dependent: Large intervals contribute more elements
 - Measures "base-pair overlap"
-- **Subsampling**: Hash each point to decide inclusion (deterministic across files)
+- **Subsampling**: Two deterministic strategies:
+  - **Hash-threshold (default)**: Hash each point, include if hash ≤ threshold
+  - **Mixed-stride (--mixed-stride)**: Select points using stride S (where 1/S ≈ subB), with per-chromosome residue for interval-independence. Faster for low subB rates.
 
 ### Mode C: Combined Elements
 
@@ -598,6 +610,14 @@ for (pos = 1000; pos < 2000; pos++) {
   - Very large workloads (>64): 24 threads (capped for efficiency)
   - Prevents thread overhead on small tasks while maximizing performance on large workloads
   - Respects user override via `OMP_NUM_THREADS`
+
+### Recent Additions (v0.8.0)
+- ✅ **Mixed-stride subsampling**: Alternative subsampling strategy for Mode B and Mode C
+  - `--mixed-stride` flag for stride-based point selection
+  - `--seed` parameter for controlling deterministic hashing
+  - Faster performance at low subB rates (≤0.3) by avoiding per-point hashing
+  - Interval-independent sampling (same as hash-threshold method)
+  - Compatible with both Mode B and Mode C
 
 ### Previous Additions (v0.7.0)
 - ✅ **OpenMP Parallelization**: Multi-level parallelization for dramatic speedups
