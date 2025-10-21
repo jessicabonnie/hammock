@@ -121,15 +121,20 @@ namespace xxhash {
 // ============================================================================
 
 // Intelligently choose number of threads based on workload
-int choose_optimal_threads(size_t num_files, size_t num_primary_files, int mode) {
+int choose_optimal_threads(size_t num_files, size_t num_primary_files, int mode, int manual_threads = -1) {
 #ifdef _OPENMP
     // Get system defaults
     int max_threads = omp_get_max_threads();
     
-    // If user has set OMP_NUM_THREADS, respect it
+    // Priority 1: Command-line argument (highest priority)
+    if (manual_threads > 0) {
+        return std::min(manual_threads, max_threads);  // User-specified via --threads
+    }
+    
+    // Priority 2: OMP_NUM_THREADS environment variable
     char* omp_env = std::getenv("OMP_NUM_THREADS");
     if (omp_env != nullptr) {
-        return max_threads;  // User has explicitly set thread count
+        return max_threads;  // User has explicitly set thread count via environment
     }
     
     // Calculate total number of comparisons
@@ -312,26 +317,24 @@ std::string create_point_string(const std::string& chr, int64_t pos,
 }
 
 // Hash a string to a 32-bit value for subsampling decisions
-uint32_t hash_string_32(const std::string& s) {
-    // Simple but effective 32-bit hash
-    uint32_t hash = 2166136261u;  // FNV offset basis
-    for (char c : s) {
-        hash ^= static_cast<uint32_t>(static_cast<unsigned char>(c));
-        hash *= 16777619u;  // FNV prime
-    }
-    return hash;
+uint32_t hash_string_32(const std::string& s, uint64_t seed = 0) {
+    // Use XXHash32 for consistency with Python version
+    uint64_t hash64 = xxhash::hash64(s, seed);
+    return static_cast<uint32_t>(hash64 & 0xFFFFFFFF);
 }
 
 size_t process_bed_file_mode_b(const std::string& filepath, hll::hll_t& sketch,
                                const std::string& separator = "-", 
                                double subsample = 1.0,
+                               bool mixed_stride = false,
+                               uint64_t seed = 0,
                                bool verbose = false) {
     std::ifstream file(filepath);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + filepath);
     }
     
-    // Calculate threshold for subsampling
+    // Calculate threshold for hash-threshold subsampling
     uint32_t threshold = static_cast<uint32_t>(subsample * 4294967295.0);  // 2^32 - 1
     bool do_subsample = (subsample < 1.0);
     
@@ -364,33 +367,80 @@ size_t process_bed_file_mode_b(const std::string& filepath, hll::hll_t& sketch,
     for (size_t i = 0; i < intervals.size(); i++) {
         const auto& interval = intervals[i];
         
-        // Add each point in the interval [start, end)
-        for (int64_t pos = interval.start; pos < interval.end; pos++) {
-            std::string point_str = create_point_string(interval.chr, pos, separator);
-            total_points++;
+        if (mixed_stride && do_subsample) {
+            // Mixed-stride deterministic subsampling
+            double p = subsample;
+            double inv = 1.0 / p;
+            int64_t s0 = static_cast<int64_t>(std::floor(inv));
+            int64_t s1 = static_cast<int64_t>(std::ceil(inv));
+            if (s0 < 1) s0 = 1;
+            if (s1 < 1) s1 = 1;
             
-            // Deterministic subsampling: hash the point to decide if we keep it
-            if (do_subsample) {
-                uint32_t point_hash = hash_string_32(point_str);
-                if (point_hash > threshold) {
-                    continue;  // Skip this point
-                }
+            bool choose_s1 = false;
+            if (s0 != s1) {
+                double denom = (1.0 / s1) - (1.0 / s0);
+                double q = (denom != 0.0) ? (p - 1.0 / s0) / denom : 0.0;
+                // Deterministic choice per chromosome
+                uint32_t h = hash_string_32(interval.chr, seed);
+                double rfloat = h / 4294967295.0;
+                choose_s1 = (rfloat < q);
+            }
+            int64_t S = (s0 != s1 && choose_s1) ? s1 : s0;
+            
+            // Residue per chromosome
+            uint32_t h2 = hash_string_32(interval.chr + "|res", seed);
+            int64_t residue = h2 % S;
+            
+            // First hit in [start, end)
+            int64_t offset = (residue - (interval.start % S)) % S;
+            if (offset < 0) offset += S;  // Handle negative modulo
+            int64_t x0 = interval.start + offset;
+            
+            for (int64_t pos = x0; pos < interval.end; pos += S) {
+                std::string point_str = create_point_string(interval.chr, pos, separator);
+                total_points++;  // Count all potential points for reporting
+                
+                // Hash the point string for HLL using XXHash for proper distribution
+                uint64_t hash_val = xxhash::hash64(point_str);
+                
+                // CRITICAL SECTION: HLL add() is thread-safe with -DTHREADSAFE
+                sketch.add(hash_val);
+                sampled_points++;
             }
             
-            // Hash the point string for HLL using XXHash for proper distribution
-            uint64_t hash_val = xxhash::hash64(point_str);
+            // Add unsampled points to total count for accurate reporting
+            total_points += (interval.end - interval.start) - ((interval.end - x0 + S - 1) / S);
             
-            // CRITICAL SECTION: HLL add() is thread-safe with -DTHREADSAFE
-            sketch.add(hash_val);
-            sampled_points++;
+        } else {
+            // Hash-threshold subsampling (original method)
+            for (int64_t pos = interval.start; pos < interval.end; pos++) {
+                std::string point_str = create_point_string(interval.chr, pos, separator);
+                total_points++;
+                
+                // Deterministic subsampling: hash the point to decide if we keep it
+                if (do_subsample) {
+                    uint32_t point_hash = hash_string_32(point_str, seed);
+                    if (point_hash > threshold) {
+                        continue;  // Skip this point
+                    }
+                }
+                
+                // Hash the point string for HLL using XXHash for proper distribution
+                uint64_t hash_val = xxhash::hash64(point_str);
+                
+                // CRITICAL SECTION: HLL add() is thread-safe with -DTHREADSAFE
+                sketch.add(hash_val);
+                sampled_points++;
+            }
         }
     }
     
     if (verbose && intervals.size() > 0) {
         if (do_subsample) {
+            std::string method = mixed_stride ? "mixed-stride" : "hash-threshold";
             std::cerr << "Processed " << intervals.size() << " intervals, " 
                      << sampled_points << "/" << total_points 
-                     << " points (subB=" << subsample << ").       " << std::endl;
+                     << " points (subB=" << subsample << ", method=" << method << ").       " << std::endl;
         } else {
             std::cerr << "Processed " << intervals.size() << " intervals, " 
                      << total_points << " points total.       " << std::endl;
@@ -408,6 +458,8 @@ size_t process_bed_file_mode_c(const std::string& filepath, hll::hll_t& sketch,
                                const std::string& separator = "-",
                                double subsample = 1.0,
                                double expA = 0.0,
+                               bool mixed_stride = false,
+                               uint64_t seed = 0,
                                bool verbose = false) {
     std::ifstream file(filepath);
     if (!file.is_open()) {
@@ -470,24 +522,71 @@ size_t process_bed_file_mode_c(const std::string& filepath, hll::hll_t& sketch,
         }
         
         // Add points (Mode B component)
-        for (int64_t pos = interval.start; pos < interval.end; pos++) {
-            std::string point_str = create_point_string(interval.chr, pos, separator);
-            total_points++;
+        if (mixed_stride && do_subsample) {
+            // Mixed-stride deterministic subsampling
+            double p = subsample;
+            double inv = 1.0 / p;
+            int64_t s0 = static_cast<int64_t>(std::floor(inv));
+            int64_t s1 = static_cast<int64_t>(std::ceil(inv));
+            if (s0 < 1) s0 = 1;
+            if (s1 < 1) s1 = 1;
             
-            // Deterministic subsampling for points
-            if (do_subsample) {
-                uint32_t point_hash = hash_string_32(point_str);
-                if (point_hash > threshold) {
-                    continue;
-                }
+            bool choose_s1 = false;
+            if (s0 != s1) {
+                double denom = (1.0 / s1) - (1.0 / s0);
+                double q = (denom != 0.0) ? (p - 1.0 / s0) / denom : 0.0;
+                // Deterministic choice per chromosome
+                uint32_t h = hash_string_32(interval.chr, seed);
+                double rfloat = h / 4294967295.0;
+                choose_s1 = (rfloat < q);
+            }
+            int64_t S = (s0 != s1 && choose_s1) ? s1 : s0;
+            
+            // Residue per chromosome
+            uint32_t h2 = hash_string_32(interval.chr + "|res", seed);
+            int64_t residue = h2 % S;
+            
+            // First hit in [start, end)
+            int64_t offset = (residue - (interval.start % S)) % S;
+            if (offset < 0) offset += S;  // Handle negative modulo
+            int64_t x0 = interval.start + offset;
+            
+            for (int64_t pos = x0; pos < interval.end; pos += S) {
+                std::string point_str = create_point_string(interval.chr, pos, separator);
+                total_points++;  // Count all potential points for reporting
+                
+                // Hash the point string for HLL using XXHash for proper distribution
+                uint64_t hash_val = xxhash::hash64(point_str);
+                
+                // CRITICAL SECTION: HLL add() is thread-safe with -DTHREADSAFE
+                sketch.add(hash_val);
+                sampled_points++;
             }
             
-            // Hash the point string for HLL using XXHash for proper distribution
-            uint64_t hash_val = xxhash::hash64(point_str);
+            // Add unsampled points to total count for accurate reporting
+            total_points += (interval.end - interval.start) - ((interval.end - x0 + S - 1) / S);
             
-            // CRITICAL SECTION: HLL add() is thread-safe with -DTHREADSAFE
-            sketch.add(hash_val);
-            sampled_points++;
+        } else {
+            // Hash-threshold subsampling (original method)
+            for (int64_t pos = interval.start; pos < interval.end; pos++) {
+                std::string point_str = create_point_string(interval.chr, pos, separator);
+                total_points++;
+                
+                // Deterministic subsampling for points
+                if (do_subsample) {
+                    uint32_t point_hash = hash_string_32(point_str, seed);
+                    if (point_hash > threshold) {
+                        continue;
+                    }
+                }
+                
+                // Hash the point string for HLL using XXHash for proper distribution
+                uint64_t hash_val = xxhash::hash64(point_str);
+                
+                // CRITICAL SECTION: HLL add() is thread-safe with -DTHREADSAFE
+                sketch.add(hash_val);
+                sampled_points++;
+            }
         }
     }
     
@@ -497,8 +596,9 @@ size_t process_bed_file_mode_c(const std::string& filepath, hll::hll_t& sketch,
             std::cerr << " (" << total_interval_elements << " expanded elements, expA=" << expA << ")";
         }
         if (do_subsample) {
+            std::string method = mixed_stride ? "mixed-stride" : "hash-threshold";
             std::cerr << ", " << sampled_points << "/" << total_points 
-                     << " points (subB=" << subsample << ")";
+                     << " points (subB=" << subsample << ", method=" << method << ")";
         } else {
             std::cerr << ", " << total_points << " points";
         }
@@ -534,6 +634,10 @@ void print_usage(const char* program_name) {
     std::cerr << "                           C = combined (intervals + points)\n";
     std::cerr << "  --subB <float>         : Subsampling rate for points (0.0-1.0, default: 1.0)\n";
     std::cerr << "                           Used in Mode B and Mode C\n";
+    std::cerr << "  --mixed-stride         : Use mixed-stride subsampling strategy (default: hash-threshold)\n";
+    std::cerr << "                           Mixed-stride avoids per-point hashing for better performance\n";
+    std::cerr << "                           at low subB rates. Both methods are deterministic.\n";
+    std::cerr << "  --seed <int>           : Random seed for hashing (default: 0)\n";
     std::cerr << "  --expA <float>         : Interval expansion exponent (default: 0)\n";
     std::cerr << "                           Adds 10^expA versions of each interval (Mode C only)\n";
     std::cerr << "                           Increases interval weight relative to points\n";
@@ -542,6 +646,8 @@ void print_usage(const char* program_name) {
     std::cerr << "  --separator, -s <str>  : Separator for strings (default: \"-\")\n";
     std::cerr << "  --output, -o <prefix>  : Output file prefix (default: hammock)\n";
     std::cerr << "                           Output: {prefix}_hll_p{precision}_jacc{mode}[_expA{expA}][_B{subB}].csv\n";
+    std::cerr << "  --threads, -t <int>    : Number of threads to use (default: auto-select based on workload)\n";
+    std::cerr << "                           Overrides OMP_NUM_THREADS environment variable\n";
     std::cerr << "  --verbose, -v          : Print verbose progress information\n";
     std::cerr << "  --help, -h             : Show this help message\n\n";
     std::cerr << "Examples:\n";
@@ -572,6 +678,9 @@ int main(int argc, char* argv[]) {
     std::string output_prefix = "hammock";
     double subB = 1.0;
     double expA = 0.0; // Default interval expansion exponent
+    bool mixed_stride = false;  // Default to hash-threshold method
+    uint64_t seed = 0;  // Default seed
+    int manual_threads = -1;  // -1 means auto-select
     bool verbose = false;
     
     // Parse command line arguments
@@ -591,6 +700,8 @@ int main(int argc, char* argv[]) {
             return 0;
         } else if (arg == "--verbose" || arg == "-v") {
             verbose = true;
+        } else if (arg == "--mixed-stride") {
+            mixed_stride = true;
         } else if (arg == "--mode" && i + 1 < argc) {
             std::string mode_str = argv[++i];
             if (mode_str == "A" || mode_str == "a") {
@@ -609,6 +720,8 @@ int main(int argc, char* argv[]) {
                 std::cerr << "Error: --subB must be between 0.0 and 1.0" << std::endl;
                 return 1;
             }
+        } else if (arg == "--seed" && i + 1 < argc) {
+            seed = std::stoull(argv[++i]);
         } else if (arg == "--expA" && i + 1 < argc) {
             expA = std::stod(argv[++i]);
             if (expA < 0.0) {
@@ -621,6 +734,12 @@ int main(int argc, char* argv[]) {
             separator = argv[++i];
         } else if ((arg == "--output" || arg == "-o" || arg == "--outprefix") && i + 1 < argc) {
             output_prefix = argv[++i];
+        } else if ((arg == "--threads" || arg == "-t") && i + 1 < argc) {
+            manual_threads = std::stoi(argv[++i]);
+            if (manual_threads < 1) {
+                std::cerr << "Error: --threads must be >= 1" << std::endl;
+                return 1;
+            }
         } else {
             std::cerr << "Unknown argument: " << arg << std::endl;
             print_usage(argv[0]);
@@ -640,12 +759,16 @@ int main(int argc, char* argv[]) {
                 std::cerr << "Mode: C (combined intervals + points)" << std::endl;
             }
             if ((mode == MODE_B || mode == MODE_C) && subB < 1.0) {
-                std::cerr << "Subsampling: " << (subB * 100.0) << "% of points" << std::endl;
+                std::string method = mixed_stride ? "mixed-stride" : "hash-threshold";
+                std::cerr << "Subsampling: " << (subB * 100.0) << "% of points (method: " << method << ")" << std::endl;
             }
             if (mode == MODE_C && expA > 0.0) {
                 size_t expansions = static_cast<size_t>(std::pow(10.0, expA));
                 std::cerr << "Interval expansion: 10^" << expA << " = " << expansions 
                          << " versions per interval" << std::endl;
+            }
+            if (seed != 0) {
+                std::cerr << "Random seed: " << seed << std::endl;
             }
         }
         
@@ -657,10 +780,16 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         
+        // Optimization: Check if same file list provided for both inputs
+        bool same_file_list = (files_list == primary_list);
+        if (same_file_list && verbose) {
+            std::cerr << "Note: Same file list detected - will reuse sketches for efficiency" << std::endl;
+        }
+        
         // Intelligently set number of threads based on workload and mode
 #ifdef _OPENMP
         int max_available_threads = omp_get_max_threads();
-        int optimal_threads = choose_optimal_threads(files.size(), primary_files.size(), mode);
+        int optimal_threads = choose_optimal_threads(files.size(), primary_files.size(), mode, manual_threads);
         omp_set_num_threads(optimal_threads);
         
         // Enable nested parallelism for Mode B/C (file-level + interval-level)
@@ -683,8 +812,15 @@ int main(int argc, char* argv[]) {
             std::cerr << "\nProcessing files..." << std::endl;
 #ifdef _OPENMP
             std::cerr << "Using " << optimal_threads << " threads";
-            if (max_available_threads != optimal_threads) {
-                std::cerr << " (auto-selected from " << max_available_threads << " available)";
+            if (manual_threads > 0) {
+                std::cerr << " (user-specified via --threads)";
+            } else {
+                char* omp_env = std::getenv("OMP_NUM_THREADS");
+                if (omp_env != nullptr) {
+                    std::cerr << " (set via OMP_NUM_THREADS)";
+                } else if (max_available_threads != optimal_threads) {
+                    std::cerr << " (auto-selected from " << max_available_threads << " available)";
+                }
             }
             std::cerr << std::endl;
 #endif
@@ -726,9 +862,9 @@ int main(int argc, char* argv[]) {
                 if (mode == MODE_A) {
                     count = process_bed_file_mode_a(files[i], sketches[i], separator, false);
                 } else if (mode == MODE_B) {
-                    count = process_bed_file_mode_b(files[i], sketches[i], separator, subB, false);
+                    count = process_bed_file_mode_b(files[i], sketches[i], separator, subB, mixed_stride, seed, false);
                 } else {  // MODE_C
-                    count = process_bed_file_mode_c(files[i], sketches[i], separator, subB, expA, false);
+                    count = process_bed_file_mode_c(files[i], sketches[i], separator, subB, expA, mixed_stride, seed, false);
                 }
                 
                 if (verbose) {
@@ -760,9 +896,9 @@ int main(int argc, char* argv[]) {
                 if (mode == MODE_A) {
                     count = process_bed_file_mode_a(files[i], sketches[i], separator, verbose);
                 } else if (mode == MODE_B) {
-                    count = process_bed_file_mode_b(files[i], sketches[i], separator, subB, verbose);
+                    count = process_bed_file_mode_b(files[i], sketches[i], separator, subB, mixed_stride, seed, verbose);
                 } else {  // MODE_C
-                    count = process_bed_file_mode_c(files[i], sketches[i], separator, subB, expA, verbose);
+                    count = process_bed_file_mode_c(files[i], sketches[i], separator, subB, expA, mixed_stride, seed, verbose);
                 }
                 
                 if (verbose) {
@@ -783,15 +919,23 @@ int main(int argc, char* argv[]) {
         // End timing for file processing
         auto file_proc_end = std::chrono::high_resolution_clock::now();
         
-        if (verbose) {
-            std::cerr << "\nProcessing primary files..." << std::endl;
-        }
-        
-        // Pre-allocate primary sketches vector
-        primary_sketches.resize(primary_files.size(), hll::hll_t(precision));
-        
         // Start timing for primary file processing
         auto primary_proc_start = std::chrono::high_resolution_clock::now();
+        
+        // Optimization: Skip if same file list (reuse sketches)
+        if (same_file_list) {
+            if (verbose) {
+                std::cerr << "\nSkipping primary file processing (reusing sketches from main files)" << std::endl;
+            }
+            // Point primary_sketches reference to sketches - but we can't do that with vector
+            // Instead, we'll handle this in the comparison loop
+        } else {
+            if (verbose) {
+                std::cerr << "\nProcessing primary files..." << std::endl;
+            }
+            
+            // Pre-allocate primary sketches vector
+            primary_sketches.resize(primary_files.size(), hll::hll_t(precision));
         
         // Parallel primary file processing (same strategy as main files)
         bool parallelize_primary = (mode == MODE_A) || 
@@ -822,9 +966,9 @@ int main(int argc, char* argv[]) {
                 if (mode == MODE_A) {
                     count = process_bed_file_mode_a(primary_files[i], primary_sketches[i], separator, false);
                 } else if (mode == MODE_B) {
-                    count = process_bed_file_mode_b(primary_files[i], primary_sketches[i], separator, subB, false);
+                    count = process_bed_file_mode_b(primary_files[i], primary_sketches[i], separator, subB, mixed_stride, seed, false);
                 } else {  // MODE_C
-                    count = process_bed_file_mode_c(primary_files[i], primary_sketches[i], separator, subB, expA, false);
+                    count = process_bed_file_mode_c(primary_files[i], primary_sketches[i], separator, subB, expA, mixed_stride, seed, false);
                 }
                 
                 if (verbose) {
@@ -856,9 +1000,9 @@ int main(int argc, char* argv[]) {
                 if (mode == MODE_A) {
                     count = process_bed_file_mode_a(primary_files[i], primary_sketches[i], separator, verbose);
                 } else if (mode == MODE_B) {
-                    count = process_bed_file_mode_b(primary_files[i], primary_sketches[i], separator, subB, verbose);
+                    count = process_bed_file_mode_b(primary_files[i], primary_sketches[i], separator, subB, mixed_stride, seed, verbose);
                 } else {  // MODE_C
-                    count = process_bed_file_mode_c(primary_files[i], primary_sketches[i], separator, subB, expA, verbose);
+                    count = process_bed_file_mode_c(primary_files[i], primary_sketches[i], separator, subB, expA, mixed_stride, seed, verbose);
                 }
                 
                 if (verbose) {
@@ -875,6 +1019,7 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
+        }  // End of else block for primary file processing
         
         // End timing for primary file processing
         auto primary_proc_end = std::chrono::high_resolution_clock::now();
@@ -941,19 +1086,23 @@ int main(int argc, char* argv[]) {
                 results[idx].i = i;
                 results[idx].j = j;
                 
+                // Get the appropriate sketch for comparison
+                // If same file list, use sketches[j]; otherwise use primary_sketches[j]
+                hll::hll_t& sketch_j = same_file_list ? sketches[j] : primary_sketches[j];
+                
                 // Use inclusion-exclusion Jaccard with MLE cardinalities (should be most accurate)
-                results[idx].jaccard = calculate_jaccard(sketches[i], primary_sketches[j]);
+                results[idx].jaccard = calculate_jaccard(sketches[i], sketch_j);
                 
                 // Individual cardinalities using MLE for better accuracy
                 results[idx].card1 = sketches[i].report_ertl_improved();
-                results[idx].card2 = primary_sketches[j].report_ertl_improved();
+                results[idx].card2 = sketch_j.report_ertl_improved();
                 
                 // Intersection via MIN of registers (higher error than Jaccard)
-                results[idx].intersection = hll::intersection_size(sketches[i], primary_sketches[j]);
+                results[idx].intersection = hll::intersection_size(sketches[i], sketch_j);
                 
                 // Union via MAX of registers using MLE for better accuracy
                 // Using operator+ which creates a copy (operator+= now fixed but keeping for consistency)
-                hll::hll_t union_sketch = hll::operator+(sketches[i], primary_sketches[j]);
+                hll::hll_t union_sketch = hll::operator+(sketches[i], sketch_j);
                 results[idx].union_size = union_sketch.report_ertl_improved();
                 
                 // NOTE: Due to different estimation methods, jaccard ≠ intersection/union
