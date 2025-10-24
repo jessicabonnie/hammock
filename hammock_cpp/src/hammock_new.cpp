@@ -126,8 +126,8 @@ void print_usage(const char* program_name) {
     std::cerr << "                           Output: {prefix}_{hll|bmh}_p{precision}_jacc{mode}[_expA{expA}][_B{subB}].csv\n";
     std::cerr << "  --threads, -t <int>    : Number of threads to use (default: auto-select based on workload)\n";
     std::cerr << "                           Overrides OMP_NUM_THREADS environment variable\n";
-    std::cerr << "  --count <int>          : Column index (1-based) containing precomputed read counts\n";
-    std::cerr << "                           When specified, uses BagMinHash sketching with count values\n";
+    std::cerr << "  --peak-height <int>    : Column index (1-based) containing peak height/signal values\n";
+    std::cerr << "                           When specified with Mode A, uses BagMinHash sketching with signal weights\n";
     std::cerr << "                           When not specified, uses HyperLogLog sketching (default)\n";
     std::cerr << "  --verbose, -v          : Print verbose progress information\n";
     std::cerr << "  --help, -h             : Show this help message\n\n";
@@ -147,8 +147,8 @@ void print_usage(const char* program_name) {
     std::cerr << "  # Mode C with both expansion and subsampling\n";
     std::cerr << "  " << program_name << " files.txt primary.txt --mode C --expA 2 --subB 0.1 -o results\n";
     std::cerr << "    → results_hll_p18_jaccC_expA2.00_B0.10.csv\n\n";
-    std::cerr << "  # BagMinHash with count column (column 4)\n";
-    std::cerr << "  " << program_name << " files.txt primary.txt --mode A --count 4 -o results\n";
+    std::cerr << "  # BagMinHash with peak height column (column 4)\n";
+    std::cerr << "  " << program_name << " files.txt primary.txt --mode A --peak-height 4 -o results\n";
     std::cerr << "    → results_bmh_p18_jaccA.csv\n";
 }
 
@@ -165,7 +165,7 @@ int main(int argc, char* argv[]) {
     bool mixed_stride = false;  // Default to hash-threshold method
     uint64_t seed = 0;  // Default seed
     int manual_threads = -1;  // -1 means auto-select
-    int count_column = -1;  // -1 means no count column specified
+    int peak_height_column = -1;  // -1 means no count column specified
     bool verbose = false;
     
     // Parse command line arguments
@@ -225,10 +225,10 @@ int main(int argc, char* argv[]) {
                 std::cerr << "Error: --threads must be >= 1" << std::endl;
                 return 1;
             }
-        } else if (arg == "--count" && i + 1 < argc) {
-            count_column = std::stoi(argv[++i]);
-            if (count_column < 1) {
-                std::cerr << "Error: --count must be >= 1 (1-based column index)" << std::endl;
+        } else if (arg == "--peak-height" && i + 1 < argc) {
+            peak_height_column = std::stoi(argv[++i]);
+            if (peak_height_column < 1) {
+                std::cerr << "Error: --peak-height must be >= 1 (1-based column index)" << std::endl;
                 return 1;
             }
         } else {
@@ -280,6 +280,12 @@ int main(int argc, char* argv[]) {
         // Intelligently set number of threads based on workload and mode
 #ifdef _OPENMP
         int max_available_threads = omp_get_max_threads();
+        // Check for incompatible peak-height usage
+        if (peak_height_column > 0 && mode != MODE_A) {
+            std::cerr << "Warning: --peak-height is only supported with Mode A. Using HyperLogLog sketching instead." << std::endl;
+            peak_height_column = -1;  // Reset to disable BagMinHash
+        }
+        
         int optimal_threads = choose_optimal_threads(files.size(), primary_files.size(), mode, manual_threads);
         omp_set_num_threads(optimal_threads);
         
@@ -299,9 +305,9 @@ int main(int argc, char* argv[]) {
         std::vector<std::unique_ptr<AbstractSketch>> sketches;
         std::vector<std::unique_ptr<AbstractSketch>> primary_sketches;
         
-        // Create appropriate sketch type based on count column
-        if (count_column > 0) {
-            // Use BagMinHash when count column is specified
+        // Create appropriate sketch type based on peak height column and mode
+        if (peak_height_column > 0 && mode == MODE_A) {
+            // Use BagMinHash when peak height column is specified and Mode A is used
             for (size_t i = 0; i < files.size(); i++) {
                 sketches.push_back(std::make_unique<BagMinHashSketch>(precision, seed));
             }
@@ -309,7 +315,7 @@ int main(int argc, char* argv[]) {
                 primary_sketches.push_back(std::make_unique<BagMinHashSketch>(precision, seed));
             }
         } else {
-            // Use HLL when no count column is specified
+            // Use HLL for all other cases (no peak height column or Mode B/C)
             for (size_t i = 0; i < files.size(); i++) {
                 sketches.push_back(std::make_unique<HLLSketch>(precision));
             }
@@ -370,11 +376,11 @@ int main(int argc, char* argv[]) {
                 size_t count;
                 
                 if (mode == MODE_A) {
-                    count = process_bed_file_mode_a(files[i], *sketches[i], separator, count_column, false);
+                    count = process_bed_file_mode_a(files[i], *sketches[i], separator, peak_height_column, false);
                 } else if (mode == MODE_B) {
-                    count = process_bed_file_mode_b(files[i], *sketches[i], separator, subB, mixed_stride, seed, count_column, false);
+                    count = process_bed_file_mode_b(files[i], *sketches[i], separator, subB, mixed_stride, seed, peak_height_column, false);
                 } else {  // MODE_C
-                    count = process_bed_file_mode_c(files[i], *sketches[i], separator, subB, expA, mixed_stride, seed, count_column, false);
+                    count = process_bed_file_mode_c(files[i], *sketches[i], separator, subB, expA, mixed_stride, seed, peak_height_column, false);
                 }
                 
                 if (verbose) {
@@ -404,11 +410,11 @@ int main(int argc, char* argv[]) {
                 size_t count;
                 
                 if (mode == MODE_A) {
-                    count = process_bed_file_mode_a(files[i], *sketches[i], separator, count_column, verbose);
+                    count = process_bed_file_mode_a(files[i], *sketches[i], separator, peak_height_column, verbose);
                 } else if (mode == MODE_B) {
-                    count = process_bed_file_mode_b(files[i], *sketches[i], separator, subB, mixed_stride, seed, count_column, verbose);
+                    count = process_bed_file_mode_b(files[i], *sketches[i], separator, subB, mixed_stride, seed, peak_height_column, verbose);
                 } else {  // MODE_C
-                    count = process_bed_file_mode_c(files[i], *sketches[i], separator, subB, expA, mixed_stride, seed, count_column, verbose);
+                    count = process_bed_file_mode_c(files[i], *sketches[i], separator, subB, expA, mixed_stride, seed, peak_height_column, verbose);
                 }
                 
                 if (verbose) {
@@ -446,7 +452,7 @@ int main(int argc, char* argv[]) {
             
             // Pre-allocate primary sketches vector
             primary_sketches.clear();
-            if (count_column > 0) {
+            if (peak_height_column > 0) {
                 for (size_t i = 0; i < primary_files.size(); i++) {
                     primary_sketches.push_back(std::make_unique<BagMinHashSketch>(precision, seed));
                 }
@@ -483,11 +489,11 @@ int main(int argc, char* argv[]) {
                 size_t count;
                 
                 if (mode == MODE_A) {
-                    count = process_bed_file_mode_a(primary_files[i], *primary_sketches[i], separator, count_column, false);
+                    count = process_bed_file_mode_a(primary_files[i], *primary_sketches[i], separator, peak_height_column, false);
                 } else if (mode == MODE_B) {
-                    count = process_bed_file_mode_b(primary_files[i], *primary_sketches[i], separator, subB, mixed_stride, seed, count_column, false);
+                    count = process_bed_file_mode_b(primary_files[i], *primary_sketches[i], separator, subB, mixed_stride, seed, peak_height_column, false);
                 } else {  // MODE_C
-                    count = process_bed_file_mode_c(primary_files[i], *primary_sketches[i], separator, subB, expA, mixed_stride, seed, count_column, false);
+                    count = process_bed_file_mode_c(primary_files[i], *primary_sketches[i], separator, subB, expA, mixed_stride, seed, peak_height_column, false);
                 }
                 
                 if (verbose) {
@@ -517,11 +523,11 @@ int main(int argc, char* argv[]) {
                 size_t count;
                 
                 if (mode == MODE_A) {
-                    count = process_bed_file_mode_a(primary_files[i], *primary_sketches[i], separator, count_column, verbose);
+                    count = process_bed_file_mode_a(primary_files[i], *primary_sketches[i], separator, peak_height_column, verbose);
                 } else if (mode == MODE_B) {
-                    count = process_bed_file_mode_b(primary_files[i], *primary_sketches[i], separator, subB, mixed_stride, seed, count_column, verbose);
+                    count = process_bed_file_mode_b(primary_files[i], *primary_sketches[i], separator, subB, mixed_stride, seed, peak_height_column, verbose);
                 } else {  // MODE_C
-                    count = process_bed_file_mode_c(primary_files[i], *primary_sketches[i], separator, subB, expA, mixed_stride, seed, count_column, verbose);
+                    count = process_bed_file_mode_c(primary_files[i], *primary_sketches[i], separator, subB, expA, mixed_stride, seed, peak_height_column, verbose);
                 }
                 
                 if (verbose) {
@@ -558,7 +564,7 @@ int main(int argc, char* argv[]) {
         else mode_str = "C";
         
         // Generate output filename using Python hammock convention
-        std::string sketch_type = (count_column >= 0) ? "bmh" : "hll";
+        std::string sketch_type = (peak_height_column >= 0) ? "bmh" : "hll";
         std::string output_file = output_prefix + "_" + sketch_type + "_p" + std::to_string(precision) + "_jacc" + mode_str;
         
         // Add expA if present (and not default)

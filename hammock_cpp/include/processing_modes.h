@@ -16,14 +16,14 @@ uint32_t hash_string_32(const std::string& s, uint64_t seed = 0);
 
 // Processing functions for different modes
 size_t process_bed_file_mode_a(const std::string& filepath, AbstractSketch& sketch, 
-                               const std::string& separator = "-", int count_column = -1, bool verbose = false);
+                               const std::string& separator = "-", int peak_height_column = -1, bool verbose = false);
 
 size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sketch,
                                const std::string& separator = "-", 
                                double subsample = 1.0,
                                bool mixed_stride = false,
                                uint64_t seed = 0,
-                               int count_column = -1,
+                               int peak_height_column = -1,
                                bool verbose = false);
 
 size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sketch,
@@ -32,7 +32,7 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
                                double expA = 0.0,
                                bool mixed_stride = false,
                                uint64_t seed = 0,
-                               int count_column = -1,
+                               int peak_height_column = -1,
                                bool verbose = false);
 
 // Jaccard calculation

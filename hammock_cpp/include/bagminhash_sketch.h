@@ -19,7 +19,7 @@ public:
     explicit BagMinHashSketch(size_t num_hashes, uint64_t seed = 0);
     
     void add(uint64_t hash_val) override;
-    void add_with_count(uint64_t hash_val, uint64_t count);
+    void add_with_normalized_count(uint64_t hash_val, uint64_t raw_count, double scale_factor = 100.0);
     double jaccard_similarity(const AbstractSketch& other) const override;
     double cardinality() const override;
     double intersection_size(const AbstractSketch& other) const override;

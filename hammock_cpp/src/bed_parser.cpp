@@ -24,7 +24,7 @@ bool is_header_or_blank(const std::string& line) {
 }
 
 bool parse_bed_line(const std::string& line, std::string& chr, int64_t& start, int64_t& end, 
-                    int64_t& count, int count_column) {
+                    int64_t& count, int peak_height_column) {
     if (is_header_or_blank(line)) {
         return false;
     }
@@ -43,16 +43,16 @@ bool parse_bed_line(const std::string& line, std::string& chr, int64_t& start, i
     chr = normalize_chromosome(chr_raw);
     
     // Extract count from specified column if requested
-    if (count_column > 0) {
+    if (peak_height_column > 0) {
         count = 1;  // Default count if column doesn't exist or is invalid
         std::string token;
         int current_column = 3;  // We've already read chr, start, end (columns 1-3)
         
-        while (iss >> token && current_column < count_column) {
+        while (iss >> token && current_column < peak_height_column) {
             current_column++;
         }
         
-        if (current_column == count_column) {
+        if (current_column == peak_height_column) {
             try {
                 count = std::stoll(token);
                 if (count < 0) {

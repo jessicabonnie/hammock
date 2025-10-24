@@ -35,7 +35,7 @@ double calculate_jaccard(const AbstractSketch& sketch1, const AbstractSketch& sk
 }
 
 size_t process_bed_file_mode_a(const std::string& filepath, AbstractSketch& sketch, 
-                               const std::string& separator, int count_column, bool verbose) {
+                               const std::string& separator, int peak_height_column, bool verbose) {
     std::ifstream file(filepath);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + filepath);
@@ -49,18 +49,19 @@ size_t process_bed_file_mode_a(const std::string& filepath, AbstractSketch& sket
     while (std::getline(file, line)) {
         line.erase(line.find_last_not_of(" \t\n\r\f\v") + 1);
         
-        if (parse_bed_line(line, chr, start, end, count, count_column)) {
+        if (parse_bed_line(line, chr, start, end, count, peak_height_column)) {
             std::string interval_str = create_interval_string(chr, start, end, separator);
             
             // Hash the interval string using XXHash for proper distribution
             uint64_t hash_val = xxhash::hash64(interval_str);
             
             // Use count-aware adding if count column is specified
-            if (count_column > 0) {
+            if (peak_height_column > 0) {
                 // Try to cast to BagMinHashSketch to use count-aware adding
                 BagMinHashSketch* bmh_sketch = dynamic_cast<BagMinHashSketch*>(&sketch);
                 if (bmh_sketch) {
-                    bmh_sketch->add_with_count(hash_val, count);
+                    // Use normalized weights for BagMinHash to ensure scale-comparable weights
+                    bmh_sketch->add_with_normalized_count(hash_val, count);
                 } else {
                     // Fall back to regular add for HLL
                     for (int64_t i = 0; i < count; i++) {
@@ -92,7 +93,7 @@ size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sket
                                double subsample,
                                bool mixed_stride,
                                uint64_t seed,
-                               int count_column,
+                               int peak_height_column,
                                bool verbose) {
     std::ifstream file(filepath);
     if (!file.is_open()) {
@@ -116,7 +117,7 @@ size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sket
     
     while (std::getline(file, line)) {
         line.erase(line.find_last_not_of(" \t\n\r\f\v") + 1);
-        if (parse_bed_line(line, chr, start, end, count, count_column)) {
+        if (parse_bed_line(line, chr, start, end, count, peak_height_column)) {
             intervals.push_back({chr, start, end, count});
         }
     }
@@ -221,7 +222,7 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
                                double expA,
                                bool mixed_stride,
                                uint64_t seed,
-                               int count_column,
+                               int peak_height_column,
                                bool verbose) {
     std::ifstream file(filepath);
     if (!file.is_open()) {
@@ -254,7 +255,7 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
     
     while (std::getline(file, line)) {
         line.erase(line.find_last_not_of(" \t\n\r\f\v") + 1);
-        if (parse_bed_line(line, chr, start, end, count, count_column)) {
+        if (parse_bed_line(line, chr, start, end, count, peak_height_column)) {
             intervals.push_back({chr, start, end, count});
         }
     }
