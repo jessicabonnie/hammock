@@ -11,6 +11,9 @@
 #include <cstdlib>
 #include <stdexcept>
 #include <chrono>
+#include <memory>
+#include <unordered_map>
+#include <queue>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -117,6 +120,214 @@ namespace xxhash {
 }  // namespace xxhash
 
 // ============================================================================
+// ABSTRACT SKETCH INTERFACE
+// ============================================================================
+
+// Abstract base class for all sketch types
+class AbstractSketch {
+public:
+    virtual ~AbstractSketch() = default;
+    virtual void add(uint64_t hash_val) = 0;
+    virtual double jaccard_similarity(const AbstractSketch& other) const = 0;
+    virtual double cardinality() const = 0;
+    virtual double intersection_size(const AbstractSketch& other) const = 0;
+    virtual std::unique_ptr<AbstractSketch> union_with(const AbstractSketch& other) const = 0;
+    virtual std::string get_sketch_type() const = 0;
+    virtual void clear() = 0;
+};
+
+// ============================================================================
+// HLL SKETCH WRAPPER
+// ============================================================================
+
+class HLLSketch : public AbstractSketch {
+private:
+    hll::hll_t sketch_;
+    
+public:
+    explicit HLLSketch(size_t precision) : sketch_(precision) {}
+    
+    void add(uint64_t hash_val) override {
+        sketch_.add(hash_val);
+    }
+    
+    double jaccard_similarity(const AbstractSketch& other) const override {
+        const HLLSketch* hll_other = dynamic_cast<const HLLSketch*>(&other);
+        if (!hll_other) {
+            throw std::runtime_error("Cannot compute Jaccard between different sketch types");
+        }
+        return sketch_.jaccard_similarity_registers(hll_other->sketch_);
+    }
+    
+    double cardinality() const override {
+        return const_cast<hll::hll_t&>(sketch_).report_ertl_improved();
+    }
+    
+    double intersection_size(const AbstractSketch& other) const override {
+        const HLLSketch* hll_other = dynamic_cast<const HLLSketch*>(&other);
+        if (!hll_other) {
+            throw std::runtime_error("Cannot compute intersection between different sketch types");
+        }
+        return hll::intersection_size(sketch_, hll_other->sketch_);
+    }
+    
+    std::unique_ptr<AbstractSketch> union_with(const AbstractSketch& other) const override {
+        const HLLSketch* hll_other = dynamic_cast<const HLLSketch*>(&other);
+        if (!hll_other) {
+            throw std::runtime_error("Cannot compute union between different sketch types");
+        }
+        auto result = std::make_unique<HLLSketch>(sketch_.get_np());
+        result->sketch_ = hll::operator+(sketch_, hll_other->sketch_);
+        return result;
+    }
+    
+    std::string get_sketch_type() const override {
+        return "hyperloglog";
+    }
+    
+    void clear() override {
+        sketch_.clear();
+    }
+};
+
+// ============================================================================
+// BAGMINHASH SKETCH IMPLEMENTATION
+// ============================================================================
+
+class BagMinHashSketch : public AbstractSketch {
+private:
+    size_t num_hashes_;
+    std::vector<std::pair<uint64_t, uint64_t>> min_hashes_;  // (hash, count) pairs
+    uint64_t seed_;
+    
+    // Hash function for generating multiple hash values
+    uint64_t hash_with_seed(uint64_t value, uint64_t seed) const {
+        // Convert uint64_t to string for xxhash
+        std::string value_str = std::to_string(value);
+        return xxhash::hash64(value_str, seed);
+    }
+    
+public:
+    explicit BagMinHashSketch(size_t num_hashes, uint64_t seed = 0) 
+        : num_hashes_(num_hashes), min_hashes_(num_hashes, {UINT64_MAX, 0}), seed_(seed) {}
+    
+    void add(uint64_t hash_val) override {
+        // For BagMinHash, we need to track counts, but since we're getting individual hash values,
+        // we'll treat each add as a count of 1. In a real implementation, you'd want to batch
+        // adds by the same hash value to properly handle counts.
+        for (size_t i = 0; i < num_hashes_; ++i) {
+            uint64_t hash_seed = seed_ + i;
+            uint64_t hashed_value = hash_with_seed(hash_val, hash_seed);
+            
+            if (hashed_value < min_hashes_[i].first) {
+                min_hashes_[i].first = hashed_value;
+                min_hashes_[i].second = 1;  // Reset count when new minimum found
+            } else if (hashed_value == min_hashes_[i].first) {
+                min_hashes_[i].second++;  // Increment count for same minimum
+            }
+        }
+    }
+    
+    // Add with explicit count (for use with --count argument)
+    void add_with_count(uint64_t hash_val, uint64_t count) {
+        for (size_t i = 0; i < num_hashes_; ++i) {
+            uint64_t hash_seed = seed_ + i;
+            uint64_t hashed_value = hash_with_seed(hash_val, hash_seed);
+            
+            if (hashed_value < min_hashes_[i].first) {
+                min_hashes_[i].first = hashed_value;
+                min_hashes_[i].second = count;
+            } else if (hashed_value == min_hashes_[i].first) {
+                min_hashes_[i].second += count;
+            }
+        }
+    }
+    
+    double jaccard_similarity(const AbstractSketch& other) const override {
+        const BagMinHashSketch* bmh_other = dynamic_cast<const BagMinHashSketch*>(&other);
+        if (!bmh_other) {
+            throw std::runtime_error("Cannot compute Jaccard between different sketch types");
+        }
+        
+        if (min_hashes_.size() != bmh_other->min_hashes_.size()) {
+            throw std::runtime_error("BagMinHash sketches must have same number of hashes");
+        }
+        
+        double intersection_sum = 0.0;
+        double union_sum = 0.0;
+        
+        for (size_t i = 0; i < min_hashes_.size(); ++i) {
+            if (min_hashes_[i].first == bmh_other->min_hashes_[i].first) {
+                // Same minimum hash - intersection is min of counts, union is max
+                intersection_sum += std::min(min_hashes_[i].second, bmh_other->min_hashes_[i].second);
+                union_sum += std::max(min_hashes_[i].second, bmh_other->min_hashes_[i].second);
+            } else {
+                // Different minimum hashes - no intersection, union is sum of counts
+                union_sum += min_hashes_[i].second + bmh_other->min_hashes_[i].second;
+            }
+        }
+        
+        return (union_sum > 0) ? (intersection_sum / union_sum) : 0.0;
+    }
+    
+    double cardinality() const override {
+        // For BagMinHash, cardinality estimation is more complex
+        // This is a simplified version - in practice you'd want a more sophisticated estimator
+        double total_count = 0.0;
+        for (const auto& pair : min_hashes_) {
+            total_count += pair.second;
+        }
+        return total_count / num_hashes_;
+    }
+    
+    double intersection_size(const AbstractSketch& other) const override {
+        const BagMinHashSketch* bmh_other = dynamic_cast<const BagMinHashSketch*>(&other);
+        if (!bmh_other) {
+            throw std::runtime_error("Cannot compute intersection between different sketch types");
+        }
+        
+        double intersection_sum = 0.0;
+        for (size_t i = 0; i < min_hashes_.size(); ++i) {
+            if (min_hashes_[i].first == bmh_other->min_hashes_[i].first) {
+                intersection_sum += std::min(min_hashes_[i].second, bmh_other->min_hashes_[i].second);
+            }
+        }
+        return intersection_sum;
+    }
+    
+    std::unique_ptr<AbstractSketch> union_with(const AbstractSketch& other) const override {
+        const BagMinHashSketch* bmh_other = dynamic_cast<const BagMinHashSketch*>(&other);
+        if (!bmh_other) {
+            throw std::runtime_error("Cannot compute union between different sketch types");
+        }
+        
+        auto result = std::make_unique<BagMinHashSketch>(num_hashes_, seed_);
+        
+        for (size_t i = 0; i < min_hashes_.size(); ++i) {
+            if (min_hashes_[i].first < bmh_other->min_hashes_[i].first) {
+                result->min_hashes_[i] = min_hashes_[i];
+            } else if (bmh_other->min_hashes_[i].first < min_hashes_[i].first) {
+                result->min_hashes_[i] = bmh_other->min_hashes_[i];
+            } else {
+                // Same minimum hash - take the maximum count
+                result->min_hashes_[i] = {min_hashes_[i].first, 
+                                         std::max(min_hashes_[i].second, bmh_other->min_hashes_[i].second)};
+            }
+        }
+        
+        return result;
+    }
+    
+    std::string get_sketch_type() const override {
+        return "bagminhash";
+    }
+    
+    void clear() override {
+        std::fill(min_hashes_.begin(), min_hashes_.end(), std::make_pair(UINT64_MAX, 0));
+    }
+};
+
+// ============================================================================
 // THREAD MANAGEMENT
 // ============================================================================
 
@@ -206,8 +417,9 @@ bool is_header_or_blank(const std::string& line) {
     return false;
 }
 
-// Parse a BED line and extract chr, start, end
-bool parse_bed_line(const std::string& line, std::string& chr, int64_t& start, int64_t& end) {
+// Parse a BED line and extract chr, start, end, and optionally count
+bool parse_bed_line(const std::string& line, std::string& chr, int64_t& start, int64_t& end, 
+                    int64_t& count, int count_column = -1) {
     if (is_header_or_blank(line)) {
         return false;
     }
@@ -224,6 +436,31 @@ bool parse_bed_line(const std::string& line, std::string& chr, int64_t& start, i
     }
     
     chr = normalize_chromosome(chr_raw);
+    
+    // Extract count from specified column if requested
+    if (count_column > 0) {
+        count = 1;  // Default count if column doesn't exist or is invalid
+        std::string token;
+        int current_column = 3;  // We've already read chr, start, end (columns 1-3)
+        
+        while (iss >> token && current_column < count_column) {
+            current_column++;
+        }
+        
+        if (current_column == count_column) {
+            try {
+                count = std::stoll(token);
+                if (count < 0) {
+                    count = 0;  // Negative counts don't make sense
+                }
+            } catch (const std::exception&) {
+                count = 1;  // Default to 1 if parsing fails
+            }
+        }
+    } else {
+        count = 1;  // Default count when no count column specified
+    }
+    
     return true;
 }
 
@@ -251,12 +488,9 @@ std::vector<std::string> read_filepath_list(const std::string& list_file) {
 }
 
 // Calculate Jaccard similarity between two sketches
-// Use register-based method which is empirically most accurate for HLL
-// This avoids the fundamental errors in HLL cardinality-based intersection/union estimation
-double calculate_jaccard(hll::hll_t& sketch1, hll::hll_t& sketch2) {
-    // Register-based Jaccard compares register patterns directly
-    // This method has been empirically validated and avoids cardinality estimation errors
-    return sketch1.jaccard_similarity_registers(sketch2);
+// Use polymorphic method that works with any sketch type
+double calculate_jaccard(const AbstractSketch& sketch1, const AbstractSketch& sketch2) {
+    return sketch1.jaccard_similarity(sketch2);
 }
 
 // ============================================================================
@@ -268,8 +502,8 @@ std::string create_interval_string(const std::string& chr, int64_t start, int64_
     return chr + separator + std::to_string(start) + separator + std::to_string(end) + separator + "A";
 }
 
-size_t process_bed_file_mode_a(const std::string& filepath, hll::hll_t& sketch, 
-                               const std::string& separator = "-", bool verbose = false) {
+size_t process_bed_file_mode_a(const std::string& filepath, AbstractSketch& sketch, 
+                               const std::string& separator = "-", int count_column = -1, bool verbose = false) {
     std::ifstream file(filepath);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + filepath);
@@ -278,19 +512,33 @@ size_t process_bed_file_mode_a(const std::string& filepath, hll::hll_t& sketch,
     size_t interval_count = 0;
     std::string line;
     std::string chr;
-    int64_t start, end;
+    int64_t start, end, count;
     
     while (std::getline(file, line)) {
         line.erase(line.find_last_not_of(" \t\n\r\f\v") + 1);
         
-        if (parse_bed_line(line, chr, start, end)) {
+        if (parse_bed_line(line, chr, start, end, count, count_column)) {
             std::string interval_str = create_interval_string(chr, start, end, separator);
             
             // Hash the interval string using XXHash for proper distribution
             uint64_t hash_val = xxhash::hash64(interval_str);
             
-            // Use add() directly to avoid double-hashing
-            sketch.add(hash_val);
+            // Use count-aware adding if count column is specified
+            if (count_column > 0) {
+                // Try to cast to BagMinHashSketch to use count-aware adding
+                BagMinHashSketch* bmh_sketch = dynamic_cast<BagMinHashSketch*>(&sketch);
+                if (bmh_sketch) {
+                    bmh_sketch->add_with_count(hash_val, count);
+                } else {
+                    // Fall back to regular add for HLL
+                    for (int64_t i = 0; i < count; i++) {
+                        sketch.add(hash_val);
+                    }
+                }
+            } else {
+                // Use add() directly to avoid double-hashing
+                sketch.add(hash_val);
+            }
             interval_count++;
             
             if (verbose && interval_count % 10000 == 0) {
@@ -323,11 +571,12 @@ uint32_t hash_string_32(const std::string& s, uint64_t seed = 0) {
     return static_cast<uint32_t>(hash64 & 0xFFFFFFFF);
 }
 
-size_t process_bed_file_mode_b(const std::string& filepath, hll::hll_t& sketch,
+size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sketch,
                                const std::string& separator = "-", 
                                double subsample = 1.0,
                                bool mixed_stride = false,
                                uint64_t seed = 0,
+                               int count_column = -1,
                                bool verbose = false) {
     std::ifstream file(filepath);
     if (!file.is_open()) {
@@ -341,18 +590,18 @@ size_t process_bed_file_mode_b(const std::string& filepath, hll::hll_t& sketch,
     // Read all intervals first
     struct Interval {
         std::string chr;
-        int64_t start, end;
+        int64_t start, end, count;
     };
     std::vector<Interval> intervals;
     
     std::string line;
     std::string chr;
-    int64_t start, end;
+    int64_t start, end, count;
     
     while (std::getline(file, line)) {
         line.erase(line.find_last_not_of(" \t\n\r\f\v") + 1);
-        if (parse_bed_line(line, chr, start, end)) {
-            intervals.push_back({chr, start, end});
+        if (parse_bed_line(line, chr, start, end, count, count_column)) {
+            intervals.push_back({chr, start, end, count});
         }
     }
     file.close();
@@ -454,12 +703,13 @@ size_t process_bed_file_mode_b(const std::string& filepath, hll::hll_t& sketch,
 // MODE C: COMBINED INTERVAL + POINT COMPARISON
 // ============================================================================
 
-size_t process_bed_file_mode_c(const std::string& filepath, hll::hll_t& sketch,
+size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sketch,
                                const std::string& separator = "-",
                                double subsample = 1.0,
                                double expA = 0.0,
                                bool mixed_stride = false,
                                uint64_t seed = 0,
+                               int count_column = -1,
                                bool verbose = false) {
     std::ifstream file(filepath);
     if (!file.is_open()) {
@@ -482,18 +732,18 @@ size_t process_bed_file_mode_c(const std::string& filepath, hll::hll_t& sketch,
     // Read all intervals first
     struct Interval {
         std::string chr;
-        int64_t start, end;
+        int64_t start, end, count;
     };
     std::vector<Interval> intervals;
     
     std::string line;
     std::string chr;
-    int64_t start, end;
+    int64_t start, end, count;
     
     while (std::getline(file, line)) {
         line.erase(line.find_last_not_of(" \t\n\r\f\v") + 1);
-        if (parse_bed_line(line, chr, start, end)) {
-            intervals.push_back({chr, start, end});
+        if (parse_bed_line(line, chr, start, end, count, count_column)) {
+            intervals.push_back({chr, start, end, count});
         }
     }
     file.close();
@@ -516,6 +766,7 @@ size_t process_bed_file_mode_c(const std::string& filepath, hll::hll_t& sketch,
         for (size_t exp = 0; exp < interval_expansions; exp++) {
             std::string interval_str = base_interval_str + separator + std::to_string(exp);
             uint64_t interval_hash = xxhash::hash64(interval_str);
+            
             // CRITICAL SECTION: HLL add() is thread-safe with -DTHREADSAFE
             sketch.add(interval_hash);
             total_interval_elements++;
@@ -648,6 +899,9 @@ void print_usage(const char* program_name) {
     std::cerr << "                           Output: {prefix}_hll_p{precision}_jacc{mode}[_expA{expA}][_B{subB}].csv\n";
     std::cerr << "  --threads, -t <int>    : Number of threads to use (default: auto-select based on workload)\n";
     std::cerr << "                           Overrides OMP_NUM_THREADS environment variable\n";
+    std::cerr << "  --count <int>          : Column index (1-based) containing precomputed read counts\n";
+    std::cerr << "                           When specified, uses BagMinHash sketching with count values\n";
+    std::cerr << "                           When not specified, uses HyperLogLog sketching (default)\n";
     std::cerr << "  --verbose, -v          : Print verbose progress information\n";
     std::cerr << "  --help, -h             : Show this help message\n\n";
     std::cerr << "Examples:\n";
@@ -665,7 +919,10 @@ void print_usage(const char* program_name) {
     std::cerr << "    → results_hll_p18_jaccC_expA2.50.csv\n\n";
     std::cerr << "  # Mode C with both expansion and subsampling\n";
     std::cerr << "  " << program_name << " files.txt primary.txt --mode C --expA 2 --subB 0.1 -o results\n";
-    std::cerr << "    → results_hll_p18_jaccC_expA2.00_B0.10.csv\n";
+    std::cerr << "    → results_hll_p18_jaccC_expA2.00_B0.10.csv\n\n";
+    std::cerr << "  # Using BagMinHash with count column (column 4)\n";
+    std::cerr << "  " << program_name << " files.txt primary.txt --mode A --count 4 -o results\n";
+    std::cerr << "    → results_bagminhash_p18_jaccA.csv\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -681,6 +938,7 @@ int main(int argc, char* argv[]) {
     bool mixed_stride = false;  // Default to hash-threshold method
     uint64_t seed = 0;  // Default seed
     int manual_threads = -1;  // -1 means auto-select
+    int count_column = -1;  // -1 means no count column specified
     bool verbose = false;
     
     // Parse command line arguments
@@ -738,6 +996,12 @@ int main(int argc, char* argv[]) {
             manual_threads = std::stoi(argv[++i]);
             if (manual_threads < 1) {
                 std::cerr << "Error: --threads must be >= 1" << std::endl;
+                return 1;
+            }
+        } else if (arg == "--count" && i + 1 < argc) {
+            count_column = std::stoi(argv[++i]);
+            if (count_column < 1) {
+                std::cerr << "Error: --count must be >= 1 (1-based column index)" << std::endl;
                 return 1;
             }
         } else {
@@ -805,8 +1069,27 @@ int main(int argc, char* argv[]) {
         }
         
         // Create sketches for all files
-        std::vector<hll::hll_t> sketches(files.size(), hll::hll_t(precision));
-        std::vector<hll::hll_t> primary_sketches;
+        std::vector<std::unique_ptr<AbstractSketch>> sketches;
+        std::vector<std::unique_ptr<AbstractSketch>> primary_sketches;
+        
+        // Create appropriate sketch type based on count column
+        if (count_column > 0) {
+            // Use BagMinHash when count column is specified
+            for (size_t i = 0; i < files.size(); i++) {
+                sketches.push_back(std::make_unique<BagMinHashSketch>(precision, seed));
+            }
+            for (size_t i = 0; i < primary_files.size(); i++) {
+                primary_sketches.push_back(std::make_unique<BagMinHashSketch>(precision, seed));
+            }
+        } else {
+            // Use HLL when no count column is specified
+            for (size_t i = 0; i < files.size(); i++) {
+                sketches.push_back(std::make_unique<HLLSketch>(precision));
+            }
+            for (size_t i = 0; i < primary_files.size(); i++) {
+                primary_sketches.push_back(std::make_unique<HLLSketch>(precision));
+            }
+        }
         
         if (verbose) {
             std::cerr << "\nProcessing files..." << std::endl;
@@ -860,11 +1143,11 @@ int main(int argc, char* argv[]) {
                 size_t count;
                 
                 if (mode == MODE_A) {
-                    count = process_bed_file_mode_a(files[i], sketches[i], separator, false);
+                    count = process_bed_file_mode_a(files[i], *sketches[i], separator, count_column, false);
                 } else if (mode == MODE_B) {
-                    count = process_bed_file_mode_b(files[i], sketches[i], separator, subB, mixed_stride, seed, false);
+                    count = process_bed_file_mode_b(files[i], *sketches[i], separator, subB, mixed_stride, seed, count_column, false);
                 } else {  // MODE_C
-                    count = process_bed_file_mode_c(files[i], sketches[i], separator, subB, expA, mixed_stride, seed, false);
+                    count = process_bed_file_mode_c(files[i], *sketches[i], separator, subB, expA, mixed_stride, seed, count_column, false);
                 }
                 
                 if (verbose) {
@@ -879,7 +1162,7 @@ int main(int argc, char* argv[]) {
                             count_desc = "Elements (intervals + points)";
                         }
                         std::cerr << "  " << count_desc << ": " << count 
-                                 << ", Estimated cardinality: " << sketches[i].report_ertl_improved() << std::endl;
+                                 << ", Estimated cardinality: " << sketches[i]->cardinality() << std::endl;
                     }
                 }
             }
@@ -894,11 +1177,11 @@ int main(int argc, char* argv[]) {
                 size_t count;
                 
                 if (mode == MODE_A) {
-                    count = process_bed_file_mode_a(files[i], sketches[i], separator, verbose);
+                    count = process_bed_file_mode_a(files[i], *sketches[i], separator, count_column, verbose);
                 } else if (mode == MODE_B) {
-                    count = process_bed_file_mode_b(files[i], sketches[i], separator, subB, mixed_stride, seed, verbose);
+                    count = process_bed_file_mode_b(files[i], *sketches[i], separator, subB, mixed_stride, seed, count_column, verbose);
                 } else {  // MODE_C
-                    count = process_bed_file_mode_c(files[i], sketches[i], separator, subB, expA, mixed_stride, seed, verbose);
+                    count = process_bed_file_mode_c(files[i], *sketches[i], separator, subB, expA, mixed_stride, seed, count_column, verbose);
                 }
                 
                 if (verbose) {
@@ -911,7 +1194,7 @@ int main(int argc, char* argv[]) {
                         count_desc = "Elements (intervals + points)";
                     }
                     std::cerr << "  " << count_desc << ": " << count 
-                             << ", Estimated cardinality: " << sketches[i].report_ertl_improved() << std::endl;
+                             << ", Estimated cardinality: " << sketches[i]->cardinality() << std::endl;
                 }
             }
         }
@@ -935,7 +1218,16 @@ int main(int argc, char* argv[]) {
             }
             
             // Pre-allocate primary sketches vector
-            primary_sketches.resize(primary_files.size(), hll::hll_t(precision));
+            primary_sketches.clear();
+            if (count_column > 0) {
+                for (size_t i = 0; i < primary_files.size(); i++) {
+                    primary_sketches.push_back(std::make_unique<BagMinHashSketch>(precision, seed));
+                }
+            } else {
+                for (size_t i = 0; i < primary_files.size(); i++) {
+                    primary_sketches.push_back(std::make_unique<HLLSketch>(precision));
+                }
+            }
         
         // Parallel primary file processing (same strategy as main files)
         bool parallelize_primary = (mode == MODE_A) || 
@@ -964,11 +1256,11 @@ int main(int argc, char* argv[]) {
                 size_t count;
                 
                 if (mode == MODE_A) {
-                    count = process_bed_file_mode_a(primary_files[i], primary_sketches[i], separator, false);
+                    count = process_bed_file_mode_a(primary_files[i], *primary_sketches[i], separator, count_column, false);
                 } else if (mode == MODE_B) {
-                    count = process_bed_file_mode_b(primary_files[i], primary_sketches[i], separator, subB, mixed_stride, seed, false);
+                    count = process_bed_file_mode_b(primary_files[i], *primary_sketches[i], separator, subB, mixed_stride, seed, count_column, false);
                 } else {  // MODE_C
-                    count = process_bed_file_mode_c(primary_files[i], primary_sketches[i], separator, subB, expA, mixed_stride, seed, false);
+                    count = process_bed_file_mode_c(primary_files[i], *primary_sketches[i], separator, subB, expA, mixed_stride, seed, count_column, false);
                 }
                 
                 if (verbose) {
@@ -983,7 +1275,7 @@ int main(int argc, char* argv[]) {
                             count_desc = "Elements (intervals + points)";
                         }
                         std::cerr << "  " << count_desc << ": " << count 
-                                 << ", Estimated cardinality: " << primary_sketches[i].report_ertl_improved() << std::endl;
+                                 << ", Estimated cardinality: " << primary_sketches[i]->cardinality() << std::endl;
                     }
                 }
             }
@@ -998,11 +1290,11 @@ int main(int argc, char* argv[]) {
                 size_t count;
                 
                 if (mode == MODE_A) {
-                    count = process_bed_file_mode_a(primary_files[i], primary_sketches[i], separator, verbose);
+                    count = process_bed_file_mode_a(primary_files[i], *primary_sketches[i], separator, count_column, verbose);
                 } else if (mode == MODE_B) {
-                    count = process_bed_file_mode_b(primary_files[i], primary_sketches[i], separator, subB, mixed_stride, seed, verbose);
+                    count = process_bed_file_mode_b(primary_files[i], *primary_sketches[i], separator, subB, mixed_stride, seed, count_column, verbose);
                 } else {  // MODE_C
-                    count = process_bed_file_mode_c(primary_files[i], primary_sketches[i], separator, subB, expA, mixed_stride, seed, verbose);
+                    count = process_bed_file_mode_c(primary_files[i], *primary_sketches[i], separator, subB, expA, mixed_stride, seed, count_column, verbose);
                 }
                 
                 if (verbose) {
@@ -1015,7 +1307,7 @@ int main(int argc, char* argv[]) {
                         count_desc = "Elements (intervals + points)";
                     }
                     std::cerr << "  " << count_desc << ": " << count 
-                             << ", Estimated cardinality: " << primary_sketches[i].report_ertl_improved() << std::endl;
+                             << ", Estimated cardinality: " << primary_sketches[i]->cardinality() << std::endl;
                 }
             }
         }
@@ -1088,22 +1380,21 @@ int main(int argc, char* argv[]) {
                 
                 // Get the appropriate sketch for comparison
                 // If same file list, use sketches[j]; otherwise use primary_sketches[j]
-                hll::hll_t& sketch_j = same_file_list ? sketches[j] : primary_sketches[j];
+                AbstractSketch& sketch_j = same_file_list ? *sketches[j] : *primary_sketches[j];
                 
-                // Use inclusion-exclusion Jaccard with MLE cardinalities (should be most accurate)
-                results[idx].jaccard = calculate_jaccard(sketches[i], sketch_j);
+                // Use polymorphic Jaccard calculation
+                results[idx].jaccard = calculate_jaccard(*sketches[i], sketch_j);
                 
-                // Individual cardinalities using MLE for better accuracy
-                results[idx].card1 = sketches[i].report_ertl_improved();
-                results[idx].card2 = sketch_j.report_ertl_improved();
+                // Individual cardinalities using polymorphic method
+                results[idx].card1 = sketches[i]->cardinality();
+                results[idx].card2 = sketch_j.cardinality();
                 
-                // Intersection via MIN of registers (higher error than Jaccard)
-                results[idx].intersection = hll::intersection_size(sketches[i], sketch_j);
+                // Intersection using polymorphic method
+                results[idx].intersection = sketches[i]->intersection_size(sketch_j);
                 
-                // Union via MAX of registers using MLE for better accuracy
-                // Using operator+ which creates a copy (operator+= now fixed but keeping for consistency)
-                hll::hll_t union_sketch = hll::operator+(sketches[i], sketch_j);
-                results[idx].union_size = union_sketch.report_ertl_improved();
+                // Union using polymorphic method
+                auto union_sketch = sketches[i]->union_with(sketch_j);
+                results[idx].union_size = union_sketch->cardinality();
                 
                 // NOTE: Due to different estimation methods, jaccard ≠ intersection/union
                 // The register-based Jaccard is most accurate; use it as ground truth
@@ -1122,7 +1413,7 @@ int main(int argc, char* argv[]) {
         for (const auto& result : results) {
             outfile << files[result.i] << ","
                    << primary_files[result.j] << ","
-                   << "hyperloglog," << mode_str << ","
+                   << sketches[result.i]->get_sketch_type() << "," << mode_str << ","
                    << precision << ","
                    << result.jaccard << ","
                    << result.intersection << ","
