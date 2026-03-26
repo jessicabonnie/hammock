@@ -497,8 +497,22 @@ def write_samplesheet_csv(path: Path, control_rows: List[Dict[str, str]], ip_row
             w.writerow(row)
 
 
-def write_control_manifest_tsv(path: Path, control_rows: List[Dict[str, str]]) -> None:
+def write_control_manifest_tsv(
+    path: Path,
+    control_rows: List[Dict[str, str]],
+    ip_rows: Optional[List[Dict[str, str]]] = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    target_by_control: Dict[str, List[str]] = {}
+    if ip_rows:
+        tmp: Dict[str, set] = {}
+        for row in ip_rows:
+            cf = (row.get("encode_control_file_accession") or "").strip()
+            tg = (row.get("antibody") or "").strip()
+            if not cf or not tg:
+                continue
+            tmp.setdefault(cf, set()).add(tg)
+        target_by_control = {k: sorted(v) for k, v in tmp.items()}
     with path.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f, delimiter="\t")
         w.writerow(
@@ -506,6 +520,7 @@ def write_control_manifest_tsv(path: Path, control_rows: List[Dict[str, str]]) -
                 "file_accession",
                 "control_experiment_accession",
                 "biological_replicate",
+                "histone_target",
                 "encode_download_url",
                 "local_path_after_download",
             ]
@@ -520,6 +535,7 @@ def write_control_manifest_tsv(path: Path, control_rows: List[Dict[str, str]]) -
                     cf,
                     row["control_experiment_accession"],
                     row["replicate"],
+                    ",".join(target_by_control.get(cf, [])),
                     row["encode_control_download_url"],
                     row["fastq_1"],
                 ]

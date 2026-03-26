@@ -187,7 +187,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         tsv_path = out_dir / "nfcore_control_fastqs_encode{}.tsv".format(suf)
         sh_path = out_dir / "download_control_fastqs{}.sh".format(suf)
         write_samplesheet_csv(ss_path, ctrl_sub, ip_sub)
-        write_control_manifest_tsv(tsv_path, ctrl_sub)
+        write_control_manifest_tsv(tsv_path, ctrl_sub, ip_sub)
         write_download_script(sh_path, ctrl_sub)
         print(f"  {ss_path}  ({len(ip_sub)} IP rows, {len(ctrl_sub)} control FASTQs)")
         print(f"  {tsv_path}")
@@ -198,7 +198,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         control_tsv = out_dir / "nfcore_control_fastqs_encode.tsv"
         dl_script = out_dir / "download_control_fastqs.sh"
         write_samplesheet_csv(samplesheet_path, control_rows, ip_rows)
-        write_control_manifest_tsv(control_tsv, control_rows)
+        write_control_manifest_tsv(control_tsv, control_rows, ip_rows)
         write_download_script(dl_script, control_rows)
         print(f"  {samplesheet_path}  (combined, --write-combined)")
         print(f"  {control_tsv}")

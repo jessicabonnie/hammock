@@ -8,7 +8,7 @@ experiment row that references that accession (ENCODE cart narrowPeak files typi
 ``.bed.gz`` suffix). Includes ``lab``, ``project``, and library construction columns from the cart
 for batch / provenance tracking.
 
-Also writes ``histone_narrowpeak_bed_paths_<build>.txt`` next to the manifest (one absolute
+Also writes ``histone_narrowpeak_bed_paths_<build>.txt`` under ``path_lists/`` (one absolute
 ``bed_path`` per line per resolved reference build: ``mm10``, ``GRCh38``, ``hg19``, ``mm9``,
 ``mm10_minimal``, …).
 
@@ -33,7 +33,7 @@ from histone_encode_manifest_common import (
     fetch_encode_file_assembly,
     parse_files_cell,
     reference_build_for_manifest,
-    write_narrowpeak_bed_path_lists_by_reference_build,
+    write_bed_path_lists_by_reference_build,
 )
 
 
@@ -64,6 +64,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         action="store_true",
         help="Query encodeproject.org per file for assembly (mm10, hg19, GRCh38, …); slow but "
         "needed for correct bedtools getfasta references on mixed carts",
+    )
+    p.add_argument(
+        "--path-lists-dir",
+        type=Path,
+        default=None,
+        help="Directory for bed path lists (default: <output-dir>/path_lists)",
     )
     args = p.parse_args(argv)
 
@@ -168,8 +174,11 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     print("Wrote {} ({} rows)".format(out, len(rows_out)))
 
-    list_paths, n_unknown = write_narrowpeak_bed_path_lists_by_reference_build(
-        rows_out, output_dir=out.parent
+    path_lists_dir = (args.path_lists_dir or (out.parent / "path_lists")).resolve()
+    list_paths, n_unknown = write_bed_path_lists_by_reference_build(
+        rows_out,
+        output_dir=path_lists_dir,
+        basename_prefix="histone_narrowpeak_bed_paths",
     )
     for lp in sorted(list_paths):
         print("Wrote {}".format(lp))

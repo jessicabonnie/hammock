@@ -128,7 +128,7 @@ def effective_encode_assembly_for_row(row: Dict[str, str]) -> str:
     return reference_build_for_manifest("", (row.get("organism") or "").strip())
 
 
-def write_narrowpeak_bed_path_lists_by_reference_build(
+def write_bed_path_lists_by_reference_build(
     rows: List[Dict[str, str]],
     *,
     output_dir: Path,
@@ -163,3 +163,15 @@ def write_narrowpeak_bed_path_lists_by_reference_build(
         written.append(str(dest))
 
     return written, unknown
+
+
+def write_narrowpeak_bed_path_lists_by_reference_build(
+    rows: List[Dict[str, str]],
+    *,
+    output_dir: Path,
+    basename_prefix: str = "histone_narrowpeak_bed_paths",
+) -> Tuple[List[str], int]:
+    """Backward-compatible wrapper for narrowPeak list writing."""
+    return write_bed_path_lists_by_reference_build(
+        rows, output_dir=output_dir, basename_prefix=basename_prefix
+    )

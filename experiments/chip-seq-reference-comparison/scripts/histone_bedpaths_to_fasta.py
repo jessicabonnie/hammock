@@ -16,6 +16,7 @@ import argparse
 import csv
 import multiprocessing
 import os
+import shlex
 import subprocess
 import sys
 from collections import defaultdict
@@ -32,15 +33,16 @@ if str(_SCRIPT_DIR) not in sys.path:
 from histone_encode_manifest_common import (  # noqa: E402
     KNOWN_ENCODE_ASSEMBLY,
     ORGANISM_SLUG,
-    bed_list_slug_to_encode_assembly,
     effective_encode_assembly_for_row,
     encode_assembly_to_bed_list_slug,
     normalize_organism_label,
 )
 
-# Prefix for per-build BED lists (see ``write_narrowpeak_bed_path_lists_by_reference_build``).
-BED_PATH_LIST_PREFIX = "histone_narrowpeak_bed_paths_"
-FASTA_PATH_LIST_PREFIX = "histone_narrowpeak_fasta_paths_"
+PATH_LISTS_DIRNAME = "path_lists"
+NARROWPEAK_LIST_PREFIX = "histone_narrowpeak_bed_paths_"
+BROADPEAK_LIST_PREFIX = "histone_broadpeak_bed_paths_"
+NARROWPEAK_FASTA_SUBDIR = "narrowpeak"
+BROADPEAK_FASTA_SUBDIR = "broadpeak"
 
 # Lab reference tree (see experiments/chip-seq-reference-comparison/README.md §5).
 _REF_BASE = "/data/blangme2/jessica/mus_homo/references"
@@ -109,17 +111,6 @@ def validate_refs_for_assemblies(assemblies: Set[str], ref_map: Dict[str, Path])
     return bad
 
 
-def read_bed_paths(list_path: Path) -> List[Path]:
-    lines = []
-    with list_path.open(encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            lines.append(Path(line))
-    return lines
-
-
 def bed_to_fasta_stem(bed_path: Path) -> str:
     name = bed_path.name
     if name.endswith(".bed.gz"):
@@ -127,6 +118,21 @@ def bed_to_fasta_stem(bed_path: Path) -> str:
     if name.endswith(".bed"):
         return name[: -len(".bed")]
     return bed_path.stem
+
+
+def fasta_path_for_peaktype(out_dir: Path, peak_subdir: str, bed_path: Path) -> Path:
+    return out_dir / peak_subdir / "{}.fa".format(bed_to_fasta_stem(bed_path))
+
+
+def read_path_list(list_path: Path) -> List[Path]:
+    paths = []  # type: List[Path]
+    with list_path.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            paths.append(Path(line))
+    return paths
 
 
 def run_getfasta(bed_path: Path, ref_fasta: Path, out_fa: Path, dry_run: bool) -> None:
@@ -145,10 +151,15 @@ def run_getfasta(bed_path: Path, ref_fasta: Path, out_fa: Path, dry_run: bool) -
         "-fo",
         str(out_fa),
     ]
+    shell_cmd = (
+        "module load bedtools/2.30.0-singularity >/dev/null 2>&1 && "
+        "export SINGULARITY_BINDPATH=/vast,/data,/home && "
+        "{}".format(" ".join(shlex.quote(x) for x in cmd))
+    )
     if dry_run:
-        print(" ".join(cmd))
+        print(shell_cmd)
         return
-    subprocess.check_call(cmd)
+    subprocess.check_call(["bash", "-lc", shell_cmd])
 
 
 def process_tasks(
@@ -209,26 +220,6 @@ def _getfasta_worker(task: Tuple[str, str, str, bool, bool]) -> Tuple[bool, str,
         return (False, "", "{}: {}".format(bed_path, e))
 
 
-def process_list(
-    list_path: Path,
-    ref_fasta: Path,
-    out_dir: Path,
-    *,
-    dry_run: bool,
-    skip_existing: bool,
-    jobs: int,
-) -> Tuple[List[Path], List[str]]:
-    """Return (written fasta paths, error messages); single reference for all BEDs in list."""
-    ref_fasta = ref_fasta.resolve()
-    out_dir = out_dir.resolve()
-    tasks = []  # type: List[Tuple[Path, Path, Path]]
-    for bed in read_bed_paths(list_path):
-        stem = bed_to_fasta_stem(bed)
-        out_fa = out_dir / "{}.fa".format(stem)
-        tasks.append((bed, ref_fasta, out_fa))
-    return process_tasks(tasks, dry_run=dry_run, skip_existing=skip_existing, jobs=jobs)
-
-
 def manifest_bed_tasks_from_rows(
     rows: List[RowDict],
     out_dir: Path,
@@ -257,7 +248,7 @@ def manifest_bed_tasks_from_rows(
             row_errors.append("{}: {}".format(bed, e))
             continue
         stem = bed_to_fasta_stem(bed)
-        out_fa = out_dir / "{}.fa".format(stem)
+        out_fa = out_dir / NARROWPEAK_FASTA_SUBDIR / "{}.fa".format(stem)
         tasks.append((bed, ref, out_fa))
         meta.append((org, stem, asm))
     return tasks, meta, row_errors
@@ -271,7 +262,7 @@ def write_path_list(paths: List[Path], dest: Path) -> None:
 
 
 def write_species_fasta_path_lists(
-    hm: Path,
+    path_lists_dir: Path,
     out_dir: Path,
     meta: List[Tuple[str, str, str]],
     *,
@@ -286,21 +277,24 @@ def write_species_fasta_path_lists(
         if norm not in ORGANISM_SLUG:
             continue
         slug = ORGANISM_SLUG[norm]
-        by_slug[slug].append((out_dir / "{}.fa".format(stem)).resolve())
+        by_slug[slug].append(
+            (out_dir / NARROWPEAK_FASTA_SUBDIR / "{}.fa".format(stem)).resolve()
+        )
     for slug, paths in sorted(by_slug.items()):
         existing = sorted({p for p in paths if p.is_file()})
         if existing:
-            dest = hm / "histone_narrowpeak_fasta_paths_{}.txt".format(slug)
+            dest = path_lists_dir / "histone_narrowpeak_fasta_paths_{}.txt".format(slug)
             write_path_list(existing, dest)
             print("Wrote {} ({} paths)".format(dest, len(existing)))
 
 
 def write_reference_build_fasta_path_lists(
-    hm: Path,
+    path_lists_dir: Path,
     out_dir: Path,
     meta: List[Tuple[str, str, str]],
     *,
     no_path_lists: bool,
+    basename_prefix: str,
 ) -> None:
     """meta entries are (organism, fasta_stem, encode_assembly)."""
     if no_path_lists:
@@ -308,30 +302,108 @@ def write_reference_build_fasta_path_lists(
     by_build_slug = defaultdict(list)  # type: Dict[str, List[Path]]
     for _org, stem, asm in meta:
         bslug = encode_assembly_to_bed_list_slug(asm)
-        by_build_slug[bslug].append((out_dir / "{}.fa".format(stem)).resolve())
+        by_build_slug[bslug].append(
+            (out_dir / NARROWPEAK_FASTA_SUBDIR / "{}.fa".format(stem)).resolve()
+        )
     for bslug, paths in sorted(by_build_slug.items()):
         existing = sorted({p for p in paths if p.is_file()})
         if existing:
-            dest = hm / "{}{}.txt".format(FASTA_PATH_LIST_PREFIX, bslug)
+            dest = path_lists_dir / "{}_{}.txt".format(basename_prefix, bslug)
             write_path_list(existing, dest)
             print("Wrote {} ({} paths)".format(dest, len(existing)))
 
 
-def generate_tissue_breakout_png(manifest_path: Path, output_png: Path) -> None:
+def generate_tissue_breakout_png(rows: List[RowDict], output_png: Path) -> None:
     """
-    Render a PNG bar chart from manifest tissue/build/organism columns via R.
+    Render grouped+stacked bar chart PNG:
+    - for each tissue, one bar per organism
+    - each bar segmented by reference build.
+    """
+    try:
+        import matplotlib
 
-    Uses cluster module + Rscript to avoid Python plotting dependencies.
-    """
-    r_script = _SCRIPT_DIR / "plot_tissue_breakout_from_manifest.R"
-    if not r_script.is_file():
-        raise FileNotFoundError("R plotting script not found: {}".format(r_script))
-    output_png.parent.mkdir(parents=True, exist_ok=True)
-    cmd = (
-        "module load r/4.3.0 && "
-        "Rscript '{}' '{}' '{}'".format(r_script, manifest_path, output_png)
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError("matplotlib/numpy unavailable for PNG plotting: {}".format(e))
+
+    counts = defaultdict(lambda: defaultdict(int))  # type: Dict[Tuple[str, str], Dict[str, int]]
+    tissues_set = set()  # type: Set[str]
+    builds_set = set()  # type: Set[str]
+    species_set = set()  # type: Set[str]
+    for row in rows:
+        tissue = (row.get("tissue_type") or "").strip() or "unknown"
+        species = (row.get("organism") or "").strip() or "unknown"
+        build = effective_encode_assembly_for_row(row) or "unknown"
+        counts[(species, build)][tissue] += 1
+        tissues_set.add(tissue)
+        builds_set.add(build)
+        species_set.add(species)
+
+    tissues = sorted(tissues_set)
+    species = sorted(species_set)
+    # Keep common species first for readability.
+    preferred = ["Mus musculus", "Homo sapiens"]
+    species = [s for s in preferred if s in species] + [s for s in species if s not in preferred]
+    builds = sorted(builds_set)
+
+    x = np.arange(len(tissues))
+    bar_w = 0.38 if len(species) <= 2 else max(0.2, 0.8 / max(1, len(species)))
+    group_offsets = np.linspace(
+        -((len(species) - 1) * bar_w) / 2.0, ((len(species) - 1) * bar_w) / 2.0, num=len(species)
     )
-    subprocess.check_call(["bash", "-lc", cmd])
+
+    fig, ax = plt.subplots(figsize=(14, 4.8))
+    cmap = plt.get_cmap("tab20")
+    build_color = {}  # type: Dict[str, Tuple[float, float, float, float]]
+    for i, b in enumerate(builds):
+        build_color[b] = cmap(i % 20)
+
+    for si, sp in enumerate(species):
+        xpos = x + group_offsets[si]
+        bottom = np.zeros(len(tissues))
+        for bi, b in enumerate(builds):
+            vals = np.array([counts[(sp, b)].get(t, 0) for t in tissues], dtype=float)
+            if not vals.any():
+                continue
+            label = "{} | {}".format(sp, b) if si == 0 else None
+            ax.bar(
+                xpos,
+                vals,
+                width=bar_w * 0.95,
+                bottom=bottom,
+                color=build_color[b],
+                edgecolor="#333333",
+                linewidth=0.3,
+                label=label,
+            )
+            bottom += vals
+
+    ax.set_title("Tissue types by species (stacked by reference build)")
+    ax.set_xlabel("Tissue type")
+    ax.set_ylabel("BED files")
+    ax.set_xticks(x)
+    ax.set_xticklabels(tissues, rotation=40, ha="right")
+    ax.grid(axis="y", alpha=0.25, linewidth=0.6)
+
+    # Compact legend: one entry per build color.
+    handles = []
+    labels = []
+    for b in builds:
+        handles.append(plt.Rectangle((0, 0), 1, 1, color=build_color[b]))
+        labels.append(b)
+    ax.legend(handles, labels, title="Reference build", loc="upper right", frameon=True)
+
+    # Species annotation under x-axis.
+    if len(species) == 2:
+        ax.text(0.01, -0.22, "left bar = {}".format(species[0]), transform=ax.transAxes, fontsize=9)
+        ax.text(0.35, -0.22, "right bar = {}".format(species[1]), transform=ax.transAxes, fontsize=9)
+
+    fig.tight_layout()
+    output_png.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(str(output_png), dpi=180)
+    plt.close(fig)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -342,7 +414,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--histone-marks-dir",
         type=Path,
         default=None,
-        help="Directory containing bed/, histone_narrowpeak_bed_paths_<build>.txt (or use --manifest)",
+        help="Directory containing bed/, fastq/, and path_lists/ (or use --manifest)",
     )
     p.add_argument(
         "--manifest",
@@ -400,7 +472,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument(
         "--no-path-lists",
         action="store_true",
-        help="Do not write histone_narrowpeak_fasta_paths_*.txt",
+        help="Do not write any histone_*_fasta_paths_*.txt lists",
     )
     p.add_argument(
         "--no-tissue-plot",
@@ -417,8 +489,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     args = p.parse_args(argv)
 
-    if args.manifest is None and args.histone_marks_dir is None:
-        p.error("one of --histone-marks-dir or --manifest is required")
+    if args.manifest is None:
+        p.error("--manifest is required (legacy non-manifest mode has been removed)")
 
     ncpu = multiprocessing.cpu_count() or 1
     jobs = args.jobs if args.jobs is not None else min(8, max(1, ncpu))
@@ -427,112 +499,89 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     ref_map = build_ref_map(args)
 
-    if args.manifest is not None:
-        mp = args.manifest.resolve()
-        if not mp.is_file():
-            print("error: manifest not found: {}".format(mp), file=sys.stderr)
-            return 2
-        hm = (args.histone_marks_dir or mp.parent).resolve()
-        out_dir = (args.fasta_out_dir or (hm / "fasta_from_bed")).resolve()
-
-        with mp.open(newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f, delimiter="\t")
-            fields = reader.fieldnames or []
-            rows = list(reader)  # type: List[RowDict]
-
-        has_asm_col = "assembly" in fields
-        nrows = len(rows)
-        asm_nonempty = sum(1 for r in rows if (r.get("assembly") or "").strip())
-        if has_asm_col and asm_nonempty not in (0, nrows):
-            print(
-                "error: manifest has mixed empty/non-empty assembly values; fix or rebuild with "
-                "--fetch-assembly",
-                file=sys.stderr,
-            )
-            return 2
-        legacy_mm10_grch38 = (not has_asm_col) or asm_nonempty == 0
-        if legacy_mm10_grch38:
-            print(
-                "warning: manifest has no usable per-file assembly; assuming mm10 (mouse) and "
-                "GRCh38 (human). Rebuild with build_histone_narrowpeak_bed_manifest.py "
-                "--fetch-assembly for correct hg19 / mm9 / mm10-minimal handling.",
-                file=sys.stderr,
-            )
-
-        assemblies = set()  # type: Set[str]
-        for r in rows:
-            eff = effective_encode_assembly_for_row(r)
-            if eff:
-                assemblies.add(eff)
-
-        bad_refs = validate_refs_for_assemblies(assemblies, ref_map)
-        if bad_refs:
-            for msg in bad_refs:
-                print("error: {}".format(msg), file=sys.stderr)
-            return 2
-
-        tasks, meta, row_errors = manifest_bed_tasks_from_rows(rows, out_dir, ref_map)
-        if row_errors:
-            for msg in row_errors[:40]:
-                print("error: {}".format(msg), file=sys.stderr)
-            if len(row_errors) > 40:
-                print("error: ... and {} more manifest row errors".format(len(row_errors) - 40), file=sys.stderr)
-            return 2
-
-        print(
-            "Processing {} BEDs from manifest {} (jobs={})".format(len(tasks), mp, jobs)
-        )
-        all_written, errs_all = process_tasks(
-            tasks,
-            dry_run=args.dry_run,
-            skip_existing=args.skip_existing,
-            jobs=jobs,
-        )
-        for err in errs_all[:20]:
-            print("error: {}".format(err), file=sys.stderr)
-        if len(errs_all) > 20:
-            print("error: ... and {} more".format(len(errs_all) - 20), file=sys.stderr)
-        write_species_fasta_path_lists(hm, out_dir, meta, no_path_lists=args.no_path_lists)
-        write_reference_build_fasta_path_lists(
-            hm, out_dir, meta, no_path_lists=args.no_path_lists
-        )
-        if not args.no_tissue_plot and not args.dry_run:
-            plot_png = hm / "tissue_type_breakout_by_build_and_organism.png"
-            try:
-                generate_tissue_breakout_png(mp, plot_png)
-                print("Wrote {}".format(plot_png))
-            except Exception as e:  # noqa: BLE001
-                print(
-                    "warning: could not generate tissue breakout PNG: {}".format(e),
-                    file=sys.stderr,
-                )
-        print("FASTA directory: {} ({} outputs touched this run)".format(out_dir, len(all_written)))
-        return 1 if errs_all else 0
-
-    hm = args.histone_marks_dir.resolve()
+    mp = args.manifest.resolve()
+    if not mp.is_file():
+        print("error: manifest not found: {}".format(mp), file=sys.stderr)
+        return 2
+    hm = (args.histone_marks_dir or mp.parent).resolve()
     out_dir = (args.fasta_out_dir or (hm / "fasta_from_bed")).resolve()
+    path_lists_dir = (hm / PATH_LISTS_DIRNAME).resolve()
 
-    list_paths = sorted(hm.glob(BED_PATH_LIST_PREFIX + "*.txt"))
-    if not list_paths:
+    with mp.open(newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        fields = reader.fieldnames or []
+        rows = list(reader)  # type: List[RowDict]
+
+    has_asm_col = "assembly" in fields
+    nrows = len(rows)
+    asm_nonempty = sum(1 for r in rows if (r.get("assembly") or "").strip())
+    if has_asm_col and asm_nonempty not in (0, nrows):
         print(
-            "error: no {prefix}*.txt under {hm}; run "
-            "build_histone_narrowpeak_bed_manifest.py or use --manifest".format(
-                prefix=BED_PATH_LIST_PREFIX, hm=hm
-            ),
+            "error: manifest has mixed empty/non-empty assembly values; fix or rebuild with "
+            "--fetch-assembly",
             file=sys.stderr,
         )
         return 2
+    if (not has_asm_col) or asm_nonempty == 0:
+        print(
+            "warning: manifest has no usable per-file assembly; assuming mm10 (mouse) and "
+            "GRCh38 (human). Rebuild with build_histone_narrowpeak_bed_manifest.py "
+            "--fetch-assembly for correct hg19 / mm9 / mm10-minimal handling.",
+            file=sys.stderr,
+        )
 
-    all_written = []  # type: List[Path]
-    errs_all = []  # type: List[str]
-    for lp in list_paths:
-        lp = lp.resolve()
-        slug = lp.name[len(BED_PATH_LIST_PREFIX) : -len(".txt")]
-        asm = bed_list_slug_to_encode_assembly(slug)
-        if not asm:
+    assemblies = set()  # type: Set[str]
+    for r in rows:
+        eff = effective_encode_assembly_for_row(r)
+        if eff:
+            assemblies.add(eff)
+
+    bad_refs = validate_refs_for_assemblies(assemblies, ref_map)
+    if bad_refs:
+        for msg in bad_refs:
+            print("error: {}".format(msg), file=sys.stderr)
+        return 2
+
+    tasks, meta, row_errors = manifest_bed_tasks_from_rows(rows, out_dir, ref_map)
+    if row_errors:
+        for msg in row_errors[:40]:
+            print("error: {}".format(msg), file=sys.stderr)
+        if len(row_errors) > 40:
+            print("error: ... and {} more manifest row errors".format(len(row_errors) - 40), file=sys.stderr)
+        return 2
+
+    print(
+        "Processing {} BEDs from manifest {} (jobs={})".format(len(tasks), mp, jobs)
+    )
+    all_written, errs_all = process_tasks(
+        tasks,
+        dry_run=args.dry_run,
+        skip_existing=args.skip_existing,
+        jobs=jobs,
+    )
+    for err in errs_all[:20]:
+        print("error: {}".format(err), file=sys.stderr)
+    if len(errs_all) > 20:
+        print("error: ... and {} more".format(len(errs_all) - 20), file=sys.stderr)
+    write_species_fasta_path_lists(
+        path_lists_dir, out_dir, meta, no_path_lists=args.no_path_lists
+    )
+    write_reference_build_fasta_path_lists(
+        path_lists_dir,
+        out_dir,
+        meta,
+        no_path_lists=args.no_path_lists,
+        basename_prefix="histone_narrowpeak_fasta_paths",
+    )
+    # Also process broadPeak lists (if present) from path_lists/ using build-specific refs.
+    broad_lists = sorted(path_lists_dir.glob(BROADPEAK_LIST_PREFIX + "*.txt"))
+    for lp in broad_lists:
+        slug = lp.name[len(BROADPEAK_LIST_PREFIX) : -len(".txt")]
+        asm = slug if slug != "mm10_minimal" else "mm10-minimal"
+        if asm not in KNOWN_ENCODE_ASSEMBLY:
             print(
-                "warning: skipping {} (unknown build slug {!r}; expected one of ENCODE assemblies)".format(
-                    lp, slug
+                "warning: skipping broadPeak list with unknown build slug {!r}: {}".format(
+                    slug, lp
                 ),
                 file=sys.stderr,
             )
@@ -542,37 +591,39 @@ def main(argv: Optional[List[str]] = None) -> int:
         except ValueError as e:
             print("error: {}: {}".format(lp, e), file=sys.stderr)
             return 2
+        list_tasks = []  # type: List[Tuple[Path, Path, Path]]
+        for bed in read_path_list(lp):
+            out_fa = fasta_path_for_peaktype(out_dir, BROADPEAK_FASTA_SUBDIR, bed)
+            list_tasks.append((bed, ref, out_fa))
         print(
-            "Processing BEDs for build {} ({}) from {} with {} (jobs={})".format(
-                asm, slug, lp, ref, jobs
+            "Processing broadPeak BEDs for build {} from {} with {} (jobs={})".format(
+                asm, lp, ref, jobs
             )
         )
-        written, errors = process_list(
-            lp,
-            ref,
-            out_dir,
+        w2, e2 = process_tasks(
+            list_tasks,
             dry_run=args.dry_run,
             skip_existing=args.skip_existing,
             jobs=jobs,
         )
-        all_written.extend(written)
-        errs_all.extend(errors)
-        for err in errors[:20]:
-            print("error: {}".format(err), file=sys.stderr)
-        if len(errors) > 20:
-            print("error: ... and {} more".format(len(errors) - 20), file=sys.stderr)
+        all_written.extend(w2)
+        errs_all.extend(e2)
         if not args.no_path_lists:
-            stems = [bed_to_fasta_stem(b) for b in read_bed_paths(lp)]
-            existing_fa = []
-            for s in stems:
-                p = (out_dir / "{}.fa".format(s)).resolve()
-                if p.is_file():
-                    existing_fa.append(p)
-            if existing_fa:
-                dest = hm / "{}{}.txt".format(FASTA_PATH_LIST_PREFIX, slug)
-                write_path_list(existing_fa, dest)
-                print("Wrote {} ({} paths)".format(dest, len(existing_fa)))
-
+            existing = sorted({p for p in w2 if p.is_file()})
+            if existing:
+                dest = path_lists_dir / "histone_broadpeak_fasta_paths_{}.txt".format(slug)
+                write_path_list(existing, dest)
+                print("Wrote {} ({} paths)".format(dest, len(existing)))
+    if not args.no_tissue_plot and not args.dry_run:
+        plot_png = hm / "tissue_type_breakout_by_build_and_organism.png"
+        try:
+            generate_tissue_breakout_png(rows, plot_png)
+            print("Wrote {}".format(plot_png))
+        except Exception as e:  # noqa: BLE001
+            print(
+                "warning: could not generate tissue breakout PNG: {}".format(e),
+                file=sys.stderr,
+            )
     print("FASTA directory: {} ({} outputs touched this run)".format(out_dir, len(all_written)))
     return 1 if errs_all else 0
 
