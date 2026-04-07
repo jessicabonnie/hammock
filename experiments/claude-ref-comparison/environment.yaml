@@ -1,0 +1,19 @@
+name: claude-ref-comparison
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  # Workflow runner
+  - snakemake-minimal>=7.0
+  # Accession resolution (fetch_accessions.py)
+  - requests
+  - pandas
+  - matplotlib
+  - seaborn
+  - pip:
+      - pysradb
+      # Hammock (local install from repo root)
+      - -e /home/jbonnie1/interval_sketch/hammock

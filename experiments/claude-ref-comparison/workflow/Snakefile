@@ -2,74 +2,75 @@
 # Snakefile — Minimizer Sketching Validation on ENCODE Data
 # =============================================================================
 #
+# Pipeline per sample+ref:
+#   download FASTQ → align (BWA-MEM2) → call peaks (MACS2)
+#   → peaks-to-FASTA (bedtools getfasta) → hammock (k/w sweep)
+#
 # Two experiments:
 #   A) Cross-reference robustness: same sample aligned to GRCh37 vs GRCh38
-#   B) Tissue-over-species clustering: human (ENCODE/Roadmap) vs mouse (Mouse ENCODE)
+#   B) Tissue-over-species clustering: human (Roadmap) vs mouse (Mouse ENCODE)
 #
 # Usage:
-#   snakemake --cores 8 --use-singularity --singularity-args "--bind /scratch"
-#   snakemake --profile slurm_profile/ --use-singularity
+#   snakemake --dryrun --forceall
+#   snakemake --profile workflow/slurm_profile/ --use-singularity
 #
 # =============================================================================
 
 configfile: "config/config.yaml"
 
-# Resolve paths from config
-SAMPLES     = config["samples"]
-OUTDIR      = config["outdir"]
-SCRATCH     = config["scratch"]
-SKETCH_BIN  = config["sketch_bin"]
-K           = config["kmer_size"]
-W           = config["window_size"]
-S           = config["sketch_size"]
+SAMPLES    = config["samples"]
+OUTDIR     = config["outdir"]
+SCRATCH    = config["scratch"]
+HAMMOCK    = config["sketch_bin"]
+PRECISION  = config["precision"]
+KMER_SIZES = config["kmer_sizes"]
+WIND_SIZES = config["window_sizes"]
+
+# Filter out (k, w) pairs where w < k — those produce silent degenerate sketches
+KW_PAIRS = [(k, w) for k in KMER_SIZES for w in WIND_SIZES if w >= k]
 
 # ── Wildcard constraints ────────────────────────────────────────────────────
 wildcard_constraints:
     sample  = r"[A-Za-z0-9_\-]+",
-    ref     = r"GRCh37|GRCh38|GRCm39",
-    mark    = r"H3K27ac|H3K4me3|H3K4me1|H3K27me3",
-    species = r"human|mouse",
+    ref     = r"GRCh37|GRCh38|mm10",
+    k       = r"\d+",
+    w       = r"\d+",
 
-# ── Helper: list all samples for a given experiment ─────────────────────────
-def exp_a_pairs():
-    """Return list of (sample, mark) for Experiment A cross-reference pairs."""
-    return [(s["id"], s["mark"])
-            for s in SAMPLES["experiment_a"]]
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
-def exp_b_samples():
-    """Return list of (sample, species, tissue, mark) for Experiment B."""
-    return [(s["id"], s["species"], s["tissue"], s["mark"])
-            for s in SAMPLES["experiment_b"]]
+def exp_a_samples():
+    return [s["id"] for s in SAMPLES["experiment_a"]]
 
-# ── Target rules ─────────────────────────────────────────────────────────────
+def exp_b_samples_for_ref(ref):
+    return [s["id"] for s in SAMPLES["experiment_b"] if s["ref"] == ref]
+
+def hammock_csv(outprefix, k, w):
+    """Predict the CSV filename hammock emits for given parameters."""
+    return f"{outprefix}_mnmzr_p{PRECISION}_jaccD_k{k}_w{w}.csv"
+
+# ── Target rule ───────────────────────────────────────────────────────────────
 
 rule all:
     input:
-        # Experiment A outputs
+        # Experiment A: one plot per valid (k, w) combo
         expand(
-            "{outdir}/exp_a/similarity_matrix.tsv",
-            outdir=OUTDIR
+            "{outdir}/exp_a/k{k}_w{w}/cross_ref_validation.png",
+            zip,
+            outdir=[OUTDIR] * len(KW_PAIRS),
+            k=[p[0] for p in KW_PAIRS],
+            w=[p[1] for p in KW_PAIRS],
         ),
+        # Experiment B: one plot per valid (k, w) combo
         expand(
-            "{outdir}/exp_a/cross_ref_validation.png",
-            outdir=OUTDIR
-        ),
-        # Experiment B outputs
-        expand(
-            "{outdir}/exp_b/similarity_matrix.tsv",
-            outdir=OUTDIR
-        ),
-        expand(
-            "{outdir}/exp_b/dendrogram.png",
-            outdir=OUTDIR
-        ),
-        expand(
-            "{outdir}/exp_b/pca.png",
-            outdir=OUTDIR
+            "{outdir}/exp_b/k{k}_w{w}/dendrogram.png",
+            zip,
+            outdir=[OUTDIR] * len(KW_PAIRS),
+            k=[p[0] for p in KW_PAIRS],
+            w=[p[1] for p in KW_PAIRS],
         ),
 
 # =============================================================================
-# SHARED RULES: Download → Align → Sketch
+# SHARED RULES: Download → Align → Call Peaks → FASTA from Peaks
 # =============================================================================
 
 rule download_fastq:
@@ -78,14 +79,14 @@ rule download_fastq:
         r1 = temp("{scratch}/fastq/{sample}_1.fastq.gz"),
         r2 = temp("{scratch}/fastq/{sample}_2.fastq.gz"),
     params:
-        sra_id  = lambda wc: SAMPLES["sra_map"][wc.sample],
-        tmpdir  = lambda wc: f"{SCRATCH}/tmp/{wc.sample}",
+        sra_id = lambda wc: SAMPLES["sra_map"][wc.sample],
+        tmpdir = lambda wc: f"{SCRATCH}/tmp/{wc.sample}",
     log:
         "{outdir}/logs/download/{sample}.log"
     threads: 4
     resources:
         mem_mb  = 8000,
-        runtime = 120,  # minutes
+        runtime = 120,
     singularity:
         config["containers"]["sra_tools"]
     shell:
@@ -97,25 +98,26 @@ rule download_fastq:
             --threads {threads} \
             --split-files \
             2>{log}
-        pigz -p {threads} {wildcards.scratch}/fastq/{wildcards.sample}_1.fastq
-        pigz -p {threads} {wildcards.scratch}/fastq/{wildcards.sample}_2.fastq
+        pigz -p {threads} \
+            {wildcards.scratch}/fastq/{wildcards.sample}_1.fastq \
+            {wildcards.scratch}/fastq/{wildcards.sample}_2.fastq
         """
 
 rule align_bwa_mem2:
-    """Align FASTQ to reference genome with BWA-MEM2; sort and mark duplicates."""
+    """Align FASTQ to reference genome with BWA-MEM2; sort."""
     input:
         r1  = "{scratch}/fastq/{sample}_1.fastq.gz",
         r2  = "{scratch}/fastq/{sample}_2.fastq.gz",
         ref = lambda wc: config["references"][wc.ref]["fasta"],
     output:
-        bam = "{outdir}/aligned/{ref}/{sample}.bam",
-        bai = "{outdir}/aligned/{ref}/{sample}.bam.bai",
+        bam = temp("{scratch}/aligned/{ref}/{sample}.bam"),
+        bai = temp("{scratch}/aligned/{ref}/{sample}.bam.bai"),
     log:
         "{outdir}/logs/align/{ref}/{sample}.log"
     threads: 16
     resources:
-        mem_mb  = 32000,
-        runtime = 240,
+        mem_mb    = 32000,
+        runtime   = 240,
         partition = "bigmem",
     singularity:
         config["containers"]["bwa_samtools"]
@@ -124,37 +126,62 @@ rule align_bwa_mem2:
         bwa-mem2 mem -t {threads} \
             -R "@RG\\tID:{wildcards.sample}\\tSM:{wildcards.sample}\\tPL:ILLUMINA" \
             {input.ref} {input.r1} {input.r2} \
-          | samtools sort -@ {threads} -o {output.bam} - \
-          2>{log}
+          | samtools sort -@ {threads} -o {output.bam} -
         samtools index {output.bam}
         """
 
-rule sketch_bam:
-    """Compute minimizer sketch from a BAM file."""
+rule call_peaks:
+    """Call peaks with MACS2 from aligned BAM."""
     input:
-        bam = "{outdir}/aligned/{ref}/{sample}.bam",
-        bai = "{outdir}/aligned/{ref}/{sample}.bam.bai",
+        bam = "{scratch}/aligned/{ref}/{sample}.bam",
+        bai = "{scratch}/aligned/{ref}/{sample}.bam.bai",
     output:
-        sketch = "{outdir}/sketches/{ref}/{sample}.sketch",
+        peak = "{outdir}/peaks/{ref}/{sample}_peaks.narrowPeak",
     params:
-        k = K,
-        w = W,
-        s = S,
+        gsize  = lambda wc: config["macs_gsize"][wc.ref],
+        outdir = lambda wc: f"{OUTDIR}/peaks/{wc.ref}",
+        name   = lambda wc: wc.sample,
     log:
-        "{outdir}/logs/sketch/{ref}/{sample}.log"
+        "{outdir}/logs/peaks/{ref}/{sample}.log"
     threads: 4
     resources:
         mem_mb  = 16000,
-        runtime = 60,
+        runtime = 120,
+    singularity:
+        config["containers"]["macs2"]
     shell:
         """
-        {SKETCH_BIN} sketch \
-            --input  {input.bam} \
-            --output {output.sketch} \
-            --kmer   {params.k} \
-            --window {params.w} \
-            --size   {params.s} \
-            --threads {threads} \
+        macs2 callpeak \
+            -t {input.bam} \
+            -f BAMPE \
+            -g {params.gsize} \
+            -n {params.name} \
+            --outdir {params.outdir} \
+            --nomodel \
+            2>{log}
+        """
+
+rule peaks_to_fasta:
+    """Extract peak sequences with bedtools getfasta."""
+    input:
+        peak = "{outdir}/peaks/{ref}/{sample}_peaks.narrowPeak",
+        ref  = lambda wc: config["references"][wc.ref]["fasta"],
+    output:
+        fa = "{outdir}/fastas/{ref}/{sample}.fa",
+    log:
+        "{outdir}/logs/fastas/{ref}/{sample}.log"
+    threads: 1
+    resources:
+        mem_mb  = 4000,
+        runtime = 30,
+    singularity:
+        config["containers"]["bedtools"]
+    shell:
+        """
+        bedtools getfasta \
+            -fi {input.ref} \
+            -bed {input.peak} \
+            -fo {output.fa} \
             2>{log}
         """
 
@@ -162,96 +189,131 @@ rule sketch_bam:
 # EXPERIMENT A: Cross-Reference Robustness
 # =============================================================================
 
-rule exp_a_similarity_matrix:
-    """Compute all-vs-all pairwise similarity for Experiment A sketches."""
+rule exp_a_fasta_list:
+    """Write a file listing FASTA paths for all Exp A samples under one ref."""
     input:
-        sketches = expand(
-            "{outdir}/sketches/{ref}/{sample}.sketch",
-            outdir=OUTDIR,
-            ref=["GRCh37", "GRCh38"],
-            sample=[s["id"] for s in SAMPLES["experiment_a"]],
+        fas = lambda wc: expand(
+            "{outdir}/fastas/{ref}/{sample}.fa",
+            outdir=OUTDIR, ref=wc.ref,
+            sample=exp_a_samples(),
         ),
     output:
-        matrix = "{outdir}/exp_a/similarity_matrix.tsv",
+        lst = "{outdir}/exp_a/fasta_lists/{ref}.txt",
+    run:
+        with open(output.lst, "w") as fh:
+            for fa in input.fas:
+                fh.write(fa + "\n")
+
+rule exp_a_hammock:
+    """Run hammock all-vs-all for Exp A (both refs together) at one (k, w)."""
+    input:
+        grch37 = "{outdir}/exp_a/fasta_lists/GRCh37.txt",
+        grch38 = "{outdir}/exp_a/fasta_lists/GRCh38.txt",
+    output:
+        csv = "{outdir}/exp_a/k{k}_w{w}/exp_a_mnmzr_p{precision}_jaccD_k{k}_w{w}.csv",
+    params:
+        outprefix = lambda wc: f"{OUTDIR}/exp_a/k{wc.k}_w{wc.w}/exp_a",
+        all_lists  = lambda wc, input: f"{input.grch37} {input.grch38}",
     log:
-        "{outdir}/logs/exp_a/similarity_matrix.log"
+        "{outdir}/logs/exp_a/hammock_k{k}_w{w}.log"
     threads: 8
     resources:
-        mem_mb = 8000,
-        runtime = 30,
+        mem_mb  = 16000,
+        runtime = 60,
     shell:
         """
-        {SKETCH_BIN} dist \
-            --sketches {input.sketches} \
-            --output   {output.matrix} \
-            --threads  {threads} \
+        # Concatenate both ref lists into one combined list for all-vs-all
+        cat {input.grch37} {input.grch38} > {params.outprefix}_all_fastas.txt
+        {HAMMOCK} {params.outprefix}_all_fastas.txt \
+                  {params.outprefix}_all_fastas.txt \
+            --outprefix {params.outprefix} \
+            --minimizer \
+            -k {wildcards.k} \
+            -w {wildcards.w} \
+            --precision {PRECISION} \
+            --full-paths \
             2>{log}
         """
 
 rule exp_a_validate_and_plot:
-    """Statistical test and visualization for cross-reference similarity."""
+    """Statistical test and visualization for cross-reference similarity (Exp A)."""
     input:
-        matrix   = "{outdir}/exp_a/similarity_matrix.tsv",
+        csv      = "{outdir}/exp_a/k{k}_w{w}/exp_a_mnmzr_p{precision}_jaccD_k{k}_w{w}.csv",
         metadata = "config/exp_a_metadata.tsv",
     output:
-        plot  = "{outdir}/exp_a/cross_ref_validation.png",
-        stats = "{outdir}/exp_a/cross_ref_stats.tsv",
+        plot  = "{outdir}/exp_a/k{k}_w{w}/cross_ref_validation.png",
+        stats = "{outdir}/exp_a/k{k}_w{w}/cross_ref_stats.tsv",
+    params:
+        sim_col = "similarity_with_ends",
     log:
-        "{outdir}/logs/exp_a/validate_plot.log"
+        "{outdir}/logs/exp_a/validate_plot_k{k}_w{w}.log"
     singularity:
         config["containers"]["r_tidyverse"]
     script:
-        "scripts/exp_a_validate_plot.R"
+        "../scripts/exp_a_validate_plot.R"
 
 # =============================================================================
 # EXPERIMENT B: Tissue-over-Species Clustering
 # =============================================================================
 
-rule exp_b_similarity_matrix:
-    """Compute all-vs-all pairwise similarity for Experiment B (human + mouse)."""
+rule exp_b_fasta_list:
+    """Write a file listing FASTA paths for all Exp B samples under one ref."""
     input:
-        # Human sketches (GRCh38)
-        human_sketches = expand(
-            "{outdir}/sketches/GRCh38/{sample}.sketch",
-            outdir=OUTDIR,
-            sample=[s["id"] for s in SAMPLES["experiment_b"] if s["species"] == "human"],
-        ),
-        # Mouse sketches (GRCm39)
-        mouse_sketches = expand(
-            "{outdir}/sketches/GRCm39/{sample}.sketch",
-            outdir=OUTDIR,
-            sample=[s["id"] for s in SAMPLES["experiment_b"] if s["species"] == "mouse"],
+        fas = lambda wc: expand(
+            "{outdir}/fastas/{ref}/{sample}.fa",
+            outdir=OUTDIR, ref=wc.ref,
+            sample=exp_b_samples_for_ref(wc.ref),
         ),
     output:
-        matrix = "{outdir}/exp_b/similarity_matrix.tsv",
+        lst = "{outdir}/exp_b/fasta_lists/{ref}.txt",
+    run:
+        with open(output.lst, "w") as fh:
+            for fa in input.fas:
+                fh.write(fa + "\n")
+
+rule exp_b_hammock:
+    """Run hammock all-vs-all for Exp B (human GRCh38 + mouse mm10) at one (k, w)."""
+    input:
+        human = "{outdir}/exp_b/fasta_lists/GRCh38.txt",
+        mouse = "{outdir}/exp_b/fasta_lists/mm10.txt",
+    output:
+        csv = "{outdir}/exp_b/k{k}_w{w}/exp_b_mnmzr_p{precision}_jaccD_k{k}_w{w}.csv",
+    params:
+        outprefix = lambda wc: f"{OUTDIR}/exp_b/k{wc.k}_w{wc.w}/exp_b",
     log:
-        "{outdir}/logs/exp_b/similarity_matrix.log"
+        "{outdir}/logs/exp_b/hammock_k{k}_w{w}.log"
     threads: 8
     resources:
-        mem_mb = 8000,
-        runtime = 30,
+        mem_mb  = 16000,
+        runtime = 60,
     shell:
         """
-        {SKETCH_BIN} dist \
-            --sketches {input.human_sketches} {input.mouse_sketches} \
-            --output   {output.matrix} \
-            --threads  {threads} \
+        cat {input.human} {input.mouse} > {params.outprefix}_all_fastas.txt
+        {HAMMOCK} {params.outprefix}_all_fastas.txt \
+                  {params.outprefix}_all_fastas.txt \
+            --outprefix {params.outprefix} \
+            --minimizer \
+            -k {wildcards.k} \
+            -w {wildcards.w} \
+            --precision {PRECISION} \
+            --full-paths \
             2>{log}
         """
 
 rule exp_b_cluster_and_plot:
-    """Hierarchical clustering, PCA, and dendrogram for tissue-over-species."""
+    """Hierarchical clustering, PCA, and dendrogram for tissue-over-species (Exp B)."""
     input:
-        matrix   = "{outdir}/exp_b/similarity_matrix.tsv",
+        csv      = "{outdir}/exp_b/k{k}_w{w}/exp_b_mnmzr_p{precision}_jaccD_k{k}_w{w}.csv",
         metadata = "config/exp_b_metadata.tsv",
     output:
-        dendrogram = "{outdir}/exp_b/dendrogram.png",
-        pca        = "{outdir}/exp_b/pca.png",
-        clusters   = "{outdir}/exp_b/cluster_assignments.tsv",
+        dendrogram = "{outdir}/exp_b/k{k}_w{w}/dendrogram.png",
+        pca        = "{outdir}/exp_b/k{k}_w{w}/pca.png",
+        clusters   = "{outdir}/exp_b/k{k}_w{w}/cluster_assignments.tsv",
+    params:
+        sim_col = "similarity_with_ends",
     log:
-        "{outdir}/logs/exp_b/cluster_plot.log"
+        "{outdir}/logs/exp_b/cluster_plot_k{k}_w{w}.log"
     singularity:
         config["containers"]["r_tidyverse"]
     script:
-        "scripts/exp_b_cluster_plot.R"
-
+        "../scripts/exp_b_cluster_plot.R"

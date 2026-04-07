@@ -12,8 +12,8 @@ executor: slurm
 
 # Default resources for all jobs (override per-rule in Snakefile with resources:)
 default-resources:
-  slurm_partition: "standard"
-  slurm_account:   ""          # fill in your cluster account
+  slurm_partition: "parallel"
+  slurm_account:   "blangme2_scal"
   mem_mb:          8000
   runtime:         60          # minutes
   cpus_per_task:   1
@@ -23,6 +23,7 @@ default-resources:
 set-resources:
   align_bwa_mem2:
     slurm_partition: "bigmem"
+    slurm_account:   "blangme2_bigmem"
     mem_mb:          32000
     runtime:         240
     cpus_per_task:   16

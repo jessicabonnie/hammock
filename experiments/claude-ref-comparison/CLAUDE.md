@@ -13,11 +13,20 @@ Validates minimizer-based sketching on ENCODE/Roadmap ChIP-seq data via two expe
 - `workflow/Snakefile` — full pipeline (download → align → sketch → similarity → plots)
 - `workflow/slurm_profile/config.yaml` — SLURM cluster profile
 
+## Environment
+
+```bash
+ml anaconda
+conda env create -f environment.yaml   # first time only
+conda activate claude-ref-comparison
+```
+
+`environment.yaml` is the source of truth — update it and re-run `conda env update -f environment.yaml --prune` when dependencies change.
+
 ## Before running the workflow
 
 1. Run `python scripts/fetch_accessions.py` to confirm SRA run IDs for Mouse ENCODE samples (GSE49847)
 2. Update `sra_map` in `config/config.yaml` with confirmed SRR IDs
-3. Update reference FASTA paths in `config/config.yaml` for your cluster
 
 ## Running
 

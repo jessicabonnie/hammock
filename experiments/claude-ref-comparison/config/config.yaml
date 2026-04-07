@@ -4,16 +4,26 @@
 # =============================================================================
 
 # Output and scratch directories
-outdir:  "results"
-scratch: "/scratch/minimizer_encode"
+outdir:  "/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results"
+scratch: "/vast/blangme2/jbonnie/hammock/claude-ref-comparison/scratch"
 
-# Sketching tool binary (project-specific — update path before running)
-sketch_bin: "../../bin/minimizer_sketch"
+# Hammock entrypoint
+sketch_bin: "python3 /home/jbonnie1/interval_sketch/hammock/hammock/hammock.py"
 
-# Minimizer parameters (to be tuned; these are starting defaults)
-kmer_size:   21
-window_size: 11
-sketch_size: 10000
+# Minimizer parameter sweep — all (k, w) combinations will be run
+# Keep precision high; k and w intentionally low to start
+# Parameter sweep — all (k, w) pairs where w >= k will be run.
+# w < k causes silent degenerate sketches (zero minimizers per window,
+# falls back to full-sequence hashing) so those combos are skipped at runtime.
+kmer_sizes:   [3, 5, 7]
+window_sizes: [5, 10, 15, 20]
+precision:    24
+
+# MACS2 genome size flags
+macs_gsize:
+  GRCh38: "hs"
+  GRCh37: "hs"
+  mm10:   "mm"
 
 # =============================================================================
 # CONTAINER IMAGES (Singularity)
@@ -23,24 +33,25 @@ containers:
   bwa_samtools: "docker://biocontainers/bwa-mem2:2.2.1"
   r_tidyverse:  "docker://rocker/tidyverse:4.3.0"
   samtools:     "docker://biocontainers/samtools:1.18"
-  picard:       "docker://broadinstitute/picard:2.27.5"
+  macs2:        "docker://biocontainers/macs2:2.2.9.1"
+  bedtools:     "docker://biocontainers/bedtools:2.31.0"
 
 # =============================================================================
 # REFERENCE GENOMES
 # =============================================================================
 references:
   GRCh38:
-    fasta: "/ref/GRCh38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
-    bwa_index: "/ref/GRCh38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
-    chromsizes: "/ref/GRCh38/hg38.chrom.sizes"
+    fasta: "/data/blangme2/jessica/mus_homo/references/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna"
+    bwa_index: "/data/blangme2/jessica/mus_homo/references/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna"
+    chromsizes: "/data/blangme2/jessica/mus_homo/references/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna.fai"
   GRCh37:
-    fasta: "/ref/GRCh37/GRCh37.p13.genome.fa"
-    bwa_index: "/ref/GRCh37/GRCh37.p13.genome.fa"
-    chromsizes: "/ref/GRCh37/hg19.chrom.sizes"
-  GRCm39:
-    fasta: "/ref/GRCm39/GCF_000001635.27_GRCm39_genomic.fna"
-    bwa_index: "/ref/GRCm39/GCF_000001635.27_GRCm39_genomic.fna"
-    chromsizes: "/ref/GRCm39/mm39.chrom.sizes"
+    fasta: "/data/blangme2/jessica/mus_homo/references/hg19/hg19.fa"
+    bwa_index: "/data/blangme2/jessica/mus_homo/references/hg19/hg19.fa"
+    chromsizes: "/data/blangme2/jessica/mus_homo/references/hg19/hg19.fa.fai"
+  mm10:
+    fasta: "/data/blangme2/jessica/mus_homo/references/mm10/mm10_no_alt_analysis_set_ENCODE.fasta"
+    bwa_index: "/data/blangme2/jessica/mus_homo/references/mm10/mm10_no_alt_analysis_set_ENCODE.fasta"
+    chromsizes: "/data/blangme2/jessica/mus_homo/references/mm10/mm10_no_alt_analysis_set_ENCODE.fasta.fai"
 
 # =============================================================================
 # EXPERIMENT A: Cross-Reference Robustness
@@ -148,29 +159,29 @@ samples:
       tissue: heart
       species: mouse
       geo:    GSE49847
-      ref:    GRCm39
+      ref:    mm10
     - id:     mm_liver_H3K27ac
       mark:   H3K27ac
       tissue: liver
       species: mouse
       geo:    GSE49847
-      ref:    GRCm39
+      ref:    mm10
     - id:     mm_lung_H3K27ac
       mark:   H3K27ac
       tissue: lung
       species: mouse
       geo:    GSE49847
-      ref:    GRCm39
+      ref:    mm10
     - id:     mm_brain_H3K27ac
       mark:   H3K27ac
       tissue: brain
       species: mouse
       geo:    GSE49847
-      ref:    GRCm39
+      ref:    mm10
     - id:     mm_spleen_H3K27ac
       mark:   H3K27ac
       tissue: spleen
       species: mouse
       geo:    GSE49847
-      ref:    GRCm39
+      ref:    mm10
 
