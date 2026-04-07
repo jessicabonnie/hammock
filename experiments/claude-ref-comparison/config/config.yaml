@@ -70,17 +70,17 @@ references:
 samples:
   sra_map:
     # Experiment A: Human H3K27ac — heart left ventricle (Roadmap E095)
-    E095_H3K27ac: "SRR1234567"          # TODO: confirm SRA run ID
+    E095_H3K27ac: "SRR2173071"          # confirmed: GSM1127115 (heart, Roadmap E095)
     # Experiment A: Human H3K27ac — liver (Roadmap E066)
-    E066_H3K27ac: "SRR1234568"          # TODO: confirm SRA run ID
+    E066_H3K27ac: "SRR2172698"          # confirmed: GSM1127068 (liver, Roadmap E066)
     # Experiment A: Human H3K27ac — lung (Roadmap E096)
-    E096_H3K27ac: "SRR1234569"          # TODO: confirm SRA run ID
+    E096_H3K27ac: "SRR2173068"          # confirmed: GSM1127116 (lung, Roadmap E096)
     # Experiment B additional: Mouse ENCODE LICR H3K27ac
-    mm_heart_H3K27ac:   "SRR1234570"   # TODO: confirm from GSE49847
-    mm_liver_H3K27ac:   "SRR1234571"   # TODO: confirm from GSE49847
-    mm_lung_H3K27ac:    "SRR1234572"   # TODO: confirm from GSE49847
-    mm_brain_H3K27ac:   "SRR1234573"   # TODO: confirm from GSE49847
-    mm_spleen_H3K27ac:  "SRR1234574"   # TODO: confirm from GSE49847
+    mm_heart_H3K27ac:   "TODO"          # TODO: confirm from GSE49847
+    mm_liver_H3K27ac:   "TODO"          # TODO: confirm from GSE49847
+    # mm_lung_H3K27ac: not available in GSE49847 — excluded from Exp B
+    mm_brain_H3K27ac:   "TODO"          # TODO: confirm from GSE49847
+    mm_spleen_H3K27ac:  "TODO"          # TODO: confirm from GSE49847
 
   experiment_a:
     - id:     E095_H3K27ac
@@ -123,13 +123,7 @@ samples:
       geo:    GSE16256
       encode: E066
       ref:    GRCh38
-    - id:     E096_H3K27ac
-      mark:   H3K27ac
-      tissue: lung
-      species: human
-      geo:    GSE16256
-      encode: E096
-      ref:    GRCh38
+    # lung excluded from Exp B: H3K27ac absent from GSE49847 (mouse); planned H3K4me3 extension will add it
     - id:     E067_H3K27ac
       mark:   H3K27ac
       tissue: brain_angular_gyrus
@@ -166,12 +160,7 @@ samples:
       species: mouse
       geo:    GSE49847
       ref:    mm10
-    - id:     mm_lung_H3K27ac
-      mark:   H3K27ac
-      tissue: lung
-      species: mouse
-      geo:    GSE49847
-      ref:    mm10
+    # mm_lung_H3K27ac excluded: H3K27ac not present in GSE49847 for lung
     - id:     mm_brain_H3K27ac
       mark:   H3K27ac
       tissue: brain

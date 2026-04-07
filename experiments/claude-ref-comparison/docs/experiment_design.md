@@ -91,22 +91,23 @@ Reproduce the clustering from Yue et al. (2014) and Lin et al. (2014) using mini
 
 Following Yue et al. (2014) and Lin et al. (2014), use the overlapping tissue types available in both human (ENCODE/Roadmap) and mouse (Mouse ENCODE):
 
-| Tissue | Human Source | Human GEO/Accession | Mouse Source | Mouse GEO/Accession |
+| Tissue | Human (Roadmap) | Human GEO | Mouse (LICR) | Mouse GEO |
 |---|---|---|---|---|
-| Heart | Roadmap E095 (left ventricle) | GSE16256 | Mouse ENCODE | GSE49847 (LICR) |
-| Liver | Roadmap E066 | GSE16256 | Mouse ENCODE | GSE49847 (LICR) |
-| Lung | Roadmap E096 | GSE16256 | Mouse ENCODE | GSE49847 |
-| Brain (frontal cortex / cerebellum) | Roadmap E067/E071 | GSE16256 | Mouse ENCODE | GSE49847 |
-| Spleen | Roadmap E113 | GSE16256 | Mouse ENCODE | GSE49847 |
-| Small intestine | Roadmap E109 | GSE16256 | Mouse ENCODE | GSE49847 |
+| Heart | E095 | GSM1127115 / GSE16256 | GSM1000093 | GSE49847 |
+| Liver | E066 | GSM1127068 / GSE16256 | GSM1000140 | GSE49847 |
+| Brain (cortex) | E067 | GSM1127069 / GSE16256 | GSM1000100 | GSE49847 |
+| Spleen | E113 | GSM1127132 / GSE16256 | GSM1000138 | GSE49847 |
 
-> **Note:** GSE49847 is the GEO Series for Mouse ENCODE LICR ChIP-seq data used in the Lin et al. (2014) analysis. The Roadmap human data are under GEO Superseries GSE16256. See bibliography for full citations.
+> **Note:** Lung is excluded from the initial H3K27ac analysis — H3K27ac ChIP-seq is absent from GSE49847 for lung (only H3K4me3/H3K4me1/Pol2/CTCF are available). Lung will be added in the planned H3K4me3 extension (see below). GSE49847 is the GEO Series for Mouse ENCODE LICR ChIP-seq data (Yue et al. 2014). Roadmap human data are under GEO Superseries GSE16256.
 
 **Histone marks to include (in priority order):**
 
 1. H3K4me3 — active promoters; used in all key papers
 2. H3K27ac — active enhancers; strongest tissue discriminator (Roadmap 2015)
 3. H3K4me1 — poised/active enhancers; used in Yue et al. and Roadmap 2015
+
+**Planned extension — H3K4me3 across all tissues including lung:**
+The initial analysis uses H3K27ac across 4 tissues (heart, liver, brain, spleen). A subsequent run will switch to H3K4me3, which is available in GSE49847 for all target tissues including lung, allowing a 5-tissue comparison and a cross-mark consistency check. H3K4me3 GSM accessions for Roadmap human samples (E095/E066) are already confirmed (GSM1127114, GSM1127067); mouse lung H3K4me3 GSMs need to be pulled from GSE49847.
 
 ### Expected Clustering Result
 
