@@ -10,6 +10,11 @@ scratch: "/vast/blangme2/jbonnie/hammock/claude-ref-comparison/scratch"
 # Hammock entrypoint
 sketch_bin: "python3 /home/jbonnie1/interval_sketch/hammock/hammock/hammock.py"
 
+# Primary similarity column — Mode D outputs two columns:
+#   jaccard_similarity            — minimizers only
+#   jaccard_similarity_with_ends  — minimizers + boundary k-mers (primary; used in all plots/stats)
+primary_sim_col: "jaccard_similarity_with_ends"
+
 # Minimizer parameter sweep — all (k, w) combinations will be run
 # Keep precision high; k and w intentionally low to start
 # Parameter sweep — all (k, w) pairs where w >= k will be run.

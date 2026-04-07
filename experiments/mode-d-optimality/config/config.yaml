@@ -9,6 +9,12 @@ kmer_sizes:   [3, 5, 7, 10]
 window_sizes: [5, 10, 15, 20, 40]
 precision:    24
 
+# Primary similarity column for parameter selection
+# Mode D outputs two columns; both are recorded in sweep CSVs:
+#   jaccard_similarity            — minimizers only
+#   jaccard_similarity_with_ends  — minimizers + boundary k-mers (primary)
+primary_sim_col: "jaccard_similarity_with_ends"
+
 # Synthetic data settings
 seq_length:     1000     # length of each synthetic sequence
 trials:         20       # trials per (k, w, mutation_rate) combination
