@@ -14,7 +14,8 @@ experiments/chip-seq-reference-comparison/
     ├── build_histone_narrowpeak_bed_manifest.py
     ├── build_nfcore_chipseq_samplesheet.py
     ├── chipseq_nfcore_samplesheet.py
-    ├── histone_bedpaths_to_fasta.py       # bedtools getfasta → fasta_from_bed/
+    ├── histone_bedpaths_to_fasta_manifest.py  # manifest-driven bedtools getfasta → fasta_from_bed/
+    ├── plot_hammock_histone_similarity.py    # hammock CSV + manifest → heatmaps / violins
     └── histone_encode_manifest_common.py   # shared cart parsing + batch columns
 ```
 
@@ -27,9 +28,10 @@ On some systems the same tree is mirrored under a shared filesystem, e.g. `/vast
 All outputs are written under **`data/histone-marks/`** when you set `HISTONE_MARKS` as follows (from the **repository root** `hammock/`):
 
 ```bash
-export HISTONE_MARKS="$(pwd)/experiments/chip-seq-reference-comparison/data/histone-marks"
+export HISTONE_MARKS="/home/jbonnie1/interval_sketch/hammock/experiments/chip-seq-reference-comparison/data/histone-marks"
 # or, on a typical vast mirror:
 # export HISTONE_MARKS="/vast/blangme2/jbonnie/hammock/chip-seq-reference-comparison/data/histone-marks"
+export HISTONE_MARKS_RESULTS="/vast/blangme2/jbonnie/hammock/chip-seq-reference-comparison/results/histone-marks"
 ```
 
 ### 1. Cart export from ENCODE
@@ -77,7 +79,7 @@ python3 experiments/chip-seq-reference-comparison/scripts/build_histone_narrowpe
   --output "${HISTONE_MARKS}/histone_narrowpeak_bed_manifest.tsv"
 ```
 
-**With ENCODE per-file assembly** (slow: one HTTPS GET per local BED). Use this when the cart mixes hg19/GRCh38 or mm9/mm10/mm10-minimal—then run **`histone_bedpaths_to_fasta.py --manifest`** (§5):
+**With ENCODE per-file assembly** (slow: one HTTPS GET per local BED). Use this when the cart mixes hg19/GRCh38 or mm9/mm10/mm10-minimal—then run **`histone_bedpaths_to_fasta_manifest.py --manifest`** (§5):
 
 ```bash
 python3 experiments/chip-seq-reference-comparison/scripts/build_histone_narrowpeak_bed_manifest.py \
@@ -124,7 +126,7 @@ Create **`${HISTONE_MARKS}/fasta_from_bed/`** (sibling of `bed/` and `fastq/`) w
 | **mm10-minimal** | `mm10_minimal/mm10_minimal_ENCODE.fasta` | `$MM10_MINIMAL_FASTA` / `--ref-mm10-minimal` |
 | **mm9** | `mm9/mm9.fa` | `$MM9_FASTA` / `--ref-mm9` |
 
-Older mus-homo docs also mention [`experiments/mus-homo/dnase-seq/dnase-seq.md`](mus-homo/dnase-seq/dnase-seq.md) paths; the table above is what **`histone_bedpaths_to_fasta.py`** uses by default.
+Older mus-homo docs also mention [`experiments/mus-homo/dnase-seq/dnase-seq.md`](mus-homo/dnase-seq/dnase-seq.md) paths; the table above is what **`histone_bedpaths_to_fasta_manifest.py`** uses by default.
 
 Requires **`bedtools`** on `PATH`. Gzipped BED is passed through to `bedtools` as in the mus-homo recipes.
 
@@ -133,14 +135,14 @@ From the **repository root** (`hammock/`), after **`HISTONE_MARKS`** is set:
 **Recommended (assembly-aware):** rebuild the manifest with **`--fetch-assembly`** if needed, then (defaults use the **`mus_homo/references/`** tree above):
 
 ```bash
-python3 experiments/chip-seq-reference-comparison/scripts/histone_bedpaths_to_fasta.py \
+python3 experiments/chip-seq-reference-comparison/scripts/histone_bedpaths_to_fasta_manifest.py \
   --manifest "${HISTONE_MARKS}/histone_narrowpeak_bed_manifest.tsv" \
   --histone-marks-dir "${HISTONE_MARKS}"
 ```
 
 Add **`--ref-hg19`**, **`--ref-mm9`**, etc., only if those files live somewhere else on your system.
 
-If the **`assembly`** column is missing or entirely blank, **`histone_bedpaths_to_fasta.py`** still resolves references from **`reference_build`** (and finally from **`organism`**). A warning is printed when **`assembly`** was never filled from ENCODE (**`--fetch-assembly`**).
+If the **`assembly`** column is missing or entirely blank, **`histone_bedpaths_to_fasta_manifest.py`** still resolves references from **`reference_build`** (and finally from **`organism`**). A warning is printed when **`assembly`** was never filled from ENCODE (**`--fetch-assembly`**).
 
 The script writes FASTAs under **`${HISTONE_MARKS}/fasta_from_bed/narrowpeak/`** and **`${HISTONE_MARKS}/fasta_from_bed/broadpeak/`** (separate directories to avoid collisions), and refreshes **`path_lists/histone_*_fasta_paths_<build>.txt`**. In manifest mode it writes **both** species-based narrowPeak lists (**`path_lists/histone_narrowpeak_fasta_paths_Mus_musculus.txt`**, **`_Homo_sapiens.txt`**) and per-build narrowPeak lists, and it also processes broadPeak build lists from **`path_lists/histone_broadpeak_bed_paths_<build>.txt`** when present. It also writes **`tissue_type_breakout_by_build_and_organism.png`**. Use **`--skip-existing`**, **`--dry-run`**, and **`-j N`** as needed (parallel `bedtools`; **`-j 1`** is sequential). Disable PNG generation with **`--no-tissue-plot`**.
 
@@ -186,6 +188,10 @@ This creates, under **`${HISTONE_MARKS}/`**:
 
 Each CSV includes an extra column **`encode_organism`** (ignored by nf-core; useful for checks).
 
+Run-specific note (2026-04-07): after generating these samplesheets, the mouse file was manually edited to drop failing replicate 2 for `ENCSR548BKP_H3K4me1` (rows with IP FASTQs `ENCFF089POY` and `ENCFF980EMT`). This replicate failed in `nf-core/chipseq` during MACS3 model-building (`<100` paired peaks); replicate 1 for the same experiment was retained.
+
+Run-specific note (2026-04-07, later rerun): the mouse file was edited again to drop failing replicate 1 for `ENCSR282GAG_H3K27me3` (rows with IP FASTQs `ENCFF213QFH` and `ENCFF683GIH`) after another MACS3 model-building failure (`94` paired peaks, still below the `100` minimum). Replicate 2 for this experiment was retained.
+
 Fetch controls (default destination: **`${HISTONE_MARKS}/fastq_controls/`**):
 
 ```bash
@@ -193,21 +199,30 @@ bash "${HISTONE_MARKS}/download_control_fastqs_Mus_musculus.sh"
 bash "${HISTONE_MARKS}/download_control_fastqs_Homo_sapiens.sh"   # if present
 ```
 
-Then run Nextflow **per species**, for example:
+<!-- Then run Nextflow **per species**, for example:
 
 ```bash
-nextflow run nf-core/chipseq -r 2.1.0 \
+nextflow run chipseq -r 2.1.0 \
   --input "${HISTONE_MARKS}/nfcore_chipseq_samplesheet_Mus_musculus.csv" \
-  --outdir "${HISTONE_MARKS}/nfcore_chipseq_results_mouse" \
+  --outdir "${HISTONE_MARKS_RESULTS}/nf-core_mm10" \
   -profile singularity \
-  --genome mm10
+  --genome mm10 \
+  --macs_gsize 1870000000
 
-nextflow run nf-core/chipseq -r 2.1.0 \
+nextflow run chipseq -r 2.1.0 \
   --input "${HISTONE_MARKS}/nfcore_chipseq_samplesheet_Homo_sapiens.csv" \
-  --outdir "${HISTONE_MARKS}/nfcore_chipseq_results_human" \
+  --outdir "${HISTONE_MARKS_RESULTS}/nf-core-GRCh38" \
   -profile singularity \
-  --genome GRCh38
-```
+  --genome GRCh38 \
+  --macs_gsize 2700000000
+
+  nextflow run nf-core/chipseq -r 2.1.0 \
+  --input "${HISTONE_MARKS}/nfcore_chipseq_samplesheet_Homo_sapiens.csv" \
+  --outdir "${HISTONE_MARKS_RESULTS}/nf-core-GRCh37" \
+  -profile singularity \
+  --genome GRCh37 \
+  --macs_gsize 2700000000
+``` -->
 
 Optional **single combined** sheet (all species in one file, previous behavior):
 
@@ -238,8 +253,8 @@ python3 experiments/chip-seq-reference-comparison/scripts/build_nfcore_chipseq_s
 | `histone_narrowpeak_bed_manifest.tsv` | `build_histone_narrowpeak_bed_manifest.py` (§4) |
 | `path_lists/histone_narrowpeak_bed_paths_<build>.txt` | §4 (per reference build, e.g. `mm10`, `GRCh38`) |
 | `path_lists/histone_broadpeak_bed_paths_<build>.txt` | §4b (per reference build) |
-| `fasta_from_bed/*.fa` | `histone_bedpaths_to_fasta.py` (§5) |
-| `path_lists/histone_*_fasta_paths_<build>.txt` | §5 (legacy list mode or **`--manifest`**; same slug as BED list) |
+| `fasta_from_bed/narrowpeak/*.fa` + `fasta_from_bed/broadpeak/*.fa` | `histone_bedpaths_to_fasta_manifest.py` (§5) |
+| `path_lists/histone_*_fasta_paths_<build>.txt` | §5 (`--manifest`; same slug as BED list) |
 | `path_lists/histone_narrowpeak_fasta_paths_Mus_musculus.txt` / `_Homo_sapiens.txt` | §5 (**`--manifest`** only; species) |
 | `histone_fastq_manifest.tsv` | `build_histone_fastq_manifest.py` (§6) |
 
@@ -252,13 +267,14 @@ python3 experiments/chip-seq-reference-comparison/scripts/build_nfcore_chipseq_s
 | `scripts/histone_encode_manifest_common.py` | Shared: cart parsing, batch fields, `normalize_organism_label`, species BED path list writer |
 | `scripts/build_histone_narrowpeak_bed_manifest.py` | Cart TSV + `bed/*.bed.gz` → `histone_narrowpeak_bed_manifest.tsv` |
 | `scripts/build_histone_fastq_manifest.py` | Cart TSV + `fastq/` → `histone_fastq_manifest.tsv` |
-| `scripts/histone_bedpaths_to_fasta.py` | BED path lists + mm10/GRCh38 refs → `fasta_from_bed/*.fa` + FASTA path lists |
+| `scripts/histone_bedpaths_to_fasta_manifest.py` | Manifest + assembly-aware refs → `fasta_from_bed/{narrowpeak,broadpeak}/*.fa` + FASTA path lists |
 | `scripts/build_nfcore_chipseq_samplesheet.py` | Local IP FASTQs + manifest → per-species nf-core CSVs + control TSVs + downloaders |
 | `scripts/chipseq_nfcore_samplesheet.py` | Library: ENCODE API, samplesheet build, split by `Mus musculus` / `Homo sapiens` |
+| `scripts/plot_hammock_histone_similarity.py` | Hammock pairwise CSV + `histone_fastq_manifest.tsv` (+ optional nf-core samplesheet) → annotated TSV, clustermaps, tissue blocks, cross-reference violins |
 
 ---
 
-## Reference-genome comparison workflow (separate design)
+## Reference-genome comparison workflow 
 
 The following describes an older **same-TF, two-reference** alignment comparison (not the histone-marks ENCODE cohort). Placeholders remain for cell line, TF, and references.
 
@@ -268,7 +284,6 @@ Compare ChIP-seq data for the same cell line and transcription factor aligned to
 
 ### Experimental design
 
-- **Cell line**: [TO BE FILLED]
 - **Transcription factor**: [TO BE FILLED]
 - **Reference genome 1**: [TO BE FILLED]
 - **Reference genome 2**: [TO BE FILLED]
@@ -278,118 +293,181 @@ Compare ChIP-seq data for the same cell line and transcription factor aligned to
 
 #### 1. Data preparation
 
-```bash
-cd data
-xargs -n 1 curl -O -L < raw_files1.txt
-```
-
-##### Download/locate reference genomes
-
-```bash
-# Reference 1 (e.g., hg19)
-REF1=/path/to/reference1.fa
-
-# Reference 2 (e.g., hg38)
-REF2=/path/to/reference2.fa
-```
-
 ##### Run nf-core/chipseq for both references
 
 ```bash
-nextflow run chipseq/ -profile singularity --outdir chip-seq-reference-comparison/results/histone-marks/nf-core-GRCh37/ --input chip-seq-reference-comparison/data/histone-marks/nfcore_chipseq_samplesheet_Homo_sapiens.csv --genome GRCh37 --macs_gsize 2700000000
-nextflow run chipseq/ -profile singularity --outdir chip-seq-reference-comparison/results/histone-marks/nf-core/ --input chip-seq-reference-comparison/data/histone-marks/nfcore_chipseq_samplesheet_Homo_sapiens.csv --genome GRCh38 --macs_gsize 2700000000
+nextflow run chipseq/ \
+  -profile singularity \
+  --outdir ${HISTONE_MARKS_RESULTS}/nf-core-GRCh37/ \
+  --input ${HISTONE_MARKS}/nfcore_chipseq_samplesheet_Homo_sapiens.csv \
+  --genome GRCh37 \
+  --macs_gsize 2700000000
+
+nextflow run chipseq/ \
+  -profile singularity \
+  --outdir ${HISTONE_MARKS_RESULTS}/nf-core-GRCh38/ \
+  --input ${HISTONE_MARKS}/nfcore_chipseq_samplesheet_Homo_sapiens.csv \
+  --genome GRCh38 \
+  --macs_gsize 2700000000
+
+nextflow run chipseq \
+  --input "${HISTONE_MARKS}/nfcore_chipseq_samplesheet_Mus_musculus.csv" \
+  --outdir "${HISTONE_MARKS_RESULTS}/nf-core-mm10" \
+  -profile singularity \
+  --genome mm10 \
+  --macs_gsize 1870000000
 ```
 
 #### 2. Organize BED files
 
 ```bash
-cd chip-seq-reference-comparison/results/histone-marks
+# cd chip-seq-reference-comparison/results/histone-marks
 
 # Adjust these to your actual nf-core output directories
-REF_G37_OUT=nf-core-GRCh37
-REF_G38_OUT=nf-core-GRCh38
+REF_G37_OUT=${HISTONE_MARKS_RESULTS}/nf-core-GRCh37
+REF_G38_OUT=${HISTONE_MARKS_RESULTS}/nf-core-GRCh38/
+REF_MM10_OUT=${HISTONE_MARKS_RESULTS}/nf-core-mm10
 
-# Typical nf-core/chipseq peak directories; update glob if your profile/version differs
-ls "$REF_G37_OUT"/**/*_peaks.narrowPeak 2>/dev/null | xargs realpath > ref_GRCh37_bed_paths.txt
-ls "$REF_G38_OUT"/**/*_peaks.narrowPeak 2>/dev/null | xargs realpath > ref_GRCh38_bed_paths.txt
+# Recursive search (bash ** only works with shopt -s globstar; nf-core nests peaks several dirs deep).
+# xargs -r avoids "realpath: missing operand" when find returns nothing (pipeline not finished or wrong --outdir).
+find "$REF_G37_OUT" -type f -name '*_peaks.broadPeak' -print0 2>/dev/null | xargs -0r realpath > ${HISTONE_MARKS_RESULTS}/ref_GRCh37_bed_paths_BROAD.txt
+find "$REF_G37_OUT" -type f -name '*_peaks.narrowPeak' -print0 2>/dev/null | xargs -0r realpath > ${HISTONE_MARKS_RESULTS}/ref_GRCh37_bed_paths_NARROW.txt
 
-while read -r filepath; do
-    basename "$filepath" | sed 's/_peaks.narrowPeak$//'
-done < ref_GRCh37_bed_paths.txt > sample_names.txt
+find "$REF_G38_OUT" -type f -name '*_peaks.broadPeak' -print0 2>/dev/null | xargs -0r realpath > ${HISTONE_MARKS_RESULTS}/ref_GRCh38_bed_paths_BROAD.txt
+find "$REF_G38_OUT" -type f -name '*_peaks.narrowPeak' -print0 2>/dev/null | xargs -0r realpath > ${HISTONE_MARKS_RESULTS}/ref_GRCh38_bed_paths_NARROW.txt
+
+find "$REF_MM10_OUT" -type f -name '*_peaks.broadPeak' -print0 2>/dev/null | xargs -0r realpath > ${HISTONE_MARKS_RESULTS}/ref_mm10_bed_paths_BROAD.txt
+find "$REF_MM10_OUT" -type f -name '*_peaks.narrowPeak' -print0 2>/dev/null | xargs -0r realpath > ${HISTONE_MARKS_RESULTS}/ref_mm10_bed_paths_NARROW.txt
+
 ```
 
 #### 3. Create FASTA files from peaks
 
 ```bash
-mkdir -p fastas_GRCh37 fastas_GRCh38
+mkdir -p ${REF_G38_OUT}/fastas_from_broad ${REF_G38_OUT}/fastas_from_narrow
+mkdir -p ${REF_G37_OUT}/fastas_from_broad ${REF_G37_OUT}/fastas_from_narrow
+mkdir -p ${REF_MM10_OUT}/fastas_from_broad ${REF_MM10_OUT}/fastas_from_narrow
 
-REF_G37=/path/to/GRCh37.fa
-REF_G38=/path/to/GRCh38.fa
+python3 experiments/chip-seq-reference-comparison/scripts/beds_to_fastas.py \
+  --bed-list ${HISTONE_MARKS_RESULTS}/ref_GRCh37_bed_paths_BROAD.txt \
+  --output-dir ${REF_G37_OUT}/fastas_from_broad \
+  --reference GRCh37 \
+  -j 8 > ${HISTONE_MARKS_RESULTS}/ref_GRCh37_fasta_paths_BROAD.txt
+  # use dry run if only the fasta paths are needed as output
 
-while read -r bedfile; do
-    outfile=$(basename "$bedfile" _peaks.narrowPeak)
-    bedtools getfasta -fi "$REF_G37" -bed "$bedfile" -fo "fastas_GRCh37/${outfile}.fa"
-    echo "$(realpath "fastas_GRCh37/${outfile}.fa")"
-done < ref_GRCh37_bed_paths.txt > ref_GRCh37_fastas.txt
+  python3 experiments/chip-seq-reference-comparison/scripts/beds_to_fastas.py \
+  --bed-list ${HISTONE_MARKS_RESULTS}/ref_GRCh38_bed_paths_BROAD.txt \
+  --output-dir ${REF_G38_OUT}/fastas_from_broad \
+  --reference GRCh38 \
+  -j 8 > ${HISTONE_MARKS_RESULTS}/ref_GRCh38_fasta_paths_BROAD.txt
 
-while read -r bedfile; do
-    outfile=$(basename "$bedfile" _peaks.narrowPeak)
-    bedtools getfasta -fi "$REF_G38" -bed "$bedfile" -fo "fastas_GRCh38/${outfile}.fa"
-    echo "$(realpath "fastas_GRCh38/${outfile}.fa")"
-done < ref_GRCh38_bed_paths.txt > ref_GRCh38_fastas.txt
+  python3 experiments/chip-seq-reference-comparison/scripts/beds_to_fastas.py \
+  --bed-list ${HISTONE_MARKS_RESULTS}/ref_GRCh37_bed_paths_NARROW.txt \
+  --output-dir ${REF_G37_OUT}/fastas_from_narrow \
+  --reference GRCh37 \
+  -j 8 > ${HISTONE_MARKS_RESULTS}/ref_GRCh37_fasta_paths_NARROW.txt
 
-cat ref_GRCh37_fastas.txt ref_GRCh38_fastas.txt > all_fastas.txt
+  python3 experiments/chip-seq-reference-comparison/scripts/beds_to_fastas.py \
+  --bed-list ${HISTONE_MARKS_RESULTS}/ref_GRCh38_bed_paths_NARROW.txt \
+  --output-dir ${REF_G38_OUT}/fastas_from_narrow \
+  --reference GRCh38 \
+  -j 8 > ${HISTONE_MARKS_RESULTS}/ref_GRCh38_fasta_paths_NARROW.txt
+
+  python3 experiments/chip-seq-reference-comparison/scripts/beds_to_fastas.py \
+  --bed-list ${HISTONE_MARKS_RESULTS}/ref_mm10_bed_paths_BROAD.txt \
+  --output-dir ${REF_MM10_OUT}/fastas_from_broad \
+  --reference mm10 \
+  -j 8 > ${HISTONE_MARKS_RESULTS}/ref_mm10_fasta_paths_BROAD.txt
+
+cat ${HISTONE_MARKS_RESULTS}/ref_GRCh38_fasta_paths_BROAD.txt ${HISTONE_MARKS_RESULTS}/ref_GRCh37_fasta_paths_BROAD.txt > ${HISTONE_MARKS_RESULTS}/homo_BROAD_fastas.txt
+
+cat ${HISTONE_MARKS_RESULTS}/ref_GRCh38_fasta_paths_NARROW.txt ${HISTONE_MARKS_RESULTS}/ref_GRCh37_fasta_paths_NARROW.txt > ${HISTONE_MARKS_RESULTS}/homo_NARROW_fastas.txt
+
+cat ${HISTONE_MARKS_RESULTS}/homo_BROAD_fastas.txt ${HISTONE_MARKS_RESULTS}/ref_mm10_fasta_paths_BROAD.txt > ${HISTONE_MARKS_RESULTS}/mus_homo_BROAD_fastas.txt
+
 ```
 
 ### Mode D analysis
 
-#### Within-reference comparisons
-
+#### Humans Across References -- BROAD/NARROW Peak
 ```bash
-hammock data/ref1_fastas.txt data/ref1_fastas.txt \
-    --outprefix results/ref1_comparison \
-    -k 20 -w 200 --precision 20
+mkdir ${HISTONE_MARKS_RESULTS}/hammock/
 
-hammock data/ref2_fastas.txt data/ref2_fastas.txt \
-    --outprefix results/ref2_comparison \
-    -k 20 -w 200 --precision 20
+hammock ${HISTONE_MARKS_RESULTS}/homo_BROAD_fastas.txt \
+  ${HISTONE_MARKS_RESULTS}/homo_BROAD_fastas.txt \
+    --outprefix ${HISTONE_MARKS_RESULTS}/hammock/homo_BROAD \
+    --minimizer \
+    -k 5 -w 40 --precision 24 \
+    --full-paths
+
+hammock ${HISTONE_MARKS_RESULTS}/homo_NARROW_fastas.txt \
+  ${HISTONE_MARKS_RESULTS}/homo_NARROW_fastas.txt \
+  --outprefix ${HISTONE_MARKS_RESULTS}/hammock/homo_NARROW \
+  --minimizer \
+  -k 5 -w 40 --precision 24 \
+  --full-paths
 ```
 
-#### Cross-reference comparison
+The emitted CSV name includes sketch parameters (e.g. ``..._mnmzr_p24_jaccD_k5_w40.csv`` for minimizer runs with ``--precision 24``, ``-k 5``, ``-w 40``). Use **`--full-paths`** so paths join to the manifest.
+
+#### Plotting (manifest-joined similarity)
+
+**Biological replicates.** By default the plotting script uses **all** replicates (`--biological-replicate all`). Pairwise similarities are **averaged** when multiple file pairs correspond to the same biosample unit (same experiment, histone, tissue, and life stage, within a reference or across references for violins). Pass e.g. `--biological-replicate 1` to restrict to one ENCODE biological replicate after joining paths to metadata.
+
+**Path filter.** Use **`--path-filter fastas_from_broad`** for broadPeak FASTAs (`.../fastas_from_broad/...`) or **`--path-filter fastas_from_narrow`** for narrowPeak FASTAs (`.../fastas_from_narrow/...`). The substring must appear in both `file1` and `file2` paths.
+
+**Similarity column.** The plotting script always reads **`jaccard_similarity_with_ends`** (minimizer Jaccard including end k-mers). The CSV must contain that column, or pass **`--similarity-col`** to use a different column.
+
+**2D embeddings (MDS + PCA).** Scatter plots share one scheme: **face color = tissue**, **marker shape = histone mark**, **edge color = reference build**, and **semi-transparent points** so overlaps are visible. **MDS:** **`mds_embedding_by_lifestage.pdf`** (one page per life stage; classical MDS on distance = 1 − similarity for that stage’s track matrix), **`mds_coordinates_by_lifestage.tsv`**, and **`similarity_matrix_all_tracks.tsv`** (full aggregated similarity matrix for reference). **PCA:** **`pca_by_lifestage.pdf`** (one page per life stage; PCA on centered **rows** of the life-stage similarity matrix), plus **`pca_coordinates_by_lifestage.tsv`**. Same similarity column as the rest of the pipeline.
+
+**Outlier experiments.** In this histone reference dataset, two accessions were extreme on adult PCA after reference-aware sketching: **ENCSR330MAM** (H3K27me3, stomach, adult) and **ENCSR158WBG** (H3K4me1, stomach, adult; especially vs other experiments). By default the plotting script drops any pairwise row involving those **`experiment_accession`** values via **`--exclude-experiment-accession`** (default `ENCSR330MAM,ENCSR158WBG`). Pass **`--exclude-experiment-accession -`** to keep every experiment. The filter applies to all figures (not only PCA).
+
+**Python environment.** The plot script needs `pandas`, `matplotlib`, `scipy`, and `seaborn`. If the system `python3` is too old or lacks those packages, use a conda env (example below) or `pip install pandas matplotlib seaborn scipy`.
+
+**Commands — broadPeak vs narrowPeak.** From the repository root (`hammock/`), set paths and run **one** of the two blocks below. They differ only in the input CSV (`homo_BROAD_...` vs `homo_NARROW_...`), **`--path-filter`** (`fastas_from_broad` vs `fastas_from_narrow`), and **`--outdir`** (`figs-broad` vs `figs-narrow`). Adjust the CSV basename if your minimizer run used different `p`, `k`, or `w`.
 
 ```bash
-hammock data/ref1_fastas.txt data/ref2_fastas.txt \
-    --outprefix results/cross_reference \
-    -k 20 -w 200 --precision 20
+# From repository root hammock/
+export HISTONE_MARKS="/vast/blangme2/jbonnie/hammock/chip-seq-reference-comparison/data/histone-marks"
+export HISTONE_MARKS_RESULTS="/vast/blangme2/jbonnie/hammock/chip-seq-reference-comparison/results/histone-marks"
 
-hammock data/all_fastas.txt data/all_fastas.txt \
-    --outprefix results/combined \
-    -k 20 -w 200 --precision 20
+mkdir -p "${HISTONE_MARKS_RESULTS}/hammock/figs-broad"
+
+# broadPeak FASTAs (path segment .../fastas_from_broad/... in hammock CSV)
+python3 experiments/chip-seq-reference-comparison/scripts/plot_hammock_histone_similarity.py \
+  "${HISTONE_MARKS_RESULTS}/hammock/homo_BROAD_mnmzr_p24_jaccD_k5_w40.csv" \
+  --manifest "${HISTONE_MARKS}/histone_fastq_manifest.tsv" \
+  --samplesheet "${HISTONE_MARKS}/nfcore_chipseq_samplesheet_Homo_sapiens.csv" \
+  --organism "Homo sapiens" \
+  --path-filter fastas_from_broad \
+  --outdir "${HISTONE_MARKS_RESULTS}/hammock/figs-broad"
 ```
-
-#### Parameter variations
 
 ```bash
-for k in 15 20 25 30; do
-    hammock data/all_fastas.txt data/all_fastas.txt \
-        --outprefix results/combined_k${k} \
-        -k $k -w 200 --precision 20
-done
+mkdir -p "${HISTONE_MARKS_RESULTS}/hammock/figs-narrow"
 
-for w in 100 200 300 400; do
-    hammock data/all_fastas.txt data/all_fastas.txt \
-        --outprefix results/combined_w${w} \
-        -k 20 -w $w --precision 20
-done
+# narrowPeak FASTAs (path segment .../fastas_from_narrow/...)
+python3 experiments/chip-seq-reference-comparison/scripts/plot_hammock_histone_similarity.py \
+  "${HISTONE_MARKS_RESULTS}/hammock/homo_NARROW_mnmzr_p24_jaccD_k5_w40.csv" \
+  --manifest "${HISTONE_MARKS}/histone_fastq_manifest.tsv" \
+  --samplesheet "${HISTONE_MARKS}/nfcore_chipseq_samplesheet_Homo_sapiens.csv" \
+  --organism "Homo sapiens" \
+  --path-filter fastas_from_narrow \
+  --outdir "${HISTONE_MARKS_RESULTS}/hammock/figs-narrow"
 ```
 
-### Expected results
+The default is `--biological-replicate all` (mean across replicates as described above). Other outputs under `--outdir` include `annotated_pairs.tsv`, `cross_reference_violin.png` / `cross_reference_violin_faceted.png`, `clustermap_<ref>.png`, `clustermap_lifestage_<slug>.png` (life stage: tick labels show reference, histone, experiment; strips = tissue), `dendrogram_*.png`, `tissue_block_heatmap_*.png`, `similarity_matrix_*.tsv`, `tissue_mean_block_*.tsv`, and the MDS/PCA embedding files named above.
 
-1. **Within-reference consistency**: similarity of replicates on the same reference.
-2. **Cross-reference concordance**: same biological sample across references.
-3. **Reference-specific artifacts**: whether reference choice shifts similarity.
+On a cluster where `python3` is 3.6 without pandas, use a newer interpreter, for example:
 
-### Analysis notes
+```bash
+/data/apps/extern/anaconda/envs/mamba/0.23.0/bin/python3.10 \
+  experiments/chip-seq-reference-comparison/scripts/plot_hammock_histone_similarity.py \
+  "${HISTONE_MARKS_RESULTS}/hammock/homo_BROAD_mnmzr_p24_jaccD_k5_w40.csv" \
+  --manifest "${HISTONE_MARKS}/histone_fastq_manifest.tsv" \
+  --samplesheet "${HISTONE_MARKS}/nfcore_chipseq_samplesheet_Homo_sapiens.csv" \
+  --organism "Homo sapiens" \
+  --path-filter fastas_from_broad \
+  --outdir "${HISTONE_MARKS_RESULTS}/hammock/figs-broad"
+```
 
-- Mode D uses k-mer content in sequences; extracted peak sequences still depend on alignment and reference.
-- Different references can change peak locations, widths, and extracted sequence content.

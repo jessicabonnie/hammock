@@ -14,7 +14,7 @@ Also writes ``histone_narrowpeak_bed_paths_<build>.txt`` under ``path_lists/`` (
 
 The manifest includes ``assembly`` (empty unless ``--fetch-assembly``) and ``reference_build``
 (per-file when fetched, otherwise mm10/GRCh38 inferred from ``organism``). Use
-``--fetch-assembly`` before ``histone_bedpaths_to_fasta.py --manifest`` when the cart mixes
+``--fetch-assembly`` before ``histone_bedpaths_to_fasta_manifest.py --manifest`` when the cart mixes
 hg19/GRCh38 or mm9/mm10/mm10-minimal.
 """
 

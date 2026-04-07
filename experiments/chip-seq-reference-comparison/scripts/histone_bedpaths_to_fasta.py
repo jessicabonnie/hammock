@@ -489,15 +489,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     args = p.parse_args(argv)
 
-    if args.manifest is None:
-        p.error("--manifest is required (legacy non-manifest mode has been removed)")
-
     ncpu = multiprocessing.cpu_count() or 1
     jobs = args.jobs if args.jobs is not None else min(8, max(1, ncpu))
     if jobs < 1:
         jobs = 1
 
     ref_map = build_ref_map(args)
+    if args.manifest is None:
+        p.error("--manifest is required (legacy non-manifest mode has been removed)")
 
     mp = args.manifest.resolve()
     if not mp.is_file():
