@@ -15,7 +15,7 @@ set -euo pipefail
 EXPERIMENT_DIR="/home/jbonnie1/interval_sketch/hammock/experiments/mode-d-optimality"
 
 ml anaconda
-conda activate claude-ref-comparison
+conda activate hammock
 
 cd "$EXPERIMENT_DIR"
 
