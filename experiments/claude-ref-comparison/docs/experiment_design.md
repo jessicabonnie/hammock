@@ -1,8 +1,8 @@
 # Experiment Design: Minimizer-Based Sketching on ENCODE Epigenomic Data
 
 **Project:** Validation of minimizer-based sequence sketching across reference genomes and biological contexts  
-**Status:** Design Phase  
-**Last Updated:** 2025-06
+**Status:** Workflow built; pending accession confirmation and parameter selection  
+**Last Updated:** 2026-04
 
 ---
 
@@ -54,14 +54,13 @@ No prior work has explicitly tested sketch-based similarity across reference ver
 
 **Tissue targets (Experiment A):**
 
-| Tissue | ENCODE Accession (GRCh38) | ENCODE Accession (GRCh37) | Mark |
-|---|---|---|---|
-| Heart left ventricle | ENCSR000AKP | ENCSR000AKP (hg19 file) | H3K27ac |
-| Liver | ENCSR000EWC | ENCSR000EWC (hg19 file) | H3K27ac |
-| Brain (angular gyrus) | TBD via portal query | TBD | H3K27ac |
+| Tissue | Roadmap ID | Mark |
+|---|---|---|
+| Heart left ventricle | E095 | H3K27ac |
+| Liver | E066 | H3K27ac |
+| Lung | E096 | H3K27ac |
 
-> **TODO:** Confirm portal accessions for dual-reference samples. Use ENCODE portal API query:  
-> `https://www.encodeproject.org/search/?type=Experiment&assay_title=Histone+ChIP-seq&target.label=H3K27ac&replicates.library.biosample.donor.organism.scientific_name=Homo+sapiens&files.genome_annotation=GRCh37&files.genome_annotation=GRCh38`
+> **TODO:** Confirm SRA run IDs for Roadmap E095/E066/E096 via `scripts/fetch_accessions.py` and update `sra_map` in `config/config.yaml`.
 
 ### Metric
 
@@ -143,11 +142,11 @@ For Roadmap data, use the EBI ENA or NCBI SRA entries linked from GEO Superserie
 ### Step 2: Align (if using FASTQ)
 
 - Human: align to GRCh38 (primary) and GRCh37 (Experiment A only) using BWA-MEM2
-- Mouse: align to GRCm39 (mm39)
+- Mouse: align to mm10 (GRCm38; mm39 is not available on this cluster)
 
 ### Step 3: Sketch
 
-Apply minimizer sketching pipeline to each BAM file (or FASTQ). Parameters TBD from project's sketching tool documentation.
+Extract sequences from aligned BAM files as FASTA (via `bedtools getfasta`), then apply minimizer sketching (hammock mode D) to the FASTA files. Sketching parameters (k, w) are being selected via the companion `mode-d-optimality` sweep experiment; see that experiment's results before finalising values in `config/config.yaml`.
 
 ### Step 4: Compute pairwise similarities
 
@@ -167,17 +166,16 @@ Hierarchical clustering, PCA, and/or t-SNE/UMAP to visualize groupings.
 - **Version control:** Git; all documents in Markdown (LaTeX migration planned)
 - **Code access:** Claude Code extension on Cursor
 
-See `workflow/Snakefile` and `workflow/nextflow.config` for pipeline definitions.
+See `workflow/Snakefile` for pipeline definitions (Snakemake + SLURM; no Nextflow config).
 
 ---
 
 ## Open Questions / TODOs
 
-- [ ] Confirm ENCODE portal accession numbers for dual-reference (hg19 + hg38) samples (Experiment A)
-- [ ] Confirm GEO SRA run IDs from GSE49847 for Mouse ENCODE LICR ChIP-seq
-- [ ] Determine k-mer size and minimizer window parameters for sketching
-- [ ] Decide whether to sketch raw reads, filtered reads, or sub-sampled BAMs
-- [ ] Establish compute resource requirements (storage, RAM, CPU) for full dataset
+- [ ] Run `scripts/fetch_accessions.py` to confirm SRA run IDs for Roadmap E095/E066/E096 and Mouse ENCODE GSE49847; update `sra_map` in `config/config.yaml`
+- [ ] Select final (k, w) parameters from `mode-d-optimality` sweep results and update `kmer_sizes` / `window_sizes` in `config/config.yaml`
+- [ ] Decide whether to sketch from raw FASTQ, aligned BAM, or peak-called BED (current plan: BAM → FASTA via bedtools)
+- [ ] Establish storage requirements for full FASTQ + BAM + FASTA dataset
 
 ---
 
