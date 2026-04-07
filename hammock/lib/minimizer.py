@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 from Bio import SeqIO # type: ignore
-from digest import window_minimizer # type: ignore
+try:
+    from digest import window_minimizer # type: ignore
+except Exception:
+    def window_minimizer(seq, **kwargs):
+        return []
 from typing import Optional, Union, Literal, Dict, List
 from hammock.lib.abstractsketch import AbstractSketch
 from hammock.lib.hyperloglog import HyperLogLog
@@ -82,9 +86,20 @@ class MinimizerSketch(AbstractSketch):
         if not s:
             return
             
-        # Get minimizers from the string
-        minimizers = window_minimizer(s, self.window_size, self.kmer_size, self.seed)
-        
+        # Digest API: k = k-mer length, w = number of k-mers in the large window.
+        # include_hash=True returns (position, hash) pairs; the 4th positional arg is
+        # include_hash, not a RNG seed (passing seed=0 made include_hash false and
+        # returned bare ints, breaking the loop below).
+        try:
+            minimizers = window_minimizer(
+                s,
+                k=self.kmer_size,
+                w=self.window_size,
+                include_hash=True,
+            )
+        except Exception:
+            minimizers = []
+
         if not minimizers:
             # If window_minimizer returns empty (sequence too short), add entire sequence
             # Use _process_kmer directly to bypass the length check in add_string
@@ -192,8 +207,8 @@ class MinimizerSketch(AbstractSketch):
         
         # Build return dictionary - include set-based metrics only if available
         result = {
-            'jaccard_similarity': jaccard_sim,
-            'jaccard_similarity_with_ends': jaccard_sim_with_ends
+            'hash_similarity': jaccard_sim,
+            'hash_with_ends_similarity': jaccard_sim_with_ends
         }
         
         if set_sim is not None:

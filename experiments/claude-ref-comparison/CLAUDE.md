@@ -16,17 +16,19 @@ Validates minimizer-based sketching on ENCODE/Roadmap ChIP-seq data via two expe
 ## Environment
 
 ```bash
-ml anaconda
-conda env create -f environment.yaml   # first time only
-conda activate claude-ref-comparison
+ml anaconda && conda activate hammock   # always run this at the start of a terminal session
+conda env create -f environment.yaml    # first time only (env name: claude-ref-comparison)
 ```
 
 `environment.yaml` is the source of truth — update it and re-run `conda env update -f environment.yaml --prune` when dependencies change.
 
-## Before running the workflow
+## Hammock output columns
 
-1. Run `python scripts/fetch_accessions.py` to confirm SRA run IDs for Mouse ENCODE samples (GSE49847)
-2. Update `sra_map` in `config/config.yaml` with confirmed SRR IDs
+When using minimizer (mode D) output CSVs, always use:
+- `hash_with_ends_similarity` — primary metric (minimizers + flanking end k-mers)
+- `hash_similarity` — secondary metric (minimizers only)
+
+**Never use `jaccard_similarity`** — that column is legacy and should be ignored even if present.
 
 ## Running
 

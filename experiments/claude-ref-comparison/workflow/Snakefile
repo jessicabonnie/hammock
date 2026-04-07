@@ -247,7 +247,7 @@ rule exp_a_validate_and_plot:
         plot  = "{outdir}/exp_a/k{k}_w{w}/cross_ref_validation.png",
         stats = "{outdir}/exp_a/k{k}_w{w}/cross_ref_stats.tsv",
     params:
-        sim_col = "similarity_with_ends",
+        sim_col = "hash_with_ends_similarity",
     log:
         "{outdir}/logs/exp_a/validate_plot_k{k}_w{w}.log"
     singularity:
@@ -313,7 +313,7 @@ rule exp_b_cluster_and_plot:
         pca        = "{outdir}/exp_b/k{k}_w{w}/pca.png",
         clusters   = "{outdir}/exp_b/k{k}_w{w}/cluster_assignments.tsv",
     params:
-        sim_col = "similarity_with_ends",
+        sim_col = "hash_with_ends_similarity",
     log:
         "{outdir}/logs/exp_b/cluster_plot_k{k}_w{w}.log"
     singularity:

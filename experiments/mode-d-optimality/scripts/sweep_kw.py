@@ -98,8 +98,8 @@ def _run_task(args):
     true_j = true_kmer_jaccard(seq1, seq2, k)
     try:
         sim = sketched_similarity(seq1, seq2, k, w, precision)
-        sj  = sim["jaccard_similarity"]
-        sje = sim["jaccard_similarity_with_ends"]
+        sj  = sim["hash_similarity"]
+        sje = sim["hash_with_ends_similarity"]
     except Exception as e:
         sj = sje = float("nan")
         print(f"  ERROR k={k} w={w} mut={mut} trial={trial}: {e}", file=sys.stderr)
@@ -160,10 +160,10 @@ def run_sweep(k_values, w_values, mutation_rates, seq_length, trials,
         writer.writerow([
             "k", "w", "mutation_rate", "trial",
             "true_kmer_jaccard",
-            "sketched_jaccard",
-            "sketched_jaccard_with_ends",
-            "error_jaccard",
-            "error_jaccard_with_ends",
+            "sketched_hash",
+            "sketched_hash_with_ends",
+            "error_hash",
+            "error_hash_with_ends",
         ])
         for row in rows:
             writer.writerow(row)
