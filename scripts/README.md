@@ -203,6 +203,85 @@ compare_sim_matrices.py hammock_results.csv bedtools_output.txt
 compare_sim_matrices.py hammock_results.csv bedtools_output.txt --table
 ```
 
+#### `interpolateABC.py`
+**Purpose**: Calculate comprehensive distance metrics between hammock mode C output similarity matrices and compare them against mode A and mode B outputs. This script analyzes how mode C interpolates between modes A and B by tracking expA and subB parameters and generating visualization plots.
+
+**Usage**:
+```bash
+interpolateABC.py <directory> [--output FILE] [--output-tag TAG] [--precision INT] [--linkage METHOD] [--verbose]
+```
+
+**Features**:
+- Compares mode C output similarity matrices (precision 24) against mode A and mode B outputs
+- Tracks expA and subB parameter values from mode C files
+- Calculates multiple distance metrics: Frobenius, Euclidean, Manhattan, and Cosine distances
+- Computes normalized Robinson-Foulds distances for tree topology comparison
+- Generates comprehensive visualization plots showing distance trends vs parameters
+- Supports custom precision filtering and linkage methods
+- **Uses centralized parsing from utils.py** for consistent hammock format handling
+
+**Parameters**:
+- `directory`: Directory containing hammock output files (required)
+- `--output, -o FILE`: Output file for results (default: ABC_interpolation.tsv)
+- `--output-tag, -t TAG`: Optional tag to add to output basename before extension
+- `--precision, -p INT`: Precision value to filter files (default: 24)
+- `--linkage, -l METHOD`: Linkage method for clustering (single, complete, average, ward; default: average)
+- `--verbose, -v`: Verbose output with detailed progress information
+
+**Output Files**:
+- `<output>_expA.tsv`: Results for expA parameter analysis
+- `<output>_subB.tsv`: Results for subB parameter analysis  
+- `<output_basename>_expA.png`: Visualization plots for expA parameter
+- `<output_basename>_subB.png`: Visualization plots for subB parameter
+- `<output_basename>.pdf`: Combined PDF with all visualizations
+
+**Output Columns**:
+- `File`: Mode C filename
+- `expA` or `subB`: Parameter value being analyzed
+- `Frobenius_C_vs_A`, `Frobenius_C_vs_B`, `Frobenius_A_vs_B`: Frobenius matrix distances
+- `Euclidean_C_vs_A`, `Euclidean_C_vs_B`, `Euclidean_A_vs_B`: Euclidean matrix distances
+- `Manhattan_C_vs_A`, `Manhattan_C_vs_B`, `Manhattan_A_vs_B`: Manhattan matrix distances
+- `Cosine_C_vs_A`, `Cosine_C_vs_B`, `Cosine_A_vs_B`: Cosine matrix distances
+- `nRF_C_vs_A`, `nRF_C_vs_B`, `nRF_A_vs_B`: Normalized Robinson-Foulds distances
+
+**Visualization Features**:
+- **Matrix Distance Plots**: Show Frobenius distances vs parameter values with baseline comparisons
+- **Tree Topology Plots**: Show normalized RF distances vs parameter values
+- **Baseline Reference**: Horizontal lines showing mode A vs mode B distances for context
+- **Multi-page PDF**: Combined visualization with separate pages for expA and subB analysis
+
+**Dependencies**:
+- **Required**: scipy, pandas, numpy, matplotlib, seaborn
+- **Recommended**: ete3 (for accurate Robinson-Foulds calculations)
+- **Alternative**: dendropy (fallback if ete3 unavailable)
+
+**Examples**:
+```bash
+# Basic analysis with default settings
+interpolateABC.py /path/to/hammock/outputs
+
+# Custom output file and precision
+interpolateABC.py /path/to/hammock/outputs --output my_analysis.tsv --precision 22
+
+# Add output tag for experiment tracking
+interpolateABC.py /path/to/hammock/outputs --output-tag experiment1 --verbose
+
+# Use different linkage method for tree comparison
+interpolateABC.py /path/to/hammock/outputs --linkage complete --verbose
+```
+
+**Interpretation**:
+- **Lower distances**: Mode C is more similar to the reference mode (A or B)
+- **Baseline comparison**: Mode A vs Mode B distances provide context for expected differences
+- **Parameter trends**: How expA/subB values affect interpolation between modes A and B
+- **Tree topology**: Normalized RF distances show how clustering structure changes with parameters
+
+**Use Cases**:
+- Analyze how mode C interpolates between modes A and B
+- Optimize expA and subB parameter values for best interpolation
+- Compare matrix-level vs tree-level distance metrics
+- Generate publication-quality plots for parameter analysis
+
 #### `compare_clustering_trees.py`
 **Purpose**: Compare hierarchical clustering trees built from Jaccard similarity matrices using Robinson-Foulds distance. This provides a biologically meaningful comparison of how well hammock approximates bedtools clustering patterns.
 

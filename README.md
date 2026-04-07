@@ -110,8 +110,6 @@ Hammock supports different comparison modes and includes automatic mode detectio
 
 Interval Files:
 - BED format (`.bed`): Tab-delimited format with chromosome, start, and end positions
-- BigBed format (`.bb`): Binary indexed version of BED format, useful for large datasets
-- BigWig format (`.bw`): Binary format for continuous data, intervals created from runs of non-zero values
 - Any tab-delimited file with at least 3 columns (chr, start, end) in BED-style format
 
 Sequence Files (triggers mode D):
@@ -147,6 +145,18 @@ Sketching Options:
 **Performance Note**: When you install with `pip install "hammock[fast]"`, HyperLogLog sketching automatically uses FastHyperLogLog with C++ acceleration for 2-15x better performance. If C++ compilation fails, it automatically falls back to Cython acceleration (2-5x speedup) or pure Python.
 
 **⚠️ Important Note**: The `--hashsize` command line argument is currently unsupported. Hammock now uses **64-bit hashing by default** for optimal performance and accuracy. This change ensures better cardinality estimation and consistency across all implementations. This works transparently with all existing commands.
+### Subsampling in Modes B and C
+
+Two deterministic strategies are available for point subsampling (`--subB`):
+
+- Default (hash-threshold): For each point `chr + sep + pos` (UTF-8), compute `xxhash32(seed)` and include if the value ≤ `floor(subB·(2^32−1))`. This is interval-independent (same decisions across overlapping intervals) and pairs well with batch HLL ingestion.
+- Mixed-stride (`--mixed-stride`): Avoids per-point hashing. For each chromosome, deterministically pick a stride S so that the expected density ≈ subB, derive a residue r, and select points where `(pos − r) % S == 0`. This is also interval-independent and runs in roughly O(subB·length).
+
+Guidance:
+- Use the default method for higher sampling rates (e.g., subB ≥ 0.6–0.8); it benefits from very fast batch ingestion to HLL.
+- Use `--mixed-stride` for lower sampling rates (e.g., subB ≤ 0.2–0.5); it reduces CPU work on long intervals by skipping large runs.
+- Accuracy: Both are deterministic. Mixed-stride matches target subB in expectation; default matches per point. Jaccard differences vs subB=1.0 are typically small.
+
 
 Mode C Options:
 - `--subA`: Subsampling rate for intervals (default: 1.0)
@@ -159,6 +169,7 @@ Mode D Options:
 
 General Options:
 - `--outprefix`, `-o`: The output file prefix (default: "hammock")
+- `--full-paths`: Write **normalized full paths** (`os.path.normpath`) in the `file1` / `file2` columns of the output CSV instead of basenames. Applies to **all modes** (A–D). Use this when the same filename appears under different directories, or when you need paths for downstream joins. Default behavior remains basename-only for compact tables.
 - `--threads`: Number of threads to use for parallel processing (default: number of CPUs)
 - `--debug`: Output debug information including sparsity comparisons
 
@@ -182,6 +193,9 @@ hammock files.txt primary.txt --subA 0.5 --subB 0.5
 
 # Compare sequences (automatically uses mode D)
 hammock fasta_files.txt primary_fastas.txt
+
+# Same, but keep full paths in the CSV (useful when filenames repeat in different folders)
+hammock fasta_files.txt primary_fastas.txt --full-paths
 
 # Note: --hashsize argument is currently unsupported
 # hammock now uses 64-bit hashing by default for optimal performance
@@ -508,7 +522,7 @@ This will test all implementations and show detailed performance comparisons inc
 ### **Precision Flexibility**
 - **Removed upper limits**: No more artificial restrictions on precision values
 - **Use any precision ≥ 4**: Optimize for your specific dataset size and accuracy requirements
-- **Better performance**: Higher precision values can now be used for very large datasets
+- **Better performance**: Higher precision values available for large datasets
 
 ### **Benefits of These Changes**
 - **Improved accuracy**: 64-bit hashing provides better cardinality estimation
