@@ -1,0 +1,176 @@
+# =============================================================================
+# config/config.yaml
+# Workflow configuration for minimizer-sketching ENCODE validation experiments
+# =============================================================================
+
+# Output and scratch directories
+outdir:  "results"
+scratch: "/scratch/minimizer_encode"
+
+# Sketching tool binary (project-specific — update path before running)
+sketch_bin: "../../bin/minimizer_sketch"
+
+# Minimizer parameters (to be tuned; these are starting defaults)
+kmer_size:   21
+window_size: 11
+sketch_size: 10000
+
+# =============================================================================
+# CONTAINER IMAGES (Singularity)
+# =============================================================================
+containers:
+  sra_tools:    "docker://ncbi/sra-tools:3.0.0"
+  bwa_samtools: "docker://biocontainers/bwa-mem2:2.2.1"
+  r_tidyverse:  "docker://rocker/tidyverse:4.3.0"
+  samtools:     "docker://biocontainers/samtools:1.18"
+  picard:       "docker://broadinstitute/picard:2.27.5"
+
+# =============================================================================
+# REFERENCE GENOMES
+# =============================================================================
+references:
+  GRCh38:
+    fasta: "/ref/GRCh38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+    bwa_index: "/ref/GRCh38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fa"
+    chromsizes: "/ref/GRCh38/hg38.chrom.sizes"
+  GRCh37:
+    fasta: "/ref/GRCh37/GRCh37.p13.genome.fa"
+    bwa_index: "/ref/GRCh37/GRCh37.p13.genome.fa"
+    chromsizes: "/ref/GRCh37/hg19.chrom.sizes"
+  GRCm39:
+    fasta: "/ref/GRCm39/GCF_000001635.27_GRCm39_genomic.fna"
+    bwa_index: "/ref/GRCm39/GCF_000001635.27_GRCm39_genomic.fna"
+    chromsizes: "/ref/GRCm39/mm39.chrom.sizes"
+
+# =============================================================================
+# EXPERIMENT A: Cross-Reference Robustness
+#   Same biological sample → aligned to GRCh37 AND GRCh38
+#   Goal: sim(sample_i_hg37, sample_i_hg38) > sim(sample_i_hg37, sample_j_hg37)
+# =============================================================================
+#
+# TODO: Replace placeholder SRA IDs with confirmed ENCODE/SRA accessions.
+#       Query ENCODE portal for experiments with both hg19 and hg38 alignments:
+#       https://www.encodeproject.org/search/?type=Experiment
+#             &assay_title=Histone+ChIP-seq
+#             &target.label=H3K27ac
+#             &files.genome_annotation=GRCh37
+#             &files.genome_annotation=GRCh38
+#
+samples:
+  sra_map:
+    # Experiment A: Human H3K27ac — heart left ventricle (Roadmap E095)
+    E095_H3K27ac: "SRR1234567"          # TODO: confirm SRA run ID
+    # Experiment A: Human H3K27ac — liver (Roadmap E066)
+    E066_H3K27ac: "SRR1234568"          # TODO: confirm SRA run ID
+    # Experiment A: Human H3K27ac — lung (Roadmap E096)
+    E096_H3K27ac: "SRR1234569"          # TODO: confirm SRA run ID
+    # Experiment B additional: Mouse ENCODE LICR H3K27ac
+    mm_heart_H3K27ac:   "SRR1234570"   # TODO: confirm from GSE49847
+    mm_liver_H3K27ac:   "SRR1234571"   # TODO: confirm from GSE49847
+    mm_lung_H3K27ac:    "SRR1234572"   # TODO: confirm from GSE49847
+    mm_brain_H3K27ac:   "SRR1234573"   # TODO: confirm from GSE49847
+    mm_spleen_H3K27ac:  "SRR1234574"   # TODO: confirm from GSE49847
+
+  experiment_a:
+    - id:     E095_H3K27ac
+      mark:   H3K27ac
+      tissue: heart
+      species: human
+      geo:    GSE16256
+      encode: E095
+      refs:   [GRCh37, GRCh38]
+    - id:     E066_H3K27ac
+      mark:   H3K27ac
+      tissue: liver
+      species: human
+      geo:    GSE16256
+      encode: E066
+      refs:   [GRCh37, GRCh38]
+    - id:     E096_H3K27ac
+      mark:   H3K27ac
+      tissue: lung
+      species: human
+      geo:    GSE16256
+      encode: E096
+      refs:   [GRCh37, GRCh38]
+
+  experiment_b:
+    # ── Human samples (Roadmap Epigenomics) ──────────────────────────────────
+    # Source: GEO Superseries GSE16256
+    # Roadmap Epigenomics Consortium (2015) Nature 518:317-330
+    - id:     E095_H3K27ac
+      mark:   H3K27ac
+      tissue: heart
+      species: human
+      geo:    GSE16256
+      encode: E095
+      ref:    GRCh38
+    - id:     E066_H3K27ac
+      mark:   H3K27ac
+      tissue: liver
+      species: human
+      geo:    GSE16256
+      encode: E066
+      ref:    GRCh38
+    - id:     E096_H3K27ac
+      mark:   H3K27ac
+      tissue: lung
+      species: human
+      geo:    GSE16256
+      encode: E096
+      ref:    GRCh38
+    - id:     E067_H3K27ac
+      mark:   H3K27ac
+      tissue: brain_angular_gyrus
+      species: human
+      geo:    GSE16256
+      encode: E067
+      ref:    GRCh38
+    - id:     E113_H3K27ac
+      mark:   H3K27ac
+      tissue: spleen
+      species: human
+      geo:    GSE16256
+      encode: E113
+      ref:    GRCh38
+    - id:     E109_H3K27ac
+      mark:   H3K27ac
+      tissue: small_intestine
+      species: human
+      geo:    GSE16256
+      encode: E109
+      ref:    GRCh38
+    # ── Mouse samples (Mouse ENCODE — LICR) ──────────────────────────────────
+    # Source: GEO GSE49847
+    # Yue et al. (2014) Nature 515:355-364
+    - id:     mm_heart_H3K27ac
+      mark:   H3K27ac
+      tissue: heart
+      species: mouse
+      geo:    GSE49847
+      ref:    GRCm39
+    - id:     mm_liver_H3K27ac
+      mark:   H3K27ac
+      tissue: liver
+      species: mouse
+      geo:    GSE49847
+      ref:    GRCm39
+    - id:     mm_lung_H3K27ac
+      mark:   H3K27ac
+      tissue: lung
+      species: mouse
+      geo:    GSE49847
+      ref:    GRCm39
+    - id:     mm_brain_H3K27ac
+      mark:   H3K27ac
+      tissue: brain
+      species: mouse
+      geo:    GSE49847
+      ref:    GRCm39
+    - id:     mm_spleen_H3K27ac
+      mark:   H3K27ac
+      tissue: spleen
+      species: mouse
+      geo:    GSE49847
+      ref:    GRCm39
+

@@ -1,0 +1,52 @@
+# =============================================================================
+# workflow/slurm_profile/config.yaml
+# Snakemake SLURM cluster profile
+# =============================================================================
+#
+# Usage: snakemake --profile workflow/slurm_profile/ --use-singularity
+#
+# Requires: snakemake-executor-plugin-slurm (pip install snakemake-executor-plugin-slurm)
+#
+
+executor: slurm
+
+# Default resources for all jobs (override per-rule in Snakefile with resources:)
+default-resources:
+  slurm_partition: "standard"
+  slurm_account:   ""          # fill in your cluster account
+  mem_mb:          8000
+  runtime:         60          # minutes
+  cpus_per_task:   1
+
+# Jobs requiring large memory go to bigmem partition
+# Set in Snakefile with: resources: partition="bigmem", mem_mb=64000
+set-resources:
+  align_bwa_mem2:
+    slurm_partition: "bigmem"
+    mem_mb:          32000
+    runtime:         240
+    cpus_per_task:   16
+  sketch_bam:
+    mem_mb:          16000
+    runtime:         60
+    cpus_per_task:   4
+  exp_a_similarity_matrix:
+    mem_mb:          16000
+    runtime:         60
+    cpus_per_task:   8
+  exp_b_similarity_matrix:
+    mem_mb:          16000
+    runtime:         60
+    cpus_per_task:   8
+
+# Snakemake job submission options
+jobs: 100
+latency-wait: 60
+rerun-incomplete: true
+keep-going: true
+printshellcmds: true
+
+# Singularity / Apptainer options
+use-singularity: true
+singularity-args: "--bind /scratch,/ref,/data"
+

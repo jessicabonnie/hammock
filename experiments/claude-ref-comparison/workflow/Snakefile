@@ -1,0 +1,257 @@
+# =============================================================================
+# Snakefile — Minimizer Sketching Validation on ENCODE Data
+# =============================================================================
+#
+# Two experiments:
+#   A) Cross-reference robustness: same sample aligned to GRCh37 vs GRCh38
+#   B) Tissue-over-species clustering: human (ENCODE/Roadmap) vs mouse (Mouse ENCODE)
+#
+# Usage:
+#   snakemake --cores 8 --use-singularity --singularity-args "--bind /scratch"
+#   snakemake --profile slurm_profile/ --use-singularity
+#
+# =============================================================================
+
+configfile: "config/config.yaml"
+
+# Resolve paths from config
+SAMPLES     = config["samples"]
+OUTDIR      = config["outdir"]
+SCRATCH     = config["scratch"]
+SKETCH_BIN  = config["sketch_bin"]
+K           = config["kmer_size"]
+W           = config["window_size"]
+S           = config["sketch_size"]
+
+# ── Wildcard constraints ────────────────────────────────────────────────────
+wildcard_constraints:
+    sample  = r"[A-Za-z0-9_\-]+",
+    ref     = r"GRCh37|GRCh38|GRCm39",
+    mark    = r"H3K27ac|H3K4me3|H3K4me1|H3K27me3",
+    species = r"human|mouse",
+
+# ── Helper: list all samples for a given experiment ─────────────────────────
+def exp_a_pairs():
+    """Return list of (sample, mark) for Experiment A cross-reference pairs."""
+    return [(s["id"], s["mark"])
+            for s in SAMPLES["experiment_a"]]
+
+def exp_b_samples():
+    """Return list of (sample, species, tissue, mark) for Experiment B."""
+    return [(s["id"], s["species"], s["tissue"], s["mark"])
+            for s in SAMPLES["experiment_b"]]
+
+# ── Target rules ─────────────────────────────────────────────────────────────
+
+rule all:
+    input:
+        # Experiment A outputs
+        expand(
+            "{outdir}/exp_a/similarity_matrix.tsv",
+            outdir=OUTDIR
+        ),
+        expand(
+            "{outdir}/exp_a/cross_ref_validation.png",
+            outdir=OUTDIR
+        ),
+        # Experiment B outputs
+        expand(
+            "{outdir}/exp_b/similarity_matrix.tsv",
+            outdir=OUTDIR
+        ),
+        expand(
+            "{outdir}/exp_b/dendrogram.png",
+            outdir=OUTDIR
+        ),
+        expand(
+            "{outdir}/exp_b/pca.png",
+            outdir=OUTDIR
+        ),
+
+# =============================================================================
+# SHARED RULES: Download → Align → Sketch
+# =============================================================================
+
+rule download_fastq:
+    """Download FASTQ from SRA using fasterq-dump."""
+    output:
+        r1 = temp("{scratch}/fastq/{sample}_1.fastq.gz"),
+        r2 = temp("{scratch}/fastq/{sample}_2.fastq.gz"),
+    params:
+        sra_id  = lambda wc: SAMPLES["sra_map"][wc.sample],
+        tmpdir  = lambda wc: f"{SCRATCH}/tmp/{wc.sample}",
+    log:
+        "{outdir}/logs/download/{sample}.log"
+    threads: 4
+    resources:
+        mem_mb  = 8000,
+        runtime = 120,  # minutes
+    singularity:
+        config["containers"]["sra_tools"]
+    shell:
+        """
+        mkdir -p {params.tmpdir}
+        fasterq-dump {params.sra_id} \
+            --outdir {wildcards.scratch}/fastq/ \
+            --temp {params.tmpdir} \
+            --threads {threads} \
+            --split-files \
+            2>{log}
+        pigz -p {threads} {wildcards.scratch}/fastq/{wildcards.sample}_1.fastq
+        pigz -p {threads} {wildcards.scratch}/fastq/{wildcards.sample}_2.fastq
+        """
+
+rule align_bwa_mem2:
+    """Align FASTQ to reference genome with BWA-MEM2; sort and mark duplicates."""
+    input:
+        r1  = "{scratch}/fastq/{sample}_1.fastq.gz",
+        r2  = "{scratch}/fastq/{sample}_2.fastq.gz",
+        ref = lambda wc: config["references"][wc.ref]["fasta"],
+    output:
+        bam = "{outdir}/aligned/{ref}/{sample}.bam",
+        bai = "{outdir}/aligned/{ref}/{sample}.bam.bai",
+    log:
+        "{outdir}/logs/align/{ref}/{sample}.log"
+    threads: 16
+    resources:
+        mem_mb  = 32000,
+        runtime = 240,
+        partition = "bigmem",
+    singularity:
+        config["containers"]["bwa_samtools"]
+    shell:
+        """
+        bwa-mem2 mem -t {threads} \
+            -R "@RG\\tID:{wildcards.sample}\\tSM:{wildcards.sample}\\tPL:ILLUMINA" \
+            {input.ref} {input.r1} {input.r2} \
+          | samtools sort -@ {threads} -o {output.bam} - \
+          2>{log}
+        samtools index {output.bam}
+        """
+
+rule sketch_bam:
+    """Compute minimizer sketch from a BAM file."""
+    input:
+        bam = "{outdir}/aligned/{ref}/{sample}.bam",
+        bai = "{outdir}/aligned/{ref}/{sample}.bam.bai",
+    output:
+        sketch = "{outdir}/sketches/{ref}/{sample}.sketch",
+    params:
+        k = K,
+        w = W,
+        s = S,
+    log:
+        "{outdir}/logs/sketch/{ref}/{sample}.log"
+    threads: 4
+    resources:
+        mem_mb  = 16000,
+        runtime = 60,
+    shell:
+        """
+        {SKETCH_BIN} sketch \
+            --input  {input.bam} \
+            --output {output.sketch} \
+            --kmer   {params.k} \
+            --window {params.w} \
+            --size   {params.s} \
+            --threads {threads} \
+            2>{log}
+        """
+
+# =============================================================================
+# EXPERIMENT A: Cross-Reference Robustness
+# =============================================================================
+
+rule exp_a_similarity_matrix:
+    """Compute all-vs-all pairwise similarity for Experiment A sketches."""
+    input:
+        sketches = expand(
+            "{outdir}/sketches/{ref}/{sample}.sketch",
+            outdir=OUTDIR,
+            ref=["GRCh37", "GRCh38"],
+            sample=[s["id"] for s in SAMPLES["experiment_a"]],
+        ),
+    output:
+        matrix = "{outdir}/exp_a/similarity_matrix.tsv",
+    log:
+        "{outdir}/logs/exp_a/similarity_matrix.log"
+    threads: 8
+    resources:
+        mem_mb = 8000,
+        runtime = 30,
+    shell:
+        """
+        {SKETCH_BIN} dist \
+            --sketches {input.sketches} \
+            --output   {output.matrix} \
+            --threads  {threads} \
+            2>{log}
+        """
+
+rule exp_a_validate_and_plot:
+    """Statistical test and visualization for cross-reference similarity."""
+    input:
+        matrix   = "{outdir}/exp_a/similarity_matrix.tsv",
+        metadata = "config/exp_a_metadata.tsv",
+    output:
+        plot  = "{outdir}/exp_a/cross_ref_validation.png",
+        stats = "{outdir}/exp_a/cross_ref_stats.tsv",
+    log:
+        "{outdir}/logs/exp_a/validate_plot.log"
+    singularity:
+        config["containers"]["r_tidyverse"]
+    script:
+        "scripts/exp_a_validate_plot.R"
+
+# =============================================================================
+# EXPERIMENT B: Tissue-over-Species Clustering
+# =============================================================================
+
+rule exp_b_similarity_matrix:
+    """Compute all-vs-all pairwise similarity for Experiment B (human + mouse)."""
+    input:
+        # Human sketches (GRCh38)
+        human_sketches = expand(
+            "{outdir}/sketches/GRCh38/{sample}.sketch",
+            outdir=OUTDIR,
+            sample=[s["id"] for s in SAMPLES["experiment_b"] if s["species"] == "human"],
+        ),
+        # Mouse sketches (GRCm39)
+        mouse_sketches = expand(
+            "{outdir}/sketches/GRCm39/{sample}.sketch",
+            outdir=OUTDIR,
+            sample=[s["id"] for s in SAMPLES["experiment_b"] if s["species"] == "mouse"],
+        ),
+    output:
+        matrix = "{outdir}/exp_b/similarity_matrix.tsv",
+    log:
+        "{outdir}/logs/exp_b/similarity_matrix.log"
+    threads: 8
+    resources:
+        mem_mb = 8000,
+        runtime = 30,
+    shell:
+        """
+        {SKETCH_BIN} dist \
+            --sketches {input.human_sketches} {input.mouse_sketches} \
+            --output   {output.matrix} \
+            --threads  {threads} \
+            2>{log}
+        """
+
+rule exp_b_cluster_and_plot:
+    """Hierarchical clustering, PCA, and dendrogram for tissue-over-species."""
+    input:
+        matrix   = "{outdir}/exp_b/similarity_matrix.tsv",
+        metadata = "config/exp_b_metadata.tsv",
+    output:
+        dendrogram = "{outdir}/exp_b/dendrogram.png",
+        pca        = "{outdir}/exp_b/pca.png",
+        clusters   = "{outdir}/exp_b/cluster_assignments.tsv",
+    log:
+        "{outdir}/logs/exp_b/cluster_plot.log"
+    singularity:
+        config["containers"]["r_tidyverse"]
+    script:
+        "scripts/exp_b_cluster_plot.R"
+
