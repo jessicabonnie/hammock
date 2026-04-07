@@ -74,13 +74,13 @@ rule all:
 # =============================================================================
 
 rule download_fastq:
-    """Download FASTQ from SRA using fasterq-dump."""
+    """Download FASTQ from SRA using fasterq-dump; merge multiple runs if present."""
     output:
         r1 = temp("{scratch}/fastq/{sample}_1.fastq.gz"),
         r2 = temp("{scratch}/fastq/{sample}_2.fastq.gz"),
     params:
-        sra_id = lambda wc: SAMPLES["sra_map"][wc.sample],
-        tmpdir = lambda wc: f"{SCRATCH}/tmp/{wc.sample}",
+        sra_ids = lambda wc: SAMPLES["sra_map"][wc.sample],  # always a list
+        tmpdir  = lambda wc: f"{SCRATCH}/tmp/{wc.sample}",
     log:
         "{outdir}/logs/download/{sample}.log"
     threads: 4
@@ -92,15 +92,18 @@ rule download_fastq:
     shell:
         """
         mkdir -p {params.tmpdir}
-        fasterq-dump {params.sra_id} \
-            --outdir {wildcards.scratch}/fastq/ \
-            --temp {params.tmpdir} \
-            --threads {threads} \
-            --split-files \
-            2>{log}
-        pigz -p {threads} \
-            {wildcards.scratch}/fastq/{wildcards.sample}_1.fastq \
-            {wildcards.scratch}/fastq/{wildcards.sample}_2.fastq
+        : > {log}
+        for srr in {params.sra_ids}; do
+            fasterq-dump "$srr" \
+                --outdir {params.tmpdir} \
+                --temp {params.tmpdir}/tmp_"$srr" \
+                --threads {threads} \
+                --split-files \
+                2>>{log}
+        done
+        cat {params.tmpdir}/*_1.fastq | pigz -p {threads} > {output.r1}
+        cat {params.tmpdir}/*_2.fastq | pigz -p {threads} > {output.r2}
+        rm -f {params.tmpdir}/*.fastq
         """
 
 rule align_bwa_mem2:

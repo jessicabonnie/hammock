@@ -59,28 +59,23 @@ references:
 #   Goal: sim(sample_i_hg37, sample_i_hg38) > sim(sample_i_hg37, sample_j_hg37)
 # =============================================================================
 #
-# TODO: Replace placeholder SRA IDs with confirmed ENCODE/SRA accessions.
-#       Query ENCODE portal for experiments with both hg19 and hg38 alignments:
-#       https://www.encodeproject.org/search/?type=Experiment
-#             &assay_title=Histone+ChIP-seq
-#             &target.label=H3K27ac
-#             &files.genome_annotation=GRCh37
-#             &files.genome_annotation=GRCh38
-#
+# All SRR IDs confirmed; multiple runs per sample are merged in download_fastq.
 samples:
   sra_map:
-    # Experiment A: Human H3K27ac — heart left ventricle (Roadmap E095)
-    E095_H3K27ac: "SRR2173071"          # confirmed: GSM1127115 (heart, Roadmap E095)
-    # Experiment A: Human H3K27ac — liver (Roadmap E066)
-    E066_H3K27ac: "SRR2172698"          # confirmed: GSM1127068 (liver, Roadmap E066)
-    # Experiment A: Human H3K27ac — lung (Roadmap E096)
-    E096_H3K27ac: "SRR2173068"          # confirmed: GSM1127116 (lung, Roadmap E096)
-    # Experiment B additional: Mouse ENCODE LICR H3K27ac
-    mm_heart_H3K27ac:   "TODO"          # TODO: confirm from GSE49847
-    mm_liver_H3K27ac:   "TODO"          # TODO: confirm from GSE49847
-    # mm_lung_H3K27ac: not available in GSE49847 — excluded from Exp B
-    mm_brain_H3K27ac:   "TODO"          # TODO: confirm from GSE49847
-    mm_spleen_H3K27ac:  "TODO"          # TODO: confirm from GSE49847
+    # Values are lists — single-run samples have one entry; multi-run are merged.
+    # Human Roadmap H3K27ac (GSE16256) — single run each
+    E095_H3K27ac: ["SRR2173071"]        # GSM1127115, heart (Roadmap E095)
+    E066_H3K27ac: ["SRR2172698"]        # GSM1127068, liver (Roadmap E066)
+    E096_H3K27ac: ["SRR2173068"]        # GSM1127116, lung  (Roadmap E096; Exp A only)
+    E067_H3K27ac: ["SRR2172802"]        # GSM1127069, brain angular gyrus (Roadmap E067)
+    E113_H3K27ac: ["SRR2172782"]        # GSM1127132, spleen (Roadmap E113)
+    E109_H3K27ac: ["SRR2172772"]        # GSM1127128, small intestine (Roadmap E109)
+    # Mouse ENCODE LICR H3K27ac (GSE49847) — two runs each, merged on download
+    # mm_lung_H3K27ac: H3K27ac absent from GSE49847 for lung — excluded from Exp B
+    mm_heart_H3K27ac:  ["SRR566827", "SRR566828"]   # GSM1000093, adult 8wk heart
+    mm_liver_H3K27ac:  ["SRR566921", "SRR566922"]   # GSM1000140, adult 8wk liver
+    mm_brain_H3K27ac:  ["SRR566841", "SRR566842"]   # GSM1000100, adult 8wk cortex
+    mm_spleen_H3K27ac: ["SRR566917", "SRR566918"]   # GSM1000138, adult 8wk spleen
 
   experiment_a:
     - id:     E095_H3K27ac
