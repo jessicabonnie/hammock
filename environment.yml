@@ -1,0 +1,38 @@
+name: new-hammock
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.12
+
+  # C++ build toolchain (needed because `pip install -e . --no-build-isolation`
+  # builds the pybind11 extension and the standalone hammock-cpp binary).
+  - cmake>=3.18
+  - make
+  - cxx-compiler           # gxx_linux-64 + activation scripts
+  - libgomp                # OpenMP runtime (find_package(OpenMP REQUIRED))
+
+  # Python build backend (also needed under --no-build-isolation).
+  - scikit-build-core>=0.10
+  - pybind11>=2.13
+
+  # Runtime
+  - numpy
+  - biopython
+
+  # Mode D (FASTA): bioconda-only.
+  - digest
+
+  # Optional plotting / analysis helpers.
+  - matplotlib
+  - pandas
+
+  # Tests
+  - pytest
+  - pytest-xdist
+
+  - pip
+
+# After `conda env create -f environment.yml` activate the env and run:
+#   pip install -e . --no-build-isolation
+# from the repo root to build the C++ extension and install hammock itself.

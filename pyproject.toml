@@ -1,0 +1,31 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.13", "cmake>=3.18"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "hammock"
+version = "0.1.0"
+description = "Pairwise Jaccard similarity for BED intervals (modes A/B/C) and FASTA sequences (mode D)."
+requires-python = ">=3.8"
+dependencies = [
+    "numpy",
+    "biopython",
+]
+
+[project.scripts]
+hammock = "hammock.cli:main"
+
+[project.optional-dependencies]
+mode_d = ["digest"]
+plotting = ["matplotlib", "pandas"]
+test = ["pytest", "pytest-xdist"]
+
+[tool.scikit-build]
+wheel.packages = ["python/hammock"]
+cmake.version = ">=3.18"
+cmake.build-type = "Release"
+build-dir = "build/{wheel_tag}"
+
+[tool.scikit-build.cmake.define]
+HAMMOCK_BUILD_CLI = "ON"
+HAMMOCK_BUILD_TESTS = "OFF"
