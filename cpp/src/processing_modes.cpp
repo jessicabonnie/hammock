@@ -204,7 +204,10 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
     // registers array.
     HLLSketch* main_hll = dynamic_cast<HLLSketch*>(&sketch);
 
-    auto process_one = [&](const Interval& iv, AbstractSketch& s,
+    // Generic lambda so the HLLSketch instantiation picks the HLLSketch&
+    // overload of add_interval_points_to_sketch (and resolves s.add() to the
+    // inline final body).
+    auto process_one = [&](const Interval& iv, auto& s,
                            size_t& te, size_t& kept,
                            size_t& tp, size_t& sp) {
         const std::string base = create_interval_string(iv.chr, iv.start, iv.end, separator);

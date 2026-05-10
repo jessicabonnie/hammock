@@ -12,13 +12,37 @@
 // optimized hll/ library's variant — the two use different bit conventions
 // (idx low-bits vs high-bits, ctz vs clz for rho) and would not produce
 // byte-equal CSV output even on identical inputs.
-class HLLSketch : public AbstractSketch {
+//
+// `final`: lets the compiler devirtualize add() at any HLLSketch& call site,
+// which matters because the Mode B/C inner loop calls add() ~50M times per
+// large file and the body is small enough to inline (see add() below).
+class HLLSketch final : public AbstractSketch {
 public:
     explicit HLLSketch(size_t precision, size_t hash_size = 64);
     HLLSketch(const HLLSketch&) = default;
     HLLSketch& operator=(const HLLSketch&) = default;
 
-    void add(uint64_t hash_val) override;
+    // Defined inline so the stride loop can inline the body. Equivalent to
+    // hyperloglog.py::_process_kmer + _rho:
+    //   idx = hash_val low precision bits
+    //   pos = trailing-zero count of (hash_val >> precision) + 1, capped at
+    //         hash_size - precision + 1
+    //   registers[idx] = max(registers[idx], pos)
+    void add(uint64_t hash_val) final {
+        const size_t idx = hash_val & (num_registers_ - 1);
+        const uint64_t rest = hash_val >> precision_;
+        const size_t max_rho = hash_size_ - precision_;
+        size_t pos;
+        if (rest == 0) {
+            pos = max_rho + 1;
+        } else {
+            const size_t ctz = static_cast<size_t>(__builtin_ctzll(rest));
+            pos = (ctz < max_rho) ? ctz + 1 : max_rho + 1;
+        }
+        if (registers_[idx] < pos) {
+            registers_[idx] = static_cast<uint8_t>(pos);
+        }
+    }
     // In-place elementwise max — used to combine thread-local accumulators.
     void merge_max(const HLLSketch& other);
     double jaccard_similarity(const AbstractSketch& other) const override;

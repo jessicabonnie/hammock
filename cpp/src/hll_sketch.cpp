@@ -16,26 +16,7 @@ HLLSketch::HLLSketch(size_t precision, size_t hash_size)
     }
 }
 
-void HLLSketch::add(uint64_t hash_val) {
-    // Python parity (hyperloglog.py::_process_kmer + _rho):
-    //   idx = hash_val & (m - 1)            (low precision bits)
-    //   pos = 1
-    //   shift hash_val right by precision
-    //   while (hash_val & 1) == 0 && pos <= hash_size - precision:
-    //       pos += 1; hash_val >>= 1
-    //   registers[idx] = max(registers[idx], pos)
-    const size_t idx = hash_val & (num_registers_ - 1);
-    uint64_t rest = hash_val >> precision_;
-    const size_t max_rho = hash_size_ - precision_;
-    size_t pos = 1;
-    while ((rest & 1ULL) == 0 && pos <= max_rho) {
-        pos += 1;
-        rest >>= 1;
-    }
-    if (registers_[idx] < pos) {
-        registers_[idx] = static_cast<uint8_t>(pos);
-    }
-}
+// HLLSketch::add is defined inline in the header.
 
 void HLLSketch::merge_max(const HLLSketch& other) {
     if (precision_ != other.precision_ || hash_size_ != other.hash_size_) {

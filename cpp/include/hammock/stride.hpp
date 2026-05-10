@@ -2,6 +2,7 @@
 #define HAMMOCK_STRIDE_HPP
 
 #include "hammock/abstract_sketch.hpp"
+#include "hammock/hll_sketch.hpp"
 #include <cstdint>
 #include <string>
 
@@ -21,6 +22,17 @@
 size_t add_interval_points_to_sketch(const std::string& chr,
                                      int64_t start, int64_t end,
                                      AbstractSketch& sketch,
+                                     const std::string& separator,
+                                     double subsample,
+                                     bool mixed_stride,
+                                     uint64_t hll_seed);
+
+// HLLSketch overload — same behavior as the AbstractSketch version but takes
+// a concrete final-class reference so the compiler can inline HLLSketch::add
+// inside the inner ~50M-iteration loop. Mode B/C call this directly.
+size_t add_interval_points_to_sketch(const std::string& chr,
+                                     int64_t start, int64_t end,
+                                     HLLSketch& sketch,
                                      const std::string& separator,
                                      double subsample,
                                      bool mixed_stride,

@@ -5,24 +5,27 @@
 #include <cmath>
 #include <string>
 
-size_t add_interval_points_to_sketch(const std::string& chr,
-                                     int64_t start, int64_t end,
-                                     AbstractSketch& sketch,
-                                     const std::string& separator,
-                                     double subsample,
-                                     bool mixed_stride,
-                                     uint64_t hll_seed) {
+namespace {
+
+// Templated implementation so the HLLSketch instantiation can inline
+// HLLSketch::add (defined in the header) into the inner ~50M-iteration loop.
+// The AbstractSketch instantiation goes through the vtable — same as before.
+template <typename Sketch>
+size_t add_points_impl(const std::string& chr,
+                       int64_t start, int64_t end,
+                       Sketch& sketch,
+                       const std::string& separator,
+                       double subsample,
+                       bool mixed_stride,
+                       uint64_t hll_seed) {
     const bool do_subsample = (subsample < 1.0);
     size_t sampled = 0;
 
-    // Reuse one buffer across every point in this interval (and across calls
-    // on this thread) instead of allocating chr + sep + to_string(pos) each
-    // iteration. Capacity grows once on the first interval and stays.
     thread_local std::string point_buf;
     point_buf.assign(chr);
     point_buf.append(separator);
     const size_t prefix_len = point_buf.size();
-    char int_buf[24];  // int64_t fits in 20 chars; 24 leaves slack.
+    char int_buf[24];
 
     if (mixed_stride && do_subsample) {
         const double p = subsample;
@@ -85,4 +88,28 @@ size_t add_interval_points_to_sketch(const std::string& chr,
     }
 
     return sampled;
+}
+
+}  // namespace
+
+size_t add_interval_points_to_sketch(const std::string& chr,
+                                     int64_t start, int64_t end,
+                                     AbstractSketch& sketch,
+                                     const std::string& separator,
+                                     double subsample,
+                                     bool mixed_stride,
+                                     uint64_t hll_seed) {
+    return add_points_impl(chr, start, end, sketch, separator,
+                           subsample, mixed_stride, hll_seed);
+}
+
+size_t add_interval_points_to_sketch(const std::string& chr,
+                                     int64_t start, int64_t end,
+                                     HLLSketch& sketch,
+                                     const std::string& separator,
+                                     double subsample,
+                                     bool mixed_stride,
+                                     uint64_t hll_seed) {
+    return add_points_impl(chr, start, end, sketch, separator,
+                           subsample, mixed_stride, hll_seed);
 }
