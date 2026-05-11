@@ -1,11 +1,20 @@
 #include "hammock/stride.hpp"
 #include "hammock/processing_modes.hpp"
 #include "hammock/xxhash.hpp"
+#include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <cstring>
 #include <string>
 
 namespace {
+
+// Stack buffer used to assemble chr+sep+pos for hashing. Sized large enough
+// to fit any realistic genomics chr name (BED spec doesn't cap chr length,
+// but in practice ≤30 chars even on patched assemblies) + sep + int64
+// (≤20 digits). If a caller exceeds this we'd write past the end during
+// std::to_chars; we guard with a fallback path.
+constexpr size_t POINT_BUF_SIZE = 64;
 
 // Templated implementation so the HLLSketch instantiation can inline
 // HLLSketch::add (defined in the header) into the inner ~50M-iteration loop.
@@ -21,11 +30,48 @@ size_t add_points_impl(const std::string& chr,
     const bool do_subsample = (subsample < 1.0);
     size_t sampled = 0;
 
-    thread_local std::string point_buf;
-    point_buf.assign(chr);
-    point_buf.append(separator);
-    const size_t prefix_len = point_buf.size();
-    char int_buf[24];
+    // Assemble chr+sep once into a stack buffer; per-point work then only
+    // formats the integer at prefix_len and hashes the buffer.
+    const size_t chr_len = chr.size();
+    const size_t sep_len = separator.size();
+    const size_t prefix_len = chr_len + sep_len;
+
+    // ~20 chars reserved for the integer suffix. If a chr name is too long
+    // to fit in the stack buffer we fall back to a thread-local std::string.
+    if (prefix_len + 20 > POINT_BUF_SIZE) {
+        thread_local std::string fallback;
+        fallback.assign(chr);
+        fallback.append(separator);
+        char int_buf[24];
+        const uint32_t threshold = static_cast<uint32_t>(subsample * 4294967295.0);
+        // Mixed-stride and hash-threshold collapsed for simplicity in this
+        // rare path; perf isn't the concern when chr names are this long.
+        const int64_t stride = mixed_stride && do_subsample
+                                   ? std::max<int64_t>(1, static_cast<int64_t>(std::round(1.0 / subsample)))
+                                   : 1;
+        for (int64_t pos = start; pos < end; pos += stride) {
+            auto r = std::to_chars(int_buf, int_buf + sizeof(int_buf), pos);
+            fallback.resize(prefix_len);
+            fallback.append(int_buf, static_cast<size_t>(r.ptr - int_buf));
+            if (!mixed_stride && do_subsample) {
+                const uint32_t h32 = xxhash::hash32(fallback.data(),
+                                                   fallback.size(), 31337);
+                if (h32 > threshold) continue;
+            }
+            const uint64_t hash_val = xxhash::hash64(fallback.data(),
+                                                    fallback.size(),
+                                                    hll_seed);
+            sketch.add(hash_val);
+            sampled++;
+        }
+        return sampled;
+    }
+
+    char buf[POINT_BUF_SIZE];
+    std::memcpy(buf, chr.data(), chr_len);
+    std::memcpy(buf + chr_len, separator.data(), sep_len);
+    char* const int_start = buf + prefix_len;
+    char* const buf_end = buf + POINT_BUF_SIZE;
 
     if (mixed_stride && do_subsample) {
         const double p = subsample;
@@ -53,12 +99,9 @@ size_t add_points_impl(const std::string& chr,
         const int64_t x0 = start + offset;
 
         for (int64_t pos = x0; pos < end; pos += S) {
-            auto r = std::to_chars(int_buf, int_buf + sizeof(int_buf), pos);
-            point_buf.resize(prefix_len);
-            point_buf.append(int_buf, static_cast<size_t>(r.ptr - int_buf));
-            const uint64_t hash_val = xxhash::hash64_short(point_buf.data(),
-                                                          point_buf.size(),
-                                                          hll_seed);
+            auto r = std::to_chars(int_start, buf_end, pos);
+            const size_t total_len = static_cast<size_t>(r.ptr - buf);
+            const uint64_t hash_val = xxhash::hash64_short(buf, total_len, hll_seed);
             sketch.add(hash_val);
             sampled++;
         }
@@ -66,22 +109,17 @@ size_t add_points_impl(const std::string& chr,
         const uint32_t threshold = static_cast<uint32_t>(subsample * 4294967295.0);
 
         for (int64_t pos = start; pos < end; pos++) {
-            auto r = std::to_chars(int_buf, int_buf + sizeof(int_buf), pos);
-            point_buf.resize(prefix_len);
-            point_buf.append(int_buf, static_cast<size_t>(r.ptr - int_buf));
+            auto r = std::to_chars(int_start, buf_end, pos);
+            const size_t total_len = static_cast<size_t>(r.ptr - buf);
 
             if (do_subsample) {
-                const uint32_t point_hash = xxhash::hash32(point_buf.data(),
-                                                          point_buf.size(),
-                                                          31337);
+                const uint32_t point_hash = xxhash::hash32(buf, total_len, 31337);
                 if (point_hash > threshold) {
                     continue;
                 }
             }
 
-            const uint64_t hash_val = xxhash::hash64_short(point_buf.data(),
-                                                          point_buf.size(),
-                                                          hll_seed);
+            const uint64_t hash_val = xxhash::hash64_short(buf, total_len, hll_seed);
             sketch.add(hash_val);
             sampled++;
         }
