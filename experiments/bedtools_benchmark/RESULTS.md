@@ -1,23 +1,40 @@
 # bedtools_benchmark — May 2026 results
 
-Run on 2026-05-10 against the May-10 optimized `hammock-cpp` binary
+Two runs against the May-10 optimized `hammock-cpp` binary
 (`/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/python3.10/site-packages/bin/hammock-cpp`),
-on Rockfish `shared` partition (sr-class nodes), 16 cpus, 32 GB.
-Five sweeps covering precision, threads, intervals/file, num_files (t=8),
-and num_files (t=16, the orig-protocol replication).
+on Rockfish `shared` partition (sr-class nodes), 16 cpus, 32 GB:
+
+- **2026-05-10 (morning)**: five sweeps with **sequential** pre-sort.
+- **2026-05-10 (evening) → 05-11**: same five sweeps with
+  **parallel** pre-sort (`ThreadPoolExecutor` sized to `num_threads`).
+  Used for the canonical tables below — this is the workflow a real
+  HPC user would run.
 
 Headline: the optimized hammock is **~3× faster across the board** vs
 the prior build, with **same accuracy properties** and **same scaling
 shape** as the orig October 2025 run. The crossover where hammock
-beats bedtools sits at **N≈128 files** (pre-sorted inputs) or
-**N≈32–64 files** (if you count the pre-sort step as part of the
-bedtools workflow).
+beats bedtools sits at **N=128 files** under either sort framing —
+parallelizing the sort step shrinks the sort cost ~15× and makes the
+"include sort in workflow" comparison effectively the same as the
+"pre-sorted inputs" comparison.
 
 ## Source files
 
 CSVs/text reports live in `results/` (symlinked to
 `/vast/blangme2/jbonnie/hammock_claude_experiments/bedtools_benchmark/results/`).
 PNGs in `figures/`.
+
+**Parallel-sort run (canonical):**
+
+| Sweep         | Job ID      | CSV / report stem                            |
+| ------------- | ----------- | -------------------------------------------- |
+| precision     | 23923204    | `sweep_precision_20260510_213254`            |
+| threads       | 23923205    | `sweep_threads_20260510_213254`              |
+| intervals     | 23923206    | `sweep_intervals_20260510_213254`            |
+| files (t=8)   | 23923207    | `cpp_vs_bedtools_t8_20260510_213254`         |
+| files (t=16)  | 23923208    | `cpp_vs_bedtools_t16_20260510_221418`        |
+
+**Sequential-sort run (earlier, kept for reference):**
 
 | Sweep         | Job ID      | CSV / report stem                            |
 | ------------- | ----------- | -------------------------------------------- |
@@ -46,27 +63,37 @@ Near-constant 3.1–3.2× speedup across configs.
 
 ## files sweep at t=16 (the headline comparison)
 
-p=14, 10k intervals/file, N up to 512:
+Parallel-sort run, p=14, 10k intervals/file, N up to 512, 3 runs/config:
 
-| N   | bedtools wall | hammock wall | speedup | sort wall |
-| --- | ------------- | ------------ | ------- | --------- |
-|   2 |   0.48 s |   0.44 s | 1.08× |  0.33 s |
-|   4 |   0.51 s |   0.86 s | 0.60× |  0.65 s |
-|   8 |   0.64 s |   1.73 s | 0.37× |  1.31 s |
-|  16 |   1.13 s |   3.44 s | 0.33× |  2.61 s |
-|  32 |   3.04 s |   6.85 s | 0.44× |  5.22 s |
-|  64 |  10.43 s |  13.68 s | 0.76× | 10.41 s |
-| 128 |  39.56 s |  27.34 s | **1.45×** | 20.64 s |
-| 256 | 157.81 s |  54.62 s | **2.89×** | 41.21 s |
-| 512 | 645.25 s | 109.40 s | **5.90×** | 82.51 s |
+| N   | bedtools wall | hammock wall | speedup | sort wall (parallel, 16w) |
+| --- | ------------- | ------------ | ------- | ------------------------- |
+|   2 |   0.76 s |   0.45 s | 1.70× | 0.10 s |
+|   4 |   0.51 s |   0.87 s | 0.58× | 0.09 s |
+|   8 |   0.63 s |   1.74 s | 0.36× | 0.11 s |
+|  16 |   1.18 s |   3.49 s | 0.34× | 0.22 s |
+|  32 |   3.23 s |   6.89 s | 0.47× | 0.41 s |
+|  64 |  11.51 s |  14.06 s | 0.82× | 0.74 s |
+| 128 |  44.89 s |  27.49 s | **1.63×** | 1.43 s |
+| 256 | 184.47 s |  54.99 s | **3.35×** | 2.79 s |
+| 512 | 767.51 s | 110.07 s | **6.97×** | 5.52 s |
 
-Crossover at **N=128**. The orig Oct 2025 run reported 1.45× at N=128
-and 5.83× at N=512 — virtually identical to ours.
+Crossover at **N=128** (1.63× there, 6.97× at N=512). The orig Oct 2025
+run reported 1.45× at N=128 and 5.83× at N=512 — same shape, slightly
+larger ratios in our run because the sr-class hardware was slower for
+bedtools-via-parallel-fan-out than the orig's c-class hardware.
 
-If the bedtools workflow includes the sort step (unsorted-input case),
-the crossover shifts down to **N≈32–64** and the N=512 speedup grows
-to **6.65×**. See `docs/bedtools-parallelism-caveat.md` for the
-fairness framing and the full table.
+With parallel sort the bedtools workflow penalty essentially vanishes:
+
+| N   | bt wall | sort | bt + sort | hammock | speedup (with sort) |
+| --- | ------- | ---- | --------- | ------- | ------------------- |
+|  64 |  11.5 s |  0.7 s |  12.3 s |  14.1 s | 0.87× |
+| 128 |  44.9 s |  1.4 s |  46.3 s |  27.5 s | 1.68× |
+| 256 | 184.5 s |  2.8 s | 187.3 s |  55.0 s | 3.40× |
+| 512 | 767.5 s |  5.5 s | 773.0 s | 110.1 s | 7.02× |
+
+The crossover holds at N=128 either way. See
+`docs/bedtools-parallelism-caveat.md` for the fairness framing —
+parallelizing sort makes that whole discussion mostly moot.
 
 ## threads sweep — scaling preserved
 

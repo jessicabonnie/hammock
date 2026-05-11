@@ -155,52 +155,43 @@ hammock and the current bedtools baseline.
 
 ## Sort time and the fairness question
 
-Pre-sort time, captured in the same May 2026 run:
+Pre-sort time from the 2026-05-10 evening rerun, with the sort step
+parallelized across 16 workers
+(`ThreadPoolExecutor` of `subprocess` calls to `sort`):
 
-| N   | bedtools wall | sort wall | sort as % of bt workflow | bt + sort | hammock wall | speedup (with sort) |
-| --- | ------------- | --------- | ------------------------ | --------- | ------------ | ------------------- |
+| N   | bedtools wall | sort wall (parallel, 16w) | sort as % of bt workflow | bt + sort | hammock wall | speedup (with sort) |
+| --- | ------------- | ------------------------- | ------------------------ | --------- | ------------ | ------------------- |
+|  64 |  11.5 s |  0.74 s |  6% |  12.3 s |  14.1 s | 0.87× |
+| 128 |  44.9 s |  1.43 s |  3% |  46.3 s |  27.5 s | 1.68× |
+| 256 | 184.5 s |  2.79 s |  1% | 187.3 s |  55.0 s | 3.40× |
+| 512 | 767.5 s |  5.52 s |  1% | 773.0 s | 110.1 s | 7.02× |
+
+With parallel sort the pre-sort step is **a few percent of the
+bedtools workflow at most** — the "fairness gap" between the
+pre-sorted and unsorted-input framings has essentially vanished.
+Crossover sits at **N=128 in either framing**, with hammock's lead
+growing to ~7× at N=512.
+
+For context, here is the same table from the earlier sequential-sort
+run (2026-05-10 morning), where sort was a much bigger story:
+
+| N   | bedtools wall | sort wall (sequential) | sort % | bt + sort | hammock wall | speedup |
+| --- | ------------- | ---------------------- | ------ | --------- | ------------ | ------- |
 |  64 |  10.4 s |  10.4 s | 50% |  20.8 s |  13.7 s | 1.52× |
 | 128 |  39.6 s |  20.6 s | 34% |  60.2 s |  27.3 s | 2.20× |
 | 256 | 157.8 s |  41.2 s | 21% | 199.0 s |  54.6 s | 3.64× |
 | 512 | 645.3 s |  82.5 s | 11% | 727.8 s | 109.4 s | 6.65× |
 
-The pre-sort step is a substantial — sometimes dominant — fraction of
-the "use bedtools to compute pairwise jaccard" workflow when inputs
-aren't already sorted. For N=64 it's *literally larger than the
-bedtools run itself*. Sort time scales linearly in total intervals
-(O(N·intervals/file)) while bedtools' pairwise step scales O(N²), so
-sort dominates at small-to-mid N and pairwise dominates at large N.
+Sort scales linearly in total intervals (O(N·intervals/file)) and
+parallelizes embarrassingly across files, so going from sequential
+to 16-way parallel cuts it ~15× (close to the theoretical 16×
+ceiling, limited only by per-file `subprocess` setup overhead).
 
-This shifts the headline numbers:
-
-- **Pre-sorted-input view (what we report by default):** crossover at
-  N=128, 5.90× at N=512. This is the comparison most existing
-  bioinformatics benchmarks report, and what the orig Oct 2025 run
-  reports.
-- **Unsorted-input workflow view (`bt + sort` column above):**
-  crossover drops to N≈32–64, and hammock's advantage at N=512 grows
-  from 5.90× to 6.65×.
-
-The sort step is now **parallelized across the same number of workers
-the tool gets** (`benchmark_cpp_vs_bedtools.py:_sort_one`,
-`sweep.py make_data()`), via a `ThreadPoolExecutor` of `subprocess`
-calls to `sort`. The sort_time values quoted in the table above are
-from the **earlier sequential implementation** (May 10 morning run);
-re-running with the parallel sort cuts those numbers roughly N-fold
-(modulo I/O bandwidth saturation). The bt-workflow speedup numbers
-in the unsorted-input view will shrink slightly under parallel sort
-but the qualitative story — sort can dominate at small N — survives,
-because even a 16-way parallel sort of N=64 × 10k = 640k lines still
-takes ~0.5-1 s while the bedtools jaccard step at that N is also
-~10 s, so sort is still a meaningful fraction of total at modest N.
-
-Where this matters for the user's choice of tool: if your BED files
-arrive already sorted (peak calls from MACS2, tabix output, anything
-that went through `sort-bed`/`bedtools sort` upstream), the
-pre-sorted view is right and bedtools wins everywhere below N≈128.
-If your files arrive unsorted (random feature extraction, ad-hoc
-analyses, unsorted upstream tools), the unsorted view is right and
-hammock wins much earlier — around N≈32.
+**Takeaway:** the "include sort in the bedtools workflow" comparison
+matters only when (a) the user's sort step is sequential, or (b) the
+sort dataset is small enough that fan-out overhead dominates. In any
+realistic HPC setup, the pre-sorted and unsorted-input framings give
+the same answer for which tool wins.
 
 Both views are honest. We capture sort time in every CSV and
 text report (`mean_sort_time` / `sort_time`) so downstream analysis
