@@ -122,7 +122,7 @@ size_t add_points_impl(const std::string& chr,
             const size_t total_len = prefix_len + int_len;
 
             if (do_subsample) {
-                const uint32_t point_hash = xxhash::hash32(buf, total_len, 31337);
+                const uint32_t point_hash = xxhash::hash32_short(buf, total_len, 31337);
                 if (point_hash > threshold) {
                     goto inc_ascii;
                 }

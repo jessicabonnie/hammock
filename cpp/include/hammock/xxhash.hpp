@@ -211,6 +211,39 @@ namespace xxhash {
     inline uint32_t hash32(const std::string& str, uint32_t seed = 0) {
         return hash32(str.data(), str.size(), seed);
     }
+
+    // Short-input fast path mirroring hash64_short. xxh32's wide-lane loop
+    // kicks in at len >= 16; the Mode B/C subsampling gate hashes chr+sep+pos
+    // which is always shorter. Falls back to general hash32 in the rare long
+    // case (predictable branch).
+    inline uint32_t hash32_short(const void* input, size_t len, uint32_t seed = 0) {
+        if (__builtin_expect(len >= 16, 0)) {
+            return hash32(input, len, seed);
+        }
+        const uint8_t* p = (const uint8_t*)input;
+        const uint8_t* const end = p + len;
+        uint32_t h32 = seed + PRIME32_5 + static_cast<uint32_t>(len);
+
+        while (p + 4 <= end) {
+            uint32_t k1;
+            std::memcpy(&k1, p, 4);
+            h32 += k1 * PRIME32_3;
+            h32 = rotl32(h32, 17) * PRIME32_4;
+            p += 4;
+        }
+
+        while (p < end) {
+            h32 += (*p++) * PRIME32_5;
+            h32 = rotl32(h32, 11) * PRIME32_1;
+        }
+
+        h32 ^= h32 >> 15;
+        h32 *= PRIME32_2;
+        h32 ^= h32 >> 13;
+        h32 *= PRIME32_3;
+        h32 ^= h32 >> 16;
+        return h32;
+    }
 }
 
 #endif
