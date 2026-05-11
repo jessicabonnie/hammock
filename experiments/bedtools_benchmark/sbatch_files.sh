@@ -23,6 +23,7 @@ ml parallel
 mkdir -p experiments/bedtools_benchmark/logs
 
 PYTHON=/home/jbonnie1/.conda/envs/hammock/bin/python3
+export HAMMOCK_CPP_BIN=/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/python3.10/site-packages/bin/hammock-cpp
 
 "$PYTHON" experiments/bedtools_benchmark/benchmark_cpp_vs_bedtools.py \
     --threads 8 \

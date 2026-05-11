@@ -16,6 +16,7 @@ hammock_claude refactor. Differences from the original:
 """
 
 import argparse
+import concurrent.futures
 import csv
 import glob
 import os
@@ -32,6 +33,13 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np  # type: ignore
 
+
+def _sort_one(path: str) -> None:
+    sorted_path = path + ".sorted"
+    with open(sorted_path, "w") as out:
+        subprocess.run(["sort", "-k1,1", "-k2,2n", path], stdout=out, check=True)
+    os.rename(sorted_path, path)
+
 # ---------- paths ----------
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
@@ -45,9 +53,9 @@ def find_hammock_cpp() -> str:
     env = os.environ.get("HAMMOCK_CPP_BIN")
     if env and os.path.exists(env):
         return env
-    candidates = sorted(glob.glob(os.path.join(REPO_ROOT, "build", "*", "hammock-cpp")))
+    candidates = glob.glob(os.path.join(REPO_ROOT, "build", "*", "hammock-cpp"))
     if candidates:
-        return candidates[-1]
+        return max(candidates, key=os.path.getmtime)
     raise FileNotFoundError(
         "hammock-cpp not found. Build the project first (pip install -e . --no-build-isolation) "
         "or set HAMMOCK_CPP_BIN."
@@ -227,7 +235,7 @@ def run_benchmark(
     print(f"  HLL precision:      {precision}")
     print(f"  system:             {get_system_info()}")
 
-    metric_keys = ["wall_time", "cpu_time", "max_rss_mb"]
+    metric_keys = ["wall_time", "cpu_time", "max_rss_mb", "sort_time"]
     hammock_keys = metric_keys + ["sketch_creation_time", "comparison_time"]
 
     for num_files in num_files_list:
@@ -247,12 +255,18 @@ def run_benchmark(
                     file1_list.append(a)
                     file2_list.append(b)
 
-                # Pre-sort outside timing (bedtools requires sorted input).
-                for path in file1_list + file2_list:
-                    sorted_path = path + ".sorted"
-                    with open(sorted_path, "w") as out:
-                        subprocess.run(["sort", "-k1,1", "-k2,2n", path], stdout=out, check=True)
-                    os.rename(sorted_path, path)
+                # Pre-sort outside the per-tool timing (bedtools requires sorted input;
+                # hammock is indifferent). We measure sort wall time separately so the
+                # "workflow including sort" comparison can be reconstructed downstream.
+                # Sort is parallelized across num_threads workers — see
+                # docs/bedtools-parallelism-caveat.md for the fairness framing.
+                sort_start = time.time()
+                all_paths = file1_list + file2_list
+                sort_workers = max(1, min(num_threads, len(all_paths)))
+                with concurrent.futures.ThreadPoolExecutor(max_workers=sort_workers) as ex:
+                    for _ in ex.map(_sort_one, all_paths):
+                        pass
+                sort_time = time.time() - sort_start
 
                 file1_list_path = os.path.join(tmp_dir, "file1_list.txt")
                 file2_list_path = os.path.join(tmp_dir, "file2_list.txt")
@@ -261,8 +275,10 @@ def run_benchmark(
                 with open(file2_list_path, "w") as f:
                     f.write("\n".join(file2_list) + "\n")
 
+                print(f"  sort:    {sort_time:.2f}s wall (parallel, {sort_workers} workers)")
                 print("  bedtools...", end=" ", flush=True)
                 bt = run_bedtools(file1_list_path, file2_list_path, num_threads)
+                bt["sort_time"] = sort_time
                 bedtools_runs.append(bt)
                 rss = bt["max_rss_mb"]
                 rss_str = f"{rss:.1f} MB" if rss is not None else "n/a"
@@ -270,6 +286,7 @@ def run_benchmark(
 
                 print("  hammock-cpp Mode B...", end=" ", flush=True)
                 hm = run_hammock(binary, file1_list_path, file2_list_path, precision, num_threads)
+                hm["sort_time"] = sort_time
                 hammock_runs.append(hm)
                 rss = hm["max_rss_mb"]
                 rss_str = f"{rss:.1f} MB" if rss is not None else "n/a"
@@ -307,6 +324,9 @@ def write_text_report(results: List[Dict[str, Any]], path: str) -> None:
             if bt["mean_max_rss_mb"] is not None:
                 f.write(f"  max RSS: {bt['mean_max_rss_mb']:.1f} MB "
                         f"(min {bt['min_max_rss_mb']:.1f}, max {bt['max_max_rss_mb']:.1f})\n")
+            if bt.get("mean_sort_time") is not None:
+                f.write(f"  sort:    {bt['mean_sort_time']:.3f} ± {bt['std_sort_time']:.3f} s "
+                        f"(pre-sort, not in wall above; bedtools-workflow wall = wall + sort)\n")
             f.write("hammock-cpp Mode B:\n")
             f.write(f"  wall:    {hm['mean_wall_time']:.3f} ± {hm['std_wall_time']:.3f} s\n")
             f.write(f"  cpu:     {hm['mean_cpu_time']:.3f} ± {hm['std_cpu_time']:.3f} s\n")
@@ -329,6 +349,7 @@ def write_csv(results: List[Dict[str, Any]], path: str) -> None:
         "mean_wall_time", "std_wall_time", "min_wall_time", "max_wall_time",
         "mean_cpu_time", "std_cpu_time", "min_cpu_time", "max_cpu_time",
         "mean_max_rss_mb", "std_max_rss_mb", "min_max_rss_mb", "max_max_rss_mb",
+        "mean_sort_time", "std_sort_time", "min_sort_time", "max_sort_time",
         "mean_sketch_creation_time", "std_sketch_creation_time",
         "mean_comparison_time", "std_comparison_time",
     ]

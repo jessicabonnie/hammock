@@ -11,11 +11,13 @@ results/ and figures/.
 """
 
 import argparse
+import concurrent.futures
 import csv
 import os
 import subprocess
 import sys
 import tempfile
+import time
 from collections import defaultdict
 from datetime import datetime
 
@@ -40,9 +42,13 @@ ACCURACY_KEYS = [
     "jaccard_mae_vs_bt", "jaccard_max_err_vs_bt",
     "jaccard_mae_vs_hll", "jaccard_max_err_vs_hll",
 ]
+# sort_time: wall time to pre-sort BED files for the (run_id, num_files, num_intervals)
+# realization. Pre-sort happens outside per-tool timing (bedtools needs sorted input,
+# hammock is indifferent). Same sort_time is attached to every row from the same
+# realization. See docs/bedtools-parallelism-caveat.md.
 ROW_COLS = [
     "axis", "tool", "precision", "threads", "num_files", "num_intervals", "run_id",
-    "wall_time", "cpu_time", "max_rss_mb",
+    "wall_time", "cpu_time", "max_rss_mb", "sort_time",
     "sketch_creation_time", "comparison_time",
 ] + ACCURACY_KEYS
 
@@ -107,8 +113,24 @@ def jaccard_error_stats(est: dict, *, vs_bt: dict, vs_hll: dict):
     return out
 
 
-def make_data(num_files: int, num_intervals: int, tmp_dir: str):
-    """Generate and pre-sort 2*num_files BED files; return paths to two list files."""
+def _sort_one(path: str) -> None:
+    """Sort a single BED file in-place by chrom,start."""
+    sorted_path = path + ".sorted"
+    with open(sorted_path, "w") as out:
+        subprocess.run(["sort", "-k1,1", "-k2,2n", path], stdout=out, check=True)
+    os.rename(sorted_path, path)
+
+
+def make_data(num_files: int, num_intervals: int, tmp_dir: str, num_sort_workers: int = 8):
+    """Generate and pre-sort 2*num_files BED files.
+
+    Returns (file1_list_path, file2_list_path, sort_time). sort_time covers only
+    the parallel sort step (not generation). Sort is fanned out across
+    num_sort_workers threads — each thread blocks on its own external `sort`
+    subprocess, so the GIL isn't in play. Pre-sort is outside per-tool timing
+    because bedtools requires sorted input — see
+    docs/bedtools-parallelism-caveat.md for the fairness framing.
+    """
     file1, file2 = [], []
     for i in range(num_files):
         a = os.path.join(tmp_dir, f"set1_{i}.bed")
@@ -117,18 +139,20 @@ def make_data(num_files: int, num_intervals: int, tmp_dir: str):
         generate_bed_file(num_intervals, b)
         file1.append(a)
         file2.append(b)
-    for path in file1 + file2:
-        sorted_path = path + ".sorted"
-        with open(sorted_path, "w") as out:
-            subprocess.run(["sort", "-k1,1", "-k2,2n", path], stdout=out, check=True)
-        os.rename(sorted_path, path)
+    sort_start = time.time()
+    all_paths = file1 + file2
+    workers = max(1, min(num_sort_workers, len(all_paths)))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+        for _ in ex.map(_sort_one, all_paths):
+            pass
+    sort_time = time.time() - sort_start
     f1 = os.path.join(tmp_dir, "file1_list.txt")
     f2 = os.path.join(tmp_dir, "file2_list.txt")
     with open(f1, "w") as f:
         f.write("\n".join(file1) + "\n")
     with open(f2, "w") as f:
         f.write("\n".join(file2) + "\n")
-    return f1, f2
+    return f1, f2, sort_time
 
 
 def _row(axis, tool, *, precision, threads, num_files, num_intervals, run_id, result, keys):
@@ -160,10 +184,12 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
     for run_i in range(num_runs):
         with tempfile.TemporaryDirectory() as tmp_dir:
             print(f"\n[precision] run {run_i+1}/{num_runs}: gen {num_files} files × {num_intervals} intervals")
-            f1, f2 = make_data(num_files, num_intervals, tmp_dir)
+            f1, f2, sort_time = make_data(num_files, num_intervals, tmp_dir, num_sort_workers=num_threads)
+            print(f"  sort:    {sort_time:.2f}s wall (parallel, {num_threads} workers; pre-sort, not in tool wall below)")
 
             print("  bedtools...", end=" ", flush=True)
             bt = run_bedtools(f1, f2, num_threads)
+            bt["sort_time"] = sort_time
             rss = bt["max_rss_mb"]
             print(f"{bt['wall_time']:.2f}s wall, {rss:.1f} MB" if rss is not None else f"{bt['wall_time']:.2f}s wall")
             bt_truth = parse_bedtools_jaccards(bt.get("stdout", ""))
@@ -171,7 +197,7 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
             rows.append(_row("precision", "bedtools",
                              precision=None, threads=num_threads,
                              num_files=num_files, num_intervals=num_intervals,
-                             run_id=run_i, result=bt, keys=METRIC_KEYS))
+                             run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"]))
 
             # Run all precisions; collect per-pair estimates first so we can use
             # the largest-p result as the HLL ground truth for the others.
@@ -180,6 +206,7 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
             for p in precisions:
                 print(f"  hammock-cpp p={p}...", end=" ", flush=True)
                 hm = run_hammock(binary, f1, f2, p, num_threads, keep_output=True)
+                hm["sort_time"] = sort_time
                 rss = hm["max_rss_mb"]
                 print(f"{hm['wall_time']:.2f}s wall, {rss:.1f} MB" if rss is not None else f"{hm['wall_time']:.2f}s wall")
                 estimates_by_p[p] = parse_hammock_csv(hm.get("output_csv"))
@@ -203,7 +230,7 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
                 rows.append(_row("precision", "hammock_cpp_B",
                                  precision=p, threads=num_threads,
                                  num_files=num_files, num_intervals=num_intervals,
-                                 run_id=run_i, result=merged, keys=HAMMOCK_KEYS + ACCURACY_KEYS))
+                                 run_id=run_i, result=merged, keys=HAMMOCK_KEYS + ["sort_time"] + ACCURACY_KEYS))
                 for (q, r), j_hm in est.items():
                     pair_rows.append({
                         "run_id": run_i, "precision": p,
@@ -218,25 +245,29 @@ def sweep_threads(binary, thread_list, precision, num_files, num_intervals, num_
     rows = []
     for run_i in range(num_runs):
         with tempfile.TemporaryDirectory() as tmp_dir:
+            sort_workers = max(thread_list)
             print(f"\n[threads] run {run_i+1}/{num_runs}: gen {num_files} files × {num_intervals} intervals")
-            f1, f2 = make_data(num_files, num_intervals, tmp_dir)
+            f1, f2, sort_time = make_data(num_files, num_intervals, tmp_dir, num_sort_workers=sort_workers)
+            print(f"  sort:    {sort_time:.2f}s wall (parallel, {sort_workers} workers; pre-sort, not in tool wall below)")
 
             for t in thread_list:
                 print(f"  t={t} bedtools...", end=" ", flush=True)
                 bt = run_bedtools(f1, f2, t)
+                bt["sort_time"] = sort_time
                 print(f"{bt['wall_time']:.2f}s wall")
                 rows.append(_row("threads", "bedtools",
                                  precision=None, threads=t,
                                  num_files=num_files, num_intervals=num_intervals,
-                                 run_id=run_i, result=bt, keys=METRIC_KEYS))
+                                 run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"]))
 
                 print(f"  t={t} hammock-cpp p={precision}...", end=" ", flush=True)
                 hm = run_hammock(binary, f1, f2, precision, t)
+                hm["sort_time"] = sort_time
                 print(f"{hm['wall_time']:.2f}s wall")
                 rows.append(_row("threads", "hammock_cpp_B",
                                  precision=precision, threads=t,
                                  num_files=num_files, num_intervals=num_intervals,
-                                 run_id=run_i, result=hm, keys=HAMMOCK_KEYS))
+                                 run_id=run_i, result=hm, keys=HAMMOCK_KEYS + ["sort_time"]))
     return rows
 
 
@@ -247,23 +278,26 @@ def sweep_intervals(binary, intervals_list, precision, num_threads, num_files, n
         for run_i in range(num_runs):
             with tempfile.TemporaryDirectory() as tmp_dir:
                 print(f"\n[intervals] N={ni} × {num_files} files: run {run_i+1}/{num_runs}")
-                f1, f2 = make_data(num_files, ni, tmp_dir)
+                f1, f2, sort_time = make_data(num_files, ni, tmp_dir, num_sort_workers=num_threads)
+                print(f"  sort:    {sort_time:.2f}s wall (parallel, {num_threads} workers; pre-sort, not in tool wall below)")
 
                 print("  bedtools...", end=" ", flush=True)
                 bt = run_bedtools(f1, f2, num_threads)
+                bt["sort_time"] = sort_time
                 print(f"{bt['wall_time']:.2f}s wall")
                 rows.append(_row("intervals", "bedtools",
                                  precision=None, threads=num_threads,
                                  num_files=num_files, num_intervals=ni,
-                                 run_id=run_i, result=bt, keys=METRIC_KEYS))
+                                 run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"]))
 
                 print("  hammock-cpp...", end=" ", flush=True)
                 hm = run_hammock(binary, f1, f2, precision, num_threads)
+                hm["sort_time"] = sort_time
                 print(f"{hm['wall_time']:.2f}s wall")
                 rows.append(_row("intervals", "hammock_cpp_B",
                                  precision=precision, threads=num_threads,
                                  num_files=num_files, num_intervals=ni,
-                                 run_id=run_i, result=hm, keys=HAMMOCK_KEYS))
+                                 run_id=run_i, result=hm, keys=HAMMOCK_KEYS + ["sort_time"]))
     return rows
 
 
