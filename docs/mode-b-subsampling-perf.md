@@ -1,167 +1,135 @@
-# Mode B subsampling: future perf ideas
+# Mode B perf — what we shipped and what's left
 
 ## Context
 
-After three rounds of Mode B optimization (committed):
+Mode B and the Mode B/C subsampling gate got several rounds of optimization.
+Committed changes, in order:
 
-1. Per-position string-buffer reuse (eliminate 2 heap allocations per genomic
-   position).
-2. Race-free OMP via thread-local HLLs that merge at end (also fixes the
-   non-atomic max-update on `registers_`).
-3. Inline HLL `add` with `__builtin_ctzll` + `final`-class devirtualization
-   of the inner stride-loop call site.
+1. **Per-position string-buffer reuse** — eliminated 2 heap allocations per
+   genomic position.
+2. **Race-free OMP** via thread-local HLLs that merge at end; also fixes the
+   non-atomic max-update race on `registers_`.
+3. **Inline HLL `add`** with `__builtin_ctzll` + `final`-class devirtualization
+   at the inner stride-loop call site.
+4. **`hash64_short`** — specialized xxh64 for <32-byte inputs, inlined into
+   the stride loop. Drops the wide-lane branch.
+5. **`point_buf` elimination** — replaced the thread-local `std::string` with
+   a 64-byte stack buffer; `std::to_chars` writes the integer suffix directly
+   at `prefix_len`.
+6. **Incremental ASCII counter** — initial `std::to_chars` once per interval,
+   then in-place ASCII increment on each iteration. Only the
+   non-mixed-stride path; mixed-stride still per-iteration formats.
+   (`std::to_chars` was 55% of inner-loop instructions per callgrind.)
+7. **`hash32_short`** — same specialization as `hash64_short` for the subB
+   gate hash.
 
-Cumulative speedup vs original on a 16-file (8q × 8r), ~50M-base-each
-benchmark: **~32% faster single-thread, ~25% less CPU time at all configs.**
+### Cumulative speedup vs original baseline (16 files, ~50M bases each)
 
-The two remaining ideas below are deferred deliberately. Both **only matter
-when subsampling is active** (`--subB < 1.0`); on the full-coverage path the
-hash work is the floor and there's nothing more to skip. So neither belongs
-on the critical path until we have a profiled subsampled workload that says
-they're worth the parity-risk.
+| Config | Original | Now | Speedup |
+|---|---|---|---|
+| `--threads 1` + `OMP=1` (single-thread) | 42.81s | **8.94s** | **4.8×** |
+| default `--threads` + default OMP | 1.35s / 53.1 CPU-s | **0.83s / 20.5 CPU-s** | **1.6× wall, 2.6× CPU** |
 
-## Idea 1 — hand-rolled BED parser
+### subB hash-threshold baseline (post-`hash32_short`)
 
-### What
+| subB | hash-threshold | mixed-stride |
+|---|---|---|
+| 1.0 | 9.1s | — |
+| 0.5 | 16.2s ← worst case | 12.4s |
+| 0.1 | 8.3s | 3.0s |
+| 0.01 | 6.1s | **0.8s** |
 
-`parse_bed_line` (`cpp/src/bed_parser.cpp:32`) currently uses
-`std::istringstream` per BED line. For every line it allocates a stream
-object, runs locale-aware `operator>>` for chromosome + start + end, and
-optionally walks tokens for the peak-height column. Profiling on the
-50K-interval synthetic shows parsing is a small fraction of total time
-(~50K parses vs ~50M point hashes); replacing it with a hand-rolled parser
-using `strtoll` + `memchr` would only shift the needle when **the parse
-loop runs many times relative to the inner point loop** — i.e. when the
-inner point loop is short.
+Mixed-stride is fundamentally cheaper at low subB (strides directly, no
+gate) and already at the floor. Hash-threshold is where remaining perf
+opportunity lives.
 
-### When it matters
+## Where the remaining time goes (callgrind, May 2026 after #1–6)
 
-The two regimes where `intervals.size()` grows large relative to total
-points sampled:
+Total inner-loop instructions are now ~60% in `hash64_short`, ~17% in
+`stride.cpp` (ASCII counter + loop control), ~15% in `HLL::add`, ~8% other.
+The hash work is the floor for the parity-required xxh64 algorithm.
 
-- **Heavy subsampling** (`--subB 0.01`–`--subB 0.1`): same intervals, but
-  ~1/100 to 1/10 the inner-loop work per interval. Parser cost rises from
-  noise to a meaningful fraction.
-- **Many small intervals**: e.g. SNP-like BED files with millions of 1bp
-  intervals. The interval count itself dominates total work.
-- **Mode A**: parser cost is *all* of the per-interval work (no point loop
-  at all). A faster parser is a direct win for Mode A regardless of
-  subsampling.
+## Deferred ideas (with rough payoff estimates)
 
-### Sketch of the change
+These are deliberately deferred. Most either give small gains or need a
+parity-divergence flag. They're recorded so we know the menu when a future
+profiled workload says "Mode B / subB is the hot path again."
 
-```cpp
-bool parse_bed_line_fast(const char* line, size_t len, ...) {
-    const char* p = line;
-    const char* end = line + len;
-    // chr: scan to first \t
-    const char* chr_end = static_cast<const char*>(memchr(p, '\t', end - p));
-    if (!chr_end) return false;
-    chr.assign(p, chr_end - p);
-    p = chr_end + 1;
-    // start, end: strtoll
-    char* tmp;
-    start = std::strtoll(p, &tmp, 10);
-    if (tmp == p) return false;
-    p = tmp + 1;
-    end_pos = std::strtoll(p, &tmp, 10);
-    ...
-}
-```
+### Idea A — `--fast-subsample` flag (combine gate + ingestion hash)
 
-Read the file with `mmap` (or a single `fread` into a buffer) and walk
-line-by-line via `memchr('\n', ...)` rather than `std::getline`. That also
-removes the per-line `std::string` allocation in the read loop.
+**Biggest remaining lever for subB hash-threshold.** Currently every
+genomic position computes `xxh32(point, seed=31337)` to gate, then accepted
+points additionally compute `xxh64(point, seed=hll_seed)`. The original
+Python contract is parity-locked to those two distinct algorithms+seeds.
 
-### Risks
+Behind an opt-in flag, we could compute one `xxh64`, use the high 32 bits
+as the gate decision, low 64 as the ingestion hash. One hash pass instead
+of two, eliminating the worst-case-at-subB=0.5 double-cost.
 
-- **None for parity** — same BED-format contract, same edge cases (header
-  lines, `track`/`browser` prefixes, blank lines). The orig hammock just
-  parses BED.
-- Adds ~80 lines of careful pointer arithmetic; tests (`cpp/tests/
-  test_bed_parser.cpp`) need new cases for short-line / ragged-EOF / no
-  trailing newline.
+**Estimated impact** (extrapolating from how much the gate dominates):
+- `subB=0.5` hash-threshold: 16.2s → ~10s (≈−35%)
+- `subB=0.1`: 8.3s → ~5s (−35–40%)
+- `subB=0.01`: 6.1s → ~3.5s (−40%+)
+- `subB=1.0`: 0 (gate isn't entered)
 
-### Estimated win
+**Cost:** parity divergence — would need a flag (`--fast-subsample` or
+similar), a stderr asterisk when used, and an entry in `CLAUDE.md`'s
+"Intentional divergences" section. No way to keep byte-equal CSV parity
+with the orig Python while doing this.
 
-Maybe 5–15% on heavy subsampling workloads, ~20%+ on Mode A. Not measured
-yet — verify by profiling a real subsampled workload before committing.
+### Idea B — `switch` over trailing-bytes count in `hash64_short`
 
-## Idea 2 — combine the xxh32 + xxh64 paths under subsampling
+In `hash64_short`, after the 8-byte and 4-byte chunks, the remaining
+0–3 bytes go through a `while (p < end)` loop. Callgrind shows the loop
+overhead (cond + body) is ~15% of the program for the full-coverage
+benchmark. Replacing the loop with a `switch (end - p)` over the four
+cases removes the loop bookkeeping.
 
-### What
+**Estimated impact:** ~4–8% on full-coverage Mode B; similar fraction
+on subB hash-threshold's gate (`hash32_short` has the same shape).
+**Parity-safe.** Small change. Hasn't been done because the absolute
+gain isn't large after everything else we shipped.
 
-When `--subB < 1.0`, the inner stride loop hashes each point string
-**twice**:
+### Idea C — hand-rolled BED parser
 
-1. `xxhash::hash32(point_buf, seed=31337)` — the gate hash. If above
-   threshold, skip.
-2. `xxhash::hash64(point_buf, seed=hll_seed)` — only on accepted points,
-   for HLL ingestion.
+Documented in the previous version of this file. After today's work,
+parsing is well under 1% of total time on full-coverage Mode B (gprof
+confirmed: `parse_bed_line` shows 0%). The only regime where it could
+matter is *very* heavy subsampling on *very* sparse BEDs, or Mode A
+(where parsing is most of the per-interval work).
 
-Both are full passes over a ~14-byte buffer (~10ns each). For a typical
-`--subB 0.1`, of every 10 points: 10× xxh32 + 1× xxh64. At Mode B's
-~50M-points-per-file scale that's a lot of redundant byte-mixing.
+**Estimated impact:**
+- Full-coverage Mode B: ~1% (noise).
+- Heavy subB (e.g. 0.01) on dense BEDs: ~5%.
+- Mode A: 20–30% (parser is most of the work).
 
-The shape of the win: **fold the gate decision into the same hash pass as
-the ingestion hash, so accepted points pay one pass and rejected points
-pay (almost) nothing.**
+**Parity-safe.** Only worth doing if Mode A becomes a perf priority.
 
-### Why it's blocked on parity
+### Idea D — batched / SIMD hashing across multiple points
 
-The original Python contract is *specifically* xxh32 with seed 31337 for
-the gate. Two separate algorithms (xxh32 and xxh64 are different — not
-just truncations of one another), two separate seeds. We can't change
-either without breaking byte-equal CSV parity for any subsampled run on
-the orig.
+Hash N points at a time using SIMD lanes. xxh3 (the modern xxhash family)
+has SIMD variants; we could either pick up a SIMD-friendly hash or write
+a custom lane-parallel xxh64. Major refactor.
 
-So this idea has three flavors, in order of feasibility:
+**Estimated impact:** 20–30% on plain Mode B; harder to estimate on subB
+where the gate rejects most points.
 
-#### Flavor A — short-circuit subsample-rejected points
-
-**Don't compute xxh64 on rejected points.** That's already what we do —
-`stride.cpp:73-77` does `continue` on rejection before the xxh64 line. So
-this is already optimal *given* the xxh32 contract. No-op.
-
-#### Flavor B — opt-in `--fast-subsample` flag
-
-A new flag that lets callers say "I don't need orig parity on subsampled
-runs." Under it: compute one xxh64, use the high 32 bits as the gate,
-the low 64 as the ingestion hash. Single pass, ~halves hash time on
-accepted points and saves the xxh64 on rejected ones.
-
-This is a real divergence, like the existing `--mixed-stride` and the
-`--subB`-honoring change documented in `CLAUDE.md`. It would need:
-
-- A flag (likely `--fast-subsample` or `--fast-gate`).
-- The flag prints a one-line stderr note when used (parity asterisk).
-- A test that confirms it's a near-equivalent estimator (Jaccard within
-  noise) but warns it's *not* byte-equal.
-- A line in `CLAUDE.md`'s "Intentional divergences" section.
-
-Estimated win: at `--subB 0.1`, roughly 40–50% of inner-loop time saved
-(was 10× xxh32 + 1× xxh64, becomes 1× xxh64). At `--subB 0.5` it's smaller
-(~15–25%). At `--subB 1.0` it's zero (the gate path isn't entered).
-
-#### Flavor C — replace xxh32 with a 32-bit slice of xxh64 in the gate
-
-A more drastic version of B that just changes the hashing convention to
-`hash32(s) := xxh64(s, seed=31337) >> 32`. Same single-pass benefit,
-applies even when the user *doesn't* opt in, but breaks parity for every
-subsampled run. Probably not worth the parity damage — orig users do
-care about reproducibility.
-
-### Decision
-
-Defer until someone has a profiled workload where `--subB < 1.0` is the
-hot path **and** they're willing to take a parity divergence. Then ship
-flavor B (the opt-in flag) — flavor C is too costly.
+**Cost:** significant refactor; risk of subtle correctness bugs;
+architecture-specific intrinsics needed if we want predictable behavior
+across CPUs. Defer until a profiled workload says it's the right move.
 
 ## When to revisit
 
-A trigger for either idea: a benchmark sweep on heavy-subsampled real
-workloads (e.g. `experiments/bedtools_benchmark/sweep.py` with low `subB`)
-that shows Mode B inner-loop time has plateaued and parsing/hashing are
-the visible bars on the flame graph. Until then, the current
-full-coverage path is well below memory bandwidth and the next bottleneck
-is unclear without measurement.
+Trigger any of these when:
+
+- A profiled real workload on `experiments/subB_mixed_stride/` shows that
+  Mode B / subB is the hot path of the user's analysis.
+- The user is willing to accept a parity divergence (Idea A).
+- Mode A becomes a perf priority (Idea C).
+- We hit a wall and the only remaining lever is algorithmic redesign
+  (Idea D).
+
+Until then, plain Mode B is ~5× faster than the original baseline single-
+threaded, and the subB hash-threshold path is within a small constant of
+the mixed-stride path. That's probably good enough until the next user
+need.
