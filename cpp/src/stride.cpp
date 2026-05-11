@@ -106,22 +106,52 @@ size_t add_points_impl(const std::string& chr,
             sampled++;
         }
     } else {
+        if (start >= end) return sampled;
         const uint32_t threshold = static_cast<uint32_t>(subsample * 4294967295.0);
 
+        // Format the starting position once; subsequent iterations just bump
+        // the ASCII digits in place. Most increments only touch the last
+        // byte; carries to longer numbers happen only at powers of 10 (rare
+        // within a single BED interval). This avoids ~55% of the inner-loop
+        // instructions previously spent in std::to_chars (callgrind, May
+        // 2026).
+        auto r = std::to_chars(int_start, buf_end, start);
+        size_t int_len = static_cast<size_t>(r.ptr - int_start);
+
         for (int64_t pos = start; pos < end; pos++) {
-            auto r = std::to_chars(int_start, buf_end, pos);
-            const size_t total_len = static_cast<size_t>(r.ptr - buf);
+            const size_t total_len = prefix_len + int_len;
 
             if (do_subsample) {
                 const uint32_t point_hash = xxhash::hash32(buf, total_len, 31337);
                 if (point_hash > threshold) {
-                    continue;
+                    goto inc_ascii;
                 }
             }
-
-            const uint64_t hash_val = xxhash::hash64_short(buf, total_len, hll_seed);
-            sketch.add(hash_val);
-            sampled++;
+            {
+                const uint64_t hash_val = xxhash::hash64_short(buf, total_len, hll_seed);
+                sketch.add(hash_val);
+                sampled++;
+            }
+        inc_ascii:
+            // In-place ASCII increment. The common case is a single byte
+            // bump on the last digit; carries propagate left only when the
+            // digit was '9'.
+            {
+                char* p = int_start + int_len - 1;
+                while (*p == '9') {
+                    *p = '0';
+                    if (p == int_start) {
+                        // Roll-over (e.g. 999 -> 1000): grow length by 1.
+                        std::memmove(int_start + 1, int_start, int_len);
+                        *int_start = '1';
+                        int_len++;
+                        goto inc_done;
+                    }
+                    p--;
+                }
+                (*p)++;
+            inc_done:;
+            }
         }
     }
 
