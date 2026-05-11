@@ -56,9 +56,9 @@ size_t add_points_impl(const std::string& chr,
             auto r = std::to_chars(int_buf, int_buf + sizeof(int_buf), pos);
             point_buf.resize(prefix_len);
             point_buf.append(int_buf, static_cast<size_t>(r.ptr - int_buf));
-            const uint64_t hash_val = xxhash::hash64(point_buf.data(),
-                                                    point_buf.size(),
-                                                    hll_seed);
+            const uint64_t hash_val = xxhash::hash64_short(point_buf.data(),
+                                                          point_buf.size(),
+                                                          hll_seed);
             sketch.add(hash_val);
             sampled++;
         }
@@ -79,9 +79,9 @@ size_t add_points_impl(const std::string& chr,
                 }
             }
 
-            const uint64_t hash_val = xxhash::hash64(point_buf.data(),
-                                                    point_buf.size(),
-                                                    hll_seed);
+            const uint64_t hash_val = xxhash::hash64_short(point_buf.data(),
+                                                          point_buf.size(),
+                                                          hll_seed);
             sketch.add(hash_val);
             sampled++;
         }

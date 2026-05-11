@@ -33,7 +33,6 @@ set(HAMMOCK_CORE_SOURCES
     cpp/src/hll_sketch.cpp
     cpp/src/processing_modes.cpp
     cpp/src/stride.cpp
-    cpp/src/xxhash.cpp
 )
 
 add_library(hammock_core STATIC ${HAMMOCK_CORE_SOURCES} $<TARGET_OBJECTS:hll_obj>)
