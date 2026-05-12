@@ -11,9 +11,10 @@
 #SBATCH --error=experiments/bedtools_benchmark/logs/files_%j.err
 
 # num_files sweep (the scaling-with-N axis): N ∈ {2,4,8,16,32,64,128,256},
-# p=14, t=8, intervals=10000. Uses the existing benchmark_cpp_vs_bedtools.py
-# (which already supports a num_files sweep). N=512 omitted — bedtools at 512²
-# pairs is ~hours and would blow the time limit.
+# p=14, t=8, intervals=10000, subB ∈ {1.0, 0.25}. Uses the existing
+# benchmark_cpp_vs_bedtools.py (which already supports a num_files sweep).
+# N=512 omitted — bedtools at 512² pairs is ~hours and would blow the time
+# limit.
 
 set -euo pipefail
 cd /home/jbonnie1/interval_sketch/hammock_claude
@@ -30,4 +31,5 @@ export HAMMOCK_CPP_BIN=/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/pyth
     --precision 14 \
     --num-intervals 10000 \
     --num-files 2,4,8,16,32,64,128,256 \
+    --subB-list 1.0,0.25 \
     --runs 3

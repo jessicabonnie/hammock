@@ -11,10 +11,12 @@
 #SBATCH --error=experiments/bedtools_benchmark/logs/files_t16_%j.err
 
 # Apples-to-apples replication of the orig hammock Oct 2025 benchmark:
-# t=16, p=14, 10k intervals/file, N up to 512. The orig run showed hammock
-# winning at N≥128 and 5.83× at N=512; our t=8 files run capped out at N=256
-# without reaching the wide-N regime where hammock's pairwise-compare cost
-# stops dominating. This re-runs the same protocol at the same thread count.
+# t=16, p=14, 10k intervals/file, N up to 512, subB ∈ {1.0, 0.25}. The orig
+# run showed hammock winning at N≥128 and 5.83× at N=512; our t=8 files run
+# capped out at N=256 without reaching the wide-N regime where hammock's
+# pairwise-compare cost stops dominating. This re-runs the same protocol at
+# the same thread count and adds a subB=0.25 hammock line for the
+# subsampling comparison.
 
 set -euo pipefail
 cd /home/jbonnie1/interval_sketch/hammock_claude
@@ -31,4 +33,5 @@ export HAMMOCK_CPP_BIN=/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/pyth
     --precision 14 \
     --num-intervals 10000 \
     --num-files 2,4,8,16,32,64,128,256,512 \
+    --subB-list 1.0,0.25 \
     --runs 3

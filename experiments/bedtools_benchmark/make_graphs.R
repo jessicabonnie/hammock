@@ -61,20 +61,29 @@ parse_args <- function() {
 
 load_files_csv <- function(path) {
   df <- read_csv(path, show_col_types = FALSE)
+  # Backwards compat: pre-subB CSVs have no sub_b column.
+  if (!"sub_b" %in% names(df)) df$sub_b <- ifelse(df$tool == "bedtools", NA_real_, 1.0)
+  # In the new format the sub_b cell for bedtools is empty; coerce numeric.
+  df$sub_b <- suppressWarnings(as.numeric(df$sub_b))
+
   bt <- df %>% filter(tool == "bedtools") %>%
     select(num_files, num_threads, precision,
            bt_wall = mean_wall_time, bt_wall_err = std_wall_time,
            sort_wall = mean_sort_time)
-  hm <- df %>% filter(tool == "hammock_cpp_B") %>%
-    select(num_files,
+  hm <- df %>% filter(grepl("^hammock_cpp_B", tool)) %>%
+    mutate(sub_b = ifelse(is.na(sub_b), 1.0, sub_b)) %>%
+    select(num_files, sub_b,
            hm_wall = mean_wall_time, hm_wall_err = std_wall_time,
            hm_sketch = mean_sketch_creation_time,
            hm_compare = mean_comparison_time)
-  inner_join(bt, hm, by = "num_files") %>% arrange(num_files)
+  list(bt = arrange(bt, num_files),
+       hm = arrange(hm, num_files, desc(sub_b)),
+       sub_bs = sort(unique(hm$sub_b), decreasing = TRUE))
 }
 
 # Persistent crossover: largest i where bt[i] < hm[i] and bt[i+1] > hm[i+1];
 # return the first N at which hammock wins persistently (the "+1" point).
+# Operates on per-subB joined frame.
 find_persistent_crossover <- function(d) {
   idx <- NA_integer_
   for (i in seq_len(nrow(d) - 1)) {
@@ -85,46 +94,72 @@ find_persistent_crossover <- function(d) {
   idx
 }
 
+subb_label <- function(s) ifelse(abs(s - 1.0) < 1e-9, "subB=1.0",
+                                 sprintf("subB=%g", s))
+
 plot_files_sketch_compare_split <- function(files_csv_path, out_path) {
-  d <- load_files_csv(files_csv_path)
-  t <- d$num_threads[1]; p <- d$precision[1]
+  loaded <- load_files_csv(files_csv_path)
+  bt <- loaded$bt; hm <- loaded$hm; sub_bs <- loaded$sub_bs
+  t <- bt$num_threads[1]; p <- bt$precision[1]
 
-  # Compare values can be 0 at small N; clip for log axis.
-  d$hm_compare_plot <- pmax(d$hm_compare, 1e-4)
+  # One hammock-total/sketching line per subB. Compare is sub_b-agnostic
+  # in practice (N² register comparisons regardless of sketch contents),
+  # so we plot just the subB=1.0 compare line (or the first one available).
+  hm <- hm %>% mutate(subB_label = subb_label(sub_b))
+  primary <- if (1.0 %in% sub_bs) 1.0 else sub_bs[1]
+  hm_primary <- hm %>% filter(abs(sub_b - primary) < 1e-9)
 
-  series <- bind_rows(
-    d %>% transmute(num_files, y = bt_wall,        yerr = bt_wall_err,
-                    series = sprintf("bedtools wall (parallel-wrapped, t=%d)", t)),
-    d %>% transmute(num_files, y = hm_sketch,      yerr = hm_wall_err,
-                    series = sprintf("hammock sketching (t=%d, p=%d) — dominates hammock wall", t, p)),
-    d %>% transmute(num_files, y = hm_compare_plot, yerr = NA_real_,
-                    series = "hammock pairwise compare only"),
-    d %>% transmute(num_files, y = sort_wall,       yerr = NA_real_,
-                    series = "bedtools pre-sort (excluded from bedtools wall)")
+  bedtools_series <- sprintf("bedtools wall (parallel-wrapped, t=%d)", t)
+  sort_series     <- "bedtools pre-sort (excluded from bedtools wall)"
+  compare_series  <- "hammock pairwise compare (≈ subB-agnostic)"
+
+  sketch_series_label <- function(s) {
+    sprintf("hammock sketching (t=%d, p=%d, %s)", t, p, subb_label(s))
+  }
+
+  # Build long frame for plotting.
+  bt_rows   <- bt %>% transmute(num_files, y = bt_wall, yerr = bt_wall_err,
+                                series = bedtools_series)
+  sort_rows <- bt %>% transmute(num_files, y = sort_wall, yerr = NA_real_,
+                                series = sort_series)
+  sketch_rows <- hm %>% transmute(
+    num_files, y = hm_sketch, yerr = hm_wall_err,
+    series = sketch_series_label(sub_b)
   )
-
-  series_levels <- c(
-    sprintf("bedtools wall (parallel-wrapped, t=%d)", t),
-    sprintf("hammock sketching (t=%d, p=%d) — dominates hammock wall", t, p),
-    "hammock pairwise compare only",
-    "bedtools pre-sort (excluded from bedtools wall)"
+  compare_rows <- hm_primary %>% transmute(
+    num_files, y = pmax(hm_compare, 1e-4), yerr = NA_real_,
+    series = compare_series
   )
-  series$series <- factor(series$series, levels = series_levels)
+  series_df <- bind_rows(bt_rows, sketch_rows, compare_rows, sort_rows)
 
-  color_map <- setNames(c("#1f77b4", "#ff7f0e", "#d62728", "#7f7f7f"), series_levels)
-  lty_map   <- setNames(c("solid",   "solid",   "solid",   "dotted"),  series_levels)
-  shape_map <- setNames(c(16,        15,        18,        4),         series_levels)
+  sketch_levels <- vapply(sub_bs, sketch_series_label, character(1))
+  series_levels <- c(bedtools_series, sketch_levels, compare_series, sort_series)
+  series_df$series <- factor(series_df$series, levels = series_levels)
 
-  cross_idx <- find_persistent_crossover(d)
+  # Colors: bedtools blue, sketch subBs from an orange→brown ramp, compare red, sort grey.
+  if (length(sub_bs) == 1) {
+    sketch_colors <- "#ff7f0e"
+  } else {
+    # Distinct shades per subB
+    palette <- c("#ff7f0e", "#8c564b", "#9467bd", "#17becf")
+    sketch_colors <- palette[seq_along(sub_bs)]
+  }
+  color_map <- setNames(c("#1f77b4", sketch_colors, "#d62728", "#7f7f7f"), series_levels)
+  lty_map <- setNames(c("solid", rep("solid", length(sub_bs)), "solid", "dotted"), series_levels)
+  shape_map <- setNames(c(16, rep(15, length(sub_bs)), 18, 4), series_levels)
 
-  g <- ggplot(series, aes(x = num_files, y = y,
-                          color = series, linetype = series, shape = series))
+  # Crossover annotation uses subB=1.0 (the default) only.
+  d_cross <- inner_join(bt, hm_primary, by = "num_files") %>% arrange(num_files)
+  cross_idx <- find_persistent_crossover(d_cross)
+
+  g <- ggplot(series_df, aes(x = num_files, y = y,
+                             color = series, linetype = series, shape = series))
   if (!is.na(cross_idx)) {
-    g <- g + geom_vline(xintercept = d$num_files[cross_idx],
+    g <- g + geom_vline(xintercept = d_cross$num_files[cross_idx],
                         color = "grey", linetype = "dashed", alpha = 0.4)
   }
   g <- g +
-    geom_errorbar(data = subset(series, !is.na(yerr)),
+    geom_errorbar(data = subset(series_df, !is.na(yerr)),
                   aes(ymin = pmax(y - yerr, 1e-6), ymax = y + yerr),
                   width = 0.05, alpha = 0.7, show.legend = FALSE) +
     geom_line(linewidth = 0.9) +
@@ -134,10 +169,10 @@ plot_files_sketch_compare_split <- function(files_csv_path, out_path) {
     scale_shape_manual(values = shape_map, name = NULL) +
     scale_x_continuous(
       trans = log2_trans(),
-      breaks = d$num_files,
-      labels = d$num_files,
+      breaks = bt$num_files,
+      labels = bt$num_files,
       sec.axis = sec_axis(~ . ^ 2, name = "Pairwise compares (N²)",
-                          breaks = d$num_files ^ 2,
+                          breaks = bt$num_files ^ 2,
                           labels = function(x) format(x, big.mark = ",", scientific = FALSE))
     ) +
     scale_y_continuous(trans = log10_trans(), labels = label_log()) +
@@ -159,65 +194,55 @@ plot_files_sketch_compare_split <- function(files_csv_path, out_path) {
     )
 
   if (!is.na(cross_idx)) {
-    ncross <- d$num_files[cross_idx]
+    ncross <- d_cross$num_files[cross_idx]
     g <- g + annotate("text",
-                      x = ncross * 0.55, y = d$bt_wall[cross_idx] * 4.5,
-                      label = sprintf("persistent crossover\nat N=%d", ncross),
+                      x = ncross * 0.55, y = d_cross$bt_wall[cross_idx] * 4.5,
+                      label = sprintf("persistent crossover\n(subB=1.0) at N=%d", ncross),
                       color = "grey40", size = 3.2, hjust = 1)
   }
 
-  # Annotate the compare-vs-sketch ratio at the rightmost N.
-  n_last <- tail(d$num_files, 1)
-  cmp_last <- tail(d$hm_compare, 1)
-  sk_last  <- tail(d$hm_sketch, 1)
-  cmp_plot <- tail(d$hm_compare_plot, 1)
-  ratio <- if (sk_last > 0) cmp_last / sk_last else 0
-  g <- g + annotate("text",
-                    x = n_last * 0.6, y = cmp_plot * 30,
-                    label = sprintf("compare = %.3fs\nvs sketch %.1fs\n(%.2f%% of sketch)",
-                                    cmp_last, sk_last, ratio * 100),
-                    color = "#d62728", size = 3.0, hjust = 1)
-
-  ggsave_png(out_path, g, width = 9, height = 6, dpi = 200)
+  ggsave_png(out_path, g, width = 9.5, height = 6, dpi = 200)
   cat(sprintf("Wrote %s\n", out_path))
 }
 
 plot_cost_per_pair <- function(files_csv_path, out_path) {
-  d <- load_files_csv(files_csv_path)
-  t <- d$num_threads[1]; p <- d$precision[1]
-  d <- d %>% mutate(
-    N2     = num_files ^ 2,
-    bt_pp  = bt_wall / N2,
-    hm_pp  = hm_wall / N2,
-    sk_pp  = hm_sketch / N2,
-    cmp_pp = pmax(hm_compare / N2, 1e-9)
-  )
+  loaded <- load_files_csv(files_csv_path)
+  bt <- loaded$bt; hm <- loaded$hm; sub_bs <- loaded$sub_bs
+  t <- bt$num_threads[1]; p <- bt$precision[1]
 
-  series <- bind_rows(
-    d %>% transmute(num_files, y = bt_pp,
-                    series = sprintf("bedtools (parallel-wrapped, t=%d)", t)),
-    d %>% transmute(num_files, y = hm_pp,
-                    series = sprintf("hammock total (t=%d, p=%d)", t, p)),
-    d %>% transmute(num_files, y = sk_pp,
-                    series = "hammock sketching"),
-    d %>% transmute(num_files, y = cmp_pp,
-                    series = "hammock pairwise compare")
-  )
-  series_levels <- c(
-    sprintf("bedtools (parallel-wrapped, t=%d)", t),
-    sprintf("hammock total (t=%d, p=%d)", t, p),
-    "hammock sketching",
-    "hammock pairwise compare"
-  )
-  series$series <- factor(series$series, levels = series_levels)
+  bt2 <- bt %>% mutate(N2 = num_files ^ 2, bt_pp = bt_wall / N2)
+  hm2 <- hm %>% mutate(N2 = num_files ^ 2,
+                       hm_pp = hm_wall / N2,
+                       sk_pp = hm_sketch / N2,
+                       cmp_pp = pmax(hm_compare / N2, 1e-9))
 
-  color_map <- setNames(c("#1f77b4", "#ff7f0e", "#ff7f0e", "#d62728"), series_levels)
-  lty_map   <- setNames(c("solid",   "solid",   "dashed",  "solid"),   series_levels)
-  shape_map <- setNames(c(16,        15,        17,        18),        series_levels)
-  alpha_map <- setNames(c(1, 1, 0.55, 1), series_levels)
+  bedtools_series <- sprintf("bedtools (parallel-wrapped, t=%d)", t)
+  total_label  <- function(s) sprintf("hammock total (t=%d, p=%d, %s)", t, p, subb_label(s))
+  sketch_label <- function(s) sprintf("hammock sketching (%s)", subb_label(s))
+  compare_series <- "hammock pairwise compare"
 
-  g <- ggplot(series, aes(x = num_files, y = y,
-                          color = series, linetype = series, shape = series, alpha = series)) +
+  bt_rows <- bt2 %>% transmute(num_files, y = bt_pp, series = bedtools_series)
+  total_rows  <- hm2 %>% transmute(num_files, y = hm_pp, series = total_label(sub_b))
+  sketch_rows <- hm2 %>% transmute(num_files, y = sk_pp, series = sketch_label(sub_b))
+  primary <- if (1.0 %in% sub_bs) 1.0 else sub_bs[1]
+  cmp_rows <- hm2 %>% filter(abs(sub_b - primary) < 1e-9) %>%
+    transmute(num_files, y = cmp_pp, series = compare_series)
+
+  total_levels <- vapply(sub_bs, total_label, character(1))
+  sketch_levels <- vapply(sub_bs, sketch_label, character(1))
+  series_levels <- c(bedtools_series, total_levels, sketch_levels, compare_series)
+  series_df <- bind_rows(bt_rows, total_rows, sketch_rows, cmp_rows)
+  series_df$series <- factor(series_df$series, levels = series_levels)
+
+  total_palette <- if (length(sub_bs) == 1) "#ff7f0e" else c("#ff7f0e", "#8c564b", "#9467bd", "#17becf")[seq_along(sub_bs)]
+  color_map <- setNames(c("#1f77b4", total_palette, total_palette, "#d62728"), series_levels)
+  lty_map <- setNames(c("solid", rep("solid", length(sub_bs)), rep("dashed", length(sub_bs)), "solid"),
+                      series_levels)
+  shape_map <- setNames(c(16, rep(15, length(sub_bs)), rep(17, length(sub_bs)), 18), series_levels)
+  alpha_map <- setNames(c(1, rep(1, length(sub_bs)), rep(0.55, length(sub_bs)), 1), series_levels)
+
+  g <- ggplot(series_df, aes(x = num_files, y = y,
+                             color = series, linetype = series, shape = series, alpha = series)) +
     geom_line(linewidth = 0.9) +
     geom_point(size = 2.4) +
     scale_color_manual(values = color_map, name = NULL) +
@@ -225,7 +250,7 @@ plot_cost_per_pair <- function(files_csv_path, out_path) {
     scale_shape_manual(values = shape_map, name = NULL) +
     scale_alpha_manual(values = alpha_map, name = NULL) +
     scale_x_continuous(trans = log2_trans(),
-                       breaks = d$num_files, labels = d$num_files) +
+                       breaks = bt$num_files, labels = bt$num_files) +
     scale_y_continuous(trans = log10_trans(), labels = label_log()) +
     labs(
       x = "Number of files (N)",
@@ -243,19 +268,23 @@ plot_cost_per_pair <- function(files_csv_path, out_path) {
       plot.title = element_text(face = "bold")
     )
 
-  ggsave_png(out_path, g, width = 9, height = 6, dpi = 200)
+  ggsave_png(out_path, g, width = 9.5, height = 6, dpi = 200)
   cat(sprintf("Wrote %s\n", out_path))
 }
 
 # ---------- jaccard pair plots ----------
 
 load_pairs_csv <- function(path) {
-  read_csv(path, show_col_types = FALSE) %>%
+  d <- read_csv(path, show_col_types = FALSE)
+  if (!"sub_b" %in% names(d)) d$sub_b <- 1.0
+  d %>%
     mutate(
       bedtools_jaccard = suppressWarnings(as.numeric(bedtools_jaccard)),
       hammock_jaccard  = suppressWarnings(as.numeric(hammock_jaccard)),
-      precision        = as.integer(precision)
+      precision        = as.integer(precision),
+      sub_b            = suppressWarnings(as.numeric(sub_b))
     ) %>%
+    mutate(sub_b = ifelse(is.na(sub_b), 1.0, sub_b)) %>%
     filter(!is.na(bedtools_jaccard), !is.na(hammock_jaccard))
 }
 
@@ -263,10 +292,14 @@ plot_jaccard_scatter <- function(pairs_csv_path, out_path) {
   d <- load_pairs_csv(pairs_csv_path)
   if (nrow(d) == 0) { warning("No pairs found in ", pairs_csv_path); return(invisible(NULL)) }
 
-  counts <- d %>% group_by(precision) %>% summarise(n = n(), .groups = "drop")
-  d <- d %>% left_join(counts, by = "precision") %>%
+  sub_bs <- sort(unique(d$sub_b), decreasing = TRUE)
+  d$subb_facet <- factor(subb_label(d$sub_b),
+                         levels = subb_label(sub_bs))
+
+  counts <- d %>% group_by(precision, sub_b) %>% summarise(n = n(), .groups = "drop")
+  d <- d %>% left_join(counts, by = c("precision", "sub_b")) %>%
     mutate(label = sprintf("p=%d  (n=%d)", precision, n))
-  legend_order <- counts %>% arrange(precision) %>%
+  legend_order <- counts %>% filter(abs(sub_b - sub_bs[1]) < 1e-9) %>% arrange(precision) %>%
     mutate(label = sprintf("p=%d  (n=%d)", precision, n)) %>% pull(label)
   d$label <- factor(d$label, levels = legend_order)
 
@@ -276,20 +309,24 @@ plot_jaccard_scatter <- function(pairs_csv_path, out_path) {
   ylim <- range(d$hammock_jaccard)  + c(-ypad, ypad)
   lo <- min(xlim[1], ylim[1]); hi <- max(xlim[2], ylim[2])
 
-  bt_med <- median(d$bedtools_jaccard)
-  hm_med <- median(d$hammock_jaccard)
+  med_df <- d %>% group_by(subb_facet) %>%
+    summarise(bt_med = median(bedtools_jaccard),
+              hm_med = median(hammock_jaccard), .groups = "drop") %>%
+    mutate(label = sprintf("median gap = %.3f\n(bedtools med = %.3f,\n hammock med = %.3f)",
+                           hm_med - bt_med, bt_med, hm_med))
 
   g <- ggplot(d, aes(x = bedtools_jaccard, y = hammock_jaccard, color = label)) +
     geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black", alpha = 0.6) +
     geom_point(size = 1.0, alpha = 0.35) +
-    annotate("segment", x = bt_med, xend = bt_med, y = bt_med, yend = hm_med,
-             arrow = arrow(length = unit(0.18, "cm")), color = "black", linewidth = 0.7) +
-    annotate("text",
-             x = bt_med + (hi - bt_med) * 0.10,
-             y = (bt_med + hm_med) / 2,
-             label = sprintf("median gap = %.3f\n(bedtools med = %.3f,\n hammock med = %.3f)",
-                             hm_med - bt_med, bt_med, hm_med),
-             hjust = 0, size = 3.0) +
+    geom_segment(data = med_df,
+                 aes(x = bt_med, xend = bt_med, y = bt_med, yend = hm_med),
+                 arrow = arrow(length = unit(0.18, "cm")), color = "black",
+                 linewidth = 0.7, inherit.aes = FALSE) +
+    geom_text(data = med_df,
+              aes(x = bt_med + (hi - bt_med) * 0.10,
+                  y = (bt_med + hm_med) / 2, label = label),
+              color = "black", hjust = 0, size = 3.0,
+              inherit.aes = FALSE) +
     scale_color_viridis_d(name = NULL, end = 0.95,
                           guide = guide_legend(override.aes = list(alpha = 1, size = 2.5))) +
     coord_fixed(xlim = c(lo, hi), ylim = c(lo, hi)) +
@@ -307,13 +344,10 @@ plot_jaccard_scatter <- function(pairs_csv_path, out_path) {
       legend.background = element_rect(fill = alpha("white", 0.9), color = NA),
       plot.title = element_text(face = "bold")
     )
+  if (length(sub_bs) > 1) g <- g + facet_wrap(~ subb_facet)
 
-  # Diagonal y=x label sits along the line outside the legend
-  g <- g + annotate("text", x = lo + (hi - lo) * 0.08, y = lo + (hi - lo) * 0.04,
-                    label = "y = x  (set-Jaccard equality)", angle = 45,
-                    color = "black", alpha = 0.7, size = 3.0)
-
-  ggsave_png(out_path, g, width = 8.5, height = 8, dpi = 200)
+  width <- if (length(sub_bs) > 1) 8.5 * length(sub_bs) else 8.5
+  ggsave_png(out_path, g, width = width, height = 8, dpi = 200)
   cat(sprintf("Wrote %s\n", out_path))
 }
 
@@ -322,17 +356,21 @@ plot_jaccard_delta <- function(pairs_csv_path, out_path) {
   if (nrow(d) == 0) { warning("No pairs found in ", pairs_csv_path); return(invisible(NULL)) }
   d <- d %>% mutate(delta = hammock_jaccard - bedtools_jaccard)
 
-  counts <- d %>% group_by(precision) %>% summarise(n = n(), .groups = "drop")
-  d <- d %>% left_join(counts, by = "precision") %>%
+  sub_bs <- sort(unique(d$sub_b), decreasing = TRUE)
+  d$subb_facet <- factor(subb_label(d$sub_b),
+                         levels = subb_label(sub_bs))
+
+  counts <- d %>% group_by(precision, sub_b) %>% summarise(n = n(), .groups = "drop")
+  d <- d %>% left_join(counts, by = c("precision", "sub_b")) %>%
     mutate(label = sprintf("p=%d  (n=%d)", precision, n))
-  legend_order <- counts %>% arrange(precision) %>%
+  legend_order <- counts %>% filter(abs(sub_b - sub_bs[1]) < 1e-9) %>% arrange(precision) %>%
     mutate(label = sprintf("p=%d  (n=%d)", precision, n)) %>% pull(label)
   d$label <- factor(d$label, levels = legend_order)
 
   bins <- seq(min(d$bedtools_jaccard), max(d$bedtools_jaccard), length.out = 12)
   binned <- d %>%
     mutate(bin = cut(bedtools_jaccard, breaks = bins, include.lowest = TRUE)) %>%
-    group_by(precision, label, bin) %>%
+    group_by(precision, sub_b, subb_facet, label, bin) %>%
     summarise(
       n = n(),
       x = mean(c(bins[as.integer(bin)], bins[as.integer(bin) + 1])),
@@ -340,18 +378,22 @@ plot_jaccard_delta <- function(pairs_csv_path, out_path) {
       .groups = "drop"
     ) %>% filter(n >= 3) %>% arrange(precision, x)
 
-  med_gap <- median(d$delta)
+  med_df <- d %>% group_by(subb_facet) %>%
+    summarise(med_gap = median(delta), .groups = "drop")
 
   g <- ggplot(d, aes(x = bedtools_jaccard, y = delta, color = label)) +
     geom_hline(yintercept = 0, color = "black", linewidth = 0.8, alpha = 0.7) +
-    geom_hline(yintercept = med_gap, color = "red", linewidth = 0.6,
-               linetype = "dotted", alpha = 0.7) +
+    geom_hline(data = med_df, aes(yintercept = med_gap),
+               color = "red", linewidth = 0.6, linetype = "dotted",
+               alpha = 0.7, inherit.aes = FALSE) +
     geom_point(size = 0.9, alpha = 0.25) +
     geom_line(data = binned, aes(x = x, y = mean_delta, color = label, group = label),
               linewidth = 1.0) +
-    annotate("text", x = max(d$bedtools_jaccard), y = med_gap,
-             label = sprintf("  median gap = %.3f", med_gap),
-             color = "red", hjust = 1, vjust = -0.5, size = 3.0) +
+    geom_text(data = med_df,
+              aes(x = max(d$bedtools_jaccard), y = med_gap,
+                  label = sprintf("  median gap = %.3f", med_gap)),
+              color = "red", hjust = 1, vjust = -0.5, size = 3.0,
+              inherit.aes = FALSE) +
     scale_color_viridis_d(name = NULL, end = 0.95,
                           guide = guide_legend(override.aes = list(alpha = 1, size = 2.5))) +
     labs(
@@ -368,8 +410,10 @@ plot_jaccard_delta <- function(pairs_csv_path, out_path) {
       legend.background = element_rect(fill = alpha("white", 0.9), color = NA),
       plot.title = element_text(face = "bold")
     )
+  if (length(sub_bs) > 1) g <- g + facet_wrap(~ subb_facet)
 
-  ggsave_png(out_path, g, width = 10, height = 6, dpi = 200)
+  width <- if (length(sub_bs) > 1) 10 * length(sub_bs) else 10
+  ggsave_png(out_path, g, width = width, height = 6, dpi = 200)
   cat(sprintf("Wrote %s\n", out_path))
 }
 

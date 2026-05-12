@@ -152,11 +152,17 @@ def run_hammock(
     precision: int,
     num_threads: int,
     keep_output: bool = False,
+    sub_b: float = 1.0,
+    sub_b_method: str = "mixed-stride",
 ) -> Dict[str, Any]:
     """Run hammock-cpp Mode B and return timing/RSS.
 
     With keep_output=True, the output CSV is left in place and its path is
     returned as result["output_csv"]; the caller is responsible for deleting it.
+
+    sub_b < 1.0 enables point subsampling using sub_b_method (default
+    mixed-stride, matching the post-9778ef8 binary default). At sub_b == 1.0
+    we omit the flags to keep the cmd line byte-identical to pre-subB runs.
     """
     with tempfile.NamedTemporaryFile(mode="w", delete=False) as tmp:
         out_prefix = tmp.name
@@ -171,6 +177,8 @@ def run_hammock(
             "--threads", str(num_threads),
             "--verbose",
         ]
+        if sub_b < 1.0:
+            cmd += ["--subB", f"{sub_b:g}", "--subB-method", sub_b_method]
         r = run_with_time(cmd)
 
         sketch_s: Optional[float] = None
@@ -217,6 +225,17 @@ def aggregate(runs: List[Dict[str, Any]], keys: List[str]) -> Dict[str, Any]:
     return out
 
 
+def tool_name_for_subb(sub_b: float) -> str:
+    """Tool-column identifier for a hammock run at a given subB.
+
+    subB == 1.0 stays as "hammock_cpp_B" so legacy CSVs are byte-identical;
+    anything else gets a "_subB{val}" suffix.
+    """
+    if sub_b >= 1.0:
+        return "hammock_cpp_B"
+    return f"hammock_cpp_B_subB{sub_b:g}"
+
+
 def run_benchmark(
     binary: str,
     num_files_list: List[int],
@@ -224,6 +243,7 @@ def run_benchmark(
     num_intervals: int,
     num_threads: int,
     precision: int,
+    sub_b_list: List[float],
 ) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
     print("\nBenchmark configuration:")
@@ -233,6 +253,7 @@ def run_benchmark(
     print(f"  runs/config:        {num_runs}")
     print(f"  threads:            {num_threads}")
     print(f"  HLL precision:      {precision}")
+    print(f"  subB values:        {sub_b_list}")
     print(f"  system:             {get_system_info()}")
 
     metric_keys = ["wall_time", "cpu_time", "max_rss_mb", "sort_time"]
@@ -241,7 +262,7 @@ def run_benchmark(
     for num_files in num_files_list:
         print(f"\n{'=' * 60}\n{num_files} files × {num_intervals} intervals\n{'=' * 60}")
         bedtools_runs: List[Dict[str, Any]] = []
-        hammock_runs: List[Dict[str, Any]] = []
+        hammock_runs_by_subb: Dict[float, List[Dict[str, Any]]] = {s: [] for s in sub_b_list}
 
         for run_i in range(num_runs):
             print(f"\nRun {run_i + 1}/{num_runs}: generating {2 * num_files} BED files...")
@@ -284,22 +305,28 @@ def run_benchmark(
                 rss_str = f"{rss:.1f} MB" if rss is not None else "n/a"
                 print(f"{bt['wall_time']:.2f}s wall, {rss_str} max RSS")
 
-                print("  hammock-cpp Mode B...", end=" ", flush=True)
-                hm = run_hammock(binary, file1_list_path, file2_list_path, precision, num_threads)
-                hm["sort_time"] = sort_time
-                hammock_runs.append(hm)
-                rss = hm["max_rss_mb"]
-                rss_str = f"{rss:.1f} MB" if rss is not None else "n/a"
-                print(f"{hm['wall_time']:.2f}s wall, {rss_str} max RSS")
+                for sub_b in sub_b_list:
+                    label = f"subB={sub_b:g}" if sub_b < 1.0 else "subB=1.0"
+                    print(f"  hammock-cpp Mode B {label}...", end=" ", flush=True)
+                    hm = run_hammock(binary, file1_list_path, file2_list_path,
+                                     precision, num_threads, sub_b=sub_b)
+                    hm["sort_time"] = sort_time
+                    hammock_runs_by_subb[sub_b].append(hm)
+                    rss = hm["max_rss_mb"]
+                    rss_str = f"{rss:.1f} MB" if rss is not None else "n/a"
+                    print(f"{hm['wall_time']:.2f}s wall, {rss_str} max RSS")
 
-        results.append({
+        entry: Dict[str, Any] = {
             "num_files": num_files,
             "num_intervals_per_file": num_intervals,
             "num_threads": num_threads,
             "precision": precision,
+            "sub_b_list": sub_b_list,
             "bedtools": aggregate(bedtools_runs, metric_keys),
-            "hammock_cpp_B": aggregate(hammock_runs, hammock_keys),
-        })
+        }
+        for sub_b, runs_for in hammock_runs_by_subb.items():
+            entry[tool_name_for_subb(sub_b)] = aggregate(runs_for, hammock_keys)
+        results.append(entry)
 
     return results
 
@@ -312,9 +339,11 @@ def write_text_report(results: List[Dict[str, Any]], path: str) -> None:
             f.write(f"intervals/file: {results[0]['num_intervals_per_file']}\n")
             f.write(f"threads:        {results[0]['num_threads']}\n")
             f.write(f"HLL precision:  {results[0]['precision']}\n")
+            f.write(f"subB values:    {results[0].get('sub_b_list', [1.0])}\n")
             f.write(f"system:         {get_system_info()}\n\n")
         for r in results:
-            bt, hm = r["bedtools"], r["hammock_cpp_B"]
+            bt = r["bedtools"]
+            sub_b_list = r.get("sub_b_list", [1.0])
             f.write(f"num_files={r['num_files']}\n")
             f.write("-" * 80 + "\n")
             f.write("bedtools:\n")
@@ -327,25 +356,28 @@ def write_text_report(results: List[Dict[str, Any]], path: str) -> None:
             if bt.get("mean_sort_time") is not None:
                 f.write(f"  sort:    {bt['mean_sort_time']:.3f} ± {bt['std_sort_time']:.3f} s "
                         f"(pre-sort, not in wall above; bedtools-workflow wall = wall + sort)\n")
-            f.write("hammock-cpp Mode B:\n")
-            f.write(f"  wall:    {hm['mean_wall_time']:.3f} ± {hm['std_wall_time']:.3f} s\n")
-            f.write(f"  cpu:     {hm['mean_cpu_time']:.3f} ± {hm['std_cpu_time']:.3f} s\n")
-            if hm["mean_max_rss_mb"] is not None:
-                f.write(f"  max RSS: {hm['mean_max_rss_mb']:.1f} MB\n")
-            if hm["mean_sketch_creation_time"] is not None:
-                f.write(f"  sketch:  {hm['mean_sketch_creation_time']:.3f} s\n")
-            if hm["mean_comparison_time"] is not None:
-                f.write(f"  pairs:   {hm['mean_comparison_time']:.3f} s\n")
-            if hm["mean_wall_time"] and bt["mean_wall_time"]:
-                f.write(f"  speedup (wall): {bt['mean_wall_time'] / hm['mean_wall_time']:.2f}x\n")
-            if hm["mean_cpu_time"] and bt["mean_cpu_time"]:
-                f.write(f"  speedup (cpu):  {bt['mean_cpu_time'] / hm['mean_cpu_time']:.2f}x\n")
+            for sub_b in sub_b_list:
+                tool = tool_name_for_subb(sub_b)
+                hm = r[tool]
+                f.write(f"hammock-cpp Mode B [subB={sub_b:g}, mixed-stride]:\n")
+                f.write(f"  wall:    {hm['mean_wall_time']:.3f} ± {hm['std_wall_time']:.3f} s\n")
+                f.write(f"  cpu:     {hm['mean_cpu_time']:.3f} ± {hm['std_cpu_time']:.3f} s\n")
+                if hm["mean_max_rss_mb"] is not None:
+                    f.write(f"  max RSS: {hm['mean_max_rss_mb']:.1f} MB\n")
+                if hm["mean_sketch_creation_time"] is not None:
+                    f.write(f"  sketch:  {hm['mean_sketch_creation_time']:.3f} s\n")
+                if hm["mean_comparison_time"] is not None:
+                    f.write(f"  pairs:   {hm['mean_comparison_time']:.3f} s\n")
+                if hm["mean_wall_time"] and bt["mean_wall_time"]:
+                    f.write(f"  speedup (wall): {bt['mean_wall_time'] / hm['mean_wall_time']:.2f}x\n")
+                if hm["mean_cpu_time"] and bt["mean_cpu_time"]:
+                    f.write(f"  speedup (cpu):  {bt['mean_cpu_time'] / hm['mean_cpu_time']:.2f}x\n")
             f.write("\n")
 
 
 def write_csv(results: List[Dict[str, Any]], path: str) -> None:
     cols = [
-        "num_files", "num_threads", "precision", "tool",
+        "num_files", "num_threads", "precision", "sub_b", "tool",
         "mean_wall_time", "std_wall_time", "min_wall_time", "max_wall_time",
         "mean_cpu_time", "std_cpu_time", "min_cpu_time", "max_cpu_time",
         "mean_max_rss_mb", "std_max_rss_mb", "min_max_rss_mb", "max_max_rss_mb",
@@ -357,10 +389,14 @@ def write_csv(results: List[Dict[str, Any]], path: str) -> None:
         w = csv.writer(f)
         w.writerow(cols)
         for r in results:
-            for tool, key in (("bedtools", "bedtools"), ("hammock_cpp_B", "hammock_cpp_B")):
+            sub_b_list = r.get("sub_b_list", [1.0])
+            tools = [("bedtools", "bedtools", "")]
+            for sub_b in sub_b_list:
+                tools.append((tool_name_for_subb(sub_b), tool_name_for_subb(sub_b), f"{sub_b:g}"))
+            for tool, key, sub_b_str in tools:
                 d = r[key]
-                row = [r["num_files"], r["num_threads"], r["precision"], tool]
-                for c in cols[4:]:
+                row = [r["num_files"], r["num_threads"], r["precision"], sub_b_str, tool]
+                for c in cols[5:]:
                     v = d.get(c)
                     row.append(f"{v:.6f}" if isinstance(v, float) else ("" if v is None else v))
                 w.writerow(row)
@@ -377,16 +413,20 @@ def plot(results: List[Dict[str, Any]], png_path: str) -> None:
 
     nfiles = [r["num_files"] for r in results]
     bt_wall = [r["bedtools"]["mean_wall_time"] for r in results]
-    hm_wall = [r["hammock_cpp_B"]["mean_wall_time"] for r in results]
     bt_cpu = [r["bedtools"]["mean_cpu_time"] for r in results]
-    hm_cpu = [r["hammock_cpp_B"]["mean_cpu_time"] for r in results]
     bt_rss = [r["bedtools"]["mean_max_rss_mb"] for r in results]
-    hm_rss = [r["hammock_cpp_B"]["mean_max_rss_mb"] for r in results]
     threads = results[0]["num_threads"] if results else 1
+    sub_b_list = results[0].get("sub_b_list", [1.0]) if results else [1.0]
+
+    hm_colors = ["#ff7f0e", "#1f77b4", "#2ca02c", "#d62728"]
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     axes[0].plot(nfiles, bt_wall, "ko-", label=f"bedtools (t={threads})", linewidth=2)
-    axes[0].plot(nfiles, hm_wall, "s--", color="#ff7f0e", label="hammock-cpp Mode B", linewidth=2)
+    for i, sub_b in enumerate(sub_b_list):
+        tool = tool_name_for_subb(sub_b)
+        ys = [r[tool]["mean_wall_time"] for r in results]
+        axes[0].plot(nfiles, ys, "s--", color=hm_colors[i % len(hm_colors)],
+                     label=f"hammock-cpp subB={sub_b:g}", linewidth=2)
     axes[0].set_xlabel("Number of files")
     axes[0].set_ylabel("Wall time (s)")
     axes[0].set_title("Wall time")
@@ -396,7 +436,11 @@ def plot(results: List[Dict[str, Any]], png_path: str) -> None:
     axes[0].legend()
 
     axes[1].plot(nfiles, bt_cpu, "ko-", label="bedtools", linewidth=2)
-    axes[1].plot(nfiles, hm_cpu, "s--", color="#ff7f0e", label="hammock-cpp Mode B", linewidth=2)
+    for i, sub_b in enumerate(sub_b_list):
+        tool = tool_name_for_subb(sub_b)
+        ys = [r[tool]["mean_cpu_time"] for r in results]
+        axes[1].plot(nfiles, ys, "s--", color=hm_colors[i % len(hm_colors)],
+                     label=f"hammock-cpp subB={sub_b:g}", linewidth=2)
     axes[1].set_xlabel("Number of files")
     axes[1].set_ylabel("CPU time (s)")
     axes[1].set_title("CPU time")
@@ -405,9 +449,15 @@ def plot(results: List[Dict[str, Any]], png_path: str) -> None:
     axes[1].grid(True, alpha=0.3)
     axes[1].legend()
 
-    if any(v is not None for v in bt_rss + hm_rss):
+    hm_rss_any = any(r[tool_name_for_subb(s)]["mean_max_rss_mb"] is not None
+                     for r in results for s in sub_b_list)
+    if any(v is not None for v in bt_rss) or hm_rss_any:
         axes[2].plot(nfiles, bt_rss, "ko-", label="bedtools", linewidth=2)
-        axes[2].plot(nfiles, hm_rss, "s--", color="#ff7f0e", label="hammock-cpp Mode B", linewidth=2)
+        for i, sub_b in enumerate(sub_b_list):
+            tool = tool_name_for_subb(sub_b)
+            ys = [r[tool]["mean_max_rss_mb"] for r in results]
+            axes[2].plot(nfiles, ys, "s--", color=hm_colors[i % len(hm_colors)],
+                         label=f"hammock-cpp subB={sub_b:g}", linewidth=2)
         axes[2].set_xlabel("Number of files")
         axes[2].set_ylabel("Max RSS (MB)")
         axes[2].set_title("Peak memory")
@@ -430,6 +480,11 @@ def main() -> int:
     parser.add_argument("--num-files", type=str, default=",".join(map(str, NUM_FILES_LIST)),
                         help="Comma-separated file counts")
     parser.add_argument("--runs", type=int, default=NUM_RUNS)
+    parser.add_argument("--subB-list", dest="sub_b_list", type=str, default="1.0",
+                        help="Comma-separated subB values (default '1.0'). Each value < 1.0 "
+                             "adds a hammock variant invoked with --subB <val> --subB-method "
+                             "mixed-stride. subB=1.0 emits 'hammock_cpp_B' for backwards compat; "
+                             "other values emit 'hammock_cpp_B_subB<val>'.")
     parser.add_argument("--test", action="store_true", help="Quick test (small files, few runs)")
     parser.add_argument("--binary", type=str, default=None, help="Path to hammock-cpp")
     parser.add_argument("--output-dir", type=str, default=RESULTS_DIR,
@@ -463,6 +518,15 @@ def main() -> int:
     csv_path = os.path.join(args.output_dir, stem + ".csv")
     png_path = os.path.join(args.figures_dir, stem + ".png")
 
+    sub_b_list = [float(x) for x in args.sub_b_list.split(",") if x.strip()]
+    if not sub_b_list:
+        print("--subB-list must contain at least one value", file=sys.stderr)
+        return 1
+    for s in sub_b_list:
+        if not (0.0 < s <= 1.0):
+            print(f"subB values must lie in (0, 1.0]; got {s}", file=sys.stderr)
+            return 1
+
     results = run_benchmark(
         binary=binary,
         num_files_list=num_files_list,
@@ -470,6 +534,7 @@ def main() -> int:
         num_intervals=num_intervals,
         num_threads=args.threads,
         precision=args.precision,
+        sub_b_list=sub_b_list,
     )
 
     write_text_report(results, txt_path)

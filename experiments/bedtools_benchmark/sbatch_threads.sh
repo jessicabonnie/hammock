@@ -10,8 +10,9 @@
 #SBATCH --output=experiments/bedtools_benchmark/logs/threads_%j.out
 #SBATCH --error=experiments/bedtools_benchmark/logs/threads_%j.err
 
-# Thread sweep: t ∈ {1,2,4,8,16}, p=14, files=64, intervals=10000.
-# t=1 is the long pole — bedtools at 64 files = 4096 sequential pairs.
+# Thread sweep: t ∈ {1,2,4,8,16}, p=14, files=64, intervals=10000,
+# subB ∈ {1.0, 0.25}. t=1 is the long pole — bedtools at 64 files = 4096
+# sequential pairs.
 
 set -euo pipefail
 cd /home/jbonnie1/interval_sketch/hammock_claude
@@ -29,4 +30,5 @@ export HAMMOCK_CPP_BIN=/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/pyth
     --precision 14 \
     --num-files 64 \
     --num-intervals 10000 \
+    --subB-list 1.0,0.25 \
     --runs 3

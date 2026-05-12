@@ -10,8 +10,9 @@
 #SBATCH --output=experiments/bedtools_benchmark/logs/precision_%j.out
 #SBATCH --error=experiments/bedtools_benchmark/logs/precision_%j.err
 
-# Precision sweep: p ∈ {10,12,14,16,18}, t=8, files=64, intervals=10000.
-# Bedtools is precision-independent → run once per data realization for reference.
+# Precision sweep: p ∈ {10,12,14,16,18}, t=8, files=64, intervals=10000,
+# subB ∈ {1.0, 0.25}. Bedtools is precision/subB-independent → run once per
+# data realization for reference.
 
 set -euo pipefail
 cd /home/jbonnie1/interval_sketch/hammock_claude
@@ -29,4 +30,5 @@ export HAMMOCK_CPP_BIN=/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/pyth
     --threads 8 \
     --num-files 64 \
     --num-intervals 10000 \
+    --subB-list 1.0,0.25 \
     --runs 3

@@ -32,6 +32,7 @@ from benchmark_cpp_vs_bedtools import (
     get_system_info,
     run_bedtools,
     run_hammock,
+    tool_name_for_subb,
 )
 
 
@@ -47,7 +48,7 @@ ACCURACY_KEYS = [
 # hammock is indifferent). Same sort_time is attached to every row from the same
 # realization. See docs/bedtools-parallelism-caveat.md.
 ROW_COLS = [
-    "axis", "tool", "precision", "threads", "num_files", "num_intervals", "run_id",
+    "axis", "tool", "sub_b", "precision", "threads", "num_files", "num_intervals", "run_id",
     "wall_time", "cpu_time", "max_rss_mb", "sort_time",
     "sketch_creation_time", "comparison_time",
 ] + ACCURACY_KEYS
@@ -155,9 +156,9 @@ def make_data(num_files: int, num_intervals: int, tmp_dir: str, num_sort_workers
     return f1, f2, sort_time
 
 
-def _row(axis, tool, *, precision, threads, num_files, num_intervals, run_id, result, keys):
+def _row(axis, tool, *, precision, threads, num_files, num_intervals, run_id, result, keys, sub_b=None):
     r = {
-        "axis": axis, "tool": tool,
+        "axis": axis, "tool": tool, "sub_b": sub_b,
         "precision": precision, "threads": threads,
         "num_files": num_files, "num_intervals": num_intervals,
         "run_id": run_id,
@@ -167,18 +168,20 @@ def _row(axis, tool, *, precision, threads, num_files, num_intervals, run_id, re
     return r
 
 
-def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, num_runs):
+def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, num_runs, sub_b_list):
     """Vary precision; bedtools is precision-independent so it's run once per data realization.
 
     Computes jaccard accuracy with TWO ground truths:
       - bedtools (set-jaccard): exposes the definitional gap
-      - hammock at max(precisions) (HLL ground truth): actual HLL precision/accuracy curve
+      - hammock at subB=1.0, max(precisions) (HLL ground truth): actual HLL
+        precision/accuracy curve. For subB<1.0 runs, this same ground truth
+        is used, so MAE_hll captures both HLL noise AND sampling noise.
 
     Also dumps every per-pair jaccard for downstream scatter plots.
     """
     import glob as _glob
     rows = []
-    pair_rows = []  # for the scatter plot: one row per (run, query, reference, precision)
+    pair_rows = []  # for the scatter plot: one row per (run, query, reference, precision, sub_b)
     p_max = max(precisions)
 
     for run_i in range(num_runs):
@@ -199,49 +202,60 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
                              num_files=num_files, num_intervals=num_intervals,
                              run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"]))
 
-            # Run all precisions; collect per-pair estimates first so we can use
-            # the largest-p result as the HLL ground truth for the others.
-            estimates_by_p = {}
-            hm_results_by_p = {}
-            for p in precisions:
-                print(f"  hammock-cpp p={p}...", end=" ", flush=True)
-                hm = run_hammock(binary, f1, f2, p, num_threads, keep_output=True)
-                hm["sort_time"] = sort_time
-                rss = hm["max_rss_mb"]
-                print(f"{hm['wall_time']:.2f}s wall, {rss:.1f} MB" if rss is not None else f"{hm['wall_time']:.2f}s wall")
-                estimates_by_p[p] = parse_hammock_csv(hm.get("output_csv"))
-                hm_results_by_p[p] = hm
-                prefix = hm.get("_out_prefix")
-                if prefix:
-                    for f in _glob.glob(prefix + "*"):
-                        try:
-                            os.remove(f)
-                        except OSError:
-                            pass
+            # Run all (precision, subB) combos; collect per-pair estimates first
+            # so subB=1.0 @ p_max can serve as the HLL ground truth for all
+            # other (p, subB) combos.
+            estimates: dict = {}
+            hm_results: dict = {}
+            for sub_b in sub_b_list:
+                for p in precisions:
+                    print(f"  hammock-cpp p={p} subB={sub_b:g}...", end=" ", flush=True)
+                    hm = run_hammock(binary, f1, f2, p, num_threads,
+                                     keep_output=True, sub_b=sub_b)
+                    hm["sort_time"] = sort_time
+                    rss = hm["max_rss_mb"]
+                    print(f"{hm['wall_time']:.2f}s wall, {rss:.1f} MB" if rss is not None else f"{hm['wall_time']:.2f}s wall")
+                    estimates[(p, sub_b)] = parse_hammock_csv(hm.get("output_csv"))
+                    hm_results[(p, sub_b)] = hm
+                    prefix = hm.get("_out_prefix")
+                    if prefix:
+                        for f in _glob.glob(prefix + "*"):
+                            try:
+                                os.remove(f)
+                            except OSError:
+                                pass
 
-            hll_truth = estimates_by_p.get(p_max, {})
+            hll_truth = estimates.get((p_max, 1.0), {})
 
-            for p in precisions:
-                est = estimates_by_p[p]
-                err = jaccard_error_stats(est, vs_bt=bt_truth, vs_hll=hll_truth)
-                print(f"    p={p}: n={err['jaccard_n_pairs']}, MAE_bt={err['jaccard_mae_vs_bt']:.4f}, MAE_hll={err['jaccard_mae_vs_hll']:.4f}")
-                merged = dict(hm_results_by_p[p])
-                merged.update(err)
-                rows.append(_row("precision", "hammock_cpp_B",
-                                 precision=p, threads=num_threads,
-                                 num_files=num_files, num_intervals=num_intervals,
-                                 run_id=run_i, result=merged, keys=HAMMOCK_KEYS + ["sort_time"] + ACCURACY_KEYS))
-                for (q, r), j_hm in est.items():
-                    pair_rows.append({
-                        "run_id": run_i, "precision": p,
-                        "query": q, "reference": r,
-                        "hammock_jaccard": j_hm,
-                        "bedtools_jaccard": bt_truth.get((q, r)),
-                    })
+            for sub_b in sub_b_list:
+                for p in precisions:
+                    est = estimates[(p, sub_b)]
+                    err = jaccard_error_stats(est, vs_bt=bt_truth, vs_hll=hll_truth)
+                    mae_bt = err["jaccard_mae_vs_bt"]
+                    mae_hll = err["jaccard_mae_vs_hll"]
+                    mae_bt_s = f"{mae_bt:.4f}" if mae_bt is not None else "n/a"
+                    mae_hll_s = f"{mae_hll:.4f}" if mae_hll is not None else "n/a"
+                    print(f"    p={p} subB={sub_b:g}: n={err['jaccard_n_pairs']}, "
+                          f"MAE_bt={mae_bt_s}, MAE_hll={mae_hll_s}")
+                    merged = dict(hm_results[(p, sub_b)])
+                    merged.update(err)
+                    rows.append(_row("precision", tool_name_for_subb(sub_b),
+                                     precision=p, threads=num_threads,
+                                     num_files=num_files, num_intervals=num_intervals,
+                                     run_id=run_i, result=merged,
+                                     keys=HAMMOCK_KEYS + ["sort_time"] + ACCURACY_KEYS,
+                                     sub_b=sub_b))
+                    for (q, r), j_hm in est.items():
+                        pair_rows.append({
+                            "run_id": run_i, "precision": p, "sub_b": sub_b,
+                            "query": q, "reference": r,
+                            "hammock_jaccard": j_hm,
+                            "bedtools_jaccard": bt_truth.get((q, r)),
+                        })
     return rows, pair_rows
 
 
-def sweep_threads(binary, thread_list, precision, num_files, num_intervals, num_runs):
+def sweep_threads(binary, thread_list, precision, num_files, num_intervals, num_runs, sub_b_list):
     rows = []
     for run_i in range(num_runs):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -260,18 +274,20 @@ def sweep_threads(binary, thread_list, precision, num_files, num_intervals, num_
                                  num_files=num_files, num_intervals=num_intervals,
                                  run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"]))
 
-                print(f"  t={t} hammock-cpp p={precision}...", end=" ", flush=True)
-                hm = run_hammock(binary, f1, f2, precision, t)
-                hm["sort_time"] = sort_time
-                print(f"{hm['wall_time']:.2f}s wall")
-                rows.append(_row("threads", "hammock_cpp_B",
-                                 precision=precision, threads=t,
-                                 num_files=num_files, num_intervals=num_intervals,
-                                 run_id=run_i, result=hm, keys=HAMMOCK_KEYS + ["sort_time"]))
+                for sub_b in sub_b_list:
+                    print(f"  t={t} hammock-cpp p={precision} subB={sub_b:g}...", end=" ", flush=True)
+                    hm = run_hammock(binary, f1, f2, precision, t, sub_b=sub_b)
+                    hm["sort_time"] = sort_time
+                    print(f"{hm['wall_time']:.2f}s wall")
+                    rows.append(_row("threads", tool_name_for_subb(sub_b),
+                                     precision=precision, threads=t,
+                                     num_files=num_files, num_intervals=num_intervals,
+                                     run_id=run_i, result=hm,
+                                     keys=HAMMOCK_KEYS + ["sort_time"], sub_b=sub_b))
     return rows
 
 
-def sweep_intervals(binary, intervals_list, precision, num_threads, num_files, num_runs):
+def sweep_intervals(binary, intervals_list, precision, num_threads, num_files, num_runs, sub_b_list):
     """Regenerates data per intervals point — file size is the swept variable."""
     rows = []
     for ni in intervals_list:
@@ -290,14 +306,16 @@ def sweep_intervals(binary, intervals_list, precision, num_threads, num_files, n
                                  num_files=num_files, num_intervals=ni,
                                  run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"]))
 
-                print("  hammock-cpp...", end=" ", flush=True)
-                hm = run_hammock(binary, f1, f2, precision, num_threads)
-                hm["sort_time"] = sort_time
-                print(f"{hm['wall_time']:.2f}s wall")
-                rows.append(_row("intervals", "hammock_cpp_B",
-                                 precision=precision, threads=num_threads,
-                                 num_files=num_files, num_intervals=ni,
-                                 run_id=run_i, result=hm, keys=HAMMOCK_KEYS + ["sort_time"]))
+                for sub_b in sub_b_list:
+                    print(f"  hammock-cpp subB={sub_b:g}...", end=" ", flush=True)
+                    hm = run_hammock(binary, f1, f2, precision, num_threads, sub_b=sub_b)
+                    hm["sort_time"] = sort_time
+                    print(f"{hm['wall_time']:.2f}s wall")
+                    rows.append(_row("intervals", tool_name_for_subb(sub_b),
+                                     precision=precision, threads=num_threads,
+                                     num_files=num_files, num_intervals=ni,
+                                     run_id=run_i, result=hm,
+                                     keys=HAMMOCK_KEYS + ["sort_time"], sub_b=sub_b))
     return rows
 
 
@@ -346,22 +364,29 @@ def plot_axis(rows, axis, png_path, title_suffix):
         x_key, x_label, x_log = "num_intervals", "Intervals per file", ("log", 10)
 
     bt = defaultdict(list)
-    hm = defaultdict(list)
+    hm_by_subb: dict = defaultdict(lambda: defaultdict(list))  # sub_b -> x -> [rows]
     for r in rows:
         x = r.get(x_key)
-        if r["tool"] == "hammock_cpp_B" and x is not None:
-            hm[x].append(r)
+        if r["tool"].startswith("hammock_cpp_B") and x is not None:
+            sub_b = r.get("sub_b") if r.get("sub_b") is not None else 1.0
+            hm_by_subb[float(sub_b)][x].append(r)
         elif r["tool"] == "bedtools" and (x is not None or axis == "precision"):
             bt[x if x is not None else "ref"].append(r)
+    sub_bs = sorted(hm_by_subb.keys(), reverse=True)  # 1.0 first
+    hm_colors = ["#ff7f0e", "#1f77b4", "#2ca02c", "#d62728"]
 
     n_panels = 3 if axis == "precision" else 2
     fig, axes = plt.subplots(1, n_panels, figsize=(6.5 * n_panels, 5))
 
     # Wall time
-    if hm:
+    for i, sub_b in enumerate(sub_bs):
+        hm = hm_by_subb[sub_b]
+        if not hm:
+            continue
         xs, ys, errs = _agg(hm, "wall_time")
         axes[0].errorbar(xs, ys, yerr=errs, marker="s", linestyle="--",
-                         color="#ff7f0e", label="hammock-cpp Mode B")
+                         color=hm_colors[i % len(hm_colors)],
+                         label=f"hammock-cpp subB={sub_b:g}")
     if axis == "precision":
         bt_walls = [r["wall_time"] for r in rows if r["tool"] == "bedtools" and r.get("wall_time") is not None]
         if bt_walls:
@@ -382,12 +407,16 @@ def plot_axis(rows, axis, png_path, title_suffix):
     axes[0].legend()
 
     # Max RSS
-    if hm:
+    for i, sub_b in enumerate(sub_bs):
+        hm = hm_by_subb[sub_b]
+        if not hm:
+            continue
         xs, ys, _ = _agg(hm, "max_rss_mb")
         ys_clean = [(x, y) for x, y in zip(xs, ys) if y is not None]
         if ys_clean:
             xs2, ys2 = zip(*ys_clean)
-            axes[1].plot(xs2, ys2, "s--", color="#ff7f0e", label="hammock-cpp Mode B")
+            axes[1].plot(xs2, ys2, "s--", color=hm_colors[i % len(hm_colors)],
+                         label=f"hammock-cpp subB={sub_b:g}")
     if axis == "precision":
         bt_rss = [r["max_rss_mb"] for r in rows if r["tool"] == "bedtools" and r.get("max_rss_mb") is not None]
         if bt_rss:
@@ -407,24 +436,30 @@ def plot_axis(rows, axis, png_path, title_suffix):
     axes[1].grid(True, alpha=0.3)
     axes[1].legend()
 
-    # Accuracy panel (precision sweep only) — two ground truths.
-    if axis == "precision" and hm:
-        xs, ys_hll, errs_hll = _agg(hm, "jaccard_mae_vs_hll")
-        valid_hll = [(x, y, e) for x, y, e in zip(xs, ys_hll, errs_hll) if y is not None]
-        if valid_hll:
-            xs2, ys2, errs2 = zip(*valid_hll)
-            axes[2].errorbar(xs2, ys2, yerr=errs2, marker="s", linestyle="--",
-                             color="#ff7f0e", label="MAE vs hammock@p_max (HLL noise)")
-            xs_th = list(xs2)
+    # Accuracy panel (precision sweep only) — two ground truths per subB.
+    if axis == "precision" and hm_by_subb:
+        for i, sub_b in enumerate(sub_bs):
+            hm = hm_by_subb[sub_b]
+            if not hm:
+                continue
+            color = hm_colors[i % len(hm_colors)]
+            xs, ys_hll, errs_hll = _agg(hm, "jaccard_mae_vs_hll")
+            valid_hll = [(x, y, e) for x, y, e in zip(xs, ys_hll, errs_hll) if y is not None]
+            if valid_hll:
+                xs2, ys2, errs2 = zip(*valid_hll)
+                axes[2].errorbar(xs2, ys2, yerr=errs2, marker="s", linestyle="--",
+                                 color=color, label=f"MAE vs hammock@p_max (subB={sub_b:g})")
+            xs, ys_bt, errs_bt = _agg(hm, "jaccard_mae_vs_bt")
+            valid_bt = [(x, y, e) for x, y, e in zip(xs, ys_bt, errs_bt) if y is not None]
+            if valid_bt:
+                xs2, ys2, errs2 = zip(*valid_bt)
+                axes[2].errorbar(xs2, ys2, yerr=errs2, marker="o", linestyle="-",
+                                 color=color, label=f"MAE vs bedtools (subB={sub_b:g})")
+        # Theory curve (HLL 1.04/√(2^p)) — only meaningful for subB=1.0.
+        if 1.0 in hm_by_subb:
+            xs_th = sorted(hm_by_subb[1.0].keys())
             ys_th = [1.04 / np.sqrt(2 ** x) for x in xs_th]
             axes[2].plot(xs_th, ys_th, "k:", alpha=0.6, label="1.04/√(2^p) (theory)")
-
-        xs, ys_bt, errs_bt = _agg(hm, "jaccard_mae_vs_bt")
-        valid_bt = [(x, y, e) for x, y, e in zip(xs, ys_bt, errs_bt) if y is not None]
-        if valid_bt:
-            xs2, ys2, errs2 = zip(*valid_bt)
-            axes[2].errorbar(xs2, ys2, yerr=errs2, marker="o", linestyle="-",
-                             color="#1f77b4", label="MAE vs bedtools (definitional gap)")
         axes[2].set_xlabel(x_label)
         axes[2].set_ylabel("Jaccard MAE")
         axes[2].set_title(f"Accuracy {title_suffix}")
@@ -440,10 +475,8 @@ def plot_axis(rows, axis, png_path, title_suffix):
 def plot_pair_scatter(pair_rows, png_path, title_suffix):
     """Scatter of (bedtools_jaccard, hammock_jaccard), one point per pair, colored by precision.
 
-    Shows the empirical bp-jaccard ↔ register-equality-jaccard mapping. y=x diagonal
-    is reference; if hammock matched bedtools they'd lie on it. Realistic-input
-    deviations from the diagonal are the definitional gap (see
-    docs/jaccard-definitional-gap.md).
+    With multiple subB values, plots one panel per subB so each panel keeps a
+    clean p-colored scatter.
     """
     try:
         import matplotlib  # type: ignore
@@ -452,31 +485,37 @@ def plot_pair_scatter(pair_rows, png_path, title_suffix):
     except ImportError:
         return
 
-    by_p = defaultdict(list)
+    by_subb_p = defaultdict(lambda: defaultdict(list))
     for r in pair_rows:
         if r.get("bedtools_jaccard") is None or r.get("hammock_jaccard") is None:
             continue
-        by_p[r["precision"]].append((r["bedtools_jaccard"], r["hammock_jaccard"]))
+        sub_b = r.get("sub_b") if r.get("sub_b") is not None else 1.0
+        by_subb_p[float(sub_b)][r["precision"]].append((r["bedtools_jaccard"], r["hammock_jaccard"]))
 
-    if not by_p:
+    if not by_subb_p:
         return
 
-    fig, ax = plt.subplots(figsize=(7, 7))
+    sub_bs = sorted(by_subb_p.keys(), reverse=True)
+    n = len(sub_bs)
+    fig, axes = plt.subplots(1, n, figsize=(7 * n, 7), squeeze=False)
     cmap = plt.get_cmap("viridis")
-    ps = sorted(by_p.keys())
-    for i, p in enumerate(ps):
-        xs, ys = zip(*by_p[p])
-        ax.scatter(xs, ys, s=8, alpha=0.4,
-                   color=cmap(i / max(1, len(ps) - 1)),
-                   label=f"p={p}")
-    ax.plot([0, 1], [0, 1], "k--", alpha=0.5, label="y = x (set-jaccard equality)")
-    ax.set_xlim(-0.02, 1.02)
-    ax.set_ylim(-0.02, 1.02)
-    ax.set_xlabel("bedtools jaccard (set Jaccard, ground truth)")
-    ax.set_ylabel("hammock jaccard (register-equality)")
-    ax.set_title(f"Definitional gap: hammock vs bedtools jaccard\n{title_suffix}", fontsize=10)
-    ax.grid(True, alpha=0.3)
-    ax.legend(loc="upper left", fontsize=9)
+    for j, sub_b in enumerate(sub_bs):
+        ax = axes[0, j]
+        ps = sorted(by_subb_p[sub_b].keys())
+        for i, p in enumerate(ps):
+            xs, ys = zip(*by_subb_p[sub_b][p])
+            ax.scatter(xs, ys, s=8, alpha=0.4,
+                       color=cmap(i / max(1, len(ps) - 1)),
+                       label=f"p={p}")
+        ax.plot([0, 1], [0, 1], "k--", alpha=0.5, label="y = x (set-jaccard equality)")
+        ax.set_xlim(-0.02, 1.02)
+        ax.set_ylim(-0.02, 1.02)
+        ax.set_xlabel("bedtools jaccard (set Jaccard, ground truth)")
+        ax.set_ylabel("hammock jaccard (register-equality)")
+        ax.set_title(f"subB={sub_b:g}", fontsize=11)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="upper left", fontsize=9)
+    fig.suptitle(f"Definitional gap: hammock vs bedtools jaccard\n{title_suffix}", fontsize=10)
     fig.tight_layout()
     fig.savefig(png_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
@@ -499,8 +538,22 @@ def main():
     parser.add_argument("--num-files", type=int, default=None,
                         help="Default: 64 (precision), 64 (threads), 16 (intervals)")
     parser.add_argument("--num-intervals", type=int, default=10000)
+    parser.add_argument("--subB-list", dest="sub_b_list", type=str, default="1.0",
+                        help="Comma-separated subB values (default '1.0'). "
+                             "Each adds a hammock variant invoked with "
+                             "--subB <val> --subB-method mixed-stride. subB=1.0 "
+                             "emits 'hammock_cpp_B' for backwards compat; other "
+                             "values emit 'hammock_cpp_B_subB<val>'.")
 
     args = parser.parse_args()
+    sub_b_list = [float(x) for x in args.sub_b_list.split(",") if x.strip()]
+    if not sub_b_list:
+        print("--subB-list must contain at least one value", file=sys.stderr)
+        return 1
+    for s in sub_b_list:
+        if not (0.0 < s <= 1.0):
+            print(f"subB values must lie in (0, 1.0]; got {s}", file=sys.stderr)
+            return 1
     binary = args.binary or find_hammock_cpp()
     if not os.path.exists(binary):
         print(f"hammock-cpp not found at {binary}", file=sys.stderr)
@@ -517,24 +570,31 @@ def main():
     print(f"binary: {binary}")
 
     pair_rows = []
+    subb_tag = ",".join(f"{s:g}" for s in sub_b_list)
     if args.axis == "precision":
         precisions = [int(x) for x in args.precisions.split(",")]
         nf = args.num_files if args.num_files is not None else 64
-        print(f"[precision] p ∈ {precisions}, t={args.threads}, files={nf}, intervals={args.num_intervals}")
-        rows, pair_rows = sweep_precision(binary, precisions, nf, args.num_intervals, args.threads, args.runs)
-        suffix = f"(t={args.threads}, files={nf}, intervals={args.num_intervals})"
+        print(f"[precision] p ∈ {precisions}, t={args.threads}, files={nf}, "
+              f"intervals={args.num_intervals}, subB ∈ {sub_b_list}")
+        rows, pair_rows = sweep_precision(binary, precisions, nf, args.num_intervals,
+                                          args.threads, args.runs, sub_b_list)
+        suffix = f"(t={args.threads}, files={nf}, intervals={args.num_intervals}, subB={subb_tag})"
     elif args.axis == "threads":
         thread_list = [int(x) for x in args.thread_list.split(",")]
         nf = args.num_files if args.num_files is not None else 64
-        print(f"[threads] t ∈ {thread_list}, p={args.precision}, files={nf}, intervals={args.num_intervals}")
-        rows = sweep_threads(binary, thread_list, args.precision, nf, args.num_intervals, args.runs)
-        suffix = f"(p={args.precision}, files={nf}, intervals={args.num_intervals})"
+        print(f"[threads] t ∈ {thread_list}, p={args.precision}, files={nf}, "
+              f"intervals={args.num_intervals}, subB ∈ {sub_b_list}")
+        rows = sweep_threads(binary, thread_list, args.precision, nf,
+                             args.num_intervals, args.runs, sub_b_list)
+        suffix = f"(p={args.precision}, files={nf}, intervals={args.num_intervals}, subB={subb_tag})"
     else:
         intervals_list = [int(x) for x in args.intervals_list.split(",")]
         nf = args.num_files if args.num_files is not None else 16
-        print(f"[intervals] N ∈ {intervals_list}, p={args.precision}, t={args.threads}, files={nf}")
-        rows = sweep_intervals(binary, intervals_list, args.precision, args.threads, nf, args.runs)
-        suffix = f"(p={args.precision}, t={args.threads}, files={nf})"
+        print(f"[intervals] N ∈ {intervals_list}, p={args.precision}, t={args.threads}, "
+              f"files={nf}, subB ∈ {sub_b_list}")
+        rows = sweep_intervals(binary, intervals_list, args.precision, args.threads,
+                               nf, args.runs, sub_b_list)
+        suffix = f"(p={args.precision}, t={args.threads}, files={nf}, subB={subb_tag})"
 
     stem = f"sweep_{args.axis}_{timestamp}"
     csv_path = os.path.join(args.output_dir, stem + ".csv")
@@ -546,7 +606,8 @@ def main():
     if pair_rows:
         pairs_csv = os.path.join(args.output_dir, stem + "_pairs.csv")
         with open(pairs_csv, "w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=["run_id", "precision", "query", "reference",
+            w = csv.DictWriter(f, fieldnames=["run_id", "precision", "sub_b",
+                                              "query", "reference",
                                               "bedtools_jaccard", "hammock_jaccard"],
                                extrasaction="ignore")
             w.writeheader()
