@@ -385,7 +385,7 @@ plot_jaccard_delta <- function(pairs_csv_path, out_path) {
     geom_hline(yintercept = 0, color = "black", linewidth = 0.8, alpha = 0.7) +
     geom_hline(data = med_df, aes(yintercept = med_gap),
                color = "red", linewidth = 0.6, linetype = "dotted",
-               alpha = 0.7, inherit.aes = FALSE) +
+               alpha = 0.7) +
     geom_point(size = 0.9, alpha = 0.25) +
     geom_line(data = binned, aes(x = x, y = mean_delta, color = label, group = label),
               linewidth = 1.0) +
