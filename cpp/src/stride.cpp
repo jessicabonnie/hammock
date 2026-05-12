@@ -25,10 +25,17 @@ size_t add_points_impl(const std::string& chr,
                        Sketch& sketch,
                        const std::string& separator,
                        double subsample,
-                       bool mixed_stride,
-                       uint64_t hll_seed) {
+                       SubBMethod method,
+                       uint64_t hll_seed,
+                       uint32_t gate_seed) {
     const bool do_subsample = (subsample < 1.0);
     size_t sampled = 0;
+
+    // When subsample is 1.0 the three methods are equivalent; collapse to the
+    // hash-threshold ASCII-counter fast path. (SingleHash doesn't enter its
+    // gate either since we'd just be wasting the high-bits comparison.)
+    const bool use_mixed_stride = (method == SubBMethod::MixedStride) && do_subsample;
+    const bool use_single_hash = (method == SubBMethod::SingleHash) && do_subsample;
 
     // Assemble chr+sep once into a stack buffer; per-point work then only
     // formats the integer at prefix_len and hashes the buffer.
@@ -43,26 +50,31 @@ size_t add_points_impl(const std::string& chr,
         fallback.assign(chr);
         fallback.append(separator);
         char int_buf[24];
-        const uint32_t threshold = static_cast<uint32_t>(subsample * 4294967295.0);
-        // Mixed-stride and hash-threshold collapsed for simplicity in this
-        // rare path; perf isn't the concern when chr names are this long.
-        const int64_t stride = mixed_stride && do_subsample
+        const uint32_t threshold32 = static_cast<uint32_t>(subsample * 4294967295.0);
+        const int64_t stride = use_mixed_stride
                                    ? std::max<int64_t>(1, static_cast<int64_t>(std::round(1.0 / subsample)))
                                    : 1;
         for (int64_t pos = start; pos < end; pos += stride) {
             auto r = std::to_chars(int_buf, int_buf + sizeof(int_buf), pos);
             fallback.resize(prefix_len);
             fallback.append(int_buf, static_cast<size_t>(r.ptr - int_buf));
-            if (!mixed_stride && do_subsample) {
-                const uint32_t h32 = xxhash::hash32(fallback.data(),
-                                                   fallback.size(), 31337);
-                if (h32 > threshold) continue;
+            if (use_single_hash) {
+                const uint64_t h = xxhash::hash64(fallback.data(), fallback.size(), hll_seed);
+                if (static_cast<uint32_t>(h >> 32) > threshold32) continue;
+                sketch.add(h);
+                sampled++;
+            } else {
+                if (!use_mixed_stride && do_subsample) {
+                    const uint32_t h32 = xxhash::hash32(fallback.data(),
+                                                       fallback.size(), gate_seed);
+                    if (h32 > threshold32) continue;
+                }
+                const uint64_t hash_val = xxhash::hash64(fallback.data(),
+                                                        fallback.size(),
+                                                        hll_seed);
+                sketch.add(hash_val);
+                sampled++;
             }
-            const uint64_t hash_val = xxhash::hash64(fallback.data(),
-                                                    fallback.size(),
-                                                    hll_seed);
-            sketch.add(hash_val);
-            sampled++;
         }
         return sampled;
     }
@@ -73,7 +85,7 @@ size_t add_points_impl(const std::string& chr,
     char* const int_start = buf + prefix_len;
     char* const buf_end = buf + POINT_BUF_SIZE;
 
-    if (mixed_stride && do_subsample) {
+    if (use_mixed_stride) {
         const double p = subsample;
         const double inv = 1.0 / p;
         int64_t s0 = static_cast<int64_t>(std::floor(inv));
@@ -85,13 +97,13 @@ size_t add_points_impl(const std::string& chr,
         if (s0 != s1) {
             const double denom = (1.0 / s1) - (1.0 / s0);
             const double q = (denom != 0.0) ? (p - 1.0 / s0) / denom : 0.0;
-            const uint32_t h = hash_for_subsample(chr);
+            const uint32_t h = hash_for_subsample(chr, gate_seed);
             const double rfloat = h / 4294967295.0;
             choose_s1 = (rfloat < q);
         }
         const int64_t S = (s0 != s1 && choose_s1) ? s1 : s0;
 
-        const uint32_t h2 = hash_for_subsample(chr + "|res");
+        const uint32_t h2 = hash_for_subsample(chr + "|res", gate_seed);
         const int64_t residue = h2 % S;
 
         int64_t offset = (residue - (start % S)) % S;
@@ -121,37 +133,45 @@ size_t add_points_impl(const std::string& chr,
         for (int64_t pos = start; pos < end; pos++) {
             const size_t total_len = prefix_len + int_len;
 
-            if (do_subsample) {
-                const uint32_t point_hash = xxhash::hash32_short(buf, total_len, 31337);
-                if (point_hash > threshold) {
-                    goto inc_ascii;
+            if (use_single_hash) {
+                // One xxh64 does both jobs — gate (high 32 bits) and HLL
+                // ingestion (full 64). Diverges from orig parity: different
+                // accepted-position set than HashThreshold.
+                const uint64_t h = xxhash::hash64_short(buf, total_len, hll_seed);
+                if (static_cast<uint32_t>(h >> 32) <= threshold) {
+                    sketch.add(h);
+                    sampled++;
                 }
-            }
-            {
+            } else if (do_subsample) {
+                const uint32_t point_hash = xxhash::hash32_short(buf, total_len, gate_seed);
+                if (point_hash <= threshold) {
+                    const uint64_t hash_val = xxhash::hash64_short(buf, total_len, hll_seed);
+                    sketch.add(hash_val);
+                    sampled++;
+                }
+            } else {
                 const uint64_t hash_val = xxhash::hash64_short(buf, total_len, hll_seed);
                 sketch.add(hash_val);
                 sampled++;
             }
-        inc_ascii:
+
             // In-place ASCII increment. The common case is a single byte
             // bump on the last digit; carries propagate left only when the
             // digit was '9'.
-            {
-                char* p = int_start + int_len - 1;
-                while (*p == '9') {
-                    *p = '0';
-                    if (p == int_start) {
-                        // Roll-over (e.g. 999 -> 1000): grow length by 1.
-                        std::memmove(int_start + 1, int_start, int_len);
-                        *int_start = '1';
-                        int_len++;
-                        goto inc_done;
-                    }
-                    p--;
+            char* p = int_start + int_len - 1;
+            while (*p == '9') {
+                *p = '0';
+                if (p == int_start) {
+                    // Roll-over (e.g. 999 -> 1000): grow length by 1.
+                    std::memmove(int_start + 1, int_start, int_len);
+                    *int_start = '1';
+                    int_len++;
+                    goto inc_done;
                 }
-                (*p)++;
-            inc_done:;
+                p--;
             }
+            (*p)++;
+        inc_done:;
         }
     }
 
@@ -165,10 +185,11 @@ size_t add_interval_points_to_sketch(const std::string& chr,
                                      AbstractSketch& sketch,
                                      const std::string& separator,
                                      double subsample,
-                                     bool mixed_stride,
-                                     uint64_t hll_seed) {
+                                     SubBMethod method,
+                                     uint64_t hll_seed,
+                                     uint32_t gate_seed) {
     return add_points_impl(chr, start, end, sketch, separator,
-                           subsample, mixed_stride, hll_seed);
+                           subsample, method, hll_seed, gate_seed);
 }
 
 size_t add_interval_points_to_sketch(const std::string& chr,
@@ -176,8 +197,9 @@ size_t add_interval_points_to_sketch(const std::string& chr,
                                      HLLSketch& sketch,
                                      const std::string& separator,
                                      double subsample,
-                                     bool mixed_stride,
-                                     uint64_t hll_seed) {
+                                     SubBMethod method,
+                                     uint64_t hll_seed,
+                                     uint32_t gate_seed) {
     return add_points_impl(chr, start, end, sketch, separator,
-                           subsample, mixed_stride, hll_seed);
+                           subsample, method, hll_seed, gate_seed);
 }

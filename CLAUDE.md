@@ -48,9 +48,22 @@ These are deliberate; parity tests that touch them are skipped or projected.
 2. **Containment column is well-defined.** Orig's was a placeholder. Ours:
    `(intersection / cardinality(self)) ** expA`, with `1.0` sentinel when
    `expA == 0`. Parity tests project this column out before comparing.
-3. **`--mixed-stride`** is a real flag. Orig's pipx-installed 0.4.0 doesn't
-   accept it (it lived only in WIP changes). Historical mixed-stride results
-   from the orig need to be re-run; see `memory/project_mixed_stride_rerun.md`.
+3. **`--mixed-stride`** is a real flag (now also `--subB-method=mixed-stride`).
+   Orig's pipx-installed 0.4.0 doesn't accept it (it lived only in WIP
+   changes). Historical mixed-stride results from the orig need to be
+   re-run; see `memory/project_mixed_stride_rerun.md`.
+4. **`--subB-method=single-hash`** is an opt-in parity divergence. Uses
+   one `xxh64(point, seed=hll_seed)` to drive both the gate (high 32 bits
+   compared to `subB * UINT32_MAX`) and HLL ingestion (full 64 bits). Orig
+   uses `xxh32(point, seed=31337)` for the gate, distinct from the `xxh64`
+   ingestion hash. Statistically equivalent estimator but a different
+   *accepted-position set* per file, so CSV output is not byte-equal to
+   orig. Prints a one-line stderr note when used. Default remains
+   `hash-threshold` (orig parity).
+   Note: single-hash is **not** automatically faster than hash-threshold —
+   it trades one xxh32 (cheap) for one xxh64 (more work) per position.
+   At low subB it's slightly slower than hash-threshold; only at subB
+   near 1.0 is it marginally faster. Kept as a research/comparison flag.
 
 ## Not implemented (would need work to add)
 

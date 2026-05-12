@@ -31,8 +31,9 @@ struct Args {
     double subA = 1.0;
     double subB = 1.0;
     double expA = 0.0;
-    bool mixed_stride = false;
+    SubBMethod subB_method = SubBMethod::HashThreshold;
     uint64_t seed = 42;
+    uint32_t gate_seed = 31337;
     int peak_height_column = -1;
     int threads = 0;
     bool verbose = false;
@@ -45,8 +46,13 @@ void print_help(const char* prog) {
         "  --mode <A|B|C>          Comparison mode (default: A)\n"
         "  --subA <float>          Subsampling rate for intervals (Mode C, 0..1, default: 1.0)\n"
         "  --subB <float>          Subsampling rate for points (0..1, default: 1.0)\n"
-        "  --mixed-stride          Mixed-stride deterministic subsampling (default: hash-threshold)\n"
+        "  --subB-method <name>    Point-sampling method (default: hash-threshold)\n"
+        "                          Values: hash-threshold | mixed-stride | single-hash\n"
+        "  --mixed-stride          [deprecated] alias for --subB-method=mixed-stride\n"
         "  --seed <int>            HLL hashing seed for xxh64 (default: 42)\n"
+        "  --gate-seed <int>       Seed for the subB gate hash xxh32 and the\n"
+        "                          mixed-stride chr->stride hash (default: 31337,\n"
+        "                          matches orig hammock). Ignored for single-hash.\n"
         "  --expA <float>          Interval expansion exponent (default: 0)\n"
         "  --precision, -p <int>   HyperLogLog precision 4..24 (default: 18)\n"
         "  --separator, -s <str>   Separator for hashed strings (default: \"-\")\n"
@@ -67,7 +73,17 @@ bool parse_args(int argc, char** argv, Args& out) {
         } else if (a == "--verbose" || a == "-v") {
             out.verbose = true;
         } else if (a == "--mixed-stride") {
-            out.mixed_stride = true;
+            out.subB_method = SubBMethod::MixedStride;
+        } else if (a == "--subB-method" && i + 1 < argc) {
+            std::string m = argv[++i];
+            if (m == "hash-threshold")      out.subB_method = SubBMethod::HashThreshold;
+            else if (m == "mixed-stride")   out.subB_method = SubBMethod::MixedStride;
+            else if (m == "single-hash") out.subB_method = SubBMethod::SingleHash;
+            else {
+                std::cerr << "Error: --subB-method must be one of hash-threshold, "
+                             "mixed-stride, single-hash (got '" << m << "')\n";
+                return false;
+            }
         } else if (a == "--mode" && i + 1 < argc) {
             out.mode = argv[++i];
         } else if (a == "--subA" && i + 1 < argc) {
@@ -76,6 +92,8 @@ bool parse_args(int argc, char** argv, Args& out) {
             out.subB = std::stod(argv[++i]);
         } else if (a == "--seed" && i + 1 < argc) {
             out.seed = std::stoull(argv[++i]);
+        } else if (a == "--gate-seed" && i + 1 < argc) {
+            out.gate_seed = static_cast<uint32_t>(std::stoul(argv[++i]));
         } else if (a == "--expA" && i + 1 < argc) {
             out.expA = std::stod(argv[++i]);
         } else if ((a == "--precision" || a == "-p") && i + 1 < argc) {
@@ -134,11 +152,11 @@ void process_one(const std::string& path, AbstractSketch& sketch, const Args& a)
     if (a.mode == "A") {
         process_bed_file_mode_a(path, sketch, a.seed, a.separator, a.peak_height_column, a.verbose);
     } else if (a.mode == "B") {
-        process_bed_file_mode_b(path, sketch, a.seed, a.separator, a.subB, a.mixed_stride,
-                                a.peak_height_column, a.verbose);
+        process_bed_file_mode_b(path, sketch, a.seed, a.separator, a.subB, a.subB_method,
+                                a.gate_seed, a.peak_height_column, a.verbose);
     } else {  // "C"
         process_bed_file_mode_c(path, sketch, a.seed, a.separator, a.subA, a.subB, a.expA,
-                                a.mixed_stride, a.peak_height_column, a.verbose);
+                                a.subB_method, a.gate_seed, a.peak_height_column, a.verbose);
     }
 }
 

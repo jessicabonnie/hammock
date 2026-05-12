@@ -2,6 +2,7 @@
 #define HAMMOCK_PROCESSING_MODES_HPP
 
 #include "hammock/abstract_sketch.hpp"
+#include "hammock/stride.hpp"
 #include <cstdint>
 #include <string>
 
@@ -16,8 +17,9 @@ std::string create_interval_string(const std::string& chr, int64_t start, int64_
 std::string create_point_string(const std::string& chr, int64_t pos,
                                 const std::string& separator = "\t");
 
-// Subsampling-decision hash: xxh32 with seed 31337 (Python parity).
-uint32_t hash_for_subsample(const std::string& s);
+// Subsampling-decision hash: xxh32 with the gate seed (default 31337 to
+// preserve orig parity; user-settable via --gate-seed).
+uint32_t hash_for_subsample(const std::string& s, uint32_t gate_seed = 31337);
 
 size_t process_bed_file_mode_a(const std::string& filepath, AbstractSketch& sketch,
                                uint64_t hll_seed = 42,
@@ -28,7 +30,8 @@ size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sket
                                uint64_t hll_seed = 42,
                                const std::string& separator = "\t",
                                double subB = 1.0,
-                               bool mixed_stride = false,
+                               SubBMethod method = SubBMethod::HashThreshold,
+                               uint32_t gate_seed = 31337,
                                int peak_height_column = -1,
                                bool verbose = false);
 
@@ -38,7 +41,8 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
                                double subA = 1.0,
                                double subB = 1.0,
                                double expA = 0.0,
-                               bool mixed_stride = false,
+                               SubBMethod method = SubBMethod::HashThreshold,
+                               uint32_t gate_seed = 31337,
                                int peak_height_column = -1,
                                bool verbose = false);
 

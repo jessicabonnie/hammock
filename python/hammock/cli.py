@@ -55,15 +55,34 @@ def parse_args(argv=None):
     p.add_argument("--kmer_size", '-k', type=int, default=8, help="Size of k-mers for sequence sketching")
     p.add_argument("--window_size", '-w', '--window', type=int, default=40,
                    help="Size of sliding window for sequence sketching")
-    p.add_argument("--seed", type=int, default=42, help="Random seed for hashing")
+    p.add_argument("--seed", type=int, default=42,
+                   help="HLL ingestion seed (xxh64). Default 42.")
+    p.add_argument("--gate-seed", type=int, default=31337,
+                   help="Seed for the subB gate hash (xxh32) and the mixed-stride "
+                        "chr->stride hash. Default 31337 matches orig hammock. "
+                        "Ignored when --subB-method=single-hash (gate IS the HLL hash).")
     p.add_argument("--verbose", action="store_true",
                    help="Report per-file sketching progress on stderr.")
     p.add_argument("--memory-limit-gb", type=float, default=0.0,
                    help="Soft memory limit in GiB. 0 disables (default).")
+    p.add_argument('--subB-method',
+                   choices=['hash-threshold', 'mixed-stride', 'single-hash'],
+                   default='hash-threshold',
+                   help='subB point-sampling method. '
+                        'hash-threshold (default): orig-parity, xxh32 gate seed=31337. '
+                        'mixed-stride: deterministic chr-keyed stride; not parity. '
+                        'single-hash: one xxh64 for gate+ingestion; parity divergence.')
     p.add_argument('--mixed-stride', action='store_true',
-                   help='Use mixed-stride deterministic subsampling for points (interval-independent)')
+                   help='[deprecated] alias for --subB-method=mixed-stride')
 
     args = p.parse_args(argv)
+    # --mixed-stride flag is a backwards-compat alias; if set, it takes
+    # precedence over --subB-method only if the user didn't explicitly pass
+    # the latter (i.e. the latter is still at its default).
+    if args.mixed_stride and args.subB_method == 'hash-threshold':
+        args.subB_method = 'mixed-stride'
+    elif args.mixed_stride and args.subB_method != 'mixed-stride':
+        p.error("--mixed-stride conflicts with --subB-method=" + args.subB_method)
     # Hardcoded constants the runner still reads. Hash is always xxh64; the
     # CSV `num_hashes` column is "NA" for HLL/minimizer (only meaningful for
     # MinHash, which isn't shipped).

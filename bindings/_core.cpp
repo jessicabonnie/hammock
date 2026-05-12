@@ -18,6 +18,15 @@ namespace py = pybind11;
 
 namespace {
 
+SubBMethod parse_subB_method(const std::string& s) {
+    if (s == "hash-threshold") return SubBMethod::HashThreshold;
+    if (s == "mixed-stride")   return SubBMethod::MixedStride;
+    if (s == "single-hash") return SubBMethod::SingleHash;
+    throw std::invalid_argument(
+        "subB_method must be one of 'hash-threshold', 'mixed-stride', "
+        "'single-hash' (got '" + s + "')");
+}
+
 // Build an HLLSketch from one BED file in the chosen mode.
 HLLSketch sketch_bed_file_hll(const std::string& path,
                               const std::string& mode,
@@ -26,19 +35,21 @@ HLLSketch sketch_bed_file_hll(const std::string& path,
                               double sub_a,
                               double sub_b,
                               double exp_a,
-                              bool mixed_stride,
+                              const std::string& subB_method,
                               uint64_t seed,
+                              uint32_t gate_seed,
                               int peak_height_column,
                               bool verbose) {
+    const SubBMethod method = parse_subB_method(subB_method);
     HLLSketch sketch(precision);
     if (mode == "A") {
         process_bed_file_mode_a(path, sketch, seed, separator, peak_height_column, verbose);
     } else if (mode == "B") {
-        process_bed_file_mode_b(path, sketch, seed, separator, sub_b, mixed_stride,
-                                peak_height_column, verbose);
+        process_bed_file_mode_b(path, sketch, seed, separator, sub_b, method,
+                                gate_seed, peak_height_column, verbose);
     } else if (mode == "C") {
         process_bed_file_mode_c(path, sketch, seed, separator, sub_a, sub_b, exp_a,
-                                mixed_stride, peak_height_column, verbose);
+                                method, gate_seed, peak_height_column, verbose);
     } else {
         throw std::invalid_argument("Mode must be one of A, B, C (got '" + mode + "')");
     }
@@ -54,19 +65,21 @@ BagMinHashSketch sketch_bed_file_bmh(const std::string& path,
                                      double sub_a,
                                      double sub_b,
                                      double exp_a,
-                                     bool mixed_stride,
+                                     const std::string& subB_method,
                                      uint64_t seed,
+                                     uint32_t gate_seed,
                                      int peak_height_column,
                                      bool verbose) {
+    const SubBMethod method = parse_subB_method(subB_method);
     BagMinHashSketch sketch(num_hashes, bmh_seed);
     if (mode == "A") {
         process_bed_file_mode_a(path, sketch, seed, separator, peak_height_column, verbose);
     } else if (mode == "B") {
-        process_bed_file_mode_b(path, sketch, seed, separator, sub_b, mixed_stride,
-                                peak_height_column, verbose);
+        process_bed_file_mode_b(path, sketch, seed, separator, sub_b, method,
+                                gate_seed, peak_height_column, verbose);
     } else if (mode == "C") {
         process_bed_file_mode_c(path, sketch, seed, separator, sub_a, sub_b, exp_a,
-                                mixed_stride, peak_height_column, verbose);
+                                method, gate_seed, peak_height_column, verbose);
     } else {
         throw std::invalid_argument("Mode must be one of A, B, C (got '" + mode + "')");
     }
@@ -191,8 +204,9 @@ PYBIND11_MODULE(_core, m) {
           py::arg("sub_a") = 1.0,
           py::arg("sub_b") = 1.0,
           py::arg("exp_a") = 0.0,
-          py::arg("mixed_stride") = false,
+          py::arg("subB_method") = std::string("hash-threshold"),
           py::arg("seed") = 42,
+          py::arg("gate_seed") = 31337,
           py::arg("peak_height_column") = -1,
           py::arg("verbose") = false,
           py::call_guard<py::gil_scoped_release>(),
@@ -207,8 +221,9 @@ PYBIND11_MODULE(_core, m) {
           py::arg("sub_a") = 1.0,
           py::arg("sub_b") = 1.0,
           py::arg("exp_a") = 0.0,
-          py::arg("mixed_stride") = false,
+          py::arg("subB_method") = std::string("hash-threshold"),
           py::arg("seed") = 42,
+          py::arg("gate_seed") = 31337,
           py::arg("peak_height_column") = -1,
           py::arg("verbose") = false,
           py::call_guard<py::gil_scoped_release>(),

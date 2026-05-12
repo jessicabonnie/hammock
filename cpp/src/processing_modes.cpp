@@ -27,9 +27,9 @@ std::string create_point_string(const std::string& chr, int64_t pos,
     return chr + separator + std::to_string(pos);
 }
 
-uint32_t hash_for_subsample(const std::string& s) {
-    // Python: `xxhash.xxh32(s, seed=31337).intdigest()`. Hardcoded seed.
-    return xxhash::hash32(s, 31337);
+uint32_t hash_for_subsample(const std::string& s, uint32_t gate_seed) {
+    // Python parity uses xxh32 seed=31337; users can override via --gate-seed.
+    return xxhash::hash32(s, gate_seed);
 }
 
 double calculate_jaccard(const AbstractSketch& sketch1, const AbstractSketch& sketch2) {
@@ -114,11 +114,23 @@ std::vector<Interval> read_intervals(const std::string& filepath, int peak_heigh
 }
 }  // namespace
 
+namespace {
+inline const char* method_label(SubBMethod m) {
+    switch (m) {
+        case SubBMethod::HashThreshold: return "hash-threshold";
+        case SubBMethod::MixedStride:   return "mixed-stride";
+        case SubBMethod::SingleHash: return "single-hash";
+    }
+    return "?";
+}
+}  // namespace
+
 size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sketch,
                                uint64_t hll_seed,
                                const std::string& separator,
                                double subB,
-                               bool mixed_stride,
+                               SubBMethod method,
+                               uint32_t gate_seed,
                                int peak_height_column,
                                bool verbose) {
     const std::vector<Interval> intervals = read_intervals(filepath, peak_height_column);
@@ -147,7 +159,7 @@ size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sket
                 total_points += (iv.end - iv.start);
                 sampled_points += add_interval_points_to_sketch(iv.chr, iv.start, iv.end,
                                                                local, separator, subB,
-                                                               mixed_stride, hll_seed);
+                                                               method, hll_seed, gate_seed);
             }
 #pragma omp critical
             { main_hll->merge_max(local); }
@@ -158,16 +170,15 @@ size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sket
             total_points += (iv.end - iv.start);
             sampled_points += add_interval_points_to_sketch(iv.chr, iv.start, iv.end,
                                                            sketch, separator, subB,
-                                                           mixed_stride, hll_seed);
+                                                           method, hll_seed, gate_seed);
         }
     }
 
     if (verbose && !intervals.empty()) {
         if (subB < 1.0) {
-            const std::string method = mixed_stride ? "mixed-stride" : "hash-threshold";
             std::cerr << "Processed " << intervals.size() << " intervals, "
                       << sampled_points << "/" << total_points
-                      << " points (subB=" << subB << ", method=" << method << ").       \n";
+                      << " points (subB=" << subB << ", method=" << method_label(method) << ").       \n";
         } else {
             std::cerr << "Processed " << intervals.size() << " intervals, "
                       << total_points << " points total.       \n";
@@ -183,7 +194,8 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
                                double subA,
                                double subB,
                                double expA,
-                               bool mixed_stride,
+                               SubBMethod method,
+                               uint32_t gate_seed,
                                int peak_height_column,
                                bool verbose) {
     const size_t mult = (expA > 0)
@@ -211,11 +223,11 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
                            size_t& te, size_t& kept,
                            size_t& tp, size_t& sp) {
         const std::string base = create_interval_string(iv.chr, iv.start, iv.end, separator);
-        if (do_subA && hash_for_subsample(base) > subA_threshold) {
+        if (do_subA && hash_for_subsample(base, gate_seed) > subA_threshold) {
             tp += (iv.end - iv.start);
             sp += add_interval_points_to_sketch(iv.chr, iv.start, iv.end,
                                                 s, separator, subB,
-                                                mixed_stride, hll_seed);
+                                                method, hll_seed, gate_seed);
             return;
         }
         kept++;
@@ -233,7 +245,7 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
         tp += (iv.end - iv.start);
         sp += add_interval_points_to_sketch(iv.chr, iv.start, iv.end,
                                             s, separator, subB,
-                                            mixed_stride, hll_seed);
+                                            method, hll_seed, gate_seed);
     };
 
     if (main_hll) {
@@ -272,9 +284,8 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
             std::cerr << " (" << total_interval_elements << " expanded elements, expA=" << expA << ")";
         }
         if (subB < 1.0) {
-            const std::string method = mixed_stride ? "mixed-stride" : "hash-threshold";
             std::cerr << ", " << sampled_points << "/" << total_points
-                      << " points (subB=" << subB << ", method=" << method << ")";
+                      << " points (subB=" << subB << ", method=" << method_label(method) << ")";
         } else {
             std::cerr << ", " << total_points << " points";
         }

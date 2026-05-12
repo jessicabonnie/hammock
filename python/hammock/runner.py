@@ -52,8 +52,9 @@ def _sketch_one_file(path: str, args):
         sub_a=args.subA,
         sub_b=args.subB,
         exp_a=args.expA,
-        mixed_stride=args.mixed_stride,
+        subB_method=args.subB_method,
         seed=args.seed,
+        gate_seed=args.gate_seed,
         verbose=args.verbose,
     )
 
@@ -177,6 +178,11 @@ def run(args) -> int:
         return 2
 
     n_threads = args.threads or 1
+    if args.subB_method == 'single-hash' and args.subB < 1.0:
+        print("[hammock] note: --subB-method=single-hash diverges from orig-parity "
+              "(one xxh64 does both gate and HLL ingestion; accepted-position set "
+              "differs from hash-threshold). CSV results are not byte-equal to orig.",
+              file=sys.stderr)
     if args.verbose:
         print(f"Sketching {len(queries)} query files "
               f"(mode {args.mode}, p={args.precision}, threads={n_threads})...",
