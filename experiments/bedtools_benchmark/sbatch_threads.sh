@@ -30,5 +30,5 @@ export HAMMOCK_CPP_BIN=/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/pyth
     --precision 14 \
     --num-files 64 \
     --num-intervals 10000 \
-    --subB-list 1.0,0.25 \
+    --subB-list 1.0,0.25,0.1 \
     --runs 3
