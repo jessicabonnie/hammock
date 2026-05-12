@@ -31,7 +31,7 @@ struct Args {
     double subA = 1.0;
     double subB = 1.0;
     double expA = 0.0;
-    SubBMethod subB_method = SubBMethod::HashThreshold;
+    SubBMethod subB_method = SubBMethod::MixedStride;
     uint64_t seed = 42;
     uint32_t gate_seed = 31337;
     int peak_height_column = -1;
@@ -46,9 +46,8 @@ void print_help(const char* prog) {
         "  --mode <A|B|C>          Comparison mode (default: A)\n"
         "  --subA <float>          Subsampling rate for intervals (Mode C, 0..1, default: 1.0)\n"
         "  --subB <float>          Subsampling rate for points (0..1, default: 1.0)\n"
-        "  --subB-method <name>    Point-sampling method (default: hash-threshold)\n"
+        "  --subB-method <name>    Point-sampling method (default: mixed-stride)\n"
         "                          Values: hash-threshold | mixed-stride | single-hash\n"
-        "  --mixed-stride          [deprecated] alias for --subB-method=mixed-stride\n"
         "  --seed <int>            HLL hashing seed for xxh64 (default: 42)\n"
         "  --gate-seed <int>       Seed for the subB gate hash xxh32 and the\n"
         "                          mixed-stride chr->stride hash (default: 31337,\n"
@@ -72,8 +71,6 @@ bool parse_args(int argc, char** argv, Args& out) {
             std::exit(0);
         } else if (a == "--verbose" || a == "-v") {
             out.verbose = true;
-        } else if (a == "--mixed-stride") {
-            out.subB_method = SubBMethod::MixedStride;
         } else if (a == "--subB-method" && i + 1 < argc) {
             std::string m = argv[++i];
             if (m == "hash-threshold")      out.subB_method = SubBMethod::HashThreshold;

@@ -51,7 +51,8 @@ TEST_CASE("Mode B: short interval, every position sampled, low cardinality") {
         "chr1\t0\t100\n"
     );
     HLLSketch s(14);
-    process_bed_file_mode_b(p, s, "-", 1.0, /*mixed_stride=*/false, /*seed=*/42);
+    process_bed_file_mode_b(p, s, /*hll_seed=*/42, "-", /*subB=*/1.0,
+                            SubBMethod::HashThreshold);
     // 100 unique points; HLL approximates cardinality.
     CHECK(s.cardinality() == doctest::Approx(100.0).epsilon(0.1));
     std::remove(p.c_str());
@@ -64,8 +65,11 @@ TEST_CASE("Mode C with expA=0 ≈ Mode A ∪ Mode B") {
     );
     HLLSketch a(14), b(14), c(14);
     process_bed_file_mode_a(p, a);
-    process_bed_file_mode_b(p, b, "-", 1.0, false, 42);
-    process_bed_file_mode_c(p, c, "-", 1.0, /*expA=*/0.0, false, 42);
+    process_bed_file_mode_b(p, b, /*hll_seed=*/42, "-", /*subB=*/1.0,
+                            SubBMethod::HashThreshold);
+    process_bed_file_mode_c(p, c, /*hll_seed=*/42, "-",
+                            /*subA=*/1.0, /*subB=*/1.0, /*expA=*/0.0,
+                            SubBMethod::HashThreshold);
     // Mode C with expA=0 adds intervals (×1) plus all points: should approx
     // equal merging A and B sketches.
     auto union_ab = a.union_with(b);

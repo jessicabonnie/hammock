@@ -67,22 +67,14 @@ def parse_args(argv=None):
                    help="Soft memory limit in GiB. 0 disables (default).")
     p.add_argument('--subB-method',
                    choices=['hash-threshold', 'mixed-stride', 'single-hash'],
-                   default='hash-threshold',
-                   help='subB point-sampling method. '
-                        'hash-threshold (default): orig-parity, xxh32 gate seed=31337. '
-                        'mixed-stride: deterministic chr-keyed stride; not parity. '
-                        'single-hash: one xxh64 for gate+ingestion; parity divergence.')
-    p.add_argument('--mixed-stride', action='store_true',
-                   help='[deprecated] alias for --subB-method=mixed-stride')
+                   default='mixed-stride',
+                   help='subB point-sampling method (default: mixed-stride). '
+                        'mixed-stride: deterministic chr-keyed stride, fastest at low subB. '
+                        'hash-threshold: random gate, xxh32 seed=--gate-seed; '
+                        'matches orig hammock parity. '
+                        'single-hash: one xxh64 for gate+ingestion; opt-in parity divergence.')
 
     args = p.parse_args(argv)
-    # --mixed-stride flag is a backwards-compat alias; if set, it takes
-    # precedence over --subB-method only if the user didn't explicitly pass
-    # the latter (i.e. the latter is still at its default).
-    if args.mixed_stride and args.subB_method == 'hash-threshold':
-        args.subB_method = 'mixed-stride'
-    elif args.mixed_stride and args.subB_method != 'mixed-stride':
-        p.error("--mixed-stride conflicts with --subB-method=" + args.subB_method)
     # Hardcoded constants the runner still reads. Hash is always xxh64; the
     # CSV `num_hashes` column is "NA" for HLL/minimizer (only meaningful for
     # MinHash, which isn't shipped).

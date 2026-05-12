@@ -48,22 +48,31 @@ These are deliberate; parity tests that touch them are skipped or projected.
 2. **Containment column is well-defined.** Orig's was a placeholder. Ours:
    `(intersection / cardinality(self)) ** expA`, with `1.0` sentinel when
    `expA == 0`. Parity tests project this column out before comparing.
-3. **`--mixed-stride`** is a real flag (now also `--subB-method=mixed-stride`).
-   Orig's pipx-installed 0.4.0 doesn't accept it (it lived only in WIP
-   changes). Historical mixed-stride results from the orig need to be
-   re-run; see `memory/project_mixed_stride_rerun.md`.
+3. **Default `--subB-method=mixed-stride`** — deterministic chr-keyed
+   stride sampling. Orig's pipx-installed 0.4.0 didn't accept the flag
+   at all (it lived only in WIP changes). We made mixed-stride the
+   default in v.X because it is substantially faster than hash-threshold
+   at every subB level and statistically well-behaved on genomic data;
+   the structured-sampling concern is theoretical for BED inputs and the
+   chr-keyed offset breaks cross-chromosome alignment. To get orig parity
+   on subB runs, pass `--subB-method=hash-threshold` explicitly.
+   Historical mixed-stride results from orig need to be re-run; see
+   `memory/project_mixed_stride_rerun.md`.
 4. **`--subB-method=single-hash`** is an opt-in parity divergence. Uses
    one `xxh64(point, seed=hll_seed)` to drive both the gate (high 32 bits
    compared to `subB * UINT32_MAX`) and HLL ingestion (full 64 bits). Orig
    uses `xxh32(point, seed=31337)` for the gate, distinct from the `xxh64`
    ingestion hash. Statistically equivalent estimator but a different
    *accepted-position set* per file, so CSV output is not byte-equal to
-   orig. Prints a one-line stderr note when used. Default remains
-   `hash-threshold` (orig parity).
+   orig hash-threshold. Prints a one-line stderr note when used.
    Note: single-hash is **not** automatically faster than hash-threshold —
    it trades one xxh32 (cheap) for one xxh64 (more work) per position.
    At low subB it's slightly slower than hash-threshold; only at subB
    near 1.0 is it marginally faster. Kept as a research/comparison flag.
+5. **`--gate-seed N`** (default 31337) seeds the xxh32 gate hash and
+   mixed-stride chr->stride hash. Default 31337 preserves orig contract
+   in hash-threshold mode. Lets users sweep gate randomness
+   independently of `--seed` (HLL ingestion).
 
 ## Not implemented (would need work to add)
 

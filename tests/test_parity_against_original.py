@@ -50,28 +50,42 @@ def _projected_rows(csv_text: str) -> list[tuple]:
     return [tuple(line.split(",")[i] for i in keep) for line in lines]
 
 
-# NOTE on parity scope. Two ways our hammock differs from hammock-orig that
-# we deliberately do NOT parity-test against:
+# NOTE on parity scope. Three ways our hammock differs from hammock-orig:
 #   - Mode B + --subB: orig's intervals.py:542 silently ignores subsample[1]
-#     in Mode B (`point_subsample = subsample[1] if mode == "C" else 1.0`).
-#     Our Mode B honors --subB; we accept the divergence rather than copy
-#     the bug.
-#   - --mixed-stride: orig's installed generate_points does not accept this
-#     parameter. We keep mixed-stride as an extension; tests don't compare.
+#     in Mode B. Our Mode B honors --subB; we accept the divergence.
+#   - --subB-method=mixed-stride: hammock_claude extension. Default since
+#     we dropped orig-parity as the default. To compare against orig we
+#     must explicitly pass --subB-method=hash-threshold.
+#   - --subB-method=single-hash: opt-in parity divergence (one xxh64 for
+#     gate+ingestion). Not tested against orig.
 @pytest.mark.parametrize("mode,extra", [
     ("A", []),
     ("B", []),
     ("C", []),
-    ("C", ["--subB", "0.5"]),
+    # subB-using Mode C tests must override the default mixed-stride back to
+    # hash-threshold to match orig's contract.
+    ("C", ["--subB", "0.5", "--subB-method", "hash-threshold"]),
     ("C", ["--subA", "0.5"]),
     ("C", ["--expA", "1.0"]),
-    ("C", ["--subB", "0.3", "--expA", "0.5"]),
+    ("C", ["--subB", "0.3", "--expA", "0.5", "--subB-method", "hash-threshold"]),
 ])
 def test_jaccard_byte_equal(tmp_path: Path, mode: str, extra: list[str]) -> None:
     files = _files_list(tmp_path)
-    common = [str(files), str(files), "--mode", mode, "-p", "14"] + extra
-    _run([ORIG, *common, "-o", str(tmp_path / "orig")], tmp_path)
-    _run([OURS, *common, "-o", str(tmp_path / "ours")], tmp_path)
+    # Drop our-only flags (and their args) before invoking orig.
+    our_only_flags = {"--subB-method"}
+    orig_extra: list[str] = []
+    skip_next = False
+    for a in extra:
+        if skip_next:
+            skip_next = False
+            continue
+        if a in our_only_flags:
+            skip_next = True
+            continue
+        orig_extra.append(a)
+    common = [str(files), str(files), "--mode", mode, "-p", "14"]
+    _run([ORIG, *common, *orig_extra, "-o", str(tmp_path / "orig")], tmp_path)
+    _run([OURS, *common, *extra, "-o", str(tmp_path / "ours")], tmp_path)
 
     orig_csvs = list(tmp_path.glob("orig*.csv"))
     ours_csvs = list(tmp_path.glob("ours*.csv"))
@@ -125,10 +139,11 @@ def test_threads_match_sequential(tmp_path: Path, mode: str) -> None:
 
 @pytest.mark.skipif(OURS is None, reason="hammock not on PATH")
 def test_mode_b_mixed_stride_is_deterministic(tmp_path: Path) -> None:
-    """Re-running --mode B --mixed-stride must produce byte-equal output."""
+    """Re-running --mode B with mixed-stride (the default) must produce
+    byte-equal output across invocations."""
     files = _files_list(tmp_path)
     common = [str(files), str(files), "--mode", "B", "-p", "14",
-              "--subB", "0.25", "--mixed-stride"]
+              "--subB", "0.25"]
     _run([OURS, *common, "-o", str(tmp_path / "run1")], tmp_path)
     _run([OURS, *common, "-o", str(tmp_path / "run2")], tmp_path)
     a = next(tmp_path.glob("run1*.csv")).read_text()

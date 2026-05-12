@@ -99,11 +99,13 @@ def run_one(
         out_prefix = fh.name
 
     try:
+        # mixed-stride is the default for --subB-method since v.X; this
+        # sweep was written when it was an opt-in flag.
         cmd = [
             binary, listfile, listfile,
             "--mode", "B",
             "--subB", str(subB),
-            "--mixed-stride",
+            "--subB-method", "mixed-stride",
             "-p", str(precision),
             "-t", str(threads),
             "-o", out_prefix,
