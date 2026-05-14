@@ -1,0 +1,36 @@
+# =============================================================================
+# config/config.yaml — maurano_dhs_validation sweep parameters
+# =============================================================================
+#
+# Loaded by workflow/Snakefile. Anything you'd want to tweak between sweep
+# runs lives here; everything else is in the Snakefile.
+
+# Refactored hammock installed in claude-ref-comparison conda env
+# (see memory/reference_new_hammock_env.md).
+hammock: "/home/jbonnie1/.conda/envs/claude-ref-comparison/bin/hammock"
+
+# Threads per hammock invocation (matches the sbatch profile's cpus_per_task
+# for Mode A/B/C/D rules).
+threads_per_run: 8
+
+# ── Mode A / Mode B precision sweep ─────────────────────────────────────────
+ab_precisions: [18, 21, 23]
+
+# ── Mode C: fixed precision, sweep expA and subB independently ──────────────
+c_precision: 21
+c_expA_values:  [0.1, 0.2, 0.5, 0.8, 1.0, 1.2, 1.5, 1.8, 2.0]
+c_subB_values:  [0.0001, 0.001, 0.005, 0.01, 0.05, 0.10, 0.25, 0.50, 0.80]
+
+# ── Mode D (k, w, precision) grid ───────────────────────────────────────────
+# Base grid (run 1) — full k sweep, original precision floor at 20.
+d_ks:          [8, 10, 15, 20, 25]
+d_ws:          [8, 10, 20, 30, 50, 100, 200]
+d_precisions:  [20, 22, 23, 24]
+
+# Extended grid (added after run 1) — exploring the with_ends column at
+# (a) much lower precision, (b) larger w, and (c) both, restricted to the
+# best-performing k values to keep the cluster cost manageable. Snakemake
+# unions this with the base grid above and skips configs already on disk.
+extended_d_ks:         [8, 10]
+extended_d_ws:         [8, 10, 20, 30, 50, 100, 200, 300, 500]
+extended_d_precisions: [10, 12, 14, 16, 18, 20, 22, 23, 24]

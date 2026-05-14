@@ -1,0 +1,13 @@
+# Snakemake internal state.
+.snakemake/
+
+# Default ggplot output (we use CairoPNG explicitly).
+Rplots.pdf
+
+# Stale nested dir from a misconfigured sbatch run; real logs live in
+# logs/slurm/ (which is a /vast symlink anyway).
+experiments/
+
+# Per-config raw outputs from analyze.R that we don't want tracked.
+results/raw_abc/
+results/raw_d/
