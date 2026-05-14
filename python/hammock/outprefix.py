@@ -26,7 +26,12 @@ def get_new_prefix(outprefix: str,
         outprefix = f"{outprefix}_A{subA:.2f}"
 
     if subB is not None and subB != 1.0:
-        outprefix = f"{outprefix}_B{subB:.2f}"
+        # 4 decimals when subB < 0.01 so we don't collide on rounding (e.g.
+        # 0.0001 vs 0.001 both -> "0.00" under :.2f). Keep :.2f at the
+        # historical resolution for subB >= 0.01 so existing filenames stay
+        # stable.
+        fmt = ".4f" if subB < 0.01 else ".2f"
+        outprefix = f"{outprefix}_B{format(subB, fmt)}"
 
     if mode == "D" and kmer_size is not None and window_size is not None:
         outprefix = f"{outprefix}_k{kmer_size}_w{window_size}"
