@@ -1,5 +1,6 @@
 """Mode D parity: our `hammock` CLI must match the orig conda-env `hammock`
-byte-for-byte on FASTA fixtures.
+on FASTA fixtures, modulo the containment/cosketch columns hammock_claude
+adds (orig has none).
 
 The orig is installed in the user's `hammock` conda env (Python 3.12 + bioconda
 `digest`); the pipx-installed `hammock-orig` runs Python 3.8 where bioconda
@@ -37,6 +38,21 @@ def _files_list(tmp_path: Path, *names: str) -> Path:
     return f
 
 
+# Containment + cosketch columns are hammock_claude additions that orig 0.4.0
+# does not emit. Drop them (in both forms — plain and `_with_ends`) before
+# comparing CSVs.
+_BASES = ("containment_AB", "containment_BA",
+          "cosketch_geom", "cosketch_arith", "cosketch_max")
+_PROJECTED_OUT = set(_BASES) | {b + "_with_ends" for b in _BASES}
+
+
+def _projected(csv_text: str) -> list[tuple]:
+    lines = csv_text.strip().split("\n")
+    header = lines[0].split(",")
+    keep = [i for i, name in enumerate(header) if name not in _PROJECTED_OUT]
+    return [tuple(line.split(",")[i] for i in keep) for line in lines]
+
+
 @pytest.mark.parametrize("k,w,p", [
     (8, 40, 14),
     (8, 40, 12),
@@ -52,7 +68,7 @@ def test_mode_d_byte_equal(tmp_path: Path, k: int, w: int, p: int) -> None:
 
     orig_csv = next(tmp_path.glob("orig*.csv")).read_text()
     ours_csv = next(tmp_path.glob("ours*.csv")).read_text()
-    assert orig_csv == ours_csv, (
+    assert _projected(orig_csv) == _projected(ours_csv), (
         f"Mode D mismatch for k={k} w={w} p={p}\n"
         f"--- orig ---\n{orig_csv}\n"
         f"--- ours ---\n{ours_csv}"

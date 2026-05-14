@@ -45,9 +45,25 @@ These are deliberate; parity tests that touch them are skipped or projected.
    ignored `subsample[1]` in Mode B (`point_subsample = subsample[1] if mode == "C" else 1.0`).
    We honor it. Any prior Mode B + `--subB` run on the orig is not
    parity-comparable.
-2. **Containment column is well-defined.** Orig's was a placeholder. Ours:
-   `(intersection / cardinality(self)) ** expA`, with `1.0` sentinel when
-   `expA == 0`. Parity tests project this column out before comparing.
+2. **Containment + co-sketch columns.** Orig's single `containment` column
+   was a placeholder. We replace it with a five-column block, computed
+   from the HLL register-equality intersection:
+   - `containment_AB = |A ∩ B| / |A|`
+   - `containment_BA = |A ∩ B| / |B|`
+   - `cosketch_geom  = sqrt(C_AB · C_BA)`
+   - `cosketch_arith = (C_AB + C_BA) / 2`
+   - `cosketch_max   = max(C_AB, C_BA)`
+
+   No `expA` exponent is applied — the orig's `** expA` semantics on a
+   placeholder column were never load-bearing, and `expA` already changes
+   what `A` *contains* (interval multiplicity) upstream of the intersection.
+
+   Mode D emits the same block twice: once on the minimizer HLL (paired
+   with `jaccard_similarity`) and once on the merged minimizer ∪ start-end
+   HLL (paired with `jaccard_similarity_with_ends`, columns suffixed
+   `_with_ends`).
+
+   Parity tests project these columns out before comparing.
 3. **Default `--subB-method=mixed-stride`** — deterministic chr-keyed
    stride sampling. Orig's pipx-installed 0.4.0 didn't accept the flag
    at all (it lived only in WIP changes). We made mixed-stride the

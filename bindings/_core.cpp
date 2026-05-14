@@ -12,6 +12,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace py = pybind11;
@@ -105,35 +106,46 @@ py::array_t<double> pairwise_jaccard_hll(const std::vector<HLLSketch>& a,
     return out;
 }
 
-// Compute pairwise Jaccard AND directional containment in one pass. Returns
-// (jaccard, containment) where containment[i, j] = |a[i] ∩ b[j]| / |a[i]|.
-// The expA exponent (mode C) is applied Python-side since it's CLI-metadata.
-std::pair<py::array_t<double>, py::array_t<double>>
-pairwise_jaccard_and_containment_hll(const std::vector<HLLSketch>& a,
-                                     const std::vector<HLLSketch>& b) {
+// Compute pairwise Jaccard plus both directional containments in one pass.
+// Returns (jaccard, containment_AB, containment_BA) where
+//   containment_AB[i, j] = |a[i] ∩ b[j]| / |a[i]|
+//   containment_BA[i, j] = |a[i] ∩ b[j]| / |b[j]|
+// Co-sketch summaries (geom / arith / max) are derived Python-side from
+// these two — keeps the binding narrow.
+std::tuple<py::array_t<double>, py::array_t<double>, py::array_t<double>>
+pairwise_metrics_hll(const std::vector<HLLSketch>& a,
+                     const std::vector<HLLSketch>& b) {
     const py::ssize_t n = static_cast<py::ssize_t>(a.size());
     const py::ssize_t m = static_cast<py::ssize_t>(b.size());
     py::array_t<double> jaccard({n, m});
-    py::array_t<double> containment({n, m});
+    py::array_t<double> cont_ab({n, m});
+    py::array_t<double> cont_ba({n, m});
     auto jbuf = jaccard.mutable_unchecked<2>();
-    auto cbuf = containment.mutable_unchecked<2>();
+    auto abbuf = cont_ab.mutable_unchecked<2>();
+    auto babuf = cont_ba.mutable_unchecked<2>();
     {
         py::gil_scoped_release release;
-        std::vector<double> self_card(n);
+        std::vector<double> a_card(n);
+        std::vector<double> b_card(m);
 #pragma omp parallel for schedule(static)
         for (py::ssize_t i = 0; i < n; i++) {
-            self_card[i] = a[i].cardinality();
+            a_card[i] = a[i].cardinality();
+        }
+#pragma omp parallel for schedule(static)
+        for (py::ssize_t j = 0; j < m; j++) {
+            b_card[j] = b[j].cardinality();
         }
 #pragma omp parallel for collapse(2) schedule(static)
         for (py::ssize_t i = 0; i < n; i++) {
             for (py::ssize_t j = 0; j < m; j++) {
                 jbuf(i, j) = a[i].jaccard_similarity(b[j]);
                 const double inter = a[i].intersection_size(b[j]);
-                cbuf(i, j) = (self_card[i] > 0) ? (inter / self_card[i]) : 0.0;
+                abbuf(i, j) = (a_card[i] > 0) ? (inter / a_card[i]) : 0.0;
+                babuf(i, j) = (b_card[j] > 0) ? (inter / b_card[j]) : 0.0;
             }
         }
     }
-    return {std::move(jaccard), std::move(containment)};
+    return {std::move(jaccard), std::move(cont_ab), std::move(cont_ba)};
 }
 
 }  // namespace
@@ -233,9 +245,9 @@ PYBIND11_MODULE(_core, m) {
           py::arg("a"), py::arg("b"),
           "Compute the (len(a), len(b)) pairwise-Jaccard matrix for HLL sketches.");
 
-    m.def("pairwise_jaccard_and_containment_hll", &pairwise_jaccard_and_containment_hll,
+    m.def("pairwise_metrics_hll", &pairwise_metrics_hll,
           py::arg("a"), py::arg("b"),
-          "Compute (Jaccard, directional containment) matrices in one pass.");
+          "Compute (Jaccard, containment_AB, containment_BA) matrices in one pass.");
 
     m.def("read_filepath_list", &read_filepath_list, py::arg("list_file"));
 }

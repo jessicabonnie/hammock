@@ -45,16 +45,23 @@ def test_mode_d_runs_and_self_jaccard_is_one(tmp_path: Path) -> None:
           "-p", "14", "-k", "8", "-w", "40",
           "-o", str(tmp_path / "out")], tmp_path)
     csv = next(tmp_path.glob("out*.csv")).read_text().splitlines()
+    cont_block = ["containment_AB", "containment_BA",
+                  "cosketch_geom", "cosketch_arith", "cosketch_max"]
     assert csv[0].split(",") == [
         "file1", "file2", "sketch_type", "mode",
         "precision", "num_hashes", "kmer_size", "window_size",
-        "jaccard_similarity", "jaccard_similarity_with_ends",
+        "jaccard_similarity", *cont_block,
+        "jaccard_similarity_with_ends", *[c + "_with_ends" for c in cont_block],
     ]
-    # self-pair must be Jaccard = 1.0 on both columns
+    # self-pair must be Jaccard = 1.0 (and containment = 1.0) on both halves.
+    header = csv[0].split(",")
     self_row = csv[1].split(",")
     assert self_row[0] == "tiny.fa" and self_row[1] == "tiny.fa"
-    assert float(self_row[8]) == 1.0
-    assert float(self_row[9]) == 1.0
+    for name in ("jaccard_similarity", "jaccard_similarity_with_ends",
+                 "containment_AB", "containment_BA",
+                 "containment_AB_with_ends", "containment_BA_with_ends",
+                 "cosketch_geom", "cosketch_geom_with_ends"):
+        assert float(self_row[header.index(name)]) == 1.0, name
 
 
 def test_mode_d_is_deterministic(tmp_path: Path) -> None:
@@ -88,8 +95,11 @@ def test_mode_d_distinct_files_have_nontrivial_jaccard(tmp_path: Path) -> None:
     _run([OURS, str(files1), str(files2), "--mode", "D",
           "-p", "14", "-k", "8", "-w", "40",
           "-o", str(tmp_path / "cross")], tmp_path)
-    row = next(tmp_path.glob("cross*.csv")).read_text().splitlines()[1].split(",")
-    jac, jac_ends = float(row[8]), float(row[9])
+    lines = next(tmp_path.glob("cross*.csv")).read_text().splitlines()
+    header = lines[0].split(",")
+    row = lines[1].split(",")
+    jac = float(row[header.index("jaccard_similarity")])
+    jac_ends = float(row[header.index("jaccard_similarity_with_ends")])
     assert 0.0 <= jac < 1.0, f"expected non-self Jaccard in [0, 1), got {jac}"
     assert 0.0 <= jac_ends < 1.0, f"expected non-self with-ends Jaccard in [0, 1), got {jac_ends}"
 

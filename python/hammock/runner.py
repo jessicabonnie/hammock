@@ -12,8 +12,23 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List
 
+import numpy as np
+
 from hammock import _core
 from hammock.outprefix import get_new_prefix
+
+
+# Containment + co-sketch columns for any pair of HLL sketch lists.
+_CONTAINMENT_COLS = ["containment_AB", "containment_BA",
+                     "cosketch_geom", "cosketch_arith", "cosketch_max"]
+
+
+def _cosketch_from_containments(c_ab, c_ba):
+    """Return (geom_mean, arith_mean, max) of the two directional containments."""
+    geom = np.sqrt(np.maximum(c_ab * c_ba, 0.0))
+    arith = 0.5 * (c_ab + c_ba)
+    mx = np.maximum(c_ab, c_ba)
+    return geom, arith, mx
 
 
 def _read_paths(list_file: str) -> List[str]:
@@ -124,15 +139,21 @@ def _row_prefix(args, qlabel: str, rlabel: str) -> List:
 
 
 def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches) -> int:
-    """Mode D output: jaccard_similarity + jaccard_similarity_with_ends."""
+    """Mode D output: Jaccard + containment + cosketch on both the minimizer
+    and merged (`_with_ends`) sketches."""
     if args.verbose:
-        print("Computing pairwise minimizer Jaccard (Mode D)...", file=sys.stderr)
+        print("Computing pairwise minimizer Jaccard + containment (Mode D)...",
+              file=sys.stderr)
     minimizer_query = [s.minimizer_hll for s in query_sketches]
     minimizer_ref = [s.minimizer_hll for s in ref_sketches]
     merged_query = [s.merged() for s in query_sketches]
     merged_ref = [s.merged() for s in ref_sketches]
-    jaccard = _core.pairwise_jaccard_hll(minimizer_query, minimizer_ref)
-    jaccard_ends = _core.pairwise_jaccard_hll(merged_query, merged_ref)
+
+    jac, c_ab, c_ba = _core.pairwise_metrics_hll(minimizer_query, minimizer_ref)
+    cs_geom, cs_arith, cs_max = _cosketch_from_containments(c_ab, c_ba)
+
+    jac_e, c_ab_e, c_ba_e = _core.pairwise_metrics_hll(merged_query, merged_ref)
+    cs_geom_e, cs_arith_e, cs_max_e = _cosketch_from_containments(c_ab_e, c_ba_e)
 
     out_path = get_new_prefix(
         outprefix=args.outprefix,
@@ -147,7 +168,11 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches) -> int:
         window_size=args.window_size,
     ) + ".csv"
 
-    similarity_measures = ["jaccard_similarity", "jaccard_similarity_with_ends"]
+    similarity_measures = (
+        ["jaccard_similarity"] + _CONTAINMENT_COLS
+        + ["jaccard_similarity_with_ends"]
+        + [c + "_with_ends" for c in _CONTAINMENT_COLS]
+    )
     header = _build_header(args, similarity_measures)
 
     with open(out_path, "w", newline="") as f:
@@ -158,7 +183,14 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches) -> int:
             for j, r in enumerate(refs):
                 rlabel = _label(r, args.full_paths)
                 row = _row_prefix(args, qlabel, rlabel)
-                row.extend([float(jaccard[i, j]), float(jaccard_ends[i, j])])
+                row.extend([
+                    float(jac[i, j]),
+                    float(c_ab[i, j]), float(c_ba[i, j]),
+                    float(cs_geom[i, j]), float(cs_arith[i, j]), float(cs_max[i, j]),
+                    float(jac_e[i, j]),
+                    float(c_ab_e[i, j]), float(c_ba_e[i, j]),
+                    float(cs_geom_e[i, j]), float(cs_arith_e[i, j]), float(cs_max_e[i, j]),
+                ])
                 w.writerow(row)
 
     if args.verbose:
@@ -198,22 +230,8 @@ def run(args) -> int:
 
     if args.verbose:
         print("Computing pairwise Jaccard + containment...", file=sys.stderr)
-    jaccard, containment = _core.pairwise_jaccard_and_containment_hll(
-        query_sketches, ref_sketches
-    )
-    # Containment formula:
-    #   raw = max(0, intersection_size(A, B) / cardinality(A))
-    #   if expA == 0: containment = 1.0   (matches the original hammock's
-    #                                       hardcoded sentinel for the
-    #                                       no-multiplicity case)
-    #   else:         containment = raw ** expA
-    # The original hammock's containment was effectively a placeholder; we
-    # provide a well-defined value but parity tests intentionally skip this
-    # column.
-    if args.mode == "C" and args.expA != 0:
-        containment = containment ** args.expA
-    elif args.expA == 0:
-        containment = containment * 0.0 + 1.0
+    jaccard, c_ab, c_ba = _core.pairwise_metrics_hll(query_sketches, ref_sketches)
+    cs_geom, cs_arith, cs_max = _cosketch_from_containments(c_ab, c_ba)
 
     out_path = get_new_prefix(
         outprefix=args.outprefix,
@@ -228,7 +246,7 @@ def run(args) -> int:
         window_size=args.window_size,
     ) + ".csv"
 
-    similarity_measures = ["jaccard_similarity", "containment"]
+    similarity_measures = ["jaccard_similarity"] + _CONTAINMENT_COLS
     header = _build_header(args, similarity_measures)
 
     with open(out_path, "w", newline="") as f:
@@ -239,7 +257,11 @@ def run(args) -> int:
             for j, r in enumerate(refs):
                 rlabel = _label(r, args.full_paths)
                 row = _row_prefix(args, qlabel, rlabel)
-                row.extend([float(jaccard[i, j]), float(containment[i, j])])
+                row.extend([
+                    float(jaccard[i, j]),
+                    float(c_ab[i, j]), float(c_ba[i, j]),
+                    float(cs_geom[i, j]), float(cs_arith[i, j]), float(cs_max[i, j]),
+                ])
                 w.writerow(row)
 
     if args.verbose:

@@ -33,20 +33,26 @@ def _files_list(tmp_path: Path) -> Path:
     return f
 
 
-def _projected_rows(csv_text: str) -> list[tuple]:
-    """Drop the `containment` column before comparing.
+_PROJECTED_OUT = {
+    # Orig 0.4.0 emitted an unreliable `containment` column; we no longer
+    # emit that name. Our well-defined replacements are containment_AB /
+    # containment_BA and the three cosketch summaries, none of which the
+    # orig has.
+    "containment",
+    "containment_AB", "containment_BA",
+    "cosketch_geom", "cosketch_arith", "cosketch_max",
+}
 
-    The original hammock 0.4.0 never had a working containment implementation
-    (the value emitted there was unreliable); our new program computes it as
-    `(intersection / cardinality(self)) ** expA` which is well-defined but
-    not byte-equal to the original. Parity is only required for the Jaccard
-    column.
+
+def _projected_rows(csv_text: str) -> list[tuple]:
+    """Drop containment/cosketch columns before comparing.
+
+    Parity is only required for the Jaccard column; orig 0.4.0 has no
+    counterpart for our containment/cosketch surface.
     """
     lines = csv_text.strip().split("\n")
     header = lines[0].split(",")
-    if "containment" not in header:
-        return [tuple(line.split(",")) for line in lines]
-    keep = [i for i, name in enumerate(header) if name != "containment"]
+    keep = [i for i, name in enumerate(header) if name not in _PROJECTED_OUT]
     return [tuple(line.split(",")[i] for i in keep) for line in lines]
 
 
