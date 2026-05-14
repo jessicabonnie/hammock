@@ -89,6 +89,22 @@ These are deliberate; parity tests that touch them are skipped or projected.
    mixed-stride chr->stride hash. Default 31337 preserves orig contract
    in hash-threshold mode. Lets users sweep gate randomness
    independently of `--seed` (HLL ingestion).
+6. **Mode D minimizer hash insertion uses `add_hash64` directly.** Orig's
+   `lib/minimizer.py:118-121` has two branches: a FAST_HLL fast path that
+   calls `_cpp_sketch.add_hash64(np.uint64(hash_val))` and a Python-fallback
+   slow path that does `add_string(str(np.uint64(hash_val)))`. The slow
+   path kmer-iterates over the *decimal digits* of the hash and silently
+   drops any minimizer where `len(str(hash_val)) < k` — which is most of
+   them at typical k≥10 on random-ACGT corpora (selector hashes are
+   biased small). In the orig conda env (Py3.12 + bioconda digest),
+   `_acceleration_type='Python'` so orig falls through to the buggy slow
+   path and returns `jaccard_similarity=0` even self-vs-self on synthetic
+   FASTAs. We use `_core.HLLSketch.add_hash64(hash_val)` unconditionally
+   — matching the *intent* of orig's fast path. Parity tests still pass
+   on the `tiny.fa` fixtures (which happen to not trigger the slow-path
+   bug), but synthetic-FASTA outputs will differ from orig. The earlier
+   "always 0" observation in memory turned out to be this bug; see
+   `memory/project_modeD_no_ends_zero_bug.md`.
 
 ## Not implemented (would need work to add)
 

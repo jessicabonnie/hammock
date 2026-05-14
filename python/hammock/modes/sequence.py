@@ -112,11 +112,15 @@ class MinimizerSketch:
             self._process_kmer_to(self.startend_hll, s)
             return
 
-        # Each (_, hash_val) → str(hash_val) re-hashed as kmer-iterated string.
-        # See orig minimizer.py:114-121 ("re-hashes via xxhash64 to get proper
-        # bit distribution").
+        # Feed each minimizer's selector hash directly to the HLL. This matches
+        # orig minimizer.py:118-119 (FAST_HLL path: `add_hash64(np.uint64(hash_val))`).
+        # The prior refactor ported only orig's str(hash_val) slow fallback, which
+        # silently dropped any minimizer whose decimal representation was shorter
+        # than k (e.g. k=15 vs typical minimizer hash ~10 digits), leaving the HLL
+        # empty and J=0 on random-ACGT FASTAs. See memory note
+        # [[project_modeD_no_ends_zero_bug]] for full repro.
         for _, hash_val in minimizers:
-            self._add_kmers_to(self.minimizer_hll, str(hash_val))
+            self.minimizer_hll.add_hash64(hash_val)
 
         # Canonicalized start+end (or whole seq if too short).
         if len(s) >= 2 * self.kmer_size:
