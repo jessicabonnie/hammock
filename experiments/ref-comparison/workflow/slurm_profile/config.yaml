@@ -1,0 +1,34 @@
+# =============================================================================
+# workflow/slurm_profile/config.yaml
+# Snakemake SLURM cluster profile (Snakemake 7.x format)
+# =============================================================================
+#
+# Usage: snakemake --profile workflow/slurm_profile/
+#
+
+cluster: >-
+  sbatch
+  --partition={resources.slurm_partition}
+  --account={resources.slurm_account}
+  --mem={resources.mem_mb}M
+  --time={resources.runtime}
+  --cpus-per-task={resources.cpus_per_task}
+  --exclude=bigmem23,c189,c712,c717
+  --output=logs/slurm/%x_%j.out
+  --error=logs/slurm/%x_%j.err
+
+# Default resources for all jobs (override per-rule in Snakefile with resources:)
+default-resources:
+  slurm_partition: "parallel"
+  slurm_account:   "blangme2_scal"
+  mem_mb:          8000
+  runtime:         60          # minutes
+  cpus_per_task:   1
+
+# Snakemake job submission options
+jobs: 100
+latency-wait: 60
+rerun-incomplete: true
+keep-going: true
+printshellcmds: true
+use-envmodules: true     # honor `envmodules:` directives in rules (e.g., r/4.3.0)

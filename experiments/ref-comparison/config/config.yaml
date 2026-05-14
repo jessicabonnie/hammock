@@ -1,0 +1,71 @@
+# =============================================================================
+# config/config.yaml — Cross-Reference Robustness (Experiment A)
+# =============================================================================
+#
+# Upstream: nf-core/chipseq handles download → align → peak-call against each
+# reference genome (GRCh37, GRCh38, CHM13). See scripts/run_nfcore.sh.
+# This config drives the downstream Snakemake pipeline: peaks → FASTA → hammock → plot.
+#
+
+# nf-core/chipseq output root — peaks land at:
+#   <nfcore_outdir>/<ref>/bwa/merged_library/macs3/{broad,narrow}_peak/<sample>_REP1_peaks.{broad,narrow}Peak
+nfcore_outdir: "/vast/blangme2/jbonnie/hammock/claude-ref-comparison/nfcore"
+
+# Hammock output directory (shared with the legacy claude-ref-comparison results so
+# we don't re-run alignments / hammock for the existing 3-sample sweep)
+outdir: "/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results"
+
+# Hammock entrypoint (console script in the claude-ref-comparison conda env)
+sketch_bin: "hammock"
+
+# Primary similarity column — Mode D outputs two columns:
+#   jaccard_similarity            — minimizers only
+#   jaccard_similarity_with_ends  — minimizers + boundary k-mers (primary)
+primary_sim_col: "jaccard_similarity_with_ends"
+
+# Minimizer parameter sweep — all (k, w) pairs where w >= k will be run.
+# w < k causes silent degenerate sketches so those combos are skipped.
+kmer_sizes:   [5, 8, 10, 15, 20]
+window_sizes: [5, 8, 10, 15, 20, 30]
+precision:    24
+
+# =============================================================================
+# REFERENCE GENOMES (for bedtools getfasta in peaks_to_fasta rule)
+# =============================================================================
+references:
+  GRCh38:
+    fasta: "/data/blangme2/jessica/mus_homo/references/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna"
+  GRCh37:
+    fasta: "/data/blangme2/jessica/mus_homo/references/hg19/hg19.fa"
+  CHM13:
+    fasta: "/data/blangme2/fasta/chm13_v2.0/chm13v2.0.fasta"
+
+# =============================================================================
+# SAMPLES
+# =============================================================================
+#
+# Three human H3K27ac ChIP-seq samples, each aligned to all three references.
+# The cross-reference axis is what makes this experiment require alignment —
+# the same fastqs must be re-aligned per reference to expose how reference
+# choice influences peak-FASTA sketches.
+#
+samples:
+  experiment_a:
+    - id:     ENCSR175ABH_H3K27ac
+      mark:   H3K27ac
+      tissue: heart
+      species: human
+      encode: ENCSR175ABH
+      refs:   [GRCh37, GRCh38, CHM13]
+    - id:     ENCSR864OOO_H3K27ac
+      mark:   H3K27ac
+      tissue: liver
+      species: human
+      encode: ENCSR864OOO
+      refs:   [GRCh37, GRCh38, CHM13]
+    - id:     ENCSR954JMZ_H3K27ac
+      mark:   H3K27ac
+      tissue: lung
+      species: human
+      encode: ENCSR954JMZ
+      refs:   [GRCh37, GRCh38, CHM13]

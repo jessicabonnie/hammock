@@ -1,0 +1,25 @@
+# Large data files
+results/
+*.bam
+*.bam.bai
+*.fastq
+*.fastq.gz
+*.fa
+*.fasta
+
+# Snakemake
+.snakemake/
+*.log
+
+# Temporary
+__pycache__/
+*.pyc
+.Rhistory
+.RData
+
+# Scratch
+scratch/
+
+# Singularity cache
+*.sif
+

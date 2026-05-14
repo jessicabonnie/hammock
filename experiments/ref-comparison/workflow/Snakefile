@@ -1,0 +1,200 @@
+# =============================================================================
+# Snakefile — Downstream Hammock Analysis of nf-core/chipseq Peaks
+# =============================================================================
+#
+# Prerequisites: run nf-core/chipseq per genome × peak type (see scripts/run_nfcore.sh)
+#
+# This pipeline:
+#   collect peaks → peaks-to-FASTA (bedtools getfasta) → hammock (k/w sweep) → plot
+#
+# Experiment A — Cross-reference robustness: same human sample aligned to
+# GRCh37, GRCh38, and CHM13 should sketch more similarly across references
+# than across tissues on any one reference. Two peak types (broad + narrow).
+#
+# Usage:
+#   snakemake --dryrun --forceall
+#   snakemake --profile workflow/slurm_profile/
+#
+# =============================================================================
+
+configfile: "config/config.yaml"
+
+SAMPLES    = config["samples"]
+OUTDIR     = config["outdir"]
+HAMMOCK    = config["sketch_bin"]
+PRECISION  = config["precision"]
+KMER_SIZES = config["kmer_sizes"]
+WIND_SIZES = config["window_sizes"]
+NFCORE_OUT = config["nfcore_outdir"]
+PEAK_TYPES = ["broad", "narrow"]
+
+# Filter out (k, w) pairs where w < k — those produce silent degenerate sketches
+KW_PAIRS = [(k, w) for k in KMER_SIZES for w in WIND_SIZES if w >= k]
+
+# ── Wildcard constraints ────────────────────────────────────────────────────
+wildcard_constraints:
+    sample    = r"[A-Za-z0-9_\-]+",
+    ref       = r"GRCh37|GRCh38|CHM13",
+    peak_type = r"broad|narrow",
+    k         = r"\d+",
+    w         = r"\d+",
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def exp_a_samples():
+    return [s["id"] for s in SAMPLES["experiment_a"]]
+
+def exp_a_refs():
+    """Get all unique refs used in Experiment A."""
+    refs = set()
+    for s in SAMPLES["experiment_a"]:
+        refs.update(s["refs"])
+    return sorted(refs)
+
+EXP_A_REFS = exp_a_refs()
+
+def nfcore_peak(sample, ref, peak_type):
+    """Resolve peak file path from nf-core/chipseq output.
+    Broad:  <ref>/bwa/merged_library/macs3/broad_peak/<sample>_REP1_peaks.broadPeak
+    Narrow: <ref>_narrow/bwa/merged_library/macs3/narrow_peak/<sample>_REP1_peaks.narrowPeak
+    """
+    if peak_type == "narrow":
+        return f"{NFCORE_OUT}/{ref}_narrow/bwa/merged_library/macs3/narrow_peak/{sample}_REP1_peaks.narrowPeak"
+    else:
+        return f"{NFCORE_OUT}/{ref}/bwa/merged_library/macs3/broad_peak/{sample}_REP1_peaks.broadPeak"
+
+# ── Target rule ───────────────────────────────────────────────────────────────
+
+rule all:
+    input:
+        # NOTE: list comprehensions (not `expand`) — pairs (k,w) explicitly,
+        # because `expand` with separate k/w lists does cartesian product and
+        # leaks invalid (w<k) combos into the DAG.
+        # Experiment A: one plot per (k, w, peak_type)
+        [
+            f"{OUTDIR}/exp_a/{pt}/k{k}_w{w}/cross_ref_validation.png"
+            for pt in PEAK_TYPES
+            for k, w in KW_PAIRS
+        ],
+        # Experiment A: one sweep-summary heatmap per peak_type
+        expand(
+            "{outdir}/exp_a/{peak_type}/sweep_effect_size.png",
+            outdir=OUTDIR,
+            peak_type=PEAK_TYPES,
+        ),
+
+# =============================================================================
+# SHARED: Peaks → FASTA
+# =============================================================================
+
+rule peaks_to_fasta:
+    """Extract peak sequences from nf-core peak file with bedtools getfasta."""
+    input:
+        peak = lambda wc: nfcore_peak(wc.sample, wc.ref, wc.peak_type),
+        ref  = lambda wc: config["references"][wc.ref]["fasta"],
+    output:
+        fa = "{outdir}/fastas/{peak_type}/{ref}/{sample}.fa",
+    log:
+        "{outdir}/logs/fastas/{peak_type}/{ref}/{sample}.log"
+    threads: 1
+    resources:
+        mem_mb  = 4000,
+        runtime = 30,
+    envmodules:
+        "bedtools/2.30.0"
+    shell:
+        """
+        bedtools getfasta \
+            -fi {input.ref} \
+            -bed {input.peak} \
+            -fo {output.fa} \
+            2>{log}
+        """
+
+# =============================================================================
+# EXPERIMENT A: Cross-Reference Robustness
+# =============================================================================
+
+rule exp_a_fasta_list:
+    """Write a file listing FASTA paths for all Exp A samples under one ref."""
+    input:
+        fas = lambda wc: expand(
+            "{outdir}/fastas/{peak_type}/{ref}/{sample}.fa",
+            outdir=OUTDIR, peak_type=wc.peak_type, ref=wc.ref,
+            sample=exp_a_samples(),
+        ),
+    output:
+        lst = "{outdir}/exp_a/{peak_type}/fasta_lists/{ref}.txt",
+    run:
+        with open(output.lst, "w") as fh:
+            for fa in input.fas:
+                fh.write(fa + "\n")
+
+rule exp_a_hammock:
+    """Run hammock all-vs-all for Exp A (all refs together) at one (k, w)."""
+    input:
+        lists = expand(
+            "{outdir}/exp_a/{peak_type}/fasta_lists/{ref}.txt",
+            outdir=OUTDIR, peak_type="{peak_type}", ref=EXP_A_REFS,
+        ),
+    output:
+        csv = f"{{outdir}}/exp_a/{{peak_type}}/k{{k}}_w{{w}}/exp_a_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}.csv",
+    params:
+        outprefix = lambda wc: f"{OUTDIR}/exp_a/{wc.peak_type}/k{wc.k}_w{wc.w}/exp_a",
+    log:
+        "{outdir}/logs/exp_a/{peak_type}/hammock_k{k}_w{w}.log"
+    threads: 8
+    resources:
+        mem_mb  = 16000,
+        runtime = 720,
+    shell:
+        """
+        cat {input.lists} > {params.outprefix}_all_fastas.txt
+        {HAMMOCK} {params.outprefix}_all_fastas.txt \
+                  {params.outprefix}_all_fastas.txt \
+            --mode D \
+            --outprefix {params.outprefix} \
+            -k {wildcards.k} \
+            -w {wildcards.w} \
+            --precision {PRECISION} \
+            --full-paths \
+            2>{log}
+        """
+
+rule exp_a_validate_and_plot:
+    """Statistical test and visualization for cross-reference similarity (Exp A)."""
+    input:
+        matrix   = f"{{outdir}}/exp_a/{{peak_type}}/k{{k}}_w{{w}}/exp_a_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}.csv",
+        metadata = "config/exp_a_metadata.tsv",
+    output:
+        plot  = "{outdir}/exp_a/{peak_type}/k{k}_w{w}/cross_ref_validation.png",
+        stats = "{outdir}/exp_a/{peak_type}/k{k}_w{w}/cross_ref_stats.tsv",
+    params:
+        sim_col = "jaccard_similarity_with_ends",
+    log:
+        "{outdir}/logs/exp_a/{peak_type}/validate_plot_k{k}_w{w}.log"
+    envmodules:
+        "gcc/9.3.0",
+        "r/4.3.0",
+        "libjpeg/9c"
+    script:
+        "../scripts/exp_a_validate_plot.R"
+
+rule exp_a_sweep_summary:
+    """(k × w) effect-size heatmap aggregating Exp A across the full sweep."""
+    input:
+        stats = lambda wc: [
+            f"{OUTDIR}/exp_a/{wc.peak_type}/k{k}_w{w}/cross_ref_stats.tsv"
+            for k, w in KW_PAIRS
+        ],
+    output:
+        plot = "{outdir}/exp_a/{peak_type}/sweep_effect_size.png",
+    log:
+        "{outdir}/logs/exp_a/{peak_type}/sweep_effect_size.log"
+    envmodules:
+        "gcc/9.3.0",
+        "r/4.3.0",
+        "libjpeg/9c"
+    script:
+        "../scripts/exp_a_sweep_summary.R"
+

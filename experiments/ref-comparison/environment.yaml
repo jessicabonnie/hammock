@@ -1,0 +1,23 @@
+name: claude-ref-comparison
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  # Workflow runner (downstream Snakemake only; nf-core handles alignment/peaks)
+  - snakemake-minimal>=7.0
+  # Peaks → FASTA
+  - bedtools>=2.31
+  # Analysis and plotting
+  - requests
+  - pandas
+  - matplotlib
+  - seaborn
+  - r-base>=4.2
+  - r-tidyverse
+  - r-pheatmap
+  - pip:
+      # Hammock (local install from repo root)
+      - -e /home/jbonnie1/interval_sketch/hammock
