@@ -19,6 +19,7 @@ justifies this directory's existence.
 ref-comparison/
 ├── docs/
 │   ├── experiment_design.md   ← design rationale, accessions, success criteria
+│   ├── exp_a_results.md       ← results summary + figure index
 │   ├── paper_outline.md       ← paper outline (Exp A only)
 │   └── references.bib         ← BibTeX bibliography
 ├── workflow/
@@ -35,11 +36,19 @@ ref-comparison/
 │   ├── run_nfcore.sh          ← launches nf-core/chipseq per reference
 │   ├── exp_a_validate_plot.R  ← Wilcoxon + 2-panel boxplot + heatmap
 │   └── exp_a_sweep_summary.R  ← (k × w) effect-size heatmap across the sweep
+├── results/                   ← fine-grained symlinks into legacy storage (Exp A subset)
+│   ├── exp_a/ → .../claude-ref-comparison/results/exp_a
+│   ├── fastas/ → .../claude-ref-comparison/results/fastas
+│   └── logs/{exp_a,fastas}/   ← only the Exp A-relevant log subtrees
+├── figures/                   ← local mirror of headline + representative cell figures (gitignored)
 └── README.md
 ```
 
-Hammock + nf-core outputs are stored at `/vast/blangme2/jbonnie/hammock/claude-ref-comparison/`
-(kept on the legacy path so existing CSVs / plots remain valid without re-running).
+Hammock + nf-core outputs live at `/vast/blangme2/jbonnie/hammock/claude-ref-comparison/`
+(kept on the legacy path so existing CSVs / plots remain valid without
+re-running). The `results/` directory exposes only the Exp A-relevant
+subtree; the Exp B artifacts under that legacy storage are not surfaced
+here. See `docs/exp_a_results.md` for the headline numbers.
 
 ---
 

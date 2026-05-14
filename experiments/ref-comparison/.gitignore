@@ -1,5 +1,6 @@
 # Large data files
 results/
+figures/
 *.bam
 *.bam.bai
 *.fastq
