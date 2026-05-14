@@ -22,6 +22,21 @@ cheaper than bedtools's per-pair sorted-merge for many-pair comparison.
 The three `--subB-method` modes give very similar accuracy, but only
 **mixed-stride** actually trades subsampling for speed.
 
+**Reading the zigzag.** The lines aren't sorted by error along the x-axis;
+they connect points in subB sweep order (`0.5 → 0.25 → 0.1 → 0.05 → 0.01`,
+i.e. each line moves *along the subB axis*, which is not a plot axis). So
+whenever MAE isn't monotone in subB, the line doubles back. That's most
+visible on mixed-stride: as subB goes from 0.5 → 0.25 the error jumps up,
+then drops back at subB=0.1. The cause is that mixed-stride is a
+*deterministic* chr-keyed sampler — at each subB it picks a specific stride
+length, and the resulting sample sets are not nested across subB values.
+Whether a given subB happens to align with the interval/chromosome
+structure varies discretely. Per-replicate IQR across 5 replicates is
+effectively zero in every cell (algorithm is deterministic given the
+seed), so the zigzag is structural, not noise. See
+`pareto_variants.pdf` for path-resorted and no-path versions if you'd
+prefer to read the same data without the doubling-back.
+
 ![](figures/headline_hammock_vs_bedtools.png)
 
 ---
