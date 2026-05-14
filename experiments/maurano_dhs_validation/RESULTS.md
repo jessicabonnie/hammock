@@ -31,10 +31,13 @@ are indistinguishable at the per-pair level.
 
 ![](figures/mode_c_expA_interpolation_agg.png)
 
-**expA is a much weaker knob — within `expA ∈ [0.1, 2.0]` Mode C never
-leaves Mode-B territory.** |C − Mode B| stays under 0.05 across the whole
-sweep. If you want to tune Mode C toward Mode A behaviour, use subB;
-expA barely moves the needle.
+**expA is a weaker but still real knob — the bend only shows up past
+expA ≈ 2, with the A/B crossover sitting between expA = 3.0 and 3.5.**
+Below expA = 2, |C − Mode B| stays under 0.05 (Mode-B regime). By
+expA = 4, |C − Mode A| has dropped to 0.17 while |C − Mode B| has climbed
+to 0.26 (Mode-A regime). Compared to subB, the transition is much
+shallower — you need to push expA all the way to ~4 to see the same
+swing that subB delivers between 0.001 and 0.005.
 
 ---
 

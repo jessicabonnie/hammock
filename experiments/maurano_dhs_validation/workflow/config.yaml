@@ -18,7 +18,7 @@ ab_precisions: [18, 21, 23]
 
 # ── Mode C: fixed precision, sweep expA and subB independently ──────────────
 c_precision: 21
-c_expA_values:  [0.1, 0.2, 0.5, 0.8, 1.0, 1.2, 1.5, 1.8, 2.0]
+c_expA_values:  [0.1, 0.2, 0.5, 0.8, 1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0, 3.5, 4.0]
 c_subB_values:  [0.0001, 0.001, 0.005, 0.01, 0.05, 0.10, 0.25, 0.50, 0.80]
 
 # ── Mode D (k, w, precision) grid ───────────────────────────────────────────
