@@ -519,20 +519,32 @@ dendro_png <- function(out_path, mat, title, draw_clusters = FALSE,
   tissues <- tissue_for(rownames(mat))
   pal <- setNames(scales::hue_pal()(length(unique(tissues))),
                   unique(tissues))
+  # cols is parallel to hc$labels (input order). For visual placement we
+  # index by hc$order to convert input position → visual position.
   cols <- pal[tissues[hc$labels]]
+  ord  <- hc$order
   hc$labels <- short_label(hc$labels)
-  CairoPNG(filename = out_path, width = 10, height = 6,
+  CairoPNG(filename = out_path, width = 11, height = 6,
            units = "in", res = 150)
   on.exit(dev.off())
-  op <- par(mar = c(6, 4, 3, 1))
+  op <- par(mar = c(6, 4, 3, 10))   # bigger right margin for the legend
   on.exit(par(op), add = TRUE)
-  plot(hc, hang = -1, main = title, xlab = "", sub = "", cex = 0.85)
-  mtext(side = 1, line = 0.5, at = seq_along(hc$labels),
-        text = "*", col = cols, cex = 1.4)
+  plot(hc, hang = -1, labels = FALSE,
+       main = title, xlab = "", sub = "", cex = 0.85)
+  # Coloured leaf labels in visual order.
+  mtext(text = hc$labels[ord], side = 1, at = seq_along(ord),
+        col = cols[ord], las = 2, line = 0.5, cex = 0.8)
   if (draw_clusters) {
     rect.hclust(hc, k = if (is.null(k_clusters)) n_tissues else k_clusters,
                 border = "steelblue")
   }
+  # Tissue → colour legend in the right margin (xpd = NA so it can sit
+  # outside the plot region).
+  legend(x = par("usr")[2] + diff(par("usr")[1:2]) * 0.02,
+         y = par("usr")[4],
+         legend = names(pal), fill = pal,
+         border = NA, bty = "n", cex = 0.75, xpd = NA,
+         title = "tissue", title.adj = 0)
 }
 
 ref_mat <- to_matrix(ref %>% transmute(stem1, stem2, j_hat = j_truth))
