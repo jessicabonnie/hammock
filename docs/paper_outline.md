@@ -4,15 +4,11 @@
 
 **Thesis (one sentence):** hammock — a Python+C++ HyperLogLog-backed interval-set sketcher — matches bedtools' pairwise interval-Jaccard at r ≈ 0.9996 (Mode D) and r ≈ 0.998 (Mode B), while being substantially faster than bedtools at every scale tested; the same sketches independently recover tissue clustering (ARI = 0.91) and are robust to reference-genome choice — so the speed gain comes with, not at the cost of, biological fidelity.
 
-> **Status (2026-05-14):** All experiment sweeps below are complete except
-> mus-homo, whose results are still being generated. The cross-species
-> section is currently placeholder pending those results.
-
 ---
 
 ## 1. Abstract
 
-One paragraph. Three numbers in the lead: (i) Mode B r = 0.998 / Mode D r = 0.9996 vs bedtools on Maurano DHS; (ii) substantially faster than `bedtools jaccard` on real DHS data and orders of magnitude faster at large catalog size; (iii) Mode D ARI = 0.91 / NMI = 0.96 on 10-tissue-label Maurano clustering. Close with the applicability boundary: sequence-level sketch transfers across human reference genomes but not across the ~80 Mya human↔mouse split.
+One paragraph. Three numbers in the lead: (i) Mode B r = 0.998 / Mode D r = 0.9996 vs bedtools on Maurano DHS; (ii) substantially faster than `bedtools jaccard` on real DHS data and orders of magnitude faster at large catalog size; (iii) Mode D ARI = 0.91 / NMI = 0.96 on 10-tissue-label Maurano clustering. Close with the within-species reference-build robustness result (peaks aligned to GRCh37 / GRCh38 / CHM13 cluster by tissue, not by reference genome).
 
 ## 2. Introduction
 
@@ -36,7 +32,6 @@ One paragraph. Three numbers in the lead: (i) Mode B r = 0.998 / Mode D r = 0.99
 | Synthetic FASTA pairs (`modeD_flanking/`) | exact k-mer truth for Mode D | 192 pairs (n_intervals × mean_len × dist × mutation grid); ~12,700 (k, w, p) sweep measurements |
 | Maurano 2012 fetal DHS | real interval data, 10 tissue labels (fBrain/fHeart/fIntestine_Sm/fKidney/fLung/fMuscle_arm/fMuscle_back/fMuscle_leg/fSkin/fStomach) | 20 BEDs |
 | ENCODE H3K27ac (Heart/Liver/Lung × GRCh37/GRCh38/CHM13) | reference-build robustness | 9 sample×ref |
-| ENCODE DNase-seq (5 tissues × human/mouse) | cross-species limit | 10 BEDs |
 
 ### 3.3 Statistical evaluation
 
@@ -216,21 +211,13 @@ The flanking-fraction φ ≈ 2(k−1)·n_intervals / (total_length / w) predicts
 
 ![Fig 12c — empirical vs analytical φ](../experiments/modeD_flanking/figures/synthetic_empirical_vs_analytical.png)
 
-## 5. Limitations and applicability boundary
+## 5. Limitations
 
-### 5.1 Cross-species sequence sketching at long divergence **(placeholder)**
-
-> **Source:** `experiments/mus-homo/` (sweep in progress).
-
-This section will report whether the sketch recovers tissue identity across human↔mouse DNase-seq (~80 Mya divergence) — 5 matched tissues × 2 species. Earlier evidence suggests species composition dominates k-mer content at this divergence: orthologous peaks in different species share too few k-mers for sequence-level sketching to recover tissue clustering. Full numbers and dendrograms will be filled in once the sweep completes.
-
-(Primate-phylogeny follow-ups: CSVs for human + mouse + macaque + marmoset + cow + opossum + dog are in place; full 20-species panel still being staged.)
-
-### 5.2 Definitional gap vs bedtools
+### 5.1 Definitional gap vs bedtools
 
 Mode B/C/D estimate slightly different Jaccards than bedtools (bp-set vs interval-overlap vs k-mer-set). On the synthetic Mode B benchmark, the median per-pair gap is ~0.16 and is independent of precision and subsampling. On Maurano, Mode D at the optimal high-k/high-w cell brings MAE down to 0.006 — i.e., the gap effectively closes when the sketch is well-conditioned. For applications where absolute Jaccard magnitude matters (not just ranking), the appropriate setting is determined by the (k, w, p) choice; the relevant figures are in Section 4.2.
 
-### 5.3 The cosketch + containment columns are reported but not yet exploited
+### 5.2 The cosketch + containment columns are reported but not yet exploited
 
 The five auxiliary similarity columns (containment_AB, containment_BA, cosketch_geom, cosketch_arith, cosketch_max — each in two flavors for Mode D) are present in every Mode D output CSV. Current analyses use the jaccard columns as their primary signal. A 12-metric sanity check at the ref-comparison Exp A (k=10, w=10) cell finds `cosketch_geom_with_ends` is a near-tie with `jaccard_similarity_with_ends`, while `cosketch_max` is uniformly the weakest discriminator. A full multi-metric re-evaluation across the (k, w, p) sweep and across the Maurano corpus is a natural fast-follow analysis and may identify a column (likely cosketch_geom on the minimizer-only flavor) that is more robust than jaccard at small precision or small k.
 
@@ -238,7 +225,6 @@ The five auxiliary similarity columns (containment_AB, containment_BA, cosketch_
 
 - **Practical recipe.** Mode B for fast bedtools-equivalent interval-Jaccard with optional subsampling for further speedup at no accuracy cost. Mode D at large k and w (k=20, w=100, p=24) for the closest numerical match to bedtools (r = 0.9996, MAE = 0.006). Mode D at k=10, w=30, p ≥ 22 for tissue clustering (ARI = 0.91, NMI = 0.96). Use `jaccard_similarity` by default; fall back to `jaccard_similarity_with_ends` only in the short-sequence / sparse-minimizer regime characterized in Section 4.5.
 - **The sketch carries more than bedtools captures.** Mode D recovers tissue clustering directly from peak FASTAs — independently from bedtools' interval overlap — at ARI = 0.91. Sketch similarity ≈ biological similarity, even when the two estimators don't agree numerically.
-- **Boundaries.** Within-species, robust; cross-species without coordinate alignment, expected to fail (full evaluation in §5.1 pending). This would be a property of any k-mer sketch, not specific to hammock.
 
 ## 7. Conclusion
 
