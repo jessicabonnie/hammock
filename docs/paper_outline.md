@@ -2,11 +2,10 @@
 
 **Working title (placeholder):** *hammock: HLL-sketch similarity for genomic intervals — faster than bedtools, with biological signal preserved*
 
-**Thesis (one sentence):** A Python+C++ refactor of hammock matches bedtools' pairwise interval-Jaccard at r ≈ 0.9996 (Mode D, post-fix) and r ≈ 0.998 (Mode B), while being substantially faster than bedtools at every scale tested; the same sketches independently recover tissue clustering (ARI = 0.91) and are robust to reference-genome choice — so the speed gain comes with, not at the cost of, biological fidelity.
+**Thesis (one sentence):** hammock — a Python+C++ HyperLogLog-backed interval-set sketcher — matches bedtools' pairwise interval-Jaccard at r ≈ 0.9996 (Mode D) and r ≈ 0.998 (Mode B), while being substantially faster than bedtools at every scale tested; the same sketches independently recover tissue clustering (ARI = 0.91) and are robust to reference-genome choice — so the speed gain comes with, not at the cost of, biological fidelity.
 
-> **Status note (2026-05-14):** Numbers below reflect the post-bugfix Mode D
-> implementation (commit 11739e6). Maurano + modeD_flanking + primate-phylogeny
-> reruns are complete; ref-comparison and mus-homo full sweeps are still in
+> **Status note (2026-05-14):** Maurano + modeD_flanking + primate-phylogeny
+> sweeps are complete; ref-comparison and mus-homo full sweeps are still in
 > flight at the time of writing. Cells marked **(pending rerun)** will be
 > refreshed once those finish; the qualitative claims should hold but exact
 > values may shift.
@@ -21,7 +20,7 @@ One paragraph. Three numbers in the lead: (i) Mode B r = 0.998 / Mode D r = 0.99
 
 - All-vs-all pairwise interval similarity is bedtools' weakest scaling regime (O(N²·M log M)); large epigenome catalogs make this the bottleneck.
 - Sketching trades exactness for speed; the question is *how much exactness*, and whether the sketch preserves the biology that the exact answer captures.
-- Contribution: a re-implemented hammock with HLL backing for all four modes (A/B/C BED-interval, D FASTA-minimizer), parity-tested against the original, plus a four-experiment validation framework that quantifies the speed/accuracy/biology trade-off on real data.
+- Contribution: hammock, a Python+C++ HyperLogLog-backed sketcher with four operating modes (A/B/C BED-interval, D FASTA-minimizer), plus a four-experiment validation framework that quantifies the speed/accuracy/biology trade-off on real data.
 
 ## 3. Methods
 
@@ -47,9 +46,9 @@ Pearson r, Spearman ρ, MAE vs bedtools (Mode B/C/D); ARI, NMI vs known tissue l
 
 ### 3.4 Mixed-stride subsampling (`--subB-method mixed-stride`)
 
-Mode B's `subB` knob subsamples the per-base-pair positions that get ingested into the HLL. The original hammock implemented `subB` as a *hash-threshold* gate: a per-position xxh32 hash compared to `subB × UINT32_MAX`. The gate is correct but the per-position hash cost grows linearly with the input, so the wall-time savings from skipping positions plateau quickly: at moderate subB the gate hash itself dominates and `subB ≤ 0.5` is actually slower than no subsampling at all.
+Mode B's `subB` knob subsamples the per-base-pair positions that get ingested into the HLL. A natural implementation — a *hash-threshold* gate that computes a per-position xxh32 hash and compares it to `subB × UINT32_MAX` — is correct, but the per-position hash cost grows linearly with the input, so the wall-time savings from skipping positions plateau quickly: at moderate subB the gate hash itself dominates and `subB ≤ 0.5` is actually *slower* than no subsampling at all.
 
-This paper introduces **mixed-stride** subsampling as a deterministic, hash-free alternative. For each chromosome, a fixed stride length `s = round(1/subB)` is chosen, offset by a chr-keyed hash so different chromosomes sample disjoint position phases. Ingestion walks the chromosome in stride-`s` increments — no per-position decision, no hash. The accepted-position cardinality matches the hash-threshold gate in expectation, but the cost is `O(L/s)` rather than `O(L)`, so wall time scales with `subB` instead of being dominated by the gate.
+hammock introduces **mixed-stride** subsampling as a deterministic, hash-free alternative. For each chromosome, a fixed stride length `s = round(1/subB)` is chosen, offset by a chr-keyed hash so different chromosomes sample disjoint position phases. Ingestion walks the chromosome in stride-`s` increments — no per-position decision, no per-position hash. The accepted-position cardinality matches the hash-threshold gate in expectation, but the cost is `O(L/s)` rather than `O(L)`, so wall time scales with `subB` instead of being dominated by the gate.
 
 Three properties matter for downstream use:
 
@@ -57,7 +56,7 @@ Three properties matter for downstream use:
 2. **Accuracy.** Per-pair MAE vs the no-subsample reference is statistically indistinguishable across the three subB methods (hash-threshold, mixed-stride, single-hash). Mixed-stride does not buy speed by losing accuracy.
 3. **Determinism and reproducibility.** Output is exactly reproducible given the chr-stride seed (`--gate-seed`, default 31337). The same files at the same subB produce byte-identical HLLs across runs and machines.
 
-The structured-sampling concern — that a fixed stride could miss periodic features — is theoretical for BED inputs at the strides we test; in practice the chr-keyed offset randomization breaks cross-chromosome alignment and the Maurano + synthetic accuracy measurements show no detectable bias. Mixed-stride is the default `--subB-method` setting in this implementation. Hash-threshold remains available for parity with the original (`--subB-method hash-threshold`) and is what the parity tests cover.
+The structured-sampling concern — that a fixed stride could miss periodic features — is theoretical for BED inputs at the strides we test; in practice the chr-keyed offset randomization breaks cross-chromosome alignment and the Maurano + synthetic accuracy measurements show no detectable bias. Mixed-stride is the default `--subB-method` setting; hash-threshold (`--subB-method hash-threshold`) and a single-hash variant remain available for users who want to characterize the alternative samplers.
 
 This subsampling refinement is what makes the Section 4.1 speed numbers attainable: the "high-subsample" and "max-subsample" rows of the real-DHS table are mixed-stride at `subB = 0.1` and `subB = 0.01`. The per-method comparison plot is in supplementary.
 
