@@ -63,6 +63,12 @@ The structured-sampling concern — that a fixed stride could miss periodic feat
 
 This subsampling refinement is what makes the Section 4.1 speed numbers attainable: the "high-subsample" and "max-subsample" rows of the real-DHS table are mixed-stride at `subB = 0.1` and `subB = 0.01`. The per-method comparison plot is in supplementary.
 
+### 3.7 Mode C as an A↔B interpolant
+
+Mode C is parameterized by `subB` (subsampling rate) and `expA` (interval-length exponent): at `subB → 0` it reduces to Mode A (interval-coordinate-only sketch), at `subB → 1` it reduces to Mode B (per-bp sketch). On Maurano DHS the transition is sharp — Mode C tracks Mode A at `subB ≲ 0.005` and Mode B at `subB ≳ 0.05`, with the crossover concentrated near `subB ≈ 0.005`. This makes Mode C a single-knob alternative to choosing between A and B explicitly; it does not buy accuracy over Mode B at high `subB`, but it lets a user dial down per-position cost when interval-set granularity is sufficient.
+
+![Mode C subB interpolation between Mode A regime (subB ≲ 0.005) and Mode B regime (subB ≳ 0.05) on Maurano DHS](../experiments/maurano_dhs_validation/figures/mode_c_subB_interpolation_agg.png)
+
 ## 4. Results
 
 ### 4.1 Speed: hammock is substantially faster than bedtools on real and synthetic interval corpora
@@ -118,13 +124,9 @@ Mode D's numerical agreement with bedtools peaks at r = 0.9996 / MAE = 0.0061 �
 
 ![Fig 4 — Mode D vs bedtools and vs Mode B agree per config](../experiments/maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png)
 
-**Fig 5:** Mode C is a sharp interpolation between A-regime (subB ≲ 0.005) and B-regime (subB ≳ 0.05). One knob, two regimes.
+**Fig 5:** Mode D Pearson ridge along high k + high w + p ≥ 20.
 
-![Fig 5 — Mode C subB interpolation](../experiments/maurano_dhs_validation/figures/mode_c_subB_interpolation_agg.png)
-
-**Fig 5b:** Mode D Pearson ridge along high k + high w + p ≥ 22.
-
-![Fig 5b — Mode D Pearson heatmap](../experiments/maurano_dhs_validation/figures/mode_d_pearson_heatmap.png)
+![Fig 5 — Mode D Pearson heatmap](../experiments/maurano_dhs_validation/figures/mode_d_pearson_heatmap.png)
 
 ### 4.3 Biological signal: the sketch recovers tissue identity
 
@@ -237,8 +239,7 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 | 1 | `subB_mixed_stride/figures/headline_maurano_pareto.png` | hammock dominates bedtools on real Pareto |
 | 2 | `bedtools_benchmark/figures/cpp_vs_bedtools_t16_20260512_160412_sketch_compare_split.png` | synthetic scaling to N=512 |
 | 4 | `maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png` | per-config Mode D r vs bedtools vs Mode B (y=x) |
-| 5 | `maurano_dhs_validation/figures/mode_c_subB_interpolation_agg.png` | Mode C as A↔B interpolant |
-| 5b | `maurano_dhs_validation/figures/mode_d_pearson_heatmap.png` | Mode D Pearson ridge |
+| 5 | `maurano_dhs_validation/figures/mode_d_pearson_heatmap.png` | Mode D Pearson ridge |
 | 6 | `maurano_dhs_validation/figures/mode_d_best_dendrogram.png` + `bedtools_dendrogram.png` | tissue recovery |
 | 7 | `maurano_dhs_validation/figures/mode_d_metric_tradeoff.png` | Pearson-best ≠ ARI-best |
 | 8 | `maurano_dhs_validation/figures/mode_d_clustering_ari.png` | ARI plateau across sweep |
