@@ -112,7 +112,7 @@ pick different optima.
 
 ## Clustering recovery — the actual tissue clustering
 
-The ARI-best Mode D config is **k = 10, w = 30, p = 22–24** with
+The ARI-best Mode D config is **k = 10, w = 30, p ≥ 12** with
 **ARI = 0.910, NMI = 0.961** against the 10 fetal-tissue labels. (Pre-fix
 this peaked at k = 8, w = 10, p = 12 with the same ARI/NMI — the
 clustering signal moved to a different cell of the grid but the achievable
@@ -171,7 +171,7 @@ pair). That's why ARI gets to 0.91.
 ![](figures/mode_d_clustering_ari.png)
 
 **ARI peaks in a different region from Pearson** — clustering is
-preserved over k ∈ {10}, w ∈ {30}, **all precisions p ≥ 22**, with smaller
+preserved over k ∈ {10}, w ∈ {30}, **all precisions p ≥ 12**, with smaller
 plateaus at neighbouring (k, w). `with_ends` (right column) is worse at
 clustering because it inflates pair similarities disproportionately for
 files with many short sequences, blurring the between-tissue contrast.
@@ -201,8 +201,8 @@ the recovered Jaccards agree numerically.
 | Do predictions covary with bedtools?   | Pearson r | k=20/25, w=100, p=24 | **0.9996** |
 | Do predictions rank-order the same?    | Spearman ρ | k=20/25, w=100, p=24 | **0.998** |
 | Are the absolute Jaccards close?       | MAE        | k=25, w=100, p=24 | **0.0061** |
-| Is the biology preserved?              | ARI        | k=10, w=30, p=22-24 | **0.910** |
-| Is the biology preserved (info-theory)?| NMI        | k=10, w=30, p=22-24 | **0.961** |
+| Is the biology preserved?              | ARI        | k=10, w=30, p≥12 | **0.910** |
+| Is the biology preserved (info-theory)?| NMI        | k=10, w=30, p≥12 | **0.961** |
 
 **Post-fix headline: at high k + high w + high precision, Mode D's
 `no_ends` column is a near-perfect drop-in replacement for bedtools

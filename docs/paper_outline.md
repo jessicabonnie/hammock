@@ -110,8 +110,6 @@ Across Maurano's 400 sample pairs:
 | mode | best r vs bedtools | best MAE | note |
 |---|---|---|---|
 | **Mode B** | **0.998** | — | at every precision tested |
-| Mode A | 0.82 | — | only mode that breaks — drops interval-length info |
-| Mode C (subB→1) | →0.998 | — | inherits B |
 | **Mode D** (k=20, w=100, p=24) | **0.9996** | **0.0061** | **47 of 209 configs exceed r > 0.99** |
 
 Mode D's numerical agreement with bedtools peaks at r = 0.9996 / MAE = 0.0061 — four-decimal-place agreement. The high-correlation ridge in the (k, w) Pearson heatmap runs along the high-k / high-w edge of the sweep, indicating that Mode D's near-perfect agreement is unlocked at long minimizer windows where interior coverage is richest.
@@ -132,7 +130,7 @@ Mode D's numerical agreement with bedtools peaks at r = 0.9996 / MAE = 0.0061 �
 
 > **Source:** `experiments/maurano_dhs_validation/RESULTS.md`.
 
-Mode D's best-ARI cell is **k = 10, w = 30, p ∈ {22, 23, 24}**, all yielding **ARI = 0.910, NMI = 0.961** on the 10-tissue-label set (with the three muscle subtypes — arm/back/leg — counted as distinct labels). The dendrogram makes 2 errors: the two fBrain samples split into separate clusters, and one fMuscle_back is grouped with the two fMuscle_legs — both errors that the bedtools reference dendrogram *also* makes, so this is not a sketch artifact but a property of the underlying signal.
+Mode D's best-ARI cell is **k = 10, w = 30**, with **ARI = 0.910, NMI = 0.961** on the 10-tissue-label set (with the three muscle subtypes — arm/back/leg — counted as distinct labels) holding across **all precisions p ≥ 12** — the clustering signal is precision-cheap once the (k, w) cell is right. The dendrogram makes 2 errors: the two fBrain samples split into separate clusters, and one fMuscle_back is grouped with the two fMuscle_legs — both errors that the bedtools reference dendrogram *also* makes, so this is not a sketch artifact but a property of the underlying signal.
 
 At the ARI-best config, Mode D's predicted Jaccards sit on the y = x diagonal versus bedtools (and versus Mode B) — the sketch is numerically calibrated against the bedtools reference, not just rank-correlated.
 
@@ -145,7 +143,7 @@ At the ARI-best config, Mode D's predicted Jaccards sit on the y = x diagonal ve
 
 ![Fig 7 — Mode D Pearson vs ARI tradeoff](../experiments/maurano_dhs_validation/figures/mode_d_metric_tradeoff.png)
 
-**Fig 8:** ARI ≥ 0.85 plateau is narrow — concentrated at k = 10, w = 30, p ≥ 22 — so the clustering optimum is genuinely a specific corner of the sweep, not a wide attractor.
+**Fig 8:** The ARI ≥ 0.85 plateau is a single (k, w) cell — k = 10, w = 30, holding for every precision p ≥ 12 — so the clustering optimum is genuinely a specific corner of the (k, w) sweep, not a wide attractor.
 
 ![Fig 8 — Mode D ARI across (k, w, p) sweep](../experiments/maurano_dhs_validation/figures/mode_d_clustering_ari.png)
 
@@ -223,7 +221,7 @@ The five auxiliary similarity columns (containment_AB, containment_BA, cosketch_
 
 ## 6. Discussion
 
-- **Practical recipe.** Mode B for fast bedtools-equivalent interval-Jaccard with optional subsampling for further speedup at no accuracy cost. Mode D at large k and w (k=20, w=100, p=24) for the closest numerical match to bedtools (r = 0.9996, MAE = 0.006). Mode D at k=10, w=30, p ≥ 22 for tissue clustering (ARI = 0.91, NMI = 0.96). Use `jaccard_similarity` by default; fall back to `jaccard_similarity_with_ends` only in the short-sequence / sparse-minimizer regime characterized in Section 4.5.
+- **Practical recipe.** Mode B for fast bedtools-equivalent interval-Jaccard with optional subsampling for further speedup at no accuracy cost. Mode D at large k and w (k=20, w=100, p=24) for the closest numerical match to bedtools (r = 0.9996, MAE = 0.006). Mode D at k=10, w=30, p ≥ 12 for tissue clustering (ARI = 0.91, NMI = 0.96). Use `jaccard_similarity` by default; fall back to `jaccard_similarity_with_ends` only in the short-sequence / sparse-minimizer regime characterized in Section 4.5.
 - **The sketch carries more than bedtools captures.** Mode D recovers tissue clustering directly from peak FASTAs — independently from bedtools' interval overlap — at ARI = 0.91. Sketch similarity ≈ biological similarity, even when the two estimators don't agree numerically.
 
 ## 7. Conclusion
