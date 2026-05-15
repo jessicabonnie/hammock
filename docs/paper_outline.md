@@ -4,11 +4,9 @@
 
 **Thesis (one sentence):** hammock — a Python+C++ HyperLogLog-backed interval-set sketcher — matches bedtools' pairwise interval-Jaccard at r ≈ 0.9996 (Mode D) and r ≈ 0.998 (Mode B), while being substantially faster than bedtools at every scale tested; the same sketches independently recover tissue clustering (ARI = 0.91) and are robust to reference-genome choice — so the speed gain comes with, not at the cost of, biological fidelity.
 
-> **Status note (2026-05-14):** Maurano + modeD_flanking + primate-phylogeny
-> sweeps are complete; ref-comparison and mus-homo full sweeps are still in
-> flight at the time of writing. Cells marked **(pending rerun)** will be
-> refreshed once those finish; the qualitative claims should hold but exact
-> values may shift.
+> **Status note (2026-05-14):** Maurano, modeD_flanking, primate-phylogeny,
+> and ref-comparison sweeps are complete. mus-homo full sweep is still in
+> flight; cells marked **(pending rerun)** will be refreshed once it finishes.
 
 ---
 
@@ -146,23 +144,41 @@ A second post-fix change worth highlighting: at the ARI-best config, Mode D's pr
 
 ![Fig 8 — Mode D ARI across (k, w, p) sweep](../experiments/maurano_dhs_validation/figures/mode_d_clustering_ari.png)
 
-### 4.4 Robustness to reference genome **(pending post-fix rerun)**
+### 4.4 Robustness to reference genome
 
-> **Source:** `experiments/ref-comparison/docs/exp_a_results.md` (pre-fix); full re-sweep submitted 2026-05-14 at 21:02, in flight.
+> **Source:** `experiments/ref-comparison/docs/exp_a_results.md` (rerun 2026-05-14).
 
-3 H3K27ac samples (heart, liver, lung) × 3 references (GRCh37/GRCh38/CHM13), 9 sample×ref combinations. Pre-fix headline: same-tissue cross-reference Jaccard significantly higher than different-tissue Jaccard at **every (k, w) cell with k ≥ 8** (Wilcoxon p ≤ 10⁻⁵), best Δmedian = 0.107 at k=10, w=20 broad. The dendrogram cleanly grouped the three references of each tissue with within-tissue merge heights ≤ 0.1 vs cross-tissue ≥ 0.4.
+3 H3K27ac samples (heart, liver, lung) × 3 references (GRCh37/GRCh38/CHM13), 9 sample×ref combinations. Across the (k, w) sweep, same-tissue cross-reference Jaccard is significantly higher than different-tissue Jaccard at every cell with k ≥ 8 (Wilcoxon p ≤ 10⁻⁵), and at **k ≥ 15 the two groups are *fully separated*** — the minimum same-tissue cross-reference similarity exceeds the maximum different-tissue similarity. This is a stronger statement than significant: no overlap.
 
-The Mode D bugfix is expected to *strengthen* this result rather than weaken it: pre-fix, the `jaccard_similarity` (no_ends) column was largely empty on these FASTAs at k ≥ 15 (silent zero-jaccard from minimizers being dropped), so the analysis defaulted to `jaccard_similarity_with_ends`. Post-fix, the no_ends column carries real signal and may give a cleaner same-tissue/different-tissue separation. Final numbers and dendrograms refresh once the in-flight rerun completes.
+**Best lead cell: k = 15, w = 15.** On broad peaks, Δmedian = **0.398** (median same-tissue cross-ref = 0.783, median different-tissue = 0.385; Wilcoxon p = 1.35 × 10⁻¹⁰, the test floor at n=18/54). Narrow peaks: Δmedian = 0.387 (0.729 vs 0.342). k=20, w=20 reaches an even larger Δ (0.413 broad) but at slightly suppressed medians.
 
-**Fig 9 (pre-fix; will be refreshed):** Cross-reference dendrogram at k=10, w=10 — within-tissue clades hold across GRCh37/GRCh38/CHM13.
+The sweep partitions into three regimes:
 
-![Fig 9 — cross-reference dendrogram](../experiments/ref-comparison/figures/cross_ref_dendrogram_k10_w10.png)
+| Regime | Cells | Behavior |
+|---|---|---|
+| Saturated high | k ≤ 8 (any w) | Both groups ≈ 0.95–0.99; Δ ≤ 0.02 |
+| Interpretable mid | k = 10, w ≥ 10 | Medians ≈ 0.55–0.65; Δ ≈ 0.09; groups overlap |
+| **Interpretable + fully separated** | **k ≥ 15 (any valid w)** | **Δ ≈ 0.32–0.45; min(xref) > max(diff-tissue)** |
 
-**Fig 10 (pre-fix; will be refreshed):** (k × w) effect-size heatmap for broad peaks; same-tissue cross-ref ≥ different-tissue across the sweep.
+**Fig 9:** UPGMA dendrogram at the new headline cell (k=15, w=15) — each tissue's three references form a tight monophyletic clade with deep separation between tissues; broad and narrow peak calls give the same structure.
+
+![Fig 9 — cross-reference dendrogram, k=15, w=15](../experiments/ref-comparison/figures/cross_ref_dendrogram_k15_w15.png)
+
+**Fig 9b (supplementary):** Same dendrogram at the interpretable-mid cell (k=10, w=10) — the clades still hold but with smaller margin, useful when "graceful degradation as k drops" is the story being told.
+
+![Fig 9b — cross-reference dendrogram, k=10, w=10](../experiments/ref-comparison/figures/cross_ref_dendrogram_k10_w10.png)
+
+**Fig 10:** (k × w) effect-size heatmap for broad peaks; the three regimes are immediately visible, with k ∈ {15, 20} as a uniformly high-effect block.
 
 ![Fig 10 — cross-ref effect-size sweep, broad](../experiments/ref-comparison/figures/sweep_effect_size_broad.png)
 
-Practical interpretation (unchanged by the bug): when peaks are aligned to a different human reference than expected, the sketch still produces the same biological neighborhood. This is the property that lets hammock be deployed against heterogeneous catalogs (ENCODE/Roadmap mixtures) without first re-aligning everything.
+**Metric choice at k=10, w=10** (`scripts/exp_a_metric_comparison.R`): of the 12 emitted similarity columns, `jaccard_similarity_with_ends` remains the right default — best Δ/saturation trade-off (broad Δ = 0.086, p = 2.0 × 10⁻⁷). `cosketch_geom_with_ends` is a near-tie (Δ = 0.065). All minimizer-only metrics hit the Wilcoxon p-floor but operate near saturation (medians ≈ 0.99 vs 0.92), so absolute Δ is small. `cosketch_max_with_ends` collapses on narrow (Δ ≈ 0, p ≈ 0.49) — the worst metric in both flavors and not recommended.
+
+![Fig 10b — 12-metric Wilcoxon comparison at k=10, w=10, broad](../experiments/ref-comparison/figures/metric_comparison_broad_k10_w10.png)
+
+(Note: at k=15, w=15 the minimizer-only signal is already fully separated, so the choice of with-ends vs no-ends matters less; a future replication of this 12-metric comparison at the new headline cell would confirm that observation.)
+
+Practical interpretation: when peaks are aligned to a different human reference than expected, the sketch still produces the same biological neighborhood. At k ≥ 15 the separation is large enough that reference choice is unambiguously a smaller source of variance than tissue identity. This is the property that lets hammock be deployed against heterogeneous catalogs (ENCODE/Roadmap mixtures) without first re-aligning everything.
 
 ### 4.5 Methodological notes: choosing Mode D's flanking column
 
@@ -234,8 +250,10 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 | 6 | `maurano_dhs_validation/figures/mode_d_best_dendrogram.png` + `bedtools_dendrogram.png` | tissue recovery |
 | 7 | `maurano_dhs_validation/figures/mode_d_metric_tradeoff.png` | Pearson-best ≠ ARI-best |
 | 8 | `maurano_dhs_validation/figures/mode_d_clustering_ari.png` | ARI plateau across sweep |
-| 9 | `ref-comparison/figures/cross_ref_dendrogram_k10_w10.png` *(pending rerun)* | within-tissue clades across refs |
-| 10 | `ref-comparison/figures/sweep_effect_size_broad.png` *(pending rerun)* | cross-ref effect-size heatmap |
+| 9 | `ref-comparison/figures/cross_ref_dendrogram_k15_w15.png` | within-tissue clades across refs (headline cell) |
+| 9b (supp) | `ref-comparison/figures/cross_ref_dendrogram_k10_w10.png` | same at the interpretable-mid cell |
+| 10 | `ref-comparison/figures/sweep_effect_size_broad.png` | cross-ref effect-size heatmap, broad |
+| 10b (supp) | `ref-comparison/figures/metric_comparison_broad_k10_w10.png` | 12-metric Wilcoxon comparison at k=10, w=10 |
 | 11 | `modeD_flanking/figures/maurano_delta_r_vs_w.png` | flanking column choice on real data |
 | 12 | `modeD_flanking/figures/synthetic_delta_vs_phi.png` + `synthetic_phase_diagram.png` | flanking on synthetic, φ-axis |
 | 12b | `modeD_flanking/figures/synthetic_empirical_vs_analytical.png` | analytical φ-prediction validated |
