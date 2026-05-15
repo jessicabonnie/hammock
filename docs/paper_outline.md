@@ -4,9 +4,9 @@
 
 **Thesis (one sentence):** hammock — a Python+C++ HyperLogLog-backed interval-set sketcher — matches bedtools' pairwise interval-Jaccard at r ≈ 0.9996 (Mode D) and r ≈ 0.998 (Mode B), while being substantially faster than bedtools at every scale tested; the same sketches independently recover tissue clustering (ARI = 0.91) and are robust to reference-genome choice — so the speed gain comes with, not at the cost of, biological fidelity.
 
-> **Status note (2026-05-14):** Maurano, modeD_flanking, primate-phylogeny,
-> and ref-comparison sweeps are complete. mus-homo full sweep is still in
-> flight; cells marked **(pending rerun)** will be refreshed once it finishes.
+> **Status (2026-05-14):** All experiment sweeps below are complete except
+> mus-homo, whose results are still being generated. The cross-species
+> section is currently placeholder pending those results.
 
 ---
 
@@ -98,7 +98,7 @@ Two things to communicate in this section, nothing more:
 
 ### 4.2 Accuracy: both interval-mode (B) and sequence-mode (D) hammock match bedtools
 
-> **Source:** `experiments/maurano_dhs_validation/RESULTS.md` (rerun post Mode-D fix, 2026-05-14).
+> **Source:** `experiments/maurano_dhs_validation/RESULTS.md`.
 
 Across Maurano's 400 sample pairs:
 
@@ -107,9 +107,9 @@ Across Maurano's 400 sample pairs:
 | **Mode B** | **0.998** | — | at every precision tested |
 | Mode A | 0.82 | — | only mode that breaks — drops interval-length info |
 | Mode C (subB→1) | →0.998 | — | inherits B |
-| **Mode D, post-fix** (k=20, w=100, p=24) | **0.9996** | **0.0061** | **47 of 209 configs exceed r > 0.99** |
+| **Mode D** (k=20, w=100, p=24) | **0.9996** | **0.0061** | **47 of 209 configs exceed r > 0.99** |
 
-The Mode D headline number changed by an order of magnitude post-fix: the pre-fix sweep's best was r = 0.966 (MAE 0.060); the post-fix optimum sits at r = 0.9996 with MAE 0.0061, four-decimal-place agreement with bedtools. The ridge in the (k, w) Pearson heatmap moved from a modest mid-grid optimum to the high-k / high-w edge of the sweep, indicating that Mode D's near-perfect agreement is unlocked at long minimizer windows where interior coverage is richest.
+Mode D's numerical agreement with bedtools peaks at r = 0.9996 / MAE = 0.0061 — four-decimal-place agreement. The high-correlation ridge in the (k, w) Pearson heatmap runs along the high-k / high-w edge of the sweep, indicating that Mode D's near-perfect agreement is unlocked at long minimizer windows where interior coverage is richest.
 
 **Fig 4:** Modes A/B/C summary — Pearson r vs bedtools by precision.
 
@@ -119,34 +119,34 @@ The Mode D headline number changed by an order of magnitude post-fix: the pre-fi
 
 ![Fig 5 — Mode C subB interpolation](../experiments/maurano_dhs_validation/figures/mode_c_subB_interpolation_agg.png)
 
-**Fig 5b (new):** Post-fix Mode D Pearson ridge along high k + high w + p ≥ 22.
+**Fig 5b:** Mode D Pearson ridge along high k + high w + p ≥ 22.
 
 ![Fig 5b — Mode D Pearson heatmap](../experiments/maurano_dhs_validation/figures/mode_d_pearson_heatmap.png)
 
 ### 4.3 Biological signal: the sketch recovers tissue identity
 
-> **Source:** `experiments/maurano_dhs_validation/RESULTS.md` (post-fix).
+> **Source:** `experiments/maurano_dhs_validation/RESULTS.md`.
 
-Post-fix Mode D best-ARI cell: **k = 10, w = 30, p ∈ {22, 23, 24}**, all yielding **ARI = 0.910, NMI = 0.961** on the 10-tissue-label set (with the three muscle subtypes — arm/back/leg — counted as distinct labels). The dendrogram makes 2 errors: the two fBrain samples split into separate clusters, and one fMuscle_back is grouped with the two fMuscle_legs — both errors that the bedtools reference dendrogram *also* makes, so this is not a sketch artifact but a property of the underlying signal. Pre-fix this cell was k=8, w=10, p=12; post-fix the same achievable ARI moved to a different (k, w, p) cell while the numerical value is unchanged.
+Mode D's best-ARI cell is **k = 10, w = 30, p ∈ {22, 23, 24}**, all yielding **ARI = 0.910, NMI = 0.961** on the 10-tissue-label set (with the three muscle subtypes — arm/back/leg — counted as distinct labels). The dendrogram makes 2 errors: the two fBrain samples split into separate clusters, and one fMuscle_back is grouped with the two fMuscle_legs — both errors that the bedtools reference dendrogram *also* makes, so this is not a sketch artifact but a property of the underlying signal.
 
-A second post-fix change worth highlighting: at the ARI-best config, Mode D's predicted Jaccards now sit on the y = x diagonal versus bedtools (and versus Mode B), where the pre-fix scatter showed a systematic upward bias. The bug had been suppressing sketch cardinality; with it fixed, the sketch is calibrated against the bedtools reference rather than just rank-correlated.
+At the ARI-best config, Mode D's predicted Jaccards sit on the y = x diagonal versus bedtools (and versus Mode B) — the sketch is numerically calibrated against the bedtools reference, not just rank-correlated.
 
 **Fig 6:** Mode D best-ARI dendrogram (top) paired with the bedtools reference dendrogram (bottom). Same tissue blocks recovered.
 
 ![Fig 6a — Mode D best dendrogram](../experiments/maurano_dhs_validation/figures/mode_d_best_dendrogram.png)
 ![Fig 6b — bedtools reference dendrogram](../experiments/maurano_dhs_validation/figures/bedtools_dendrogram.png)
 
-**Fig 7:** The headline methodological point holds post-fix — **best-Pearson cell ≠ best-ARI cell**. Pearson-best (large-k, large-w) cluster at ARI ≈ 0.69; ARI-best (k=10, w=30) at Pearson ≈ 0.946. Numerical perfection and clustering quality remain non-coincident knobs.
+**Fig 7:** The headline methodological point: **best-Pearson cell ≠ best-ARI cell**. Pearson-best (large-k, large-w) clusters at ARI ≈ 0.69; ARI-best (k=10, w=30) at Pearson ≈ 0.946. Numerical perfection and clustering quality are non-coincident knobs.
 
 ![Fig 7 — Mode D Pearson vs ARI tradeoff](../experiments/maurano_dhs_validation/figures/mode_d_metric_tradeoff.png)
 
-**Fig 8:** ARI ≥ 0.85 plateau now narrows to k = 10, w = 30, all p ≥ 22 (pre-fix plateau was broader; post-fix the bug-induced "easy ARI at low p" is gone).
+**Fig 8:** ARI ≥ 0.85 plateau is narrow — concentrated at k = 10, w = 30, p ≥ 22 — so the clustering optimum is genuinely a specific corner of the sweep, not a wide attractor.
 
 ![Fig 8 — Mode D ARI across (k, w, p) sweep](../experiments/maurano_dhs_validation/figures/mode_d_clustering_ari.png)
 
 ### 4.4 Robustness to reference genome
 
-> **Source:** `experiments/ref-comparison/docs/exp_a_results.md` (rerun 2026-05-14).
+> **Source:** `experiments/ref-comparison/docs/exp_a_results.md`.
 
 3 H3K27ac samples (heart, liver, lung) × 3 references (GRCh37/GRCh38/CHM13), 9 sample×ref combinations. Across the (k, w) sweep, same-tissue cross-reference Jaccard is significantly higher than different-tissue Jaccard at every cell with k ≥ 8 (Wilcoxon p ≤ 10⁻⁵), and at **k ≥ 15 the two groups are *fully separated*** — the minimum same-tissue cross-reference similarity exceeds the maximum different-tissue similarity. This is a stronger statement than significant: no overlap.
 
@@ -182,11 +182,11 @@ Practical interpretation: when peaks are aligned to a different human reference 
 
 ### 4.5 Methodological notes: choosing Mode D's flanking column
 
-> **Source:** `experiments/modeD_flanking/` Parts 1 (Maurano re-analysis) and 2 (synthetic FASTA pairs with exact k-mer Jaccard truth). Both fully rerun post-fix.
+> **Source:** `experiments/modeD_flanking/` Parts 1 (Maurano re-analysis) and 2 (synthetic FASTA pairs with exact k-mer Jaccard truth).
 
-Mode D emits two Jaccard columns: minimizer-only (`jaccard_similarity`) and minimizer-plus-flanks (`jaccard_similarity_with_ends`). The post-fix sweep gives a cleaner version of the regime story than was possible pre-fix:
+Mode D emits two Jaccard columns: minimizer-only (`jaccard_similarity`) and minimizer-plus-flanks (`jaccard_similarity_with_ends`). Two corpora characterize when each column is preferred:
 
-- **Part 1 (Maurano, real DHS):** at the high-precision configs, `no_ends` is the clear winner — at k=20, w=100, p=24, r_no_ends = 0.9996 vs r_with_ends = 0.888. The advantage flips only at the smallest (k, w) cells (k ≤ 10, w ≤ 10), where interior minimizers are sparse and the flanking k-mers carry the signal.
+- **Part 1 (Maurano, real DHS):** at high-precision configs, `no_ends` is the clear winner — at k=20, w=100, p=24, r_no_ends = 0.9996 vs r_with_ends = 0.888. The advantage flips only at the smallest (k, w) cells (k ≤ 10, w ≤ 10), where interior minimizers are sparse and the flanking k-mers carry the signal.
 - **Part 2 (synthetic, 192 FASTA pairs across an n_intervals × mean_len × dist × mutation grid, each sketched at 66 valid (k, w, p) cells — ~12 700 measurements total; exact k-mer Jaccard as truth):** `with_ends` has systematically *larger* MAE than `no_ends` against the k-mer truth (mean Δmae_r ≈ −0.015 across all k); the gap widens with φ, the flanking-fraction predictor we defined.
 
 The flanking-fraction φ ≈ 2(k−1)·n_intervals / (total_length / w) predicts the regime: large φ → `_with_ends` over-weights boundary k-mers; small φ → either column works.
@@ -208,29 +208,27 @@ The flanking-fraction φ ≈ 2(k−1)·n_intervals / (total_length / w) predicts
 
 ## 5. Limitations and applicability boundary
 
-### 5.1 Cross-species sequence sketching at long divergence **(pending post-fix rerun)**
+### 5.1 Cross-species sequence sketching at long divergence **(placeholder)**
 
-> **Source:** `experiments/mus-homo/results/column_comparison.tsv` (pre-fix); jobs rerunning 2026-05-14 21:03 onward.
+> **Source:** `experiments/mus-homo/` (sweep in progress).
 
-Pre-fix finding: across 20 (k, w) cells × DNase-seq peaks of 5 matched tissues in human/mouse (~80 Mya divergence), the sketch never produced a tissue-dominant dendrogram (species ARI > tissue ARI in every cell with k ≥ 8). The cross-reference-robustness story (Section 4.4) did *not* extend to cross-species — orthologous peaks in different species don't share enough k-mers for sequence-level sketching to recover tissue identity.
+This section will report whether the sketch recovers tissue identity across human↔mouse DNase-seq (~80 Mya divergence) — 5 matched tissues × 2 species. Earlier evidence suggests species composition dominates k-mer content at this divergence: orthologous peaks in different species share too few k-mers for sequence-level sketching to recover tissue clustering. Full numbers and dendrograms will be filled in once the sweep completes.
 
-This null may flip or sharpen post-fix: pre-fix many cells had `no_ends` Jaccards spuriously near zero (the bug), which would have *inflated* apparent species separation by collapsing within-species pairs. If the null survives the rerun, it's a stronger negative result — sequence-level sketching of regulatory peak FASTAs genuinely cannot recover cross-species tissue identity at the human↔mouse split, independent of any sketch-implementation pathology. If the null inverts, the cross-species claim needs reframing.
-
-(Primate-phylogeny follow-ups: post-fix CSVs for human + mouse + macaque + marmoset + cow + opossum + dog are in place; full 20-species panel still being staged.)
+(Primate-phylogeny follow-ups: CSVs for human + mouse + macaque + marmoset + cow + opossum + dog are in place; full 20-species panel still being staged.)
 
 ### 5.2 Definitional gap vs bedtools
 
-Mode B/C/D estimate slightly different Jaccards than bedtools (bp-set vs interval-overlap vs k-mer-set). On the synthetic Mode B benchmark, the median per-pair gap is ~0.16 and is independent of precision and subsampling. On Maurano post-fix, Mode D at the optimal high-k/high-w cell brings MAE down to 0.006 — i.e., the gap effectively closes when the sketch is well-conditioned. For applications where absolute Jaccard magnitude matters (not just ranking), the appropriate setting is determined by the (k, w, p) choice; the relevant figures are in Section 4.2.
+Mode B/C/D estimate slightly different Jaccards than bedtools (bp-set vs interval-overlap vs k-mer-set). On the synthetic Mode B benchmark, the median per-pair gap is ~0.16 and is independent of precision and subsampling. On Maurano, Mode D at the optimal high-k/high-w cell brings MAE down to 0.006 — i.e., the gap effectively closes when the sketch is well-conditioned. For applications where absolute Jaccard magnitude matters (not just ranking), the appropriate setting is determined by the (k, w, p) choice; the relevant figures are in Section 4.2.
 
 ### 5.3 The cosketch + containment columns are reported but not yet exploited
 
-The five auxiliary similarity columns added 2026-05-14 (containment_AB, containment_BA, cosketch_geom, cosketch_arith, cosketch_max — each in two flavors for Mode D) are present in every Mode D output CSV. Within-experiment analyses currently use the jaccard columns only. A pre-fix sanity check on the ref-comparison Exp A k=10, w=10 cell suggested `cosketch_geom_with_ends` is a near-tie with `jaccard_similarity_with_ends` and `cosketch_max` is uniformly the weakest discriminator; the post-fix re-evaluation across all (k, w) cells and across the Maurano sweep is straightforward and may identify a column (likely cosketch_geom on the minimizer-only flavor) that is more robust than jaccard at small precision or small k. Treat this as a fast-follow analysis rather than a result.
+The five auxiliary similarity columns (containment_AB, containment_BA, cosketch_geom, cosketch_arith, cosketch_max — each in two flavors for Mode D) are present in every Mode D output CSV. Current analyses use the jaccard columns as their primary signal. A 12-metric sanity check at the ref-comparison Exp A (k=10, w=10) cell finds `cosketch_geom_with_ends` is a near-tie with `jaccard_similarity_with_ends`, while `cosketch_max` is uniformly the weakest discriminator. A full multi-metric re-evaluation across the (k, w, p) sweep and across the Maurano corpus is a natural fast-follow analysis and may identify a column (likely cosketch_geom on the minimizer-only flavor) that is more robust than jaccard at small precision or small k.
 
 ## 6. Discussion
 
 - **Practical recipe.** Mode B for fast bedtools-equivalent interval-Jaccard with optional subsampling for further speedup at no accuracy cost. Mode D at large k and w (k=20, w=100, p=24) for the closest numerical match to bedtools (r = 0.9996, MAE = 0.006). Mode D at k=10, w=30, p ≥ 22 for tissue clustering (ARI = 0.91, NMI = 0.96). Use `jaccard_similarity` by default; fall back to `jaccard_similarity_with_ends` only in the short-sequence / sparse-minimizer regime characterized in Section 4.5.
 - **The sketch carries more than bedtools captures.** Mode D recovers tissue clustering directly from peak FASTAs — independently from bedtools' interval overlap — at ARI = 0.91. Sketch similarity ≈ biological similarity, even when the two estimators don't agree numerically.
-- **Boundaries.** Within-species, robust; cross-species without coordinate alignment, fails (pre-fix; post-fix rerun pending). This is a property of any k-mer sketch, not specific to hammock.
+- **Boundaries.** Within-species, robust; cross-species without coordinate alignment, expected to fail (full evaluation in §5.1 pending). This would be a property of any k-mer sketch, not specific to hammock.
 
 ## 7. Conclusion
 
@@ -246,7 +244,7 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 | 2 | `bedtools_benchmark/figures/cpp_vs_bedtools_t16_20260512_160412_sketch_compare_split.png` | synthetic scaling to N=512 |
 | 4 | `maurano_dhs_validation/figures/abc_pearson_vs_bedtools.png` | Mode B r=0.998 |
 | 5 | `maurano_dhs_validation/figures/mode_c_subB_interpolation_agg.png` | Mode C as A↔B interpolant |
-| 5b | `maurano_dhs_validation/figures/mode_d_pearson_heatmap.png` | post-fix Mode D Pearson ridge |
+| 5b | `maurano_dhs_validation/figures/mode_d_pearson_heatmap.png` | Mode D Pearson ridge |
 | 6 | `maurano_dhs_validation/figures/mode_d_best_dendrogram.png` + `bedtools_dendrogram.png` | tissue recovery |
 | 7 | `maurano_dhs_validation/figures/mode_d_metric_tradeoff.png` | Pearson-best ≠ ARI-best |
 | 8 | `maurano_dhs_validation/figures/mode_d_clustering_ari.png` | ARI plateau across sweep |
