@@ -1,9 +1,18 @@
 # maurano_dhs_validation — results notes
 
-Generated from the 2026-05-13/14 sweep (209 Mode D configs × 2 columns ×
+Generated from the 2026-05-14 sweep (209 Mode D configs × 2 columns ×
 2 references + 24 A/B/C configs). Numbers below come from
 `results/abc_summary.csv` and `results/mode_d_summary.csv`; figures live
 in `figures/`.
+
+> **2026-05-14 rerun after Mode D bug fix.** The earlier sweep's Mode D
+> `jaccard_similarity` (no_ends) column was contaminated by a refactor
+> bug in `MinimizerSketch.add_string` that silently dropped most
+> minimizer hashes (see `CLAUDE.md` "Intentional divergences" §6 and
+> `memory/project_modeD_no_ends_zero_bug.md`). Pre-fix numbers
+> understated `no_ends` performance dramatically — best Pearson r jumped
+> from 0.966 to **0.9996** at the post-fix optimum. All Mode D numbers
+> below are post-fix. Pre-fix CSVs are kept at `results/raw_d_buggy_pre_fix/`.
 
 ---
 
@@ -45,19 +54,21 @@ swing that subB delivers between 0.001 and 0.005.
 
 ![](figures/mode_d_pearson_heatmap.png)
 
-**A high-correlation ridge sits at k = 10, w ∈ {20, 30, 50}, p ≥ 20 in
-the `no_ends` column** (Pearson r ≈ 0.96). The `with_ends` column tops out
-around 0.93 with much higher MAE. Low precision (p ≤ 14) hurts both
-columns, but more in `with_ends`. The heatmap is the right shape for this
-sweep — we're asking "where in the (k, w) plane is the optimum?"
+**The `no_ends` column achieves near-perfect agreement at high k + high w
++ high precision.** 47 of 209 configs exceed Pearson r > 0.99 against
+bedtools, peaking at **r = 0.9996** at k = 20/25, w = 100, p = 24. The
+ridge in the heatmap runs along the right edge — large k and large w —
+not the modest (k=10, w=20) ridge the pre-fix sweep had shown. The
+`with_ends` column tops out around r = 0.97 at k = 20, w = 20.
 
 ![](figures/mode_d_mae_heatmap.png)
 
-**The Pearson-best config is *not* the MAE-best config.** At k = 10,
-w = 20, p = 24 the MAE is 0.35 (Mode D predicts ~2× bedtools despite
-excellent rank correlation). The MAE optimum is k = 10, w = 30, p = 24
-with MAE = 0.060 — six times better numerical agreement, but you'd never
-read that off the Pearson plot.
+**Numerical agreement is excellent at the Pearson optimum.** The MAE-best
+config is k = 25, w = 100, p = 24 with **MAE = 0.0061** — essentially
+indistinguishable from bedtools. 21 of 209 cells have MAE < 0.05.
+Pearson-best and MAE-best are now in the same region of the (k, w) plane
+(both at high k + high w + p = 24), unlike the pre-fix story where they
+disagreed.
 
 ---
 
@@ -90,20 +101,22 @@ validated it against any reasonable interval-Jaccard estimator.
 
 ![](figures/mode_d_metric_tradeoff.png)
 
-**The best-Pearson config and the best-ARI config are in different
-corners of the plot.** Each point is one Mode D config; circled points
-are the best of each metric. A handful of (k = 10, w = 20–30, p ≥ 20)
-configs sit far right (Pearson ≈ 0.96) but only middle-vertical
-(ARI ≈ 0.7). The ARI-best config sits high-left (Pearson ≈ 0.91 but
-ARI = 0.91). They are not the same setting. Which one you pick depends
-on what "recapitulate" means.
+**Pearson-best and ARI-best are still in different corners.** The
+Pearson-best configs (large k + large w + p = 24) cluster far right
+(Pearson ≈ 0.9996) but mid-vertical (ARI ≈ 0.69). The ARI-best config
+sits high-left (Pearson ≈ 0.946 but ARI = 0.910). Numerical perfection
+doesn't buy you the best tissue clustering — different metrics still
+pick different optima.
 
 ---
 
 ## Clustering recovery — the actual tissue clustering
 
-The ARI-best Mode D config is **k = 8, w = 10, p = 12** with
-**ARI = 0.910, NMI = 0.961** against the 10 fetal-tissue labels.
+The ARI-best Mode D config is **k = 10, w = 30, p = 22–24** with
+**ARI = 0.910, NMI = 0.961** against the 10 fetal-tissue labels. (Pre-fix
+this peaked at k = 8, w = 10, p = 12 with the same ARI/NMI — the
+clustering signal moved to a different cell of the grid but the achievable
+quality is identical.)
 
 ![](figures/mode_d_best_dendrogram.png)
 
@@ -125,7 +138,7 @@ dendrogram structure.
 
 ### Cluster contingency
 
-Predicted cluster × true tissue label at k = 8, w = 10, p = 12
+Predicted cluster × true tissue label at the post-fix ARI-best config
 (`results/best_cluster_contingency.csv`):
 
 | predicted | fBrain | fHeart | fIntestine_Sm | fKidney | fLung | fMuscle_arm | fMuscle_back | fMuscle_leg | fSkin | fStomach |
@@ -141,7 +154,9 @@ Predicted cluster × true tissue label at k = 8, w = 10, p = 12
 | 9 | . | . | . | . | . | . | . | . | 1 | . |
 | 10 | . | . | . | . | . | . | . | . | . | 1 |
 
-Per-sample assignments are in `results/best_cluster_assignment.csv`.
+Same shape as pre-fix: brain-pair split + muscle_back/leg lumping;
+everything else clean. Per-sample assignments are in
+`results/best_cluster_assignment.csv`.
 
 ![](figures/mode_d_cluster_confusion.png)
 
@@ -155,18 +170,15 @@ pair). That's why ARI gets to 0.91.
 
 ![](figures/mode_d_clustering_ari.png)
 
-**ARI peaks in a different region from Pearson.** The ARI > 0.8 plateau
-covers k ∈ {8, 10}, w ≤ 30, **all precisions p ≥ 10** — i.e. tissue
-clustering survives at very low precision. `with_ends` (right column) is
-much worse at clustering because it inflates pair similarities
-disproportionately for files with many short sequences, blurring the
-between-tissue contrast.
+**ARI peaks in a different region from Pearson** — clustering is
+preserved over k ∈ {10}, w ∈ {30}, **all precisions p ≥ 22**, with smaller
+plateaus at neighbouring (k, w). `with_ends` (right column) is worse at
+clustering because it inflates pair similarities disproportionately for
+files with many short sequences, blurring the between-tissue contrast.
 
 ![](figures/mode_d_clustering_nmi.png)
 
-**NMI tells the same story.** Peak 0.96 at k = 8, w = 10, p = 12. The
-biological-signal regime is broader and tolerates lower precision than
-the numerical-agreement regime.
+**NMI tells the same story** — peak 0.96 at the same ARI-best config.
 
 ---
 
@@ -174,11 +186,11 @@ the numerical-agreement regime.
 
 ![](figures/mode_d_best_scatter.png)
 
-**At the ARI-best config, predictions sit above the y = x diagonal on
-both panels** — Mode D's `no_ends` Jaccard is systematically inflated
-relative to either bedtools (left) or Mode B (right) — but the inflation
-pattern is consistent and monotone. The clustering structure (which is
-all ARI/NMI care about) survives the scale shift intact.
+**At the ARI-best config, predictions sit near the y = x diagonal** —
+the post-fix `no_ends` Jaccard is essentially calibrated against both
+bedtools (left) and Mode B (right). The pre-fix systematic upward bias
+is gone: the bug had been *suppressing* the sketch cardinality and now
+the recovered Jaccards agree numerically.
 
 ---
 
@@ -186,13 +198,16 @@ all ARI/NMI care about) survives the scale shift intact.
 
 | If you want to answer... | Use | At config | Value |
 |---|---|---|---|
-| Do predictions covary with bedtools?   | Pearson r | k=10, w=20, p=24 | 0.966 |
-| Do predictions rank-order the same?    | Spearman ρ | k=10, w=10, p=14 | 0.916 |
-| Are the absolute Jaccards close?       | MAE        | k=10, w=30, p=24 | 0.060 |
-| Is the biology preserved?              | ARI        | k=8,  w=10, p=12 | 0.910 |
-| Is the biology preserved (info-theory)?| NMI        | k=8,  w=10, p=12 | 0.961 |
+| Do predictions covary with bedtools?   | Pearson r | k=20/25, w=100, p=24 | **0.9996** |
+| Do predictions rank-order the same?    | Spearman ρ | k=20/25, w=100, p=24 | **0.998** |
+| Are the absolute Jaccards close?       | MAE        | k=25, w=100, p=24 | **0.0061** |
+| Is the biology preserved?              | ARI        | k=10, w=30, p=22-24 | **0.910** |
+| Is the biology preserved (info-theory)?| NMI        | k=10, w=30, p=22-24 | **0.961** |
 
-Different metrics → different optimal configs because Mode D estimates
-k-mer set Jaccard while bedtools estimates interval-overlap Jaccard.
-These are monotonically related on this corpus but not identical, so
-the choice of metric encodes the choice of which property you care about.
+**Post-fix headline: at high k + high w + high precision, Mode D's
+`no_ends` column is a near-perfect drop-in replacement for bedtools
+pairwise Jaccard** — 47 of 209 configs exceed r > 0.99 against bedtools,
+with the best four-decimal-place agreement at MAE = 0.0061. The
+clustering optimum sits at a *different* (smaller-k, smaller-w) cell of
+the grid; numerical perfection and clustering quality remain
+non-coincident knobs.
