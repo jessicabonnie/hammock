@@ -5,16 +5,20 @@ ChIP-seq peaks, aligned to GRCh37 / GRCh38 / CHM13, should sketch more
 similarly *across references* than across tissues on any one reference.
 
 3 tissues (heart, liver, lung) × 3 references = 9 sample × ref combinations.
-2 peak callers (MACS3 broad + narrow). (k, w) sweep: 26 cells with w ≥ k.
+2 peak callers (MACS3 broad + narrow). (k, w) sweep: 20 cells with w ≥ k.
 
 Hammock Mode D with minimizer HLL, `--precision 24`. Similarity metric:
 `jaccard_similarity_with_ends` (minimizer ∪ start-end HLL).
 
-## Where to find the raw results
+> **Rerun 2026-05-14**: all hammock CSVs, stats, and figures below were
+> regenerated after the Mode D minimizer-ingest bug fix (orig's slow-path
+> `add_string(str(hash_val))` silently dropped most minimizers at k ≥ 12;
+> `python/hammock/modes/sequence.py` now calls `add_hash64` directly —
+> see CLAUDE.md "Intentional divergences" §6). Pre-fix the k=15 and k=20
+> cells appeared to be a "saturated low" regime; post-fix they are the
+> strongest discriminators in the sweep.
 
-Symlinked into the repo with fine-grained paths (Exp A subset only — the
-legacy storage location also holds defunct Exp B artifacts that are not
-exposed here):
+## Where to find the raw results
 
 ```
 results/
@@ -32,16 +36,22 @@ Underlying storage: `/vast/blangme2/jbonnie/hammock/claude-ref-comparison/result
 ## Headline result
 
 Same-tissue cross-reference Jaccard is significantly higher than
-different-tissue Jaccard across **all** (k, w) cells with k ≥ 8.
-The hypothesis ("reference choice contributes less than tissue identity")
-holds across the entire usable parameter range.
+different-tissue Jaccard across every (k, w) cell with k ≥ 8 in both
+peak types. The hypothesis ("reference choice contributes less than
+tissue identity") holds across the entire usable parameter range, and
+at k ∈ {15, 20} the two groups are **fully separated** — the minimum
+same-tissue cross-ref similarity exceeds the maximum different-tissue
+similarity.
 
 ### Dendrogram — direct visual proof
 
-UPGMA clustering on `1 − jaccard_similarity_with_ends` at k=10, w=10.
-Each tissue's three references form a tight monophyletic clade in both
-peak types; the within-tissue merge heights (≤ 0.1) are several-fold
-smaller than inter-tissue merges (≥ 0.4). Source: `scripts/exp_a_dendrogram.R`.
+UPGMA clustering on `1 − jaccard_similarity_with_ends`. Each tissue's
+three references form a tight monophyletic clade in both peak types.
+At k=15, w=15 the clades are deeply separated; at k=10, w=10 they
+still partition cleanly but with smaller margin. Source:
+`scripts/exp_a_dendrogram.R`.
+
+![Cross-reference dendrogram (broad + narrow, k=15, w=15)](../figures/cross_ref_dendrogram_k15_w15.png)
 
 ![Cross-reference dendrogram (broad + narrow, k=10, w=10)](../figures/cross_ref_dendrogram_k10_w10.png)
 
@@ -61,53 +71,39 @@ effect size (median cross-ref − median diff-tissue) and the Wilcoxon p.
 
 | Regime | Cells | Behavior |
 |---|---|---|
-| **Saturated high** | k=5 (any w) | Both groups ≈ 0.99. Tiny effect (Δ ≤ 0.02). |
-| **Sweet spot — interpretable** | k=10, w ≥ 10 | Δmedian ≈ 0.10 on mid-range medians (≈ 0.5 vs 0.4). |
-| **Saturated low** | k ≥ 15 | Absolute medians collapse (≈ 0.09 vs 0.015). Ratio is large (~6×), Δ moderate (~0.08), p ≤ 1.35e-10. |
-| **Borderline** | k=8 | Strong p but small Δ (≈ 0.02–0.03) on top of high baseline (~0.95). |
+| **Saturated high** | k=5 (any w); k=8 (any w) | Both groups ≈ 0.95–0.99. Δ ≤ 0.02; k=5 mostly non-significant. |
+| **Interpretable mid** | k=10, w ≥ 10 | Medians ≈ 0.55–0.65; Δ ≈ 0.09; p ≈ 1e-7. Groups overlap. |
+| **Interpretable + fully separated** | k=15, k=20 (any valid w) | Medians cross-ref ≈ 0.55–0.78 vs diff-tissue ≈ 0.24–0.39. Δ ≈ 0.32–0.45, p ≈ 1.35e-10 (Wilcoxon floor). **min(xref) > max(diff-tissue)**. |
 
 ![Sweep effect-size heatmap, broad peaks](../figures/sweep_effect_size_broad.png)
 
 ![Sweep effect-size heatmap, narrow peaks](../figures/sweep_effect_size_narrow.png)
 
-Top-significance cells (broad, narrow consistent):
+Top-effect cells (broad / narrow consistent ordering):
 
-| Cell | Δmedian | Wilcoxon p | median(cross-ref) | median(diff-tissue) |
-|---|---|---|---|---|
-| k15_* (all w) | 0.081 | 1.35e-10 | 0.097 | 0.015 |
-| k10_w20 | 0.107 | 4.5e-7 | 0.526 | 0.419 |
-| k10_w15 | 0.106 | 4.5e-7 | 0.550 | 0.444 |
-| k10_w10 | 0.100 | 4.5e-7 | 0.587 | 0.486 |
+| Cell | peak | Δmedian | Wilcoxon p | median(cross-ref) | median(diff-tissue) |
+|---|---|---|---|---|---|
+| k15_w15 | broad  | 0.398 | 1.35e-10 | 0.783 | 0.385 |
+| k15_w15 | narrow | 0.387 | 1.35e-10 | 0.729 | 0.342 |
+| k20_w20 | broad  | 0.413 | 1.35e-10 | 0.725 | 0.313 |
+| k20_w20 | narrow | 0.366 | 1.35e-10 | 0.643 | 0.277 |
+| k15_w20 | broad  | 0.383 | 1.35e-10 | 0.743 | 0.361 |
+| k15_w30 | broad  | 0.353 | 1.35e-10 | 0.676 | 0.323 |
+| k20_w30 | broad  | 0.379 | 1.35e-10 | 0.657 | 0.277 |
+| k10_w10 | broad  | 0.086 | 2.02e-07 | 0.640 | 0.554 |
+| k10_w10 | narrow | 0.087 | 4.54e-07 | 0.640 | 0.553 |
 
-The k=10 cells are the most defensible to lead with: large absolute
-effect, both groups well away from the 0/1 boundaries, and the heatmap
-panel (B) of the single-cell figure shows visible block structure.
+**k=15, w=15 is the best lead cell**: largest Δ, maximally significant,
+medians sit in the interpretable mid-range, and the groups are *fully
+separated* (broad: min cross-ref 0.753 > max diff-tissue 0.443). k=10
+cells are still useful when overlap (rather than clean separation) is
+the story being told.
 
-## Mirrored figures (local, not committed)
+## New Mode D columns — at k=10, w=10
 
-`figures/` is gitignored. Files present:
-
-- `sweep_effect_size_{broad,narrow}.png` — top-level (k × w) effect-size heatmaps.
-- `cross_ref_validation_{broad,narrow}_k10_w10.png` — representative single-cell figure (boxplot + 9×9 sample-by-sample heatmap).
-- `cross_ref_dendrogram_k10_w10.png` — UPGMA dendrogram, broad + narrow.
-- `metric_comparison_broad_k10_w10.png` / `.tsv` — sanity check for the new Mode D output columns (see below).
-
-Other per-cell `cross_ref_validation.png` files are reachable through
-`results/exp_a/{peak_type}/k{k}_w{w}/` if a different cell ever needs to
-be inspected.
-
-## New Mode D columns — sanity check at k=10, w=10
-
-The bulk CSVs under `results/exp_a/` predate the containment + cosketch
-metric additions (shipped 2026-05-14) and only carry `jaccard_similarity`
-+ `jaccard_similarity_with_ends`. I re-ran hammock at the (k=10, w=10)
-broad cell with the current binary to check the 10 new columns. Inputs +
-output kept under `/tmp/hammock_newcols_test/` (not in `results/` —
-exploratory).
-
-`scripts/exp_a_metric_comparison.R` performs the same Wilcoxon test
-(same-tissue cross-ref vs different-tissue) on each of the 12 columns.
-Outputs `figures/metric_comparison_{broad,narrow}_k10_w10.{png,tsv}`.
+`scripts/exp_a_metric_comparison.R` runs the same Wilcoxon test on each
+of the 12 metric columns the new hammock emits (6 minimizer + 6
+minimizer+ends). Outputs: `figures/metric_comparison_{broad,narrow}_k10_w10.{png,tsv}`.
 
 ![Metric comparison, broad, k=10, w=10](../figures/metric_comparison_broad_k10_w10.png)
 
@@ -117,34 +113,36 @@ Outputs `figures/metric_comparison_{broad,narrow}_k10_w10.{png,tsv}`.
 
 | Metric (flavor)                | Δ broad | p broad | Δ narrow | p narrow |
 |---|---|---|---|---|
-| jaccard (minimizer)            | 0.127 | 1.35e-10 | 0.154 | 1.35e-10 |
-| containment_AB/BA (minimizer)  | 0.059 | 1.36e-10 | 0.067 | 1.36e-10 |
-| cosketch_geom (minimizer)      | 0.068 | 1.35e-10 | 0.083 | 1.35e-10 |
-| cosketch_arith (minimizer)     | 0.068 | 1.35e-10 | 0.082 | 1.35e-10 |
-| cosketch_max (minimizer)       | 0.032 | 1.35e-10 | 0.032 | 1.35e-10 |
-| **jaccard (minimizer+ends)**   | **0.100** | **4.5e-07** | **0.099** | **2.1e-06** ← existing default |
-| cosketch_geom (minimizer+ends) | 0.081 | 4.5e-07 | 0.078 | 7.2e-06 |
-| cosketch_arith (minimizer+ends)| 0.077 | 4.5e-07 | 0.071 | 1.4e-05 |
-| containment_AB/BA (with ends)  | 0.035 | 6.4e-04 | 0.035 | 8.5e-03 |
-| cosketch_max (with ends)       | 0.017 | 3.7e-02 | 0.000 | 4.5e-01 |
+| jaccard (minimizer)            | 0.071 | 1.35e-10 | 0.084 | 1.35e-10 |
+| containment_AB/BA (minimizer)  | 0.032 | 1.36e-10 | 0.036 | 1.36e-10 |
+| cosketch_geom (minimizer)      | 0.037 | 1.35e-10 | 0.044 | 1.35e-10 |
+| cosketch_arith (minimizer)     | 0.036 | 1.35e-10 | 0.043 | 1.35e-10 |
+| cosketch_max (minimizer)       | 0.017 | 1.35e-10 | 0.016 | 1.35e-10 |
+| **jaccard (minimizer+ends)**   | **0.086** | **2.02e-07** | **0.087** | **4.54e-07** ← existing default |
+| cosketch_geom (minimizer+ends) | 0.065 | 1.54e-07 | 0.064 | 9.94e-07 |
+| cosketch_arith (minimizer+ends)| 0.062 | 2.02e-07 | 0.059 | 4.45e-06 |
+| containment_AB/BA (with ends)  | 0.029 | 8.81e-04 | 0.028 | 6.62e-03 |
+| cosketch_max (with ends)       | 0.013 | 5.13e-02 | 0.000 | 4.92e-01 |
 
 Notes (both peak types):
-1. **All minimizer-only metrics hit the Wilcoxon test floor** (p ≈ 1.4e-10 for n=18/54). Maximally significant, but operating near saturation (medians ≈ 0.99 vs ≈ 0.93), so Δ is small in absolute terms.
-2. **Adding the start-end HLL lowers baselines into the interpretable mid-range** (~0.7) and reduces saturation. Cost: p drops by ~3–4 orders of magnitude for the surviving discriminators.
-3. **Containment-with-ends is a markedly weaker discriminator** than jaccard-with-ends. The pattern is symmetric — `containment_AB` and `containment_BA` produce identical medians across the full all-vs-all set because every unordered pair appears in both directions.
-4. **cosketch_max collapses entirely on narrow with ends** (Δ = 0, p = 0.45). Worst metric in both flavors.
-5. **`jaccard_similarity_with_ends` remains the right default** for headline analysis: best Δ/saturation trade-off and matches what the existing CSV sweep already used. `cosketch_geom_with_ends` is a near-tie if a redundancy-aware alternative is wanted.
+1. **All minimizer-only metrics hit the Wilcoxon test floor** (p ≈ 1.4e-10 for n=18/54). Maximally significant but operating near saturation (medians ≈ 0.99 vs ≈ 0.92), so absolute Δ is small.
+2. **Adding the start-end HLL lowers baselines into the interpretable mid-range** (~0.55–0.78) and reduces saturation. Cost: p drops by ~3–4 orders of magnitude for the surviving discriminators.
+3. **Containment-with-ends is a markedly weaker discriminator** than jaccard-with-ends. `containment_AB` and `containment_BA` produce identical medians across the all-vs-all set because every unordered pair appears in both directions.
+4. **cosketch_max collapses on with-ends** (broad Δ 0.013 p ≈ 0.05, narrow Δ ≈ 0 p ≈ 0.49). Worst metric in both flavors.
+5. **`jaccard_similarity_with_ends` remains the right default** for headline analysis at k=10: best Δ/saturation trade-off and matches what the existing CSV sweep uses. `cosketch_geom_with_ends` is a near-tie if a redundancy-aware alternative is wanted.
 6. **Broad vs narrow**: minimizer-only effects are slightly larger on narrow (likely tighter peak boundaries → more shared minimizers between same-sample-different-ref pairs). With-ends p-values are slightly weaker on narrow but the qualitative ordering of metrics is identical.
 
 ### To extend
 
-- Re-run the full (k × w) sweep with the current hammock to populate the new columns across all 26 cells × 2 peak types, then regenerate the sweep-effect heatmap for each metric. Inputs + Snakemake DAG are unchanged; only `rule exp_a_hammock` needs to re-fire.
-- Single-cell sanity-check CSVs are at `/tmp/hammock_newcols_test/newcols_{broad,narrow}_k10w10_mnmzr_p24_jaccD_k10_w10.csv` (not preserved in `results/`).
+- Replicate this 12-metric comparison at k=15, w=15 (the new headline cell) — `metric_comparison.R` is parameterised on the input CSV.
+- The same minimizer / minimizer+ends pattern likely holds, but with-ends may matter less when the minimizer-only signal is already fully separated.
 
 ## Scripts that produced these outputs
 
 - `scripts/exp_a_validate_plot.R` — per-cell Wilcoxon + 2-panel figure (boxplot + 9×9 heatmap)
 - `scripts/exp_a_sweep_summary.R` — (k × w) effect-size heatmap
+- `scripts/exp_a_dendrogram.R` — UPGMA dendrogram (broad + narrow)
+- `scripts/exp_a_metric_comparison.R` — 12-metric Wilcoxon comparison at one (k, w)
 - `workflow/Snakefile` — orchestrates peaks → FASTA (bedtools getfasta) → hammock Mode D → R plots
 
 ## Reproducing
