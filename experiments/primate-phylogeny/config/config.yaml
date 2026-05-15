@@ -1,0 +1,79 @@
+# =============================================================================
+# config/config.yaml — Primate / Mammal Phylogeny Recovery from Villar 2015
+# =============================================================================
+#
+# Pipeline: download Villar peak BED → bedtools getfasta → hammock all-vs-all
+# → distance matrix → NJ tree → comparison to known mammalian phylogeny.
+#
+# Peak files come from ArrayExpress E-MTAB-2633 (Villar 2015, Cell 160:554)
+# called against Ensembl v73 (Sept 2013) assemblies. Chromosome names are
+# *bare* (Ensembl style, e.g. "1", not "chr1"), so reference FASTAs must
+# match that naming convention or be re-headered.
+#
+
+# Sample manifest TSV (one row per species, two peak URLs each)
+samples_tsv: "config/samples.tsv"
+
+# Which mark to use (one run per mark). Options: H3K4me3 (more conserved
+# across mammals — ~60–70 % peak overlap) or H3K27ac (faster-evolving —
+# ~10–20 % peak overlap; chosen here to test whether wider divergence
+# opens up the cross-species Jaccard dynamic range).
+mark: "H3K4me3"
+
+# Output root — under /vast for large files
+outdir: "/vast/blangme2/jbonnie/hammock/primate-phylogeny/results"
+
+# Where to cache downloaded Villar peak files (one per species per mark)
+peaks_cache: "/vast/blangme2/jbonnie/hammock/primate-phylogeny/peaks"
+
+# Hammock entrypoint — absolute path to ensure SLURM jobs use the env-installed
+# build (PATH-resolved "hammock" can fall back to a stale ~/.local/bin install).
+sketch_bin: "/home/jbonnie1/.conda/envs/claude-ref-comparison/bin/hammock"
+
+# Primary similarity column — Mode D outputs two:
+#   jaccard_similarity            — minimizers only
+#   jaccard_similarity_with_ends  — minimizers + boundary k-mers
+primary_sim_col: "jaccard_similarity_with_ends"
+
+# (k, w) sweep — same as mus-homo / ref-comparison
+kmer_sizes:   [5, 8, 10, 15, 20]
+window_sizes: [5, 8, 10, 15, 20, 30]
+precision:    24
+
+# Reference genomes — keyed by `ucsc_assembly` column in samples.tsv.
+#
+# Villar peaks use Ensembl-style chromosome names (bare "1", not "chr1").
+# Each reference declares its own chromosome-name style via `peak_chr_prefix`:
+#   - ""     → reference is Ensembl-style (no chr prefix); pass peaks through
+#   - "chr"  → reference is UCSC-style; prepend "chr" to peak BED before getfasta
+#
+# Only species whose ucsc_assembly key is present here will be included in
+# the run. Start small (human + mouse) for plumbing, add others as their
+# v73-era references are acquired.
+references:
+  # Phase 0 (already downloaded): human + mouse
+  hg19:
+    fasta: "/data/blangme2/fasta/grch37/hs37d5.fa"
+    peak_chr_prefix: ""
+  mm10:
+    fasta: "/data/blangme2/jessica/mus_homo/references/mm10/mm10_no_alt_analysis_set_ENCODE.fasta"
+    peak_chr_prefix: "chr"
+  # Phase 1: rheMac + calJac (primate gradient), canFam (carnivore),
+  # bosTau (cetartiodactyl), monDom (marsupial outgroup). All staged from
+  # Ensembl release-73 (Sept 2013), matching Villar's peak-call assembly.
+  # Ensembl DNA FASTAs use bare chromosome names, so peak_chr_prefix: "".
+  rheMac2:
+    fasta: "/vast/blangme2/jbonnie/hammock/primate-phylogeny/references/rheMac.fa"
+    peak_chr_prefix: ""
+  calJac3:
+    fasta: "/vast/blangme2/jbonnie/hammock/primate-phylogeny/references/calJac.fa"
+    peak_chr_prefix: ""
+  canFam3:
+    fasta: "/vast/blangme2/jbonnie/hammock/primate-phylogeny/references/canFam.fa"
+    peak_chr_prefix: ""
+  bosTau7:
+    fasta: "/vast/blangme2/jbonnie/hammock/primate-phylogeny/references/bosTau.fa"
+    peak_chr_prefix: ""
+  monDom5:
+    fasta: "/vast/blangme2/jbonnie/hammock/primate-phylogeny/references/monDom.fa"
+    peak_chr_prefix: ""

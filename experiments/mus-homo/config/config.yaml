@@ -1,0 +1,38 @@
+# =============================================================================
+# config/config.yaml — Tissue-over-Species Clustering, Human + Mouse, DNase-seq
+# =============================================================================
+#
+# Pipeline: download ENCODE peak BED → bedtools getfasta → hammock all-vs-all
+# → hierarchical clustering. No nf-core/chipseq required because ENCODE
+# publishes uniform-pipeline peak BEDs directly.
+#
+
+# Sample manifest TSV (one row per ChIP-seq experiment)
+samples_tsv: "config/samples.tsv"
+
+# Output root — under /vast for large files
+outdir: "/vast/blangme2/jbonnie/hammock/mus-homo/results"
+
+# Where to cache downloaded ENCODE peak BEDs
+peaks_cache: "/vast/blangme2/jbonnie/hammock/mus-homo/peaks"
+
+# Hammock entrypoint — absolute path to ensure SLURM jobs use the env-installed
+# build (PATH-resolved "hammock" can fall back to a stale ~/.local/bin install).
+sketch_bin: "/home/jbonnie1/.conda/envs/claude-ref-comparison/bin/hammock"
+
+# Primary similarity column — Mode D outputs two:
+#   jaccard_similarity            — minimizers only
+#   jaccard_similarity_with_ends  — minimizers + boundary k-mers (primary)
+primary_sim_col: "jaccard_similarity_with_ends"
+
+# Minimizer parameter sweep (same as ref-comparison)
+kmer_sizes:   [5, 8, 10, 15, 20]
+window_sizes: [5, 8, 10, 15, 20, 30]
+precision:    24
+
+# Reference genomes — same paths as ref-comparison
+references:
+  GRCh38:
+    fasta: "/data/blangme2/jessica/mus_homo/references/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna"
+  mm10:
+    fasta: "/data/blangme2/jessica/mus_homo/references/mm10/mm10_no_alt_analysis_set_ENCODE.fasta"
