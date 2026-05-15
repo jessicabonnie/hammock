@@ -51,7 +51,7 @@ Pearson r, Spearman ρ, MAE vs bedtools (Mode B/C/D); ARI, NMI vs known tissue l
 
 > **Sources:** `experiments/subB_mixed_stride/RESULTS.md` (real DHS); `experiments/bedtools_benchmark/RESULTS.md` (synthetic).
 
-**Real DHS (Maurano, 20 samples, 190 pairs, t=16, t=8 GNU-parallel for bedtools):**
+**Real DHS (Maurano, 20 samples, 190 pairs, 8 threads for both tools — hammock `-t 8`, bedtools 8-way GNU parallel):**
 
 | tool | wall (s) | speedup over bedtools |
 |---|---|---|
@@ -60,7 +60,7 @@ Pearson r, Spearman ρ, MAE vs bedtools (Mode B/C/D); ARI, NMI vs known tissue l
 | hammock (high-subsample) | ~5 | ~2× |
 | hammock (max-subsample) | ~3.6 | ~3× |
 
-**Synthetic scaling (10k intervals/file, p=14, t=16):**
+**Synthetic scaling (10k intervals/file, p=14, 16 threads for both tools — hammock `-t 16`, bedtools 16-way GNU parallel):**
 
 | N files | bedtools | hammock | speedup |
 |---|---|---|---|
