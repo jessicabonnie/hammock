@@ -120,13 +120,13 @@ Across Maurano's 400 sample pairs:
 
 Mode D's numerical agreement with bedtools peaks at r = 0.9996 / MAE = 0.0061 — four-decimal-place agreement. The high-correlation ridge in the (k, w) Pearson heatmap runs along the high-k / high-w edge of the sweep, indicating that Mode D's near-perfect agreement is unlocked at long minimizer windows where interior coverage is richest.
 
-**Fig 4:** Per Mode D config, Pearson r against bedtools (x-axis) vs Pearson r against Mode B (y-axis); points sit tightly on y = x. Mode D's agreement with bedtools is mirrored by its agreement with Mode B, so Mode B is an interchangeable interval-Jaccard reference for Mode D — once Mode D is validated against bedtools, it is validated against any reasonable interval-Jaccard estimator.
+**Fig 3:** Per Mode D config, Pearson r against bedtools (x-axis) vs Pearson r against Mode B (y-axis); points sit tightly on y = x. Mode D's agreement with bedtools is mirrored by its agreement with Mode B, so Mode B is an interchangeable interval-Jaccard reference for Mode D — once Mode D is validated against bedtools, it is validated against any reasonable interval-Jaccard estimator.
 
-![Fig 4 — Mode D vs bedtools and vs Mode B agree per config](../experiments/maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png)
+![Fig 3 — Mode D vs bedtools and vs Mode B agree per config](../experiments/maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png)
 
-**Fig 5:** Mode D Pearson ridge along high k + high w + p ≥ 20.
+**Fig 4:** Mode D Pearson ridge along high k + high w + p ≥ 20.
 
-![Fig 5 — Mode D Pearson heatmap](../experiments/maurano_dhs_validation/figures/mode_d_pearson_heatmap.png)
+![Fig 4 — Mode D Pearson heatmap](../experiments/maurano_dhs_validation/figures/mode_d_pearson_heatmap.png)
 
 ### 4.3 Biological signal: the sketch recovers tissue identity
 
@@ -136,18 +136,18 @@ Mode D's best-ARI cell is **k = 10, w = 30**, with **ARI = 0.910, NMI = 0.961** 
 
 At the ARI-best config, Mode D's predicted Jaccards sit on the y = x diagonal versus bedtools (and versus Mode B) — the sketch is numerically calibrated against the bedtools reference, not just rank-correlated.
 
-**Fig 6:** Mode D best-ARI dendrogram (top) paired with the bedtools reference dendrogram (bottom). Same tissue blocks recovered.
+**Fig 5:** Mode D best-ARI dendrogram (top) paired with the bedtools reference dendrogram (bottom). Same tissue blocks recovered.
 
-![Fig 6a — Mode D best dendrogram](../experiments/maurano_dhs_validation/figures/mode_d_best_dendrogram.png)
-![Fig 6b — bedtools reference dendrogram](../experiments/maurano_dhs_validation/figures/bedtools_dendrogram.png)
+![Fig 5a — Mode D best dendrogram](../experiments/maurano_dhs_validation/figures/mode_d_best_dendrogram.png)
+![Fig 5b — bedtools reference dendrogram](../experiments/maurano_dhs_validation/figures/bedtools_dendrogram.png)
 
-**Fig 7:** The headline methodological point: **best-Pearson cell ≠ best-ARI cell**. Pearson-best (large-k, large-w) clusters at ARI ≈ 0.69; ARI-best (k=10, w=30) at Pearson ≈ 0.946. Numerical perfection and clustering quality are non-coincident knobs.
+**Fig 6:** The headline methodological point: **best-Pearson cell ≠ best-ARI cell**. Pearson-best (large-k, large-w) clusters at ARI ≈ 0.69; ARI-best (k=10, w=30) at Pearson ≈ 0.946. Numerical perfection and clustering quality are non-coincident knobs.
 
-![Fig 7 — Mode D Pearson vs ARI tradeoff](../experiments/maurano_dhs_validation/figures/mode_d_metric_tradeoff.png)
+![Fig 6 — Mode D Pearson vs ARI tradeoff](../experiments/maurano_dhs_validation/figures/mode_d_metric_tradeoff.png)
 
-**Fig 8:** The ARI ≥ 0.85 plateau is a single (k, w) cell — k = 10, w = 30, holding for every precision p ≥ 12 — so the clustering optimum is genuinely a specific corner of the (k, w) sweep, not a wide attractor.
+**Fig 7:** The ARI ≥ 0.85 plateau is a single (k, w) cell — k = 10, w = 30, holding for every precision p ≥ 12 — so the clustering optimum is genuinely a specific corner of the (k, w) sweep, not a wide attractor.
 
-![Fig 8 — Mode D ARI across (k, w, p) sweep](../experiments/maurano_dhs_validation/figures/mode_d_clustering_ari.png)
+![Fig 7 — Mode D ARI across (k, w, p) sweep](../experiments/maurano_dhs_validation/figures/mode_d_clustering_ari.png)
 
 ### 4.4 Robustness to reference genome
 
@@ -165,21 +165,21 @@ The sweep partitions into three regimes:
 | Interpretable mid | k = 10, w ≥ 10 | Medians ≈ 0.55–0.65; Δ ≈ 0.09; groups overlap |
 | **Interpretable + fully separated** | **k ≥ 15 (any valid w)** | **Δ ≈ 0.32–0.45; min(xref) > max(diff-tissue)** |
 
-**Fig 9:** UPGMA dendrogram at the new headline cell (k=15, w=15) — each tissue's three references form a tight monophyletic clade with deep separation between tissues; broad and narrow peak calls give the same structure.
+**Fig 8:** UPGMA dendrogram at the new headline cell (k=15, w=15) — each tissue's three references form a tight monophyletic clade with deep separation between tissues; broad and narrow peak calls give the same structure.
 
-![Fig 9 — cross-reference dendrogram, k=15, w=15](../experiments/ref-comparison/figures/cross_ref_dendrogram_k15_w15.png)
+![Fig 8 — cross-reference dendrogram, k=15, w=15](../experiments/ref-comparison/figures/cross_ref_dendrogram_k15_w15.png)
 
-**Fig 9b (supplementary):** Same dendrogram at the interpretable-mid cell (k=10, w=10) — the clades still hold but with smaller margin, useful when "graceful degradation as k drops" is the story being told.
+**Fig S1 (supplementary):** Same dendrogram at the interpretable-mid cell (k=10, w=10) — the clades still hold but with smaller margin, useful when "graceful degradation as k drops" is the story being told.
 
-![Fig 9b — cross-reference dendrogram, k=10, w=10](../experiments/ref-comparison/figures/cross_ref_dendrogram_k10_w10.png)
+![Fig S1 — cross-reference dendrogram, k=10, w=10](../experiments/ref-comparison/figures/cross_ref_dendrogram_k10_w10.png)
 
-**Fig 10:** (k × w) effect-size heatmap for broad peaks; the three regimes are immediately visible, with k ∈ {15, 20} as a uniformly high-effect block.
+**Fig 9:** (k × w) effect-size heatmap for broad peaks; the three regimes are immediately visible, with k ∈ {15, 20} as a uniformly high-effect block.
 
-![Fig 10 — cross-ref effect-size sweep, broad](../experiments/ref-comparison/figures/sweep_effect_size_broad.png)
+![Fig 9 — cross-ref effect-size sweep, broad](../experiments/ref-comparison/figures/sweep_effect_size_broad.png)
 
 **Metric choice at k=10, w=10** (`scripts/exp_a_metric_comparison.R`): of the 12 emitted similarity columns, `jaccard_similarity_with_ends` remains the right default — best Δ/saturation trade-off (broad Δ = 0.086, p = 2.0 × 10⁻⁷). `cosketch_geom_with_ends` is a near-tie (Δ = 0.065). All minimizer-only metrics hit the Wilcoxon p-floor but operate near saturation (medians ≈ 0.99 vs 0.92), so absolute Δ is small. `cosketch_max_with_ends` collapses on narrow (Δ ≈ 0, p ≈ 0.49) — the worst metric in both flavors and not recommended.
 
-![Fig 10b — 12-metric Wilcoxon comparison at k=10, w=10, broad](../experiments/ref-comparison/figures/metric_comparison_broad_k10_w10.png)
+![Fig S2 — 12-metric Wilcoxon comparison at k=10, w=10, broad](../experiments/ref-comparison/figures/metric_comparison_broad_k10_w10.png)
 
 (Note: at k=15, w=15 the minimizer-only signal is already fully separated, so the choice of with-ends vs no-ends matters less; a future replication of this 12-metric comparison at the new headline cell would confirm that observation.)
 
@@ -200,18 +200,18 @@ The flanking-fraction φ ≈ 2(k−1)·n_intervals / (total_length / w) predicts
 
 **Recommendation:** minimizer-only (`jaccard_similarity`) is the right default for ChIP/DHS-shaped corpora at any reasonable parameter choice; `_with_ends` is a fallback for short-sequence, sparse-minimizer regimes.
 
-**Fig 11:** Part 1 (Maurano real DHS) — sign of (no_ends − with_ends) flips with w.
+**Fig 10:** Part 1 (Maurano real DHS) — sign of (no_ends − with_ends) flips with w.
 
-![Fig 11 — Maurano Δr(no_ends − with_ends) vs w](../experiments/modeD_flanking/figures/maurano_delta_r_vs_w.png)
+![Fig 10 — Maurano Δr(no_ends − with_ends) vs w](../experiments/modeD_flanking/figures/maurano_delta_r_vs_w.png)
 
-**Fig 12:** Part 2 (synthetic) — Δ(no_ends, with_ends) vs φ, and the φ × mutation phase plane.
+**Fig 11:** Part 2 (synthetic) — Δ(no_ends, with_ends) vs φ, and the φ × mutation phase plane.
 
-![Fig 12a — synthetic Δ vs φ](../experiments/modeD_flanking/figures/synthetic_delta_vs_phi.png)
-![Fig 12b — synthetic φ × mutation phase diagram](../experiments/modeD_flanking/figures/synthetic_phase_diagram.png)
+![Fig 11a — synthetic Δ vs φ](../experiments/modeD_flanking/figures/synthetic_delta_vs_phi.png)
+![Fig 11b — synthetic φ × mutation phase diagram](../experiments/modeD_flanking/figures/synthetic_phase_diagram.png)
 
-**Fig 12c:** Empirical agreement with the analytical φ-prediction — independent validation of the flanking-fraction model.
+**Fig 12:** Empirical agreement with the analytical φ-prediction — independent validation of the flanking-fraction model.
 
-![Fig 12c — empirical vs analytical φ](../experiments/modeD_flanking/figures/synthetic_empirical_vs_analytical.png)
+![Fig 12 — empirical vs analytical φ](../experiments/modeD_flanking/figures/synthetic_empirical_vs_analytical.png)
 
 ## 5. Limitations
 
@@ -240,17 +240,17 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 |---|---|---|
 | 1 | `subB_mixed_stride/figures/headline_maurano_pareto.png` | hammock dominates bedtools on real Pareto |
 | 2 | `bedtools_benchmark/figures/cpp_vs_bedtools_t16_20260512_160412_sketch_compare_split.png` | synthetic scaling to N=512 |
-| 4 | `maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png` | per-config Mode D r vs bedtools vs Mode B (y=x) |
-| 5 | `maurano_dhs_validation/figures/mode_d_pearson_heatmap.png` | Mode D Pearson ridge |
-| 6 | `maurano_dhs_validation/figures/mode_d_best_dendrogram.png` + `bedtools_dendrogram.png` | tissue recovery |
-| 7 | `maurano_dhs_validation/figures/mode_d_metric_tradeoff.png` | Pearson-best ≠ ARI-best |
-| 8 | `maurano_dhs_validation/figures/mode_d_clustering_ari.png` | ARI plateau across sweep |
-| 9 | `ref-comparison/figures/cross_ref_dendrogram_k15_w15.png` | within-tissue clades across refs (headline cell) |
-| 9b (supp) | `ref-comparison/figures/cross_ref_dendrogram_k10_w10.png` | same at the interpretable-mid cell |
-| 10 | `ref-comparison/figures/sweep_effect_size_broad.png` | cross-ref effect-size heatmap, broad |
-| 10b (supp) | `ref-comparison/figures/metric_comparison_broad_k10_w10.png` | 12-metric Wilcoxon comparison at k=10, w=10 |
-| 11 | `modeD_flanking/figures/maurano_delta_r_vs_w.png` | flanking column choice on real data |
-| 12 | `modeD_flanking/figures/synthetic_delta_vs_phi.png` + `synthetic_phase_diagram.png` | flanking on synthetic, φ-axis |
-| 12b | `modeD_flanking/figures/synthetic_empirical_vs_analytical.png` | analytical φ-prediction validated |
+| 3 | `maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png` | per-config Mode D r vs bedtools vs Mode B (y=x) |
+| 4 | `maurano_dhs_validation/figures/mode_d_pearson_heatmap.png` | Mode D Pearson ridge |
+| 5 | `maurano_dhs_validation/figures/mode_d_best_dendrogram.png` + `bedtools_dendrogram.png` | tissue recovery (a + b panels) |
+| 6 | `maurano_dhs_validation/figures/mode_d_metric_tradeoff.png` | Pearson-best ≠ ARI-best |
+| 7 | `maurano_dhs_validation/figures/mode_d_clustering_ari.png` | ARI plateau across sweep |
+| 8 | `ref-comparison/figures/cross_ref_dendrogram_k15_w15.png` | within-tissue clades across refs (headline cell) |
+| 9 | `ref-comparison/figures/sweep_effect_size_broad.png` | cross-ref effect-size heatmap, broad |
+| 10 | `modeD_flanking/figures/maurano_delta_r_vs_w.png` | flanking column choice on real data |
+| 11 | `modeD_flanking/figures/synthetic_delta_vs_phi.png` + `synthetic_phase_diagram.png` | flanking on synthetic, φ-axis (a + b panels) |
+| 12 | `modeD_flanking/figures/synthetic_empirical_vs_analytical.png` | analytical φ-prediction validated |
+| S1 (supp) | `ref-comparison/figures/cross_ref_dendrogram_k10_w10.png` | cross-ref dendrogram at the interpretable-mid cell (k=10, w=10) |
+| S2 (supp) | `ref-comparison/figures/metric_comparison_broad_k10_w10.png` | 12-metric Wilcoxon comparison at k=10, w=10 |
 
 (The `synthetic_speedup_vs_nosub.png` figure showing within-hammock subB-method comparison moves to supplementary — per the constraint that internal hammock-version performance differences are not paper material.)
