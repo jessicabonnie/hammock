@@ -35,7 +35,7 @@ One paragraph. Three numbers in the lead: (i) Mode B r = 0.998 / Mode D r = 0.99
 | dataset | role | n |
 |---|---|---|
 | Synthetic BED (`bedtools_benchmark/`) | scaling regime | up to 512 × 10k intervals |
-| Synthetic FASTA pairs (`modeD_flanking/`) | exact k-mer truth for Mode D | 10 251 pairs across n_intervals × length × dist × mutation grid |
+| Synthetic FASTA pairs (`modeD_flanking/`) | exact k-mer truth for Mode D | 192 pairs (n_intervals × mean_len × dist × mutation grid); ~12 700 (k, w, p) sweep measurements |
 | Maurano 2012 fetal DHS | real interval data, 8-tissue labels | 20 BEDs |
 | ENCODE H3K27ac (Heart/Liver/Lung × GRCh37/GRCh38/CHM13) | reference-build robustness | 9 sample×ref |
 | ENCODE DNase-seq (5 tissues × human/mouse) | cross-species limit | 10 BEDs |
@@ -171,7 +171,7 @@ Practical interpretation (unchanged by the bug): when peaks are aligned to a dif
 Mode D emits two Jaccard columns: minimizer-only (`jaccard_similarity`) and minimizer-plus-flanks (`jaccard_similarity_with_ends`). The post-fix sweep gives a cleaner version of the regime story than was possible pre-fix:
 
 - **Part 1 (Maurano, real DHS):** at the high-precision configs, `no_ends` is the clear winner — at k=20, w=100, p=24, r_no_ends = 0.9996 vs r_with_ends = 0.888. The advantage flips only at the smallest (k, w) cells (k ≤ 10, w ≤ 10), where interior minimizers are sparse and the flanking k-mers carry the signal.
-- **Part 2 (synthetic, 10 251 pairs across n_intervals × length × distribution × mutation, with exact k-mer Jaccard as truth):** `with_ends` has systematically *larger* MAE than `no_ends` against the k-mer truth (mean Δmae_r ≈ −0.015 across all k); the gap widens with φ, the flanking-fraction predictor we defined.
+- **Part 2 (synthetic, 192 FASTA pairs across an n_intervals × mean_len × dist × mutation grid, each sketched at 66 valid (k, w, p) cells — ~12 700 measurements total; exact k-mer Jaccard as truth):** `with_ends` has systematically *larger* MAE than `no_ends` against the k-mer truth (mean Δmae_r ≈ −0.015 across all k); the gap widens with φ, the flanking-fraction predictor we defined.
 
 The flanking-fraction φ ≈ 2(k−1)·n_intervals / (total_length / w) predicts the regime: large φ → `_with_ends` over-weights boundary k-mers; small φ → either column works.
 
