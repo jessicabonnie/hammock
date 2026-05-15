@@ -73,8 +73,13 @@ Two things to communicate in this section, nothing more:
 1. **hammock is faster than bedtools at every regime tested** — modestly faster on small real corpora (≈2×), dramatically faster as catalog size grows (≈50× at N=512 files).
 2. **The speedup is not bought with accuracy loss.** Per-pair MAE vs bedtools is statistically indistinguishable across hammock subsampling settings — i.e., the speed knob is "free" against the bedtools reference.
 
-**Fig 1 (headline):** `subB_mixed_stride/figures/headline_maurano_pareto.png` — Pareto curve, hammock dominates bedtools on Maurano across the entire accuracy axis.
-**Fig 2:** `bedtools_benchmark/figures/cpp_vs_bedtools_t16_20260512_160412_sketch_compare_split.png` — N-scaling out to 512 files.
+**Fig 1 (headline):** Pareto curve, hammock dominates bedtools on Maurano across the entire accuracy axis.
+
+![Fig 1 — Maurano Pareto (hammock vs bedtools)](../experiments/subB_mixed_stride/figures/headline_maurano_pareto.png)
+
+**Fig 2:** N-scaling out to 512 files on synthetic.
+
+![Fig 2 — synthetic N-scaling](../experiments/bedtools_benchmark/figures/cpp_vs_bedtools_t16_20260512_160412_sketch_compare_split.png)
 
 (Internal hammock-version comparisons — mixed-stride vs hash-threshold vs single-hash subB strategies, sort-time accounting, OpenMP scaling shape — belong in the supplementary methods, not the main text.)
 
@@ -93,9 +98,17 @@ Across Maurano's 400 sample pairs:
 
 The Mode D headline number changed by an order of magnitude post-fix: the pre-fix sweep's best was r = 0.966 (MAE 0.060); the post-fix optimum sits at r = 0.9996 with MAE 0.0061, four-decimal-place agreement with bedtools. The ridge in the (k, w) Pearson heatmap moved from a modest mid-grid optimum to the high-k / high-w edge of the sweep, indicating that Mode D's near-perfect agreement is unlocked at long minimizer windows where interior coverage is richest.
 
-**Fig 4:** `maurano_dhs_validation/figures/abc_pearson_vs_bedtools.png` — Modes A/B/C summary.
-**Fig 5:** `maurano_dhs_validation/figures/mode_c_subB_interpolation_agg.png` — Mode C is a sharp interpolation between A-regime (subB ≲ 0.005) and B-regime (subB ≳ 0.05). One knob, two regimes.
-**Fig 5b (new):** `maurano_dhs_validation/figures/mode_d_pearson_heatmap.png` — post-fix Mode D Pearson ridge along high k + high w + p ≥ 22.
+**Fig 4:** Modes A/B/C summary — Pearson r vs bedtools by precision.
+
+![Fig 4 — Mode A/B/C Pearson vs bedtools](../experiments/maurano_dhs_validation/figures/abc_pearson_vs_bedtools.png)
+
+**Fig 5:** Mode C is a sharp interpolation between A-regime (subB ≲ 0.005) and B-regime (subB ≳ 0.05). One knob, two regimes.
+
+![Fig 5 — Mode C subB interpolation](../experiments/maurano_dhs_validation/figures/mode_c_subB_interpolation_agg.png)
+
+**Fig 5b (new):** Post-fix Mode D Pearson ridge along high k + high w + p ≥ 22.
+
+![Fig 5b — Mode D Pearson heatmap](../experiments/maurano_dhs_validation/figures/mode_d_pearson_heatmap.png)
 
 ### 4.3 Biological signal: the sketch recovers tissue identity
 
@@ -105,9 +118,18 @@ Post-fix Mode D best-ARI cell: **k = 10, w = 30, p ∈ {22, 23, 24}**, all yield
 
 A second post-fix change worth highlighting: at the ARI-best config, Mode D's predicted Jaccards now sit on the y = x diagonal versus bedtools (and versus Mode B), where the pre-fix scatter showed a systematic upward bias. The bug had been suppressing sketch cardinality; with it fixed, the sketch is calibrated against the bedtools reference rather than just rank-correlated.
 
-**Fig 6:** `mode_d_best_dendrogram.png` paired with `bedtools_dendrogram.png` — same tissue blocks recovered.
-**Fig 7:** `mode_d_metric_tradeoff.png` — the headline methodological point holds post-fix: **best-Pearson cell ≠ best-ARI cell**. Pearson-best (large-k, large-w) cluster at ARI ≈ 0.69; ARI-best (k=10, w=30) at Pearson ≈ 0.946. Numerical perfection and clustering quality remain non-coincident knobs.
-**Fig 8:** `mode_d_clustering_ari.png` — ARI ≥ 0.85 plateau now narrows to k = 10, w = 30, all p ≥ 22 (pre-fix plateau was broader; post-fix the bug-induced "easy ARI at low p" is gone).
+**Fig 6:** Mode D best-ARI dendrogram (top) paired with the bedtools reference dendrogram (bottom). Same tissue blocks recovered.
+
+![Fig 6a — Mode D best dendrogram](../experiments/maurano_dhs_validation/figures/mode_d_best_dendrogram.png)
+![Fig 6b — bedtools reference dendrogram](../experiments/maurano_dhs_validation/figures/bedtools_dendrogram.png)
+
+**Fig 7:** The headline methodological point holds post-fix — **best-Pearson cell ≠ best-ARI cell**. Pearson-best (large-k, large-w) cluster at ARI ≈ 0.69; ARI-best (k=10, w=30) at Pearson ≈ 0.946. Numerical perfection and clustering quality remain non-coincident knobs.
+
+![Fig 7 — Mode D Pearson vs ARI tradeoff](../experiments/maurano_dhs_validation/figures/mode_d_metric_tradeoff.png)
+
+**Fig 8:** ARI ≥ 0.85 plateau now narrows to k = 10, w = 30, all p ≥ 22 (pre-fix plateau was broader; post-fix the bug-induced "easy ARI at low p" is gone).
+
+![Fig 8 — Mode D ARI across (k, w, p) sweep](../experiments/maurano_dhs_validation/figures/mode_d_clustering_ari.png)
 
 ### 4.4 Robustness to reference genome **(pending post-fix rerun)**
 
@@ -117,8 +139,13 @@ A second post-fix change worth highlighting: at the ARI-best config, Mode D's pr
 
 The Mode D bugfix is expected to *strengthen* this result rather than weaken it: pre-fix, the `jaccard_similarity` (no_ends) column was largely empty on these FASTAs at k ≥ 15 (silent zero-jaccard from minimizers being dropped), so the analysis defaulted to `jaccard_similarity_with_ends`. Post-fix, the no_ends column carries real signal and may give a cleaner same-tissue/different-tissue separation. Final numbers and dendrograms refresh once the in-flight rerun completes.
 
-**Fig 9:** `ref-comparison/figures/cross_ref_dendrogram_k10_w10.png` (will be refreshed)
-**Fig 10:** `ref-comparison/figures/sweep_effect_size_broad.png` (will be refreshed)
+**Fig 9 (pre-fix; will be refreshed):** Cross-reference dendrogram at k=10, w=10 — within-tissue clades hold across GRCh37/GRCh38/CHM13.
+
+![Fig 9 — cross-reference dendrogram](../experiments/ref-comparison/figures/cross_ref_dendrogram_k10_w10.png)
+
+**Fig 10 (pre-fix; will be refreshed):** (k × w) effect-size heatmap for broad peaks; same-tissue cross-ref ≥ different-tissue across the sweep.
+
+![Fig 10 — cross-ref effect-size sweep, broad](../experiments/ref-comparison/figures/sweep_effect_size_broad.png)
 
 Practical interpretation (unchanged by the bug): when peaks are aligned to a different human reference than expected, the sketch still produces the same biological neighborhood. This is the property that lets hammock be deployed against heterogeneous catalogs (ENCODE/Roadmap mixtures) without first re-aligning everything.
 
@@ -135,9 +162,18 @@ The flanking-fraction φ ≈ 2(k−1)·n_intervals / (total_length / w) predicts
 
 **Recommendation:** minimizer-only (`jaccard_similarity`) is the right default for ChIP/DHS-shaped corpora at any reasonable parameter choice; `_with_ends` is a fallback for short-sequence, sparse-minimizer regimes.
 
-**Fig 11:** `modeD_flanking/figures/maurano_delta_r_vs_w.png` — Part 1; sign of (no_ends − with_ends) flips with w.
-**Fig 12:** `modeD_flanking/figures/synthetic_delta_vs_phi.png` and `synthetic_phase_diagram.png` — Part 2; the φ × mutation phase plane.
-**Fig 12b:** `modeD_flanking/figures/synthetic_empirical_vs_analytical.png` — analytical-vs-measured agreement on the φ-prediction, an independent check.
+**Fig 11:** Part 1 (Maurano real DHS) — sign of (no_ends − with_ends) flips with w.
+
+![Fig 11 — Maurano Δr(no_ends − with_ends) vs w](../experiments/modeD_flanking/figures/maurano_delta_r_vs_w.png)
+
+**Fig 12:** Part 2 (synthetic) — Δ(no_ends, with_ends) vs φ, and the φ × mutation phase plane.
+
+![Fig 12a — synthetic Δ vs φ](../experiments/modeD_flanking/figures/synthetic_delta_vs_phi.png)
+![Fig 12b — synthetic φ × mutation phase diagram](../experiments/modeD_flanking/figures/synthetic_phase_diagram.png)
+
+**Fig 12c:** Empirical agreement with the analytical φ-prediction — independent validation of the flanking-fraction model.
+
+![Fig 12c — empirical vs analytical φ](../experiments/modeD_flanking/figures/synthetic_empirical_vs_analytical.png)
 
 ## 5. Limitations and applicability boundary
 
