@@ -163,7 +163,85 @@ experiments/modeD_flanking/
 
 ## Status
 
-**Design only.** Scripts are stubs/skeletons; nothing has been run. Start
-with Part 1 — it's purely an R analysis on existing data and will tell us
-whether the hypothesis even survives contact with one real corpus before
-we spend cluster hours on the synthetic grid.
+Both parts run. **Re-run 2026-05-14** after the Mode D `no_ends` bug fix
+(see `CLAUDE.md` "Intentional divergences" §6 — pre-fix outputs are kept
+at `results/buggy_pre_fix/`). All numbers below are post-fix.
+
+---
+
+## Results
+
+### Part 1 — Maurano corpus (209 Mode D CSVs × 20 fetal-DHS samples vs bedtools)
+
+The Maurano sweep shows **`no_ends` dominates `with_ends`** when the goal
+is to recover bedtools-style interval Jaccard:
+
+| metric | best (k, w, p) | `no_ends` value | `with_ends` value at same cell |
+|---|---|---|---|
+| Pearson r | k=20, w=100, p=24 | **0.9996** | 0.888 |
+| MAE | k=25, w=100, p=24 | **0.0061** | (0.65 — much worse) |
+
+47 of 209 configs exceed r > 0.99 in `no_ends`. The φ-based hypothesis
+("flanking k-mers help capture more similarity") **does not survive
+contact with Maurano**: at large k + large w + high precision the
+minimizer-only sketch is nearly indistinguishable from bedtools, and
+adding flank k-mers introduces a systematic bias (with_ends mean
+prediction sits well above bedtools truth at small w, the classic
+flanking-inflation signature). The single regime where `with_ends`
+wins is small w (w ≈ 20) at large k, where the minimizer sample is
+sparse — a minor edge case.
+
+![](figures/maurano_delta_mae_vs_phi.png)
+
+The sign-flip with φ is largely a precision artefact: cool colours
+(p ≥ 18) cluster below zero, warm colours (p ≤ 16) cluster above. The
+"high φ ⇒ with_ends inflates" prediction is at most weakly supported.
+
+### Part 2 — synthetic random-ACGT corpus (192 pairs, 12 672 cells)
+
+On synthetic pairs with substitution-only mutation, **`with_ends` wins
+62.2% of cells on Mash residual against the true mutation rate**
+(`no_ends` wins 21.3%, ties 16.5%). Stratified by k:
+
+| k | with_ends wins | no_ends wins | tie |
+|---|---:|---:|---:|
+| 8  | 69.6 % | 16.6 % | 13.8 % |
+| 10 | 70.0 % | 15.7 % | 14.3 % |
+| 15 | 55.8 % | 26.0 % | 18.2 % |
+| 20 | 50.2 % | 29.0 % | 20.7 % |
+
+![](figures/synthetic_phase_diagram.png)
+
+`with_ends` advantage shrinks at high k — exactly where the boundary
+contribution (`2(k-1)·n_intervals` k-mers per record) becomes a smaller
+fraction of the interior k-mer pool. The phase diagram remains uniformly
+positive (with_ends wins everywhere), so the *direction* of the
+advantage is robust on uniform-random synthetic — but the *magnitude*
+matters, and at k ≥ 15 the two columns are roughly comparable.
+
+### Headline interpretation
+
+The two corpora give opposite verdicts:
+
+- **Maurano (real DHS peaks, 20 samples, thousands of records each):**
+  `no_ends` ≈ bedtools-perfect at the right config; `with_ends` adds
+  systematic positive bias.
+- **Synthetic (uniform iid ACGT, mutation-only divergence):** `with_ends`
+  modestly improves the Mash-residual estimate, mostly at smaller k.
+
+The most plausible reconciliation: on Maurano-like corpora, boundary
+k-mers collide *by coincidence* across samples (thousands of short
+peaks share boundary content despite biological divergence), which
+inflates `with_ends` above truth. On uniform-random synthetic, no such
+coincidental sharing happens, so the extra boundary content is pure
+signal.
+
+### Followup direction (not done yet)
+
+The synthetic generator can't reproduce the Maurano failure mode of
+`with_ends` because uniform-random sequences don't share boundary
+content by coincidence. A "shared-vocabulary" generator — draw record
+bodies from a fixed motif pool so that A and B share boundary k-mers
+by construction, not by mutation — would let us probe the boundary
+of where `with_ends` flips from helping to hurting. Scaffolded but not
+implemented.
