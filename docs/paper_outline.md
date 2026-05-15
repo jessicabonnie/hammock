@@ -121,9 +121,9 @@ Across Maurano's 400 sample pairs:
 
 Mode D's numerical agreement with bedtools peaks at r = 0.9996 / MAE = 0.0061 — four-decimal-place agreement. The high-correlation ridge in the (k, w) Pearson heatmap runs along the high-k / high-w edge of the sweep, indicating that Mode D's near-perfect agreement is unlocked at long minimizer windows where interior coverage is richest.
 
-**Fig 4:** Modes A/B/C summary — Pearson r vs bedtools by precision.
+**Fig 4:** Per Mode D config, Pearson r against bedtools (x-axis) vs Pearson r against Mode B (y-axis); points sit tightly on y = x. Mode D's agreement with bedtools is mirrored by its agreement with Mode B, so Mode B is an interchangeable interval-Jaccard reference for Mode D — once Mode D is validated against bedtools, it is validated against any reasonable interval-Jaccard estimator.
 
-![Fig 4 — Mode A/B/C Pearson vs bedtools](../experiments/maurano_dhs_validation/figures/abc_pearson_vs_bedtools.png)
+![Fig 4 — Mode D vs bedtools and vs Mode B agree per config](../experiments/maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png)
 
 **Fig 5:** Mode C is a sharp interpolation between A-regime (subB ≲ 0.005) and B-regime (subB ≳ 0.05). One knob, two regimes.
 
@@ -252,7 +252,7 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 |---|---|---|
 | 1 | `subB_mixed_stride/figures/headline_maurano_pareto.png` | hammock dominates bedtools on real Pareto |
 | 2 | `bedtools_benchmark/figures/cpp_vs_bedtools_t16_20260512_160412_sketch_compare_split.png` | synthetic scaling to N=512 |
-| 4 | `maurano_dhs_validation/figures/abc_pearson_vs_bedtools.png` | Mode B r=0.998 |
+| 4 | `maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png` | per-config Mode D r vs bedtools vs Mode B (y=x) |
 | 5 | `maurano_dhs_validation/figures/mode_c_subB_interpolation_agg.png` | Mode C as A↔B interpolant |
 | 5b | `maurano_dhs_validation/figures/mode_d_pearson_heatmap.png` | Mode D Pearson ridge |
 | 6 | `maurano_dhs_validation/figures/mode_d_best_dendrogram.png` + `bedtools_dendrogram.png` | tissue recovery |
