@@ -187,6 +187,8 @@ Practical interpretation: when peaks are aligned to a different human reference 
 
 ### 4.5 Methodological notes: choosing Mode D's flanking column
 
+> **Status (2026-05-15):** This section — especially its diagrams — needs work. The φ-prediction figures and the Maurano-vs-synthetic reconciliation narrative are placeholders pending a clearer visualization pass.
+
 > **Source:** `experiments/modeD_flanking/` Parts 1 (Maurano re-analysis) and 2 (synthetic FASTA pairs with exact k-mer Jaccard truth).
 
 Mode D emits two Jaccard columns: minimizer-only (`jaccard_similarity`) and minimizer-plus-flanks (`jaccard_similarity_with_ends`). Two corpora characterize when each column is preferred:
