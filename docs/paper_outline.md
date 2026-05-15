@@ -14,7 +14,7 @@
 
 ## 1. Abstract
 
-One paragraph. Three numbers in the lead: (i) Mode B r = 0.998 / Mode D r = 0.9996 vs bedtools on Maurano DHS; (ii) substantially faster than `bedtools jaccard` on real DHS data and orders of magnitude faster at large catalog size; (iii) Mode D ARI = 0.91 / NMI = 0.96 on 8-tissue Maurano clustering. Close with the applicability boundary: sequence-level sketch transfers across human reference genomes but not across the ~80 Mya human↔mouse split.
+One paragraph. Three numbers in the lead: (i) Mode B r = 0.998 / Mode D r = 0.9996 vs bedtools on Maurano DHS; (ii) substantially faster than `bedtools jaccard` on real DHS data and orders of magnitude faster at large catalog size; (iii) Mode D ARI = 0.91 / NMI = 0.96 on 10-tissue-label Maurano clustering. Close with the applicability boundary: sequence-level sketch transfers across human reference genomes but not across the ~80 Mya human↔mouse split.
 
 ## 2. Introduction
 
@@ -36,7 +36,7 @@ One paragraph. Three numbers in the lead: (i) Mode B r = 0.998 / Mode D r = 0.99
 |---|---|---|
 | Synthetic BED (`bedtools_benchmark/`) | scaling regime | up to 512 × 10k intervals |
 | Synthetic FASTA pairs (`modeD_flanking/`) | exact k-mer truth for Mode D | 192 pairs (n_intervals × mean_len × dist × mutation grid); ~12 700 (k, w, p) sweep measurements |
-| Maurano 2012 fetal DHS | real interval data, 8-tissue labels | 20 BEDs |
+| Maurano 2012 fetal DHS | real interval data, 10 tissue labels (fBrain/fHeart/fIntestine_Sm/fKidney/fLung/fMuscle_arm/fMuscle_back/fMuscle_leg/fSkin/fStomach) | 20 BEDs |
 | ENCODE H3K27ac (Heart/Liver/Lung × GRCh37/GRCh38/CHM13) | reference-build robustness | 9 sample×ref |
 | ENCODE DNase-seq (5 tissues × human/mouse) | cross-species limit | 10 BEDs |
 
@@ -129,7 +129,7 @@ The Mode D headline number changed by an order of magnitude post-fix: the pre-fi
 
 > **Source:** `experiments/maurano_dhs_validation/RESULTS.md` (post-fix).
 
-Post-fix Mode D best-ARI cell: **k = 10, w = 30, p ∈ {22, 23, 24}**, all yielding **ARI = 0.910, NMI = 0.961** on the 8-tissue / 10-fetal-tissue-subtype label set. The dendrogram makes 2 errors: the two fBrain samples split into separate clusters, and one fMuscle_back is grouped with the two fMuscle_legs — both errors that the bedtools reference dendrogram *also* makes, so this is not a sketch artifact but a property of the underlying signal. Pre-fix this cell was k=8, w=10, p=12; post-fix the same achievable ARI moved to a different (k, w, p) cell while the numerical value is unchanged.
+Post-fix Mode D best-ARI cell: **k = 10, w = 30, p ∈ {22, 23, 24}**, all yielding **ARI = 0.910, NMI = 0.961** on the 10-tissue-label set (with the three muscle subtypes — arm/back/leg — counted as distinct labels). The dendrogram makes 2 errors: the two fBrain samples split into separate clusters, and one fMuscle_back is grouped with the two fMuscle_legs — both errors that the bedtools reference dendrogram *also* makes, so this is not a sketch artifact but a property of the underlying signal. Pre-fix this cell was k=8, w=10, p=12; post-fix the same achievable ARI moved to a different (k, w, p) cell while the numerical value is unchanged.
 
 A second post-fix change worth highlighting: at the ARI-best config, Mode D's predicted Jaccards now sit on the y = x diagonal versus bedtools (and versus Mode B), where the pre-fix scatter showed a systematic upward bias. The bug had been suppressing sketch cardinality; with it fixed, the sketch is calibrated against the bedtools reference rather than just rank-correlated.
 
