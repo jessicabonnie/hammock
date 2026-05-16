@@ -265,7 +265,17 @@ print(p); dev.off()
   Option B right panel doesn't peak there, same diagnosis.
 - The ARI plateau across precision is `0.9101796407185628` for every
   p ∈ {12, 14, 16, 18, 20, 22, 23, 24} at (k=10, w=30) — confirm in
-  the violin's upper tail.
+  the violin's upper lobe.
+- **k ≥ 15 ARI degeneracy:** at k ∈ {15, 20, 25} every (w, p) cell
+  in the sweep gives ARI = `0.6931...` exactly (because the high-k
+  clustering hits a fixed basin). In the violin plot these three k
+  values should collapse to a flat horizontal stripe at 0.69 — *not*
+  a violin shape. If you see any spread at all in the k = 15 / 20 /
+  25 ARI violins you're either picking up a different `column` or
+  `reference` than the filter intends.
+- The k = 10 ARI distribution spans roughly the full [0, 0.91] range
+  with multiple sub-plateaus (around 0.09, 0.55, 0.69, 0.91); the
+  violin will be tall and multimodal, not a smooth single bump.
 
 ## Notes
 
