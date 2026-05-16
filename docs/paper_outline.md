@@ -124,9 +124,10 @@ Mode D's numerical agreement with bedtools peaks at r = 0.9996 / MAE = 0.0061 �
 
 ![Fig 3 — Mode D vs bedtools and vs Mode B agree per config](../experiments/maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png)
 
-**Fig 4:** Mode D Pearson ridge along high k + high w + p ≥ 20.
+**Fig 4 (planned — pending generation):** Two-panel line plot at p = 24. **Left panel:** Pearson r vs bedtools as a function of window size w, one colored line per k (k ∈ {8, 10, 15, 20, 25}); shows the high-k / high-w Pearson ridge as a steady upward march. **Right panel:** ARI vs tissue labels on the same (w, k) axes; shows the ARI peak at k = 10, w = 30 with flat-low values elsewhere. The contrast — Pearson is a ridge, ARI is a single peak — is the headline that Fig 6's per-config (Pearson, ARI) scatter abstracts. Generation spec: `experiments/maurano_dhs_validation/PLOT_GENERATION.md`. The original Pearson heatmap grid moves to Fig S3.
 
-![Fig 4 — Mode D Pearson heatmap](../experiments/maurano_dhs_validation/figures/mode_d_pearson_heatmap.png)
+<!-- ![Fig 4 — Mode D Pearson + ARI vs w, by k, at p=24](../experiments/maurano_dhs_validation/figures/mode_d_lines_p24.png) -->
+
 
 ### 4.3 Biological signal: the sketch recovers tissue identity
 
@@ -145,9 +146,10 @@ At the ARI-best config, Mode D's predicted Jaccards sit on the y = x diagonal ve
 
 ![Fig 6 — Mode D Pearson vs ARI tradeoff](../experiments/maurano_dhs_validation/figures/mode_d_metric_tradeoff.png)
 
-**Fig 7:** The ARI ≥ 0.85 plateau is a single (k, w) cell — k = 10, w = 30, holding for every precision p ≥ 12 — so the clustering optimum is genuinely a specific corner of the (k, w) sweep, not a wide attractor.
+**Fig 7 (planned — pending generation):** Per-k violin plot of Pearson r and ARI. **x-axis:** k (8, 10, 15, 20, 25). **y-axis:** metric value on [0, 1], shared scale. **Two violins per k:** Pearson r vs bedtools (across every (w, p) cell at that k) and ARI vs the 10 fetal-tissue labels (across every (w, p) cell at that k), `no_ends` column only. Pearson violins march steadily upward with k; ARI violins are flat near 0.2 at k ∈ {8, 15, 20, 25}, but at **k = 10 the ARI violin stretches up to 0.91 with a clear bimodal shape** — only the (w = 30, p ≥ 12) slice hits the tissue plateau. The bimodality is the point: tissue recovery is a sweet-spot cell, not a typical sweep outcome. Generation spec: `experiments/maurano_dhs_validation/PLOT_GENERATION.md`. The original ARI heatmap grid moves to Fig S4.
 
-![Fig 7 — Mode D ARI across (k, w, p) sweep](../experiments/maurano_dhs_validation/figures/mode_d_clustering_ari.png)
+<!-- ![Fig 7 — Mode D Pearson + ARI violins per k, no_ends across (w, p)](../experiments/maurano_dhs_validation/figures/mode_d_violins_by_k.png) -->
+
 
 ### 4.4 Robustness to reference genome
 
@@ -252,5 +254,7 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 | 12 | `modeD_flanking/figures/synthetic_empirical_vs_analytical.png` | analytical φ-prediction validated |
 | S1 (supp) | `ref-comparison/figures/cross_ref_dendrogram_k10_w10.png` | cross-ref dendrogram at the interpretable-mid cell (k=10, w=10) |
 | S2 (supp) | `ref-comparison/figures/metric_comparison_broad_k10_w10.png` | 12-metric Wilcoxon comparison at k=10, w=10 |
+| S3 (supp) | `maurano_dhs_validation/figures/mode_d_pearson_heatmap.png` | full Pearson heatmap grid across precision × column flavor (faceted) |
+| S4 (supp) | `maurano_dhs_validation/figures/mode_d_clustering_ari.png` | full ARI heatmap grid across precision × column flavor (faceted) |
 
 (The `synthetic_speedup_vs_nosub.png` figure showing within-hammock subB-method comparison moves to supplementary — per the constraint that internal hammock-version performance differences are not paper material.)
