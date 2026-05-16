@@ -8,9 +8,10 @@
 #
 # Usage:
 #   Rscript scripts/exp_a_dendrogram.R \
-#     <broad_csv> <narrow_csv> <metadata_tsv> <out_png>
+#     <broad_csv> <narrow_csv> <metadata_tsv> <out_png> [kw_label]
 #
 # CSV is hammock Mode D long-form (file1,file2,...,jaccard_similarity_with_ends).
+# kw_label appears in the figure title (e.g. "k=15, w=15"); defaults to "k=10, w=10".
 # =============================================================================
 
 suppressPackageStartupMessages({
@@ -20,9 +21,10 @@ suppressPackageStartupMessages({
 })
 
 args <- commandArgs(trailingOnly = TRUE)
-stopifnot(length(args) == 4)
+stopifnot(length(args) >= 4)
 broad_csv <- args[1]; narrow_csv <- args[2]
 meta_file <- args[3]; out_png   <- args[4]
+kw_label  <- if (length(args) >= 5) args[5] else "k=10, w=10"
 
 meta <- read_tsv(meta_file, show_col_types = FALSE) %>%
   mutate(key = paste(sample_id, ref, sep = "__"))
@@ -95,7 +97,7 @@ p_narrow <- build_dendro(narrow_csv, "Narrow")
 
 title <- ggdraw() +
   draw_label(
-    "Experiment A: tissue clusters dominate reference choice (k=10, w=10)",
+    sprintf("Experiment A: tissue clusters dominate reference choice (%s)", kw_label),
     fontface = "bold", x = 0.02, hjust = 0, size = 13)
 
 subtitle <- ggdraw() +
