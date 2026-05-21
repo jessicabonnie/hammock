@@ -8,7 +8,7 @@
 
 ## 1. Abstract
 
-One paragraph. Three numbers in the lead: (i) Mode B r = 0.998 / Mode D r = 0.9996 vs bedtools on Maurano DHS; (ii) substantially faster than `bedtools jaccard` on real DHS data and orders of magnitude faster at large catalog size; (iii) Mode D ARI = 0.91 / NMI = 0.96 on 10-tissue-label Maurano clustering. Close with the within-species reference-build robustness result (peaks aligned to GRCh37 / GRCh38 / CHM13 cluster by tissue, not by reference genome).
+hammock provides two complementary similarity primitives over genomic interval sets, both backed by HyperLogLog sketches. The **interval mode** reproduces `bedtools jaccard` at r = 0.998 with substantially faster wall time and orders of magnitude lower cost at large catalog size. The **sequence mode** compares the nucleotide content of intervals — a similarity primitive bedtools does not offer — recovering tissue identity from fetal DHS peak FASTAs at ARI = 0.91 / NMI = 0.96 on the 10-tissue Maurano label set, and remaining robust across human reference builds (peaks aligned to GRCh37, GRCh38, and CHM13 cluster by tissue, not by reference genome). As a calibration check, sequence mode's coordinate-projection agrees with bedtools at r = 0.9996 on Maurano DHS.
 
 ## 2. Introduction
 
