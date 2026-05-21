@@ -12,7 +12,7 @@ One paragraph. Three numbers in the lead: (i) Mode B r = 0.998 / Mode D r = 0.99
 
 ## 2. Introduction
 
-- All-vs-all pairwise interval similarity is bedtools' weakest scaling regime (O(N²·M log M)); large epigenome catalogs make this the bottleneck.
+- All-vs-all pairwise interval similarity is bedtools' weakest scaling regime (O(N²·M)); large epigenome catalogs make this the bottleneck.
 - Sketching trades exactness for speed; the question is *how much exactness*, and whether the sketch preserves the biology that the exact answer captures.
 - Contribution: hammock, a Python+C++ HyperLogLog-backed sketcher with four operating modes (A/B/C BED-interval, D FASTA-minimizer), plus a four-experiment validation framework that quantifies the speed/accuracy/biology trade-off on real data.
 
