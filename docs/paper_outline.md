@@ -189,7 +189,7 @@ Practical interpretation: when peaks are aligned to a different human reference 
 
 ### 4.5 Methodological notes: choosing Mode D's flanking column
 
-> **Status (2026-05-15):** This section — especially its diagrams — needs work. The φ-prediction figures and the Maurano-vs-synthetic reconciliation narrative are placeholders pending a clearer visualization pass.
+> **Status (2026-05-21):** Section being reworked. All §4.5 figures are hidden from the rendered outline pending replacement — only the synthetic φ × mutation phase diagram (formerly Fig 11b) is currently shown. The hidden PNGs are still on disk at `experiments/modeD_flanking/figures/` for reference. New, more interpretable figures are being brainstormed.
 
 > **Source:** `experiments/modeD_flanking/` Parts 1 (Maurano re-analysis) and 2 (synthetic FASTA pairs with exact k-mer Jaccard truth).
 
@@ -202,18 +202,25 @@ The flanking-fraction φ ≈ 2(k−1)·n_intervals / (total_length / w) predicts
 
 **Recommendation:** minimizer-only (`jaccard_similarity`) is the right default for ChIP/DHS-shaped corpora at any reasonable parameter choice; `_with_ends` is a fallback for short-sequence, sparse-minimizer regimes.
 
+<!-- Fig 10 (hidden 2026-05-21, pending rework — file still on disk):
 **Fig 10:** Part 1 (Maurano real DHS) — sign of (no_ends − with_ends) flips with w.
 
 ![Fig 10 — Maurano Δr(no_ends − with_ends) vs w](../experiments/modeD_flanking/figures/maurano_delta_r_vs_w.png)
+-->
 
-**Fig 11:** Part 2 (synthetic) — Δ(no_ends, with_ends) vs φ, and the φ × mutation phase plane.
+**Fig 11:** Part 2 (synthetic) — φ × mutation phase plane.
 
+<!-- Fig 11a (hidden 2026-05-21, pending rework — file still on disk):
 ![Fig 11a — synthetic Δ vs φ](../experiments/modeD_flanking/figures/synthetic_delta_vs_phi.png)
-![Fig 11b — synthetic φ × mutation phase diagram](../experiments/modeD_flanking/figures/synthetic_phase_diagram.png)
+-->
 
+![Fig 11 — synthetic φ × mutation phase diagram](../experiments/modeD_flanking/figures/synthetic_phase_diagram.png)
+
+<!-- Fig 12 (hidden 2026-05-21, pending rework — file still on disk):
 **Fig 12:** Empirical agreement with the analytical φ-prediction — independent validation of the flanking-fraction model.
 
 ![Fig 12 — empirical vs analytical φ](../experiments/modeD_flanking/figures/synthetic_empirical_vs_analytical.png)
+-->
 
 ## 5. Limitations
 
@@ -249,9 +256,9 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 | 7 | `maurano_dhs_validation/figures/mode_d_violins_by_k.png` | per-k Pearson and ARI distributions across full (w, p) sweep |
 | 8 | `ref-comparison/figures/cross_ref_dendrogram_k15_w15.png` | within-tissue clades across refs (headline cell) |
 | 9 | `ref-comparison/figures/sweep_effect_size_broad.png` | cross-ref effect-size heatmap, broad |
-| 10 | `modeD_flanking/figures/maurano_delta_r_vs_w.png` | flanking column choice on real data |
-| 11 | `modeD_flanking/figures/synthetic_delta_vs_phi.png` + `synthetic_phase_diagram.png` | flanking on synthetic, φ-axis (a + b panels) |
-| 12 | `modeD_flanking/figures/synthetic_empirical_vs_analytical.png` | analytical φ-prediction validated |
+| 10 | *(hidden — pending rework; PNG on disk: `modeD_flanking/figures/maurano_delta_r_vs_w.png`)* | flanking column choice on real data |
+| 11 | `modeD_flanking/figures/synthetic_phase_diagram.png` | flanking on synthetic, φ × mutation phase plane |
+| 12 | *(hidden — pending rework; PNG on disk: `modeD_flanking/figures/synthetic_empirical_vs_analytical.png`)* | analytical φ-prediction validated |
 | S1 (supp) | `ref-comparison/figures/cross_ref_dendrogram_k10_w10.png` | cross-ref dendrogram at the interpretable-mid cell (k=10, w=10) |
 | S2 (supp) | `ref-comparison/figures/metric_comparison_broad_k10_w10.png` | 12-metric Wilcoxon comparison at k=10, w=10 |
 | S3 (supp) | `maurano_dhs_validation/figures/mode_d_pearson_heatmap.png` | full Pearson heatmap grid across precision × column flavor (faceted) |
