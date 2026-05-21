@@ -21,7 +21,7 @@ hammock provides two complementary similarity primitives over genomic interval s
 ### 3.1 hammock implementation
 
 - Python orchestrator + C++ extension (pybind11); HLL with register-equality Jaccard, Ertl 2017 estimator, xxh64 ingestion.
-- Mode A: interval coords. Mode B: per-bp HLL with optional `subB` subsampling. Mode C: interpolates A↔B via `expA` and `subB`. Mode D: minimizer-HLL on FASTA, with both interior-minimizer and minimizer-plus-flanks similarity columns.
+- ~~Mode A: interval coords.~~ Mode B: per-bp HLL with optional `subB` subsampling. ~~Mode C: interpolates A↔B via `expA` and `subB`.~~ Mode D: minimizer-HLL on FASTA, with both interior-minimizer and minimizer-plus-flanks similarity columns.
 - Output per-pair similarity columns: `jaccard_similarity`, `jaccard_similarity_with_ends`, plus `containment_AB`, `containment_BA`, `cosketch_{geom,arith,max}` in both flavors (10 metrics per Mode D pair; 5 per A/B/C pair). The `jaccard_*` columns are the analyses' default; the cosketch/containment columns are reported for transparency and inform Section 5.
 
 ### 3.2 Benchmark datasets
@@ -39,7 +39,7 @@ Pearson r, Spearman ρ, MAE vs bedtools (Mode B/C/D); ARI, NMI vs known tissue l
 
 ### 3.4 HyperLogLog sketching
 
-All four modes share a HyperLogLog (HLL) backbone [@Flajolet2007]. Each input set — per-bp positions for Modes B/C, interval coordinates for Mode A, minimizer hashes for Mode D — is hashed with xxh64 (seed via `--seed`, default 42); the low `p` bits of each hash route it to one of `2^p` 1-byte registers, which stores the maximum leading-zero count seen among hashes routed there. Cardinality is recovered via the Ertl 2017 improved estimator [@Ertl2017]. For two sketches at matching `p` and seed, the union is register-wise max and the intersection cardinality is recovered from register equality — two HLLs agree at register *i* iff the leading-rho hash routed to *i* lies in `A ∩ B` — from which we read off Jaccard and the directional containments `|A ∩ B| / |A|` and `|A ∩ B| / |B|`.
+~~All four~~ Both modes share a HyperLogLog (HLL) backbone [@Flajolet2007]. Each input set — per-bp positions for Mode B~~/C~~, ~~interval coordinates for Mode A,~~ minimizer hashes for Mode D — is hashed with xxh64 (seed via `--seed`, default 42); the low `p` bits of each hash route it to one of `2^p` 1-byte registers, which stores the maximum leading-zero count seen among hashes routed there. Cardinality is recovered via the Ertl 2017 improved estimator [@Ertl2017]. For two sketches at matching `p` and seed, the union is register-wise max and the intersection cardinality is recovered from register equality — two HLLs agree at register *i* iff the leading-rho hash routed to *i* lies in `A ∩ B` — from which we read off Jaccard and the directional containments `|A ∩ B| / |A|` and `|A ∩ B| / |B|`.
 
 The asymptotic relative standard error is ≈ 1.04 / √(2^p). For the CLI default `p = 18`, that is 1.04 / 512 ≈ 0.203% on a 2^18 = 262,144-register / 256 KiB sketch. For the high-precision configuration cited in Sections 4.2–4.3 (`p = 24`), it is 1.04 / 4,096 ≈ 0.0254% on a 2^24 = 16,777,216-register / 16 MiB sketch. Memory is independent of input cardinality — the load-bearing property that lets the same 16 MiB sketch represent a 10k-interval or a 10M-interval BED at identical cost.
 
@@ -63,13 +63,15 @@ The structured-sampling concern — that a fixed stride could miss periodic feat
 
 This subsampling refinement is what makes the Section 4.1 speed numbers attainable: the "high-subsample" and "max-subsample" rows of the real-DHS table are mixed-stride at `subB = 0.1` and `subB = 0.01`. The per-method comparison plot is in supplementary.
 
-### 3.7 Mode C as an A↔B interpolant
+### ~~3.7 Mode C as an A↔B interpolant~~
 
 > **Status (2026-05-21):** This section will likely be removed. Modes A and C have no independent biological support — A is a coordinate-only sketch with no validated downstream use case, and C is an interpolation knob between A and B that does not buy accuracy over Mode B at any setting on the corpora tested. The paper is being recast around two primitives (interval mode = B, sequence mode = D); if that recasting holds, §3.7 and the Mode C figure here are dropped.
 
-Mode C is parameterized by `subB` (subsampling rate) and `expA` (interval-length exponent): at `subB → 0` it reduces to Mode A (interval-coordinate-only sketch), at `subB → 1` it reduces to Mode B (per-bp sketch). On Maurano DHS the transition is sharp — Mode C tracks Mode A at `subB ≲ 0.005` and Mode B at `subB ≳ 0.05`, with the crossover concentrated near `subB ≈ 0.005`. This makes Mode C a single-knob alternative to choosing between A and B explicitly; it does not buy accuracy over Mode B at high `subB`, but it lets a user dial down per-position cost when interval-set granularity is sufficient.
+~~Mode C is parameterized by `subB` (subsampling rate) and `expA` (interval-length exponent): at `subB → 0` it reduces to Mode A (interval-coordinate-only sketch), at `subB → 1` it reduces to Mode B (per-bp sketch). On Maurano DHS the transition is sharp — Mode C tracks Mode A at `subB ≲ 0.005` and Mode B at `subB ≳ 0.05`, with the crossover concentrated near `subB ≈ 0.005`. This makes Mode C a single-knob alternative to choosing between A and B explicitly; it does not buy accuracy over Mode B at high `subB`, but it lets a user dial down per-position cost when interval-set granularity is sufficient.~~
 
+<!-- Figure struck through alongside §3.7 body, pending section removal:
 ![Mode C subB interpolation between Mode A regime (subB ≲ 0.005) and Mode B regime (subB ≳ 0.05) on Maurano DHS](../experiments/maurano_dhs_validation/figures/mode_c_subB_interpolation_agg.png)
+-->
 
 ## 4. Results
 
@@ -228,7 +230,7 @@ The flanking-fraction φ ≈ 2(k−1)·n_intervals / (total_length / w) predicts
 
 ### 5.1 Definitional gap vs bedtools
 
-Mode B/C/D estimate slightly different Jaccards than bedtools (bp-set vs interval-overlap vs k-mer-set). On the synthetic Mode B benchmark, the median per-pair gap is ~0.16 and is independent of precision and subsampling. On Maurano, Mode D at the optimal high-k/high-w cell brings MAE down to 0.006 — i.e., the gap effectively closes when the sketch is well-conditioned. For applications where absolute Jaccard magnitude matters (not just ranking), the appropriate setting is determined by the (k, w, p) choice; the relevant figures are in Section 4.2.
+Mode B~~/C~~/D estimate slightly different Jaccards than bedtools (bp-set vs interval-overlap vs k-mer-set). On the synthetic Mode B benchmark, the median per-pair gap is ~0.16 and is independent of precision and subsampling. On Maurano, Mode D at the optimal high-k/high-w cell brings MAE down to 0.006 — i.e., the gap effectively closes when the sketch is well-conditioned. For applications where absolute Jaccard magnitude matters (not just ranking), the appropriate setting is determined by the (k, w, p) choice; the relevant figures are in Section 4.2.
 
 ### 5.2 The cosketch + containment columns are reported but not yet exploited
 
