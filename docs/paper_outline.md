@@ -65,6 +65,8 @@ This subsampling refinement is what makes the Section 4.1 speed numbers attainab
 
 ### 3.7 Mode C as an A↔B interpolant
 
+> **Status (2026-05-21):** This section will likely be removed. Modes A and C have no independent biological support — A is a coordinate-only sketch with no validated downstream use case, and C is an interpolation knob between A and B that does not buy accuracy over Mode B at any setting on the corpora tested. The paper is being recast around two primitives (interval mode = B, sequence mode = D); if that recasting holds, §3.7 and the Mode C figure here are dropped.
+
 Mode C is parameterized by `subB` (subsampling rate) and `expA` (interval-length exponent): at `subB → 0` it reduces to Mode A (interval-coordinate-only sketch), at `subB → 1` it reduces to Mode B (per-bp sketch). On Maurano DHS the transition is sharp — Mode C tracks Mode A at `subB ≲ 0.005` and Mode B at `subB ≳ 0.05`, with the crossover concentrated near `subB ≈ 0.005`. This makes Mode C a single-knob alternative to choosing between A and B explicitly; it does not buy accuracy over Mode B at high `subB`, but it lets a user dial down per-position cost when interval-set granularity is sufficient.
 
 ![Mode C subB interpolation between Mode A regime (subB ≲ 0.005) and Mode B regime (subB ≳ 0.05) on Maurano DHS](../experiments/maurano_dhs_validation/figures/mode_c_subB_interpolation_agg.png)
