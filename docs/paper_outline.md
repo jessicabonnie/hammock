@@ -97,7 +97,7 @@ Two things to communicate in this section, nothing more:
 
 **Fig 2:** N-scaling out to 512 files on synthetic.
 
-![Fig 2 — synthetic N-scaling](../experiments/bedtools_benchmark/figures/cpp_vs_bedtools_t16_20260512_160412_sketch_compare_split.png)
+![Fig 2 — synthetic N-scaling](figures/synthetic_nscaling.png)
 
 (Internal hammock-version comparisons — mixed-stride vs hash-threshold vs single-hash subB strategies, sort-time accounting, OpenMP scaling shape — belong in the supplementary methods, not the main text.)
 
@@ -242,7 +242,7 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 | # | Path | Carries |
 |---|---|---|
 | 1 | `subB_mixed_stride/figures/headline_maurano_pareto.png` | hammock dominates bedtools on real Pareto |
-| 2 | `bedtools_benchmark/figures/cpp_vs_bedtools_t16_20260512_160412_sketch_compare_split.png` | synthetic scaling to N=512 |
+| 2 | `docs/figures/synthetic_nscaling.png` (data: `docs/data/cpp_vs_bedtools_t16_20260512_160412.csv`, script: `docs/scripts/synthetic_nscaling.R`) | synthetic scaling to N=512 |
 | 3 | `maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png` | per-config sequence mode r vs bedtools vs interval mode (y=x) |
 | 4 | `maurano_dhs_validation/figures/mode_d_lines_p24.png` | sequence mode Pearson ridge vs ARI peak at p = 24 |
 | 5 | `maurano_dhs_validation/figures/mode_d_best_dendrogram.png` + `bedtools_dendrogram.png` | tissue recovery (a + b panels) |
