@@ -99,11 +99,7 @@ Two things to communicate in this section, nothing more:
 
 ![Fig 2 — synthetic N-scaling](figures/synthetic_nscaling.png)
 
-(Internal hammock-version comparisons — mixed-stride vs hash-threshold vs single-hash subB strategies, sort-time accounting, OpenMP scaling shape — belong in the supplementary methods, not the main text. The three-method speed/accuracy scatter is **Fig S5**.)
-
-**Fig S5 (supplementary):** subB-method speed/accuracy scatter — speedup vs bedtools (y) against mean per-pair Jaccard error vs the no-subsample reference (x, log); points for each `--subB` level of all three methods, no connecting line. Only mixed-stride converts subsampling into speed (~2× at subB=0.1, ~3× at subB=0.01); hash-threshold and single-hash stay near 1×.
-
-![Fig S5 — subB-method speed/accuracy scatter](figures/maurano_subB_pareto_scatter.png)
+(Internal hammock-version comparisons — mixed-stride vs hash-threshold vs single-hash subB strategies, sort-time accounting, OpenMP scaling shape — belong in the supplementary methods, not the main text. The three-method speed/accuracy scatter is **Fig S5**, in the Supplementary figures section at the end.)
 
 ### 4.2 Accuracy: both interval-mode and sequence-mode hammock match bedtools
 
@@ -165,21 +161,15 @@ The sweep partitions into three regimes:
 | Interpretable mid | k = 10, w ≥ 10 | Medians ≈ 0.55–0.65; Δ ≈ 0.09; groups overlap |
 | **Interpretable + fully separated** | **k ≥ 15 (any valid w)** | **Δ ≈ 0.32–0.45; min(xref) > max(diff-tissue)** |
 
-**Fig 8:** UPGMA dendrogram at the new headline cell (k=15, w=15) — each tissue's three references form a tight monophyletic clade with deep separation between tissues; broad and narrow peak calls give the same structure.
+**Fig 8:** UPGMA dendrogram at the new headline cell (k=15, w=15) — each tissue's three references form a tight monophyletic clade with deep separation between tissues; broad and narrow peak calls give the same structure. (The interpretable-mid k=10, w=10 version is **Fig S1**, in the Supplementary figures section.)
 
 ![Fig 8 — cross-reference dendrogram, k=15, w=15](../experiments/ref-comparison/figures/cross_ref_dendrogram_k15_w15.png)
-
-**Fig S1 (supplementary):** Same dendrogram at the interpretable-mid cell (k=10, w=10) — the clades still hold but with smaller margin, useful when "graceful degradation as k drops" is the story being told.
-
-![Fig S1 — cross-reference dendrogram, k=10, w=10](../experiments/ref-comparison/figures/cross_ref_dendrogram_k10_w10.png)
 
 **Fig 9:** (k × w) effect-size heatmap for broad peaks; the three regimes are immediately visible, with k ∈ {15, 20} as a uniformly high-effect block.
 
 ![Fig 9 — cross-ref effect-size sweep, broad](../experiments/ref-comparison/figures/sweep_effect_size_broad.png)
 
-**Metric choice at k=10, w=10** (`scripts/exp_a_metric_comparison.R`): of the 12 emitted similarity columns, `jaccard_similarity_with_ends` remains the right default — best Δ/saturation trade-off (broad Δ = 0.086, p = 2.0 × 10⁻⁷). `cosketch_geom_with_ends` is a near-tie (Δ = 0.065). All minimizer-only metrics hit the Wilcoxon p-floor but operate near saturation (medians ≈ 0.99 vs 0.92), so absolute Δ is small. `cosketch_max_with_ends` collapses on narrow (Δ ≈ 0, p ≈ 0.49) — the worst metric in both flavors and not recommended.
-
-![Fig S2 — 12-metric Wilcoxon comparison at k=10, w=10, broad](../experiments/ref-comparison/figures/metric_comparison_broad_k10_w10.png)
+**Metric choice at k=10, w=10** (`scripts/exp_a_metric_comparison.R`): of the 12 emitted similarity columns, `jaccard_similarity_with_ends` remains the right default — best Δ/saturation trade-off (broad Δ = 0.086, p = 2.0 × 10⁻⁷). `cosketch_geom_with_ends` is a near-tie (Δ = 0.065). All minimizer-only metrics hit the Wilcoxon p-floor but operate near saturation (medians ≈ 0.99 vs 0.92), so absolute Δ is small. `cosketch_max_with_ends` collapses on narrow (Δ ≈ 0, p ≈ 0.49) — the worst metric in both flavors and not recommended. (The full 12-metric comparison is **Fig S2**, in the Supplementary figures section.)
 
 (Note: at k=15, w=15 the minimizer-only signal is already fully separated, so the choice of with-ends vs no-ends matters less; a future replication of this 12-metric comparison at the new headline cell would confirm that observation.)
 
@@ -264,3 +254,21 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 | S5 (supp) | `docs/figures/maurano_subB_pareto_scatter.png` (data + script as Fig 1) | subB-method speed/accuracy scatter (de-zigzagged former headline Pareto) |
 
 (The `synthetic_speedup_vs_nosub.png` figure showing within-hammock subB-method comparison moves to supplementary — per the constraint that internal hammock-version performance differences are not paper material.)
+
+---
+
+## Supplementary figures
+
+**Fig S1:** UPGMA cross-reference dendrogram at the interpretable-mid cell (k=10, w=10) — the same tissue clades as the headline Fig 8 (k=15, w=15) still hold but with smaller margin, useful when "graceful degradation as k drops" is the story being told.
+
+![Fig S1 — cross-reference dendrogram, k=10, w=10](../experiments/ref-comparison/figures/cross_ref_dendrogram_k10_w10.png)
+
+**Fig S2:** 12-metric Wilcoxon comparison at k=10, w=10 (broad peaks). `jaccard_similarity_with_ends` gives the best Δ/saturation trade-off; `cosketch_geom_with_ends` is a near-tie; `cosketch_max` is the weakest discriminator. Backs the metric-choice discussion in §4.4.
+
+![Fig S2 — 12-metric Wilcoxon comparison at k=10, w=10, broad](../experiments/ref-comparison/figures/metric_comparison_broad_k10_w10.png)
+
+**Fig S5:** subB-method speed/accuracy scatter — speedup vs bedtools (y) against mean per-pair Jaccard error vs the no-subsample reference (x, log); points for each `--subB` level of all three methods, no connecting line. Only mixed-stride converts subsampling into speed (~2× at subB=0.1, ~3× at subB=0.01); hash-threshold and single-hash stay near 1×. De-zigzagged replacement for the former headline Pareto (§4.1).
+
+![Fig S5 — subB-method speed/accuracy scatter](figures/maurano_subB_pareto_scatter.png)
+
+(Figs S3 and S4 — the full Pearson and ARI heatmap grids — are listed in the figure index above but not yet rendered here; add their images to this section when the panels are finalized.)
