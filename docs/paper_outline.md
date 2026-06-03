@@ -89,17 +89,21 @@ This subsampling refinement is what makes the Section 4.1 speed numbers attainab
 
 Two things to communicate in this section, nothing more:
 1. **hammock is faster than bedtools at every regime tested** — modestly faster on small real corpora (≈2×), dramatically faster as catalog size grows (≈50× at N=512 files).
-2. **The speedup is not bought with accuracy loss.** Per-pair MAE vs bedtools is statistically indistinguishable across hammock subsampling settings — i.e., the speed knob is "free" against the bedtools reference.
+2. **The speedup is not bought with accuracy loss.** Subsampling changes hammock's own per-pair Jaccard by < 2×10⁻³ vs its no-subsample output, so the gap to bedtools is statistically indistinguishable across subsampling settings — the speed knob is effectively "free."
 
-**Fig 1 (headline):** Pareto curve, hammock dominates bedtools on Maurano across the entire accuracy axis.
+**Fig 1 (headline):** Grouped wall-time bars — bedtools vs hammock at no-subsample / subB=0.1 / subB=0.01 (mixed-stride) on the Maurano corpus. Each hammock bar is annotated with its speedup over bedtools and the mean per-pair Jaccard change vs hammock's own no-subsample output (ΔJ ≤ 2×10⁻³), carrying "faster at no accuracy cost" in a single view. (Replaces the earlier connected-line Pareto plot, whose lines doubled back along the non-axis subB sweep; the de-zigzagged three-method version is now Fig S5.)
 
-![Fig 1 — Maurano Pareto (hammock vs bedtools)](../experiments/subB_mixed_stride/figures/headline_maurano_pareto.png)
+![Fig 1 — Maurano wall-time bars (hammock vs bedtools)](figures/maurano_speed_bars.png)
 
 **Fig 2:** N-scaling out to 512 files on synthetic.
 
 ![Fig 2 — synthetic N-scaling](figures/synthetic_nscaling.png)
 
-(Internal hammock-version comparisons — mixed-stride vs hash-threshold vs single-hash subB strategies, sort-time accounting, OpenMP scaling shape — belong in the supplementary methods, not the main text.)
+(Internal hammock-version comparisons — mixed-stride vs hash-threshold vs single-hash subB strategies, sort-time accounting, OpenMP scaling shape — belong in the supplementary methods, not the main text. The three-method speed/accuracy scatter is **Fig S5**.)
+
+**Fig S5 (supplementary):** subB-method speed/accuracy scatter — speedup vs bedtools (y) against mean per-pair Jaccard error vs the no-subsample reference (x, log); points for each `--subB` level of all three methods, no connecting line. Only mixed-stride converts subsampling into speed (~2× at subB=0.1, ~3× at subB=0.01); hash-threshold and single-hash stay near 1×.
+
+![Fig S5 — subB-method speed/accuracy scatter](figures/maurano_subB_pareto_scatter.png)
 
 ### 4.2 Accuracy: both interval-mode and sequence-mode hammock match bedtools
 
@@ -241,7 +245,7 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 
 | # | Path | Carries |
 |---|---|---|
-| 1 | `subB_mixed_stride/figures/headline_maurano_pareto.png` | hammock dominates bedtools on real Pareto |
+| 1 | `docs/figures/maurano_speed_bars.png` (data: `docs/data/maurano_subB_summary.csv` + `docs/data/maurano_bedtools.csv`, script: `docs/scripts/maurano_speed.R`) | hammock wall-time bars vs bedtools at no-sub / subB=0.1 / 0.01 |
 | 2 | `docs/figures/synthetic_nscaling.png` (data: `docs/data/cpp_vs_bedtools_t16_20260512_160412.csv`, script: `docs/scripts/synthetic_nscaling.R`) | synthetic scaling to N=512 |
 | 3 | `maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png` | per-config sequence mode r vs bedtools vs interval mode (y=x) |
 | 4 | `maurano_dhs_validation/figures/mode_d_lines_p24.png` | sequence mode Pearson ridge vs ARI peak at p = 24 |
@@ -257,5 +261,6 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 | S2 (supp) | `ref-comparison/figures/metric_comparison_broad_k10_w10.png` | 12-metric Wilcoxon comparison at k=10, w=10 |
 | S3 (supp) | `maurano_dhs_validation/figures/mode_d_pearson_heatmap.png` | full Pearson heatmap grid across precision × column flavor (faceted) |
 | S4 (supp) | `maurano_dhs_validation/figures/mode_d_clustering_ari.png` | full ARI heatmap grid across precision × column flavor (faceted) |
+| S5 (supp) | `docs/figures/maurano_subB_pareto_scatter.png` (data + script as Fig 1) | subB-method speed/accuracy scatter (de-zigzagged former headline Pareto) |
 
 (The `synthetic_speedup_vs_nosub.png` figure showing within-hammock subB-method comparison moves to supplementary — per the constraint that internal hammock-version performance differences are not paper material.)
