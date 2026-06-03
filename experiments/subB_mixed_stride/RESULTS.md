@@ -62,7 +62,8 @@ stride avoids that per-point hash, so its savings actually compound.
 Pushing further down to `subB=0.01` on synthetic 1M, mixed-stride hits
 **14×** (vs ~1.4× for the other two). The headline plot (Maurano) and the
 diagnostic plots show the same pattern on real data, just at smaller
-magnitudes (peak 2.62× at subB=0.01).
+magnitudes (peak 2.62× vs no-subsample at subB=0.01; that same point is
+3.05× vs bedtools — the baseline used for the §4.1 headline figure).
 
 ![](figures/synthetic_speedup_vs_nosub.png)
 
