@@ -118,9 +118,9 @@ Sequence mode's numerical agreement with bedtools peaks at r = 0.9996 / MAE = 0.
 
 ![Fig 3 — sequence mode vs bedtools and vs interval mode agree per config](../experiments/maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png)
 
-**Fig 4:** Two-panel line plot at p = 24. **Left panel:** Pearson r vs bedtools as a function of window size w, one colored line per k (k ∈ {8, 10, 15, 20, 25}); shows the high-k / high-w Pearson ridge as a steady upward march. **Right panel:** ARI vs tissue labels on the same (w, k) axes; the k = 10 line spikes to 0.91 at w = 30 and drops off either side, while the k ∈ {15, 20, 25} lines are flat near ARI ≈ 0.69 for every w (high-k clustering is invariant to w). The contrast — Pearson is a ridge, ARI is a single peak — is the headline that Fig 6's per-config (Pearson, ARI) scatter abstracts. The original Pearson heatmap grid moves to Fig S3.
+**Fig 4:** Two-panel line plot at p = 24, `no_ends` column. **Left panel:** Pearson r vs bedtools as a function of window size w, one colored line per k (k ∈ {8, 10, 15, 20, 25}); the high-k lines (15/20/25) are already saturated at r ≈ 1.0 across all w, while the low-k lines (8, 10) climb toward them as w grows — together tracing the high-k / high-w Pearson ridge. **Right panel:** ARI vs tissue labels on the same axes; the k = 10 line spikes to 0.91 at w = 30 and drops off either side, while the k ∈ {15, 20, 25} lines are flat near ARI ≈ 0.69 for every w (high-k clustering is invariant to w). The contrast — Pearson is a ridge, ARI is a single peak — is the headline that Fig 6's per-config (Pearson, ARI) scatter abstracts. The original Pearson heatmap grid moves to Fig S3.
 
-![Fig 4 — sequence mode Pearson + ARI vs w, by k, at p=24](../experiments/maurano_dhs_validation/figures/mode_d_lines_p24.png)
+![Fig 4 — sequence mode Pearson + ARI vs w, by k, at p=24](figures/mode_d_lines_p24.png)
 
 
 ### 4.3 Biological signal: the sketch recovers tissue identity
@@ -238,7 +238,7 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 | 1 | `docs/figures/maurano_speed_bars.png` (data: `docs/data/maurano_subB_summary.csv` + `docs/data/maurano_bedtools.csv`, script: `docs/scripts/maurano_speed.R`) | hammock wall-time bars vs bedtools at no-sub / subB=0.1 / 0.01 |
 | 2 | `docs/figures/synthetic_nscaling.png` (data: `docs/data/cpp_vs_bedtools_t16_20260512_160412.csv`, script: `docs/scripts/synthetic_nscaling.R`) | synthetic scaling to N=512 |
 | 3 | `maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png` | per-config sequence mode r vs bedtools vs interval mode (y=x) |
-| 4 | `maurano_dhs_validation/figures/mode_d_lines_p24.png` | sequence mode Pearson ridge vs ARI peak at p = 24 |
+| 4 | `docs/figures/mode_d_lines_p24.png` (data: `docs/data/mode_d_summary.csv`, script: `docs/scripts/mode_d_lines.R`) | sequence mode Pearson ridge vs ARI peak at p = 24 |
 | 5 | `maurano_dhs_validation/figures/mode_d_best_dendrogram.png` + `bedtools_dendrogram.png` | tissue recovery (a + b panels) |
 | 6 | `maurano_dhs_validation/figures/mode_d_metric_tradeoff.png` | Pearson-best ≠ ARI-best |
 | 7 | `maurano_dhs_validation/figures/mode_d_violins_by_k.png` | per-k Pearson and ARI distributions across full (w, p) sweep |
