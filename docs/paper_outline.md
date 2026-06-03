@@ -2,7 +2,7 @@
 
 **Working title (placeholder):** *hammock: HLL-sketch similarity for genomic intervals — faster than bedtools, with biological signal preserved*
 
-**Thesis (one sentence):** hammock — a Python+C++ HyperLogLog-backed interval-set sketcher — matches bedtools' pairwise interval-Jaccard at r ≈ 0.9996 (~~Mode D~~ sequence mode) and r ≈ 0.998 (~~Mode B~~ interval mode), while being substantially faster than bedtools at every scale tested; the same sketches independently recover tissue clustering (ARI = 0.91) and are robust to reference-genome choice — so the speed gain comes with, not at the cost of, biological fidelity.
+**Thesis (one sentence):** hammock — a Python+C++ HyperLogLog-backed interval-set sketcher — matches bedtools' pairwise interval-Jaccard at r ≈ 0.9996 (sequence mode) and r ≈ 0.998 (interval mode), while being substantially faster than bedtools at every scale tested; the same sketches independently recover tissue clustering (ARI = 0.91) and are robust to reference-genome choice — so the speed gain comes with, not at the cost of, biological fidelity.
 
 ---
 
@@ -14,42 +14,42 @@ hammock provides two complementary similarity primitives over genomic interval s
 
 - All-vs-all pairwise interval similarity is bedtools' weakest scaling regime (O(N²·M)); large epigenome catalogs make this the bottleneck.
 - Sketching trades exactness for speed; the question is *how much exactness*, and whether the sketch preserves the biology that the exact answer captures.
-- Contribution: hammock, a Python+C++ HyperLogLog-backed sketcher with ~~four operating modes (A/B/C BED-interval, D FASTA-minimizer)~~ two operating modes (interval mode for BED, sequence mode for FASTA), plus a four-experiment validation framework that quantifies the speed/accuracy/biology trade-off on real data.
+- Contribution: hammock, a Python+C++ HyperLogLog-backed sketcher with two operating modes (interval mode for BED, sequence mode for FASTA), plus a four-experiment validation framework that quantifies the speed/accuracy/biology trade-off on real data.
 
 ## 3. Methods
 
 ### 3.1 hammock implementation
 
 - Python orchestrator + C++ extension (pybind11); HLL with register-equality Jaccard, Ertl 2017 estimator, xxh64 ingestion.
-- ~~Mode A: interval coords.~~ ~~Mode B~~ interval mode: per-bp HLL with optional `subB` subsampling. ~~Mode C: interpolates A↔B via `expA` and `subB`.~~ ~~Mode D~~ sequence mode: minimizer-HLL on FASTA, with both interior-minimizer and minimizer-plus-flanks similarity columns.
-- Output per-pair similarity columns: `jaccard_similarity`, `jaccard_similarity_with_ends`, plus `containment_AB`, `containment_BA`, `cosketch_{geom,arith,max}` in both flavors (10 metrics per ~~Mode D~~ sequence-mode pair; 5 per ~~A/B/C~~ interval-mode pair). The `jaccard_*` columns are the analyses' default; the cosketch/containment columns are reported for transparency and inform Section 5.
+- Interval mode: per-bp HLL with optional `subB` subsampling. Sequence mode: minimizer-HLL on FASTA, with both interior-minimizer and minimizer-plus-flanks similarity columns. (The implementation also carries two interval-coordinate variants — a coordinate-only sketch and an interpolation between it and per-bp interval mode — but neither is evaluated in this paper.)
+- Output per-pair similarity columns: `jaccard_similarity`, `jaccard_similarity_with_ends`, plus `containment_AB`, `containment_BA`, `cosketch_{geom,arith,max}` in both flavors (10 metrics per sequence-mode pair; 5 per interval-mode pair). The `jaccard_*` columns are the analyses' default; the cosketch/containment columns are reported for transparency and inform Section 5.
 
 ### 3.2 Benchmark datasets
 
 | dataset | role | n |
 |---|---|---|
 | Synthetic BED (`bedtools_benchmark/`) | scaling regime | up to 512 × 10k intervals |
-| Synthetic FASTA pairs (`modeD_flanking/`) | exact k-mer truth for ~~Mode D~~ sequence mode | 192 pairs (n_intervals × mean_len × dist × mutation grid); ~12,700 (k, w, p) sweep measurements |
+| Synthetic FASTA pairs (`modeD_flanking/`) | exact k-mer truth for sequence mode | 192 pairs (n_intervals × mean_len × dist × mutation grid); ~12,700 (k, w, p) sweep measurements |
 | Maurano 2012 fetal DHS | real interval data, 10 tissue labels (fBrain/fHeart/fIntestine_Sm/fKidney/fLung/fMuscle_arm/fMuscle_back/fMuscle_leg/fSkin/fStomach) | 20 BEDs |
 | ENCODE H3K27ac (Heart/Liver/Lung × GRCh37/GRCh38/CHM13) | reference-build robustness | 9 sample×ref |
 
 ### 3.3 Statistical evaluation
 
-Pearson r, Spearman ρ, MAE vs bedtools (~~Mode B/C/D~~ interval and sequence modes); ARI, NMI vs known tissue labels (~~Mode D~~ sequence mode); Wilcoxon same-tissue vs different-tissue (cross-reference); R/ggplot via CairoPNG.
+Pearson r, Spearman ρ, MAE vs bedtools (interval and sequence modes); ARI, NMI vs known tissue labels (sequence mode); Wilcoxon same-tissue vs different-tissue (cross-reference); R/ggplot via CairoPNG.
 
 ### 3.4 HyperLogLog sketching
 
-~~All four~~ Both modes share a HyperLogLog (HLL) backbone [@Flajolet2007]. Each input set — per-bp positions for ~~Mode B~~ interval mode~~/C~~, ~~interval coordinates for Mode A,~~ minimizer hashes for ~~Mode D~~ sequence mode — is hashed with xxh64 (seed via `--seed`, default 42); the low `p` bits of each hash route it to one of `2^p` 1-byte registers, which stores the maximum leading-zero count seen among hashes routed there. Cardinality is recovered via the Ertl 2017 improved estimator [@Ertl2017]. For two sketches at matching `p` and seed, the union is register-wise max and the intersection cardinality is recovered from register equality — two HLLs agree at register *i* iff the leading-rho hash routed to *i* lies in `A ∩ B` — from which we read off Jaccard and the directional containments `|A ∩ B| / |A|` and `|A ∩ B| / |B|`.
+Both modes share a HyperLogLog (HLL) backbone [@Flajolet2007]. Each input set — per-bp positions for interval mode, minimizer hashes for sequence mode — is hashed with xxh64 (seed via `--seed`, default 42); the low `p` bits of each hash route it to one of `2^p` 1-byte registers, which stores the maximum leading-zero count seen among hashes routed there. Cardinality is recovered via the Ertl 2017 improved estimator [@Ertl2017]. For two sketches at matching `p` and seed, the union is register-wise max and the intersection cardinality is recovered from register equality — two HLLs agree at register *i* iff the leading-rho hash routed to *i* lies in `A ∩ B` — from which we read off Jaccard and the directional containments `|A ∩ B| / |A|` and `|A ∩ B| / |B|`.
 
 The asymptotic relative standard error is ≈ 1.04 / √(2^p). For the CLI default `p = 18`, that is 1.04 / 512 ≈ 0.203% on a 2^18 = 262,144-register / 256 KiB sketch. For the high-precision configuration cited in Sections 4.2–4.3 (`p = 24`), it is 1.04 / 4,096 ≈ 0.0254% on a 2^24 = 16,777,216-register / 16 MiB sketch. Memory is independent of input cardinality — the load-bearing property that lets the same 16 MiB sketch represent a 10k-interval or a 10M-interval BED at identical cost.
 
-### 3.5 Minimizers (~~Mode D~~ sequence mode)
+### 3.5 Minimizers (sequence mode)
 
-~~Mode D~~ sequence mode reduces each FASTA sequence to its set of (k, w)-minimizers [@Roberts2004; @Schleimer2003]: in every length-`w` sliding window over the sequence, the k-mer with the smallest selector-hash value is retained. Window scanning is delegated to the VeryAmazed `digest` library [@digest], and each unique selector hash is ingested directly into the per-sequence HLL of §3.4 via `add_hash64`. In parallel hammock canonicalizes the two flanking k-mers — the leading and trailing length-k substrings of each input sequence — by taking the lexicographic minimum of forward and reverse complement, xxh64-hashes them with the same `--seed` as the HLL, and adds them to a second HLL. The default similarity column `jaccard_similarity` compares the interior-minimizer HLLs only; the alternative `jaccard_similarity_with_ends` compares the union of the interior-minimizer and flanking-k-mer HLLs, and is preferred only in the short-sequence / sparse-minimizer regime characterized in §4.5. CLI defaults are `k = 8`, `w = 40`; the production-cited configurations are `k = 20, w = 100` (§4.2, numerical agreement with bedtools) and `k = 10, w = 30` (§4.3, tissue clustering).
+Sequence mode reduces each FASTA sequence to its set of (k, w)-minimizers [@Roberts2004; @Schleimer2003]: in every length-`w` sliding window over the sequence, the k-mer with the smallest selector-hash value is retained. Window scanning is delegated to the VeryAmazed `digest` library [@digest], and each unique selector hash is ingested directly into the per-sequence HLL of §3.4 via `add_hash64`. In parallel hammock canonicalizes the two flanking k-mers — the leading and trailing length-k substrings of each input sequence — by taking the lexicographic minimum of forward and reverse complement, xxh64-hashes them with the same `--seed` as the HLL, and adds them to a second HLL. The default similarity column `jaccard_similarity` compares the interior-minimizer HLLs only; the alternative `jaccard_similarity_with_ends` compares the union of the interior-minimizer and flanking-k-mer HLLs, and is preferred only in the short-sequence / sparse-minimizer regime characterized in §4.5. CLI defaults are `k = 8`, `w = 40`; the production-cited configurations are `k = 20, w = 100` (§4.2, numerical agreement with bedtools) and `k = 10, w = 30` (§4.3, tissue clustering).
 
 ### 3.6 Mixed-stride subsampling (`--subB-method mixed-stride`)
 
-~~Mode B's~~ interval mode's `subB` knob subsamples the per-base-pair positions that get ingested into the HLL. A natural implementation — a *hash-threshold* gate that computes a per-position xxh32 hash and compares it to `subB × UINT32_MAX` — is correct, but the per-position hash cost grows linearly with the input, so the wall-time savings from skipping positions plateau quickly: at moderate subB the gate hash itself dominates and `subB ≤ 0.5` is actually *slower* than no subsampling at all.
+Interval mode's `subB` knob subsamples the per-base-pair positions that get ingested into the HLL. A natural implementation — a *hash-threshold* gate that computes a per-position xxh32 hash and compares it to `subB × UINT32_MAX` — is correct, but the per-position hash cost grows linearly with the input, so the wall-time savings from skipping positions plateau quickly: at moderate subB the gate hash itself dominates and `subB ≤ 0.5` is actually *slower* than no subsampling at all.
 
 hammock introduces **mixed-stride** subsampling as a deterministic, hash-free alternative. For each chromosome, a fixed stride length `s = round(1/subB)` is chosen, offset by a chr-keyed hash so different chromosomes sample disjoint position phases. Ingestion walks the chromosome in stride-`s` increments — no per-position decision, no per-position hash. The accepted-position cardinality matches the hash-threshold gate in expectation, but the cost is `O(L/s)` rather than `O(L)`, so wall time scales with `subB` instead of being dominated by the gate.
 
@@ -62,16 +62,6 @@ Three properties matter for downstream use:
 The structured-sampling concern — that a fixed stride could miss periodic features — is theoretical for BED inputs at the strides we test; in practice the chr-keyed offset randomization breaks cross-chromosome alignment and the Maurano + synthetic accuracy measurements show no detectable bias. Mixed-stride is the default `--subB-method` setting; hash-threshold (`--subB-method hash-threshold`) and a single-hash variant remain available for users who want to characterize the alternative samplers.
 
 This subsampling refinement is what makes the Section 4.1 speed numbers attainable: the "high-subsample" and "max-subsample" rows of the real-DHS table are mixed-stride at `subB = 0.1` and `subB = 0.01`. The per-method comparison plot is in supplementary.
-
-### ~~3.7 Mode C as an A↔B interpolant~~
-
-> **Status (2026-05-21):** This section will likely be removed. Modes A and C have no independent biological support — A is a coordinate-only sketch with no validated downstream use case, and C is an interpolation knob between A and B that does not buy accuracy over Mode B at any setting on the corpora tested. The paper is being recast around two primitives (interval mode = B, sequence mode = D); if that recasting holds, §3.7 and the Mode C figure here are dropped.
-
-~~Mode C is parameterized by `subB` (subsampling rate) and `expA` (interval-length exponent): at `subB → 0` it reduces to Mode A (interval-coordinate-only sketch), at `subB → 1` it reduces to Mode B (per-bp sketch). On Maurano DHS the transition is sharp — Mode C tracks Mode A at `subB ≲ 0.005` and Mode B at `subB ≳ 0.05`, with the crossover concentrated near `subB ≈ 0.005`. This makes Mode C a single-knob alternative to choosing between A and B explicitly; it does not buy accuracy over Mode B at high `subB`, but it lets a user dial down per-position cost when interval-set granularity is sufficient.~~
-
-<!-- Figure struck through alongside §3.7 body, pending section removal:
-![Mode C subB interpolation between Mode A regime (subB ≲ 0.005) and Mode B regime (subB ≳ 0.05) on Maurano DHS](../experiments/maurano_dhs_validation/figures/mode_c_subB_interpolation_agg.png)
--->
 
 ## 4. Results
 
@@ -111,7 +101,7 @@ Two things to communicate in this section, nothing more:
 
 (Internal hammock-version comparisons — mixed-stride vs hash-threshold vs single-hash subB strategies, sort-time accounting, OpenMP scaling shape — belong in the supplementary methods, not the main text.)
 
-### 4.2 Accuracy: both interval-mode (B) and sequence-mode (D) hammock match bedtools
+### 4.2 Accuracy: both interval-mode and sequence-mode hammock match bedtools
 
 > **Source:** `experiments/maurano_dhs_validation/RESULTS.md`.
 
@@ -119,12 +109,12 @@ Across Maurano's 400 sample pairs:
 
 | mode | best r vs bedtools | best MAE | note |
 |---|---|---|---|
-| **~~Mode B~~ interval mode** | **0.998** | — | at every precision tested |
-| **~~Mode D~~ sequence mode** (k=20, w=100, p=24) | **0.9996** | **0.0061** | **47 of 209 configs exceed r > 0.99** |
+| **interval mode** | **0.998** | — | at every precision tested |
+| **sequence mode** (k=20, w=100, p=24) | **0.9996** | **0.0061** | **47 of 209 configs exceed r > 0.99** |
 
-~~Mode D's~~ sequence mode's numerical agreement with bedtools peaks at r = 0.9996 / MAE = 0.0061 — four-decimal-place agreement. The high-correlation ridge in the (k, w) Pearson heatmap runs along the high-k / high-w edge of the sweep, indicating that ~~Mode D's~~ sequence mode's near-perfect agreement is unlocked at long minimizer windows where interior coverage is richest.
+Sequence mode's numerical agreement with bedtools peaks at r = 0.9996 / MAE = 0.0061 — four-decimal-place agreement. The high-correlation ridge in the (k, w) Pearson heatmap runs along the high-k / high-w edge of the sweep, indicating that sequence mode's near-perfect agreement is unlocked at long minimizer windows where interior coverage is richest.
 
-**Fig 3:** Per ~~Mode D~~ sequence mode config, Pearson r against bedtools (x-axis) vs Pearson r against ~~Mode B~~ interval mode (y-axis); points sit tightly on y = x. ~~Mode D's~~ sequence mode's agreement with bedtools is mirrored by its agreement with ~~Mode B~~ interval mode, so ~~Mode B~~ interval mode is an interchangeable interval-Jaccard reference for ~~Mode D~~ sequence mode — once ~~Mode D~~ sequence mode is validated against bedtools, it is validated against any reasonable interval-Jaccard estimator.
+**Fig 3:** Per sequence mode config, Pearson r against bedtools (x-axis) vs Pearson r against interval mode (y-axis); points sit tightly on y = x. Sequence mode's agreement with bedtools is mirrored by its agreement with interval mode, so interval mode is an interchangeable interval-Jaccard reference for sequence mode — once sequence mode is validated against bedtools, it is validated against any reasonable interval-Jaccard estimator.
 
 ![Fig 3 — sequence mode vs bedtools and vs interval mode agree per config](../experiments/maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png)
 
@@ -137,11 +127,11 @@ Across Maurano's 400 sample pairs:
 
 > **Source:** `experiments/maurano_dhs_validation/RESULTS.md`.
 
-~~Mode D's~~ sequence mode's best-ARI cell is **k = 10, w = 30**, with **ARI = 0.910, NMI = 0.961** on the 10-tissue-label set (with the three muscle subtypes — arm/back/leg — counted as distinct labels) holding across **all precisions p ≥ 12** — the clustering signal is precision-cheap once the (k, w) cell is right. The dendrogram makes 2 errors: the two fBrain samples split into separate clusters, and one fMuscle_back is grouped with the two fMuscle_legs — both errors that the bedtools reference dendrogram *also* makes, so this is not a sketch artifact but a property of the underlying signal.
+Sequence mode's best-ARI cell is **k = 10, w = 30**, with **ARI = 0.910, NMI = 0.961** on the 10-tissue-label set (with the three muscle subtypes — arm/back/leg — counted as distinct labels) holding across **all precisions p ≥ 12** — the clustering signal is precision-cheap once the (k, w) cell is right. The dendrogram makes 2 errors: the two fBrain samples split into separate clusters, and one fMuscle_back is grouped with the two fMuscle_legs — both errors that the bedtools reference dendrogram *also* makes, so this is not a sketch artifact but a property of the underlying signal.
 
-At the ARI-best config, ~~Mode D's~~ sequence mode's predicted Jaccards sit on the y = x diagonal versus bedtools (and versus ~~Mode B~~ interval mode) — the sketch is numerically calibrated against the bedtools reference, not just rank-correlated.
+At the ARI-best config, sequence mode's predicted Jaccards sit on the y = x diagonal versus bedtools (and versus interval mode) — the sketch is numerically calibrated against the bedtools reference, not just rank-correlated.
 
-**Fig 5:** ~~Mode D~~ sequence mode best-ARI dendrogram (top) paired with the bedtools reference dendrogram (bottom). Same tissue blocks recovered.
+**Fig 5:** sequence mode best-ARI dendrogram (top) paired with the bedtools reference dendrogram (bottom). Same tissue blocks recovered.
 
 ![Fig 5a — sequence mode best dendrogram](../experiments/maurano_dhs_validation/figures/mode_d_best_dendrogram.png)
 ![Fig 5b — bedtools reference dendrogram](../experiments/maurano_dhs_validation/figures/bedtools_dendrogram.png)
@@ -191,13 +181,13 @@ The sweep partitions into three regimes:
 
 Practical interpretation: when peaks are aligned to a different human reference than expected, the sketch still produces the same biological neighborhood. At k ≥ 15 the separation is large enough that reference choice is unambiguously a smaller source of variance than tissue identity. This is the property that lets hammock be deployed against heterogeneous catalogs (ENCODE/Roadmap mixtures) without first re-aligning everything.
 
-### 4.5 Methodological notes: choosing ~~Mode D's~~ sequence mode's flanking column
+### 4.5 Methodological notes: choosing sequence mode's flanking column
 
 > **Status (2026-05-21):** Section being reworked. All §4.5 figures are hidden from the rendered outline pending replacement — only the synthetic φ × mutation phase diagram (formerly Fig 11b) is currently shown. The hidden PNGs are still on disk at `experiments/modeD_flanking/figures/` for reference. New, more interpretable figures are being brainstormed.
 
 > **Source:** `experiments/modeD_flanking/` Parts 1 (Maurano re-analysis) and 2 (synthetic FASTA pairs with exact k-mer Jaccard truth).
 
-~~Mode D~~ sequence mode emits two Jaccard columns: minimizer-only (`jaccard_similarity`) and minimizer-plus-flanks (`jaccard_similarity_with_ends`). Two corpora characterize when each column is preferred:
+Sequence mode emits two Jaccard columns: minimizer-only (`jaccard_similarity`) and minimizer-plus-flanks (`jaccard_similarity_with_ends`). Two corpora characterize when each column is preferred:
 
 - **Part 1 (Maurano, real DHS):** at high-precision configs, `no_ends` is the clear winner — at k=20, w=100, p=24, r_no_ends = 0.9996 vs r_with_ends = 0.888. The advantage flips only at the smallest (k, w) cells (k ≤ 10, w ≤ 10), where interior minimizers are sparse and the flanking k-mers carry the signal.
 - **Part 2 (synthetic, 192 FASTA pairs across an n_intervals × mean_len × dist × mutation grid, each sketched at 66 valid (k, w, p) cells — ~12,700 measurements total; exact k-mer Jaccard as truth):** `with_ends` has systematically *larger* MAE than `no_ends` against the k-mer truth (mean Δmae_r ≈ −0.015 across all k); the gap widens with φ, the flanking-fraction predictor we defined.
@@ -230,20 +220,20 @@ The flanking-fraction φ ≈ 2(k−1)·n_intervals / (total_length / w) predicts
 
 ### 5.1 Definitional gap vs bedtools
 
-~~Mode B/C/D~~ interval and sequence modes estimate slightly different Jaccards than bedtools (bp-set vs interval-overlap vs k-mer-set). On the synthetic ~~Mode B~~ interval mode benchmark, the median per-pair gap is ~0.16 and is independent of precision and subsampling. On Maurano, ~~Mode D~~ sequence mode at the optimal high-k/high-w cell brings MAE down to 0.006 — i.e., the gap effectively closes when the sketch is well-conditioned. For applications where absolute Jaccard magnitude matters (not just ranking), the appropriate setting is determined by the (k, w, p) choice; the relevant figures are in Section 4.2.
+Interval and sequence modes estimate slightly different Jaccards than bedtools (bp-set vs interval-overlap vs k-mer-set). On the synthetic interval mode benchmark, the median per-pair gap is ~0.16 and is independent of precision and subsampling. On Maurano, sequence mode at the optimal high-k/high-w cell brings MAE down to 0.006 — i.e., the gap effectively closes when the sketch is well-conditioned. For applications where absolute Jaccard magnitude matters (not just ranking), the appropriate setting is determined by the (k, w, p) choice; the relevant figures are in Section 4.2.
 
 ### 5.2 The cosketch + containment columns are reported but not yet exploited
 
-The five auxiliary similarity columns (containment_AB, containment_BA, cosketch_geom, cosketch_arith, cosketch_max — each in two flavors for ~~Mode D~~ sequence mode) are present in every ~~Mode D~~ sequence mode output CSV. Current analyses use the jaccard columns as their primary signal. A 12-metric sanity check at the ref-comparison Exp A (k=10, w=10) cell finds `cosketch_geom_with_ends` is a near-tie with `jaccard_similarity_with_ends`, while `cosketch_max` is uniformly the weakest discriminator. A full multi-metric re-evaluation across the (k, w, p) sweep and across the Maurano corpus is a natural fast-follow analysis and may identify a column (likely cosketch_geom on the minimizer-only flavor) that is more robust than jaccard at small precision or small k.
+The five auxiliary similarity columns (containment_AB, containment_BA, cosketch_geom, cosketch_arith, cosketch_max — each in two flavors for sequence mode) are present in every sequence mode output CSV. Current analyses use the jaccard columns as their primary signal. A 12-metric sanity check at the ref-comparison Exp A (k=10, w=10) cell finds `cosketch_geom_with_ends` is a near-tie with `jaccard_similarity_with_ends`, while `cosketch_max` is uniformly the weakest discriminator. A full multi-metric re-evaluation across the (k, w, p) sweep and across the Maurano corpus is a natural fast-follow analysis and may identify a column (likely cosketch_geom on the minimizer-only flavor) that is more robust than jaccard at small precision or small k.
 
 ## 6. Discussion
 
-- **Practical recipe.** ~~Mode B~~ interval mode for fast bedtools-equivalent interval-Jaccard with optional subsampling for further speedup at no accuracy cost. ~~Mode D~~ sequence mode at large k and w (k=20, w=100, p=24) for the closest numerical match to bedtools (r = 0.9996, MAE = 0.006). ~~Mode D~~ sequence mode at k=10, w=30, p ≥ 12 for tissue clustering (ARI = 0.91, NMI = 0.96). Use `jaccard_similarity` by default; fall back to `jaccard_similarity_with_ends` only in the short-sequence / sparse-minimizer regime characterized in Section 4.5.
-- **The sketch carries more than bedtools captures.** ~~Mode D~~ sequence mode recovers tissue clustering directly from peak FASTAs — independently from bedtools' interval overlap — at ARI = 0.91. Sketch similarity ≈ biological similarity, even when the two estimators don't agree numerically.
+- **Practical recipe.** Interval mode for fast bedtools-equivalent interval-Jaccard with optional subsampling for further speedup at no accuracy cost. Sequence mode at large k and w (k=20, w=100, p=24) for the closest numerical match to bedtools (r = 0.9996, MAE = 0.006). Sequence mode at k=10, w=30, p ≥ 12 for tissue clustering (ARI = 0.91, NMI = 0.96). Use `jaccard_similarity` by default; fall back to `jaccard_similarity_with_ends` only in the short-sequence / sparse-minimizer regime characterized in Section 4.5.
+- **The sketch carries more than bedtools captures.** Sequence mode recovers tissue clustering directly from peak FASTAs — independently from bedtools' interval overlap — at ARI = 0.91. Sketch similarity ≈ biological similarity, even when the two estimators don't agree numerically.
 
 ## 7. Conclusion
 
-hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real DHS data ~~Mode B~~ interval mode matches bedtools at r = 0.998 and ~~Mode D~~ sequence mode matches it at r = 0.9996 / MAE = 0.006, while running substantially faster than bedtools at every scale tested (orders of magnitude faster at large catalog size). The same ~~Mode D~~ sequence mode sketches recover tissue clustering at ARI = 0.91 directly from peak FASTAs and are robust to reference-genome choice within a species. The combination — speed *plus* near-exact agreement *plus* preserved biology *plus* reference-build invariance — positions sketching as a viable default for large-scale epigenome comparison.
+hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real DHS data interval mode matches bedtools at r = 0.998 and sequence mode matches it at r = 0.9996 / MAE = 0.006, while running substantially faster than bedtools at every scale tested (orders of magnitude faster at large catalog size). The same sequence mode sketches recover tissue clustering at ARI = 0.91 directly from peak FASTAs and are robust to reference-genome choice within a species. The combination — speed *plus* near-exact agreement *plus* preserved biology *plus* reference-build invariance — positions sketching as a viable default for large-scale epigenome comparison.
 
 ---
 
@@ -253,8 +243,8 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 |---|---|---|
 | 1 | `subB_mixed_stride/figures/headline_maurano_pareto.png` | hammock dominates bedtools on real Pareto |
 | 2 | `bedtools_benchmark/figures/cpp_vs_bedtools_t16_20260512_160412_sketch_compare_split.png` | synthetic scaling to N=512 |
-| 3 | `maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png` | per-config ~~Mode D~~ sequence mode r vs bedtools vs ~~Mode B~~ interval mode (y=x) |
-| 4 | `maurano_dhs_validation/figures/mode_d_lines_p24.png` | ~~Mode D~~ sequence mode Pearson ridge vs ARI peak at p = 24 |
+| 3 | `maurano_dhs_validation/figures/mode_d_bedtools_vs_modeB_scatter.png` | per-config sequence mode r vs bedtools vs interval mode (y=x) |
+| 4 | `maurano_dhs_validation/figures/mode_d_lines_p24.png` | sequence mode Pearson ridge vs ARI peak at p = 24 |
 | 5 | `maurano_dhs_validation/figures/mode_d_best_dendrogram.png` + `bedtools_dendrogram.png` | tissue recovery (a + b panels) |
 | 6 | `maurano_dhs_validation/figures/mode_d_metric_tradeoff.png` | Pearson-best ≠ ARI-best |
 | 7 | `maurano_dhs_validation/figures/mode_d_violins_by_k.png` | per-k Pearson and ARI distributions across full (w, p) sweep |
