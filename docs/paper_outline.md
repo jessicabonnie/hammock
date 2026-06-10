@@ -20,56 +20,11 @@ Increased availability of high-throughput sequencing has facilitated a correspon
 - Sketching trades exactness for speed; the question is *how much exactness*, and whether the sketch preserves the biology that the exact answer captures.
 - Contribution: hammock, a Python+C++ HyperLogLog-backed sketcher with two operating modes (interval mode for BED, sequence mode for FASTA), plus a four-experiment validation framework that quantifies the speed/accuracy/biology trade-off on real data.
 
-## 3. Methods
 
-### 3.1 hammock implementation
 
-- Python orchestrator + C++ extension (pybind11); HLL with register-equality Jaccard, Ertl 2017 estimator, xxh64 ingestion.
-- Interval mode: per-bp HLL with optional `subB` subsampling. Sequence mode: minimizer-HLL on FASTA, with both interior-minimizer and minimizer-plus-flanks similarity columns. (The implementation also carries two interval-coordinate variants — a coordinate-only sketch and an interpolation between it and per-bp interval mode — but neither is evaluated in this paper.)
-- Output per-pair similarity columns: `jaccard_similarity`, `jaccard_similarity_with_ends`, plus `containment_AB`, `containment_BA`, `cosketch_{geom,arith,max}` in both flavors (10 metrics per sequence-mode pair; 5 per interval-mode pair). The `jaccard_*` columns are the analyses' default; the cosketch/containment columns are reported for transparency and inform Section 5.
+## 3. Results
 
-### 3.2 Benchmark datasets
-
-| dataset | role | n |
-|---|---|---|
-| Synthetic BED (`bedtools_benchmark/`) | scaling regime | up to 512 × 10k intervals |
-| Synthetic FASTA pairs (`modeD_flanking/`) | exact k-mer truth for sequence mode | 192 pairs (n_intervals × mean_len × dist × mutation grid); ~12,700 (k, w, p) sweep measurements |
-| Maurano 2012 fetal DHS | real interval data, 10 tissue labels (fBrain/fHeart/fIntestine_Sm/fKidney/fLung/fMuscle_arm/fMuscle_back/fMuscle_leg/fSkin/fStomach) | 20 BEDs |
-| ENCODE H3K27ac (Heart/Liver/Lung × GRCh37/GRCh38/CHM13) | reference-build robustness | 9 sample×ref |
-
-### 3.3 Statistical evaluation
-
-Pearson r, Spearman ρ, MAE vs bedtools (interval and sequence modes); ARI, NMI vs known tissue labels (sequence mode); Wilcoxon same-tissue vs different-tissue (cross-reference); R/ggplot via CairoPNG.
-
-### 3.4 HyperLogLog sketching
-
-Both modes share a HyperLogLog (HLL) backbone [@Flajolet2007]. Each input set — per-bp positions for interval mode, minimizer hashes for sequence mode — is hashed with xxh64 (seed via `--seed`, default 42); the low `p` bits of each hash route it to one of `2^p` 1-byte registers, which stores the maximum leading-zero count seen among hashes routed there. Cardinality is recovered via the Ertl 2017 improved estimator [@Ertl2017]. For two sketches at matching `p` and seed, the union is register-wise max and the intersection cardinality is recovered from register equality — two HLLs agree at register *i* iff the leading-rho hash routed to *i* lies in `A ∩ B` — from which we read off Jaccard and the directional containments `|A ∩ B| / |A|` and `|A ∩ B| / |B|`.
-
-The asymptotic relative standard error is ≈ 1.04 / √(2^p). For the CLI default `p = 18`, that is 1.04 / 512 ≈ 0.203% on a 2^18 = 262,144-register / 256 KiB sketch. For the high-precision configuration cited in Sections 4.2–4.3 (`p = 24`), it is 1.04 / 4,096 ≈ 0.0254% on a 2^24 = 16,777,216-register / 16 MiB sketch. Memory is independent of input cardinality — the load-bearing property that lets the same 16 MiB sketch represent a 10k-interval or a 10M-interval BED at identical cost.
-
-### 3.5 Minimizers (sequence mode)
-
-Sequence mode reduces each FASTA sequence to its set of (k, w)-minimizers [@Roberts2004; @Schleimer2003]: in every length-`w` sliding window over the sequence, the k-mer with the smallest selector-hash value is retained. Window scanning is delegated to the VeryAmazed `digest` library [@digest], and each unique selector hash is ingested directly into the per-sequence HLL of §3.4 via `add_hash64`. In parallel hammock canonicalizes the two flanking k-mers — the leading and trailing length-k substrings of each input sequence — by taking the lexicographic minimum of forward and reverse complement, xxh64-hashes them with the same `--seed` as the HLL, and adds them to a second HLL. The default similarity column `jaccard_similarity` compares the interior-minimizer HLLs only; the alternative `jaccard_similarity_with_ends` compares the union of the interior-minimizer and flanking-k-mer HLLs, and is preferred only in the short-sequence / sparse-minimizer regime characterized in §4.5. CLI defaults are `k = 8`, `w = 40`; the production-cited configurations are `k = 20, w = 100` (§4.2, numerical agreement with bedtools) and `k = 10, w = 30` (§4.3, tissue clustering).
-
-### 3.6 Mixed-stride subsampling (`--subB-method mixed-stride`)
-
-Interval mode's `subB` knob subsamples the per-base-pair positions that get ingested into the HLL. A natural implementation — a *hash-threshold* gate that computes a per-position xxh32 hash and compares it to `subB × UINT32_MAX` — is correct, but the per-position hash cost grows linearly with the input, so the wall-time savings from skipping positions plateau quickly: at moderate subB the gate hash itself dominates and `subB ≤ 0.5` is actually *slower* than no subsampling at all.
-
-hammock introduces **mixed-stride** subsampling as a deterministic, hash-free alternative. For each chromosome, a fixed stride length `s = round(1/subB)` is chosen, offset by a chr-keyed hash so different chromosomes sample disjoint position phases. Ingestion walks the chromosome in stride-`s` increments — no per-position decision, no per-position hash. The accepted-position cardinality matches the hash-threshold gate in expectation, but the cost is `O(L/s)` rather than `O(L)`, so wall time scales with `subB` instead of being dominated by the gate.
-
-Three properties matter for downstream use:
-
-1. **Performance scaling.** At `subB = 0.1`, mixed-stride is 3–4× faster than hash-threshold on synthetic data and 1.8–2.4× faster than hash-threshold on real DHS. The advantage compounds: at `subB = 0.01` on 1M-interval synthetic files, mixed-stride hits 14× while hash-threshold caps at ~1.4×.
-2. **Accuracy.** Per-pair MAE vs the no-subsample reference is statistically indistinguishable across the three subB methods (hash-threshold, mixed-stride, single-hash). Mixed-stride does not buy speed by losing accuracy.
-3. **Determinism and reproducibility.** Output is exactly reproducible given the chr-stride seed (`--gate-seed`, default 31337). The same files at the same subB produce byte-identical HLLs across runs and machines.
-
-The structured-sampling concern — that a fixed stride could miss periodic features — is theoretical for BED inputs at the strides we test; in practice the chr-keyed offset randomization breaks cross-chromosome alignment and the Maurano + synthetic accuracy measurements show no detectable bias. Mixed-stride is the default `--subB-method` setting; hash-threshold (`--subB-method hash-threshold`) and a single-hash variant remain available for users who want to characterize the alternative samplers.
-
-This subsampling refinement is what makes the Section 4.1 speed numbers attainable: the "high-subsample" and "max-subsample" rows of the real-DHS table are mixed-stride at `subB = 0.1` and `subB = 0.01`. The per-method comparison plot is in supplementary.
-
-## 4. Results
-
-### 4.1 Speed: hammock is substantially faster than bedtools on real and synthetic interval corpora
+### 3.1 Speed: hammock is substantially faster than bedtools on real and synthetic interval corpora
 
 > **Sources:** `experiments/subB_mixed_stride/RESULTS.md` (real DHS); `experiments/bedtools_benchmark/RESULTS.md` (synthetic).
 
@@ -105,7 +60,7 @@ Two things to communicate in this section, nothing more:
 
 (Internal hammock-version comparisons — mixed-stride vs hash-threshold vs single-hash subB strategies, sort-time accounting, OpenMP scaling shape — belong in the supplementary methods, not the main text. The three-method speed/accuracy scatter is **Fig S5**, in the Supplementary figures section at the end.)
 
-### 4.2 Accuracy: both interval-mode and sequence-mode hammock match bedtools
+### 3.2 Accuracy: both interval-mode and sequence-mode hammock match bedtools
 
 > **Source:** `experiments/maurano_dhs_validation/RESULTS.md`.
 
@@ -127,7 +82,7 @@ Sequence mode's numerical agreement with bedtools peaks at r = 0.9996 / MAE = 0.
 ![Fig 4 — sequence mode Pearson + ARI vs w, by k, at p=24](figures/mode_d_lines_p24.png)
 
 
-### 4.3 Biological signal: the sketch recovers tissue identity
+### 3.3 Biological signal: the sketch recovers tissue identity
 
 > **Source:** `experiments/maurano_dhs_validation/RESULTS.md`.
 
@@ -149,7 +104,7 @@ At the ARI-best config, sequence mode's predicted Jaccards sit on the y = x diag
 ![Fig 7 — sequence mode Pearson + ARI violins per k, no_ends across (w, p)](figures/mode_d_violins_by_k.png)
 
 
-### 4.4 Robustness to reference genome
+### 3.4 Robustness to reference genome
 
 > **Source:** `experiments/ref-comparison/docs/exp_a_results.md`.
 
@@ -179,7 +134,7 @@ The sweep partitions into three regimes:
 
 Practical interpretation: when peaks are aligned to a different human reference than expected, the sketch still produces the same biological neighborhood. At k ≥ 15 the separation is large enough that reference choice is unambiguously a smaller source of variance than tissue identity. This is the property that lets hammock be deployed against heterogeneous catalogs (ENCODE/Roadmap mixtures) without first re-aligning everything.
 
-### 4.5 Methodological notes: choosing sequence mode's flanking column
+### 3.5 Methodological notes: choosing sequence mode's flanking column
 
 > **Status (2026-05-21):** Section being reworked. All §4.5 figures are hidden from the rendered outline pending replacement — none are currently shown. The hidden PNGs are still on disk at `experiments/modeD_flanking/figures/` for reference. New, more interpretable figures are being brainstormed.
 
@@ -213,6 +168,53 @@ The flanking-fraction φ ≈ 2(k−1)·n_intervals / (total_length / w) predicts
 
 ![Fig 12 — empirical vs analytical φ](../experiments/modeD_flanking/figures/synthetic_empirical_vs_analytical.png)
 -->
+
+## 4. Methods
+
+### 4.1 hammock implementation
+
+- Python orchestrator + C++ extension (pybind11); HLL with register-equality Jaccard, Ertl 2017 estimator, xxh64 ingestion.
+- Interval mode: per-bp HLL with optional `subB` subsampling. Sequence mode: minimizer-HLL on FASTA, with both interior-minimizer and minimizer-plus-flanks similarity columns. (The implementation also carries two interval-coordinate variants — a coordinate-only sketch and an interpolation between it and per-bp interval mode — but neither is evaluated in this paper.)
+- Output per-pair similarity columns: `jaccard_similarity`, `jaccard_similarity_with_ends`, plus `containment_AB`, `containment_BA`, `cosketch_{geom,arith,max}` in both flavors (10 metrics per sequence-mode pair; 5 per interval-mode pair). The `jaccard_*` columns are the analyses' default; the cosketch/containment columns are reported for transparency and inform Section 5.
+
+### 4.2 Benchmark datasets
+
+| dataset | role | n |
+|---|---|---|
+| Synthetic BED (`bedtools_benchmark/`) | scaling regime | up to 512 × 10k intervals |
+| Synthetic FASTA pairs (`modeD_flanking/`) | exact k-mer truth for sequence mode | 192 pairs (n_intervals × mean_len × dist × mutation grid); ~12,700 (k, w, p) sweep measurements |
+| Maurano 2012 fetal DHS | real interval data, 10 tissue labels (fBrain/fHeart/fIntestine_Sm/fKidney/fLung/fMuscle_arm/fMuscle_back/fMuscle_leg/fSkin/fStomach) | 20 BEDs |
+| ENCODE H3K27ac (Heart/Liver/Lung × GRCh37/GRCh38/CHM13) | reference-build robustness | 9 sample×ref |
+
+### 4.3 Statistical evaluation
+
+Pearson r, Spearman ρ, MAE vs bedtools (interval and sequence modes); ARI, NMI vs known tissue labels (sequence mode); Wilcoxon same-tissue vs different-tissue (cross-reference); R/ggplot via CairoPNG.
+
+### 4.4 HyperLogLog sketching
+
+Both modes share a HyperLogLog (HLL) backbone [@Flajolet2007]. Each input set — per-bp positions for interval mode, minimizer hashes for sequence mode — is hashed with xxh64 (seed via `--seed`, default 42); the low `p` bits of each hash route it to one of `2^p` 1-byte registers, which stores the maximum leading-zero count seen among hashes routed there. Cardinality is recovered via the Ertl 2017 improved estimator [@Ertl2017]. For two sketches at matching `p` and seed, the union is register-wise max and the intersection cardinality is recovered from register equality — two HLLs agree at register *i* iff the leading-rho hash routed to *i* lies in `A ∩ B` — from which we read off Jaccard and the directional containments `|A ∩ B| / |A|` and `|A ∩ B| / |B|`.
+
+The asymptotic relative standard error is ≈ 1.04 / √(2^p). For the CLI default `p = 18`, that is 1.04 / 512 ≈ 0.203% on a 2^18 = 262,144-register / 256 KiB sketch. For the high-precision configuration cited in Sections 4.2–4.3 (`p = 24`), it is 1.04 / 4,096 ≈ 0.0254% on a 2^24 = 16,777,216-register / 16 MiB sketch. Memory is independent of input cardinality — the load-bearing property that lets the same 16 MiB sketch represent a 10k-interval or a 10M-interval BED at identical cost.
+
+### 4.5 Minimizers (sequence mode)
+
+Sequence mode reduces each FASTA sequence to its set of (k, w)-minimizers [@Roberts2004; @Schleimer2003]: in every length-`w` sliding window over the sequence, the k-mer with the smallest selector-hash value is retained. Window scanning is delegated to the VeryAmazed `digest` library [@digest], and each unique selector hash is ingested directly into the per-sequence HLL of §3.4 via `add_hash64`. In parallel hammock canonicalizes the two flanking k-mers — the leading and trailing length-k substrings of each input sequence — by taking the lexicographic minimum of forward and reverse complement, xxh64-hashes them with the same `--seed` as the HLL, and adds them to a second HLL. The default similarity column `jaccard_similarity` compares the interior-minimizer HLLs only; the alternative `jaccard_similarity_with_ends` compares the union of the interior-minimizer and flanking-k-mer HLLs, and is preferred only in the short-sequence / sparse-minimizer regime characterized in §4.5. CLI defaults are `k = 8`, `w = 40`; the production-cited configurations are `k = 20, w = 100` (§4.2, numerical agreement with bedtools) and `k = 10, w = 30` (§4.3, tissue clustering).
+
+### 4.6 Mixed-stride subsampling (`--subB-method mixed-stride`)
+
+Interval mode's `subB` knob subsamples the per-base-pair positions that get ingested into the HLL. A natural implementation — a *hash-threshold* gate that computes a per-position xxh32 hash and compares it to `subB × UINT32_MAX` — is correct, but the per-position hash cost grows linearly with the input, so the wall-time savings from skipping positions plateau quickly: at moderate subB the gate hash itself dominates and `subB ≤ 0.5` is actually *slower* than no subsampling at all.
+
+hammock introduces **mixed-stride** subsampling as a deterministic, hash-free alternative. For each chromosome, a fixed stride length `s = round(1/subB)` is chosen, offset by a chr-keyed hash so different chromosomes sample disjoint position phases. Ingestion walks the chromosome in stride-`s` increments — no per-position decision, no per-position hash. The accepted-position cardinality matches the hash-threshold gate in expectation, but the cost is `O(L/s)` rather than `O(L)`, so wall time scales with `subB` instead of being dominated by the gate.
+
+Three properties matter for downstream use:
+
+1. **Performance scaling.** At `subB = 0.1`, mixed-stride is 3–4× faster than hash-threshold on synthetic data and 1.8–2.4× faster than hash-threshold on real DHS. The advantage compounds: at `subB = 0.01` on 1M-interval synthetic files, mixed-stride hits 14× while hash-threshold caps at ~1.4×.
+2. **Accuracy.** Per-pair MAE vs the no-subsample reference is statistically indistinguishable across the three subB methods (hash-threshold, mixed-stride, single-hash). Mixed-stride does not buy speed by losing accuracy.
+3. **Determinism and reproducibility.** Output is exactly reproducible given the chr-stride seed (`--gate-seed`, default 31337). The same files at the same subB produce byte-identical HLLs across runs and machines.
+
+The structured-sampling concern — that a fixed stride could miss periodic features — is theoretical for BED inputs at the strides we test; in practice the chr-keyed offset randomization breaks cross-chromosome alignment and the Maurano + synthetic accuracy measurements show no detectable bias. Mixed-stride is the default `--subB-method` setting; hash-threshold (`--subB-method hash-threshold`) and a single-hash variant remain available for users who want to characterize the alternative samplers.
+
+This subsampling refinement is what makes the Section 4.1 speed numbers attainable: the "high-subsample" and "max-subsample" rows of the real-DHS table are mixed-stride at `subB = 0.1` and `subB = 0.01`. The per-method comparison plot is in supplementary.
 
 ## 5. Limitations
 
