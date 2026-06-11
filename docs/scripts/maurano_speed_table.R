@@ -1,0 +1,77 @@
+#!/usr/bin/env Rscript
+# Paper table for the Maurano real-DHS speed story (subB_mixed_stride experiment).
+#
+# Emits the §3.1 real-DHS markdown table: bedtools vs hammock interval mode
+# (mixed-stride) at no-subsample / subB=0.1 / subB=0.01. Columns: setting,
+# wall median (s), speedup over bedtools, and ΔJ (mean per-pair Jaccard change
+# vs hammock's OWN no-subsample output — the `mae` column).
+#
+# Data (in docs/data/):
+#   maurano_subB_summary.csv  — per (method, subB) wall_median + mae
+#   maurano_bedtools.csv      — bedtools per-pair runs (for reference wall)
+#
+# Usage:
+#   ml r/4.3.0 && Rscript docs/scripts/maurano_speed_table.R
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(readr)
+})
+
+script_dir <- dirname(normalizePath(sub("--file=", "",
+  grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)[1])))
+data_dir <- file.path(script_dir, "..", "data")
+
+summ <- read_csv(file.path(data_dir, "maurano_subB_summary.csv"),
+                 show_col_types = FALSE)
+bt <- read_csv(file.path(data_dir, "maurano_bedtools.csv"),
+               show_col_types = FALSE)
+
+# bedtools reference wall (matches maurano_speed.R)
+bt_wall <- bt %>%
+  distinct(rep, run_id, wall_time) %>%
+  summarise(median = median(wall_time)) %>% pull(median)
+
+ms <- summ %>% filter(method == "mixed-stride")
+get <- function(s, col) ms %>% filter(subB == s) %>% pull(.data[[col]])
+
+rows <- tibble(
+  setting = c("bedtools",
+              "hammock (no subsample)",
+              "hammock (subB = 0.1, high)",
+              "hammock (subB = 0.01, max)"),
+  wall    = c(bt_wall, get(1.0, "wall_median"),
+              get(0.1, "wall_median"), get(0.01, "wall_median")),
+  mae     = c(NA, 0, get(0.1, "mae"), get(0.01, "mae"))
+) %>%
+  mutate(speedup = bt_wall / wall)
+
+fmt_dj <- function(m) ifelse(is.na(m), "—",
+                       ifelse(m == 0, "0", formatC(m, format = "e", digits = 0)))
+fmt_su <- function(s, ref) ifelse(ref, "1.00× (ref)", sprintf("%.2f×", s))
+
+tab <- rows %>% mutate(
+  is_ref  = setting == "bedtools",
+  wall_s  = sprintf("%.2f", wall),
+  su      = fmt_su(speedup, is_ref),
+  dj      = fmt_dj(mae)
+)
+
+md <- c(
+  "| tool / setting | wall median (s) | speedup over bedtools | ΔJ vs hammock no-subsample |",
+  "|---|---|---|---|",
+  sprintf("| %s | %s | %s | %s |", tab$setting, tab$wall_s, tab$su, tab$dj)
+)
+
+out_path <- file.path(data_dir, "maurano_speed_table.md")
+writeLines(md, out_path)
+
+cat("=== raw numbers ===\n")
+cat(sprintf("bedtools median wall: %.4f s\n", bt_wall))
+for (i in 2:nrow(rows)) {
+  cat(sprintf("%-32s wall=%.4f s  speedup=%.4f×  mae=%s\n",
+              rows$setting[i], rows$wall[i], rows$speedup[i],
+              ifelse(rows$mae[i] == 0, "0", formatC(rows$mae[i], format = "e", digits = 3))))
+}
+cat("\n=== markdown table (also written to ", out_path, ") ===\n", sep = "")
+cat(paste(md, collapse = "\n"), "\n")
