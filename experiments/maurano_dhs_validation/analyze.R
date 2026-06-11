@@ -380,10 +380,10 @@ if (nrow(d) > 0) {
       geom_abline(slope = 1, intercept = 0, colour = "grey50", linetype = "dashed") +
       geom_point(alpha = 0.8, size = 2) +
       coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
-      labs(x = "Pearson r vs bedtools", y = "Pearson r vs Mode B (p=21)",
+      labs(x = "Pearson r vs bedtools", y = "Pearson r vs interval mode (p=21)",
            colour = "precision",
-           title = "Mode D: agreement with bedtools vs agreement with Mode B (per config)",
-           subtitle = "Points on y=x ⇒ Mode B and bedtools are interchangeable as references") +
+           title = "Sequence mode: agreement with bedtools vs agreement with interval mode (per config)",
+           subtitle = "Points on y=x ⇒ interval mode and bedtools are interchangeable as references") +
       theme_minimal(base_size = 11)
     save_png(file.path(figures_dir, "mode_d_bedtools_vs_modeB_scatter.png"),
              p_refs, width = 7, height = 6)
