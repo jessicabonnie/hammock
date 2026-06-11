@@ -52,11 +52,11 @@ In this study, we present an approach for applying sketching to genomic interval
 | 256 | 176 s | 7 s | ~26× |
 | **512** | **706 s** | **13 s** | **~50×** |
 
-Two things to communicate in this section, nothing more:
+Two things to communicate in this section:
 1. **hammock is faster than bedtools at every regime tested** — modestly faster on small real corpora (≈2×), dramatically faster as catalog size grows (≈50× at N=512 files).
 2. **The speedup is not bought with accuracy loss.** Subsampling changes hammock's own per-pair Jaccard by < 2×10⁻³ vs its no-subsample output, so the gap to bedtools is statistically indistinguishable across subsampling settings — the speed knob is effectively "free."
 
-**Fig 1 (headline):** Grouped wall-time bars — bedtools vs hammock at no-subsample / subB=0.1 / subB=0.01 (mixed-stride) on the Maurano corpus. Each hammock bar is annotated with its speedup over bedtools and the mean per-pair Jaccard change vs hammock's own no-subsample output (ΔJ ≤ 2×10⁻³), carrying "faster at no accuracy cost" in a single view. (Replaces the earlier connected-line Pareto plot, whose lines doubled back along the non-axis subB sweep; the de-zigzagged three-method version is now Fig S5.)
+**Fig 1 (headline):** Grouped wall-time bars — bedtools vs hammock at no-subsample / subB=0.1 / subB=0.01 (mixed-stride) on the Maurano corpus. Each hammock bar is annotated with its speedup over bedtools and the mean per-pair Jaccard change vs hammock's own no-subsample output (ΔJ ≤ 2×10⁻³), carrying "faster at no accuracy cost" in a single view. (Additional supporting figure: Fig S5.)
 
 ![Fig 1 — Maurano wall-time bars (hammock vs bedtools)](figures/maurano_speed_bars.png)
 
