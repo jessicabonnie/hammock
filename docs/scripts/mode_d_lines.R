@@ -46,7 +46,8 @@ raw <- read_csv(file.path(data_dir, "mode_d_summary.csv"),
 d24 <- raw |>
   filter(column == "jaccard_similarity",
          reference == "bedtools",
-         precision == 24) |>
+         precision == 24,
+         k %in% as.integer(k_levels)) |>   # drop k=5 (lone w=20 point, not a sweep)
   mutate(k = factor(as.character(k), levels = k_levels))
 
 panel <- function(yvar, ylab, title) {
@@ -70,12 +71,9 @@ panels_with_legend <- cowplot::plot_grid(panels, shared_legend,
 title <- cowplot::ggdraw() +
   cowplot::draw_label(
     "Sequence mode — Pearson r and ARI vs window size, at p = 24",
-    fontface = "bold", size = 14, hjust = 0.5, x = 0.5, y = 0.7) +
-  cowplot::draw_label(
-    "no_ends column only; lines connect points within the same k",
-    size = 11, colour = "gray30", hjust = 0.5, x = 0.5, y = 0.25)
+    fontface = "bold", size = 14, hjust = 0.5, x = 0.5, y = 0.5)
 p_lines <- cowplot::plot_grid(title, panels_with_legend,
-                              ncol = 1, rel_heights = c(0.12, 1))
+                              ncol = 1, rel_heights = c(0.1, 1))
 
 CairoPNG(file.path(figures_dir, "mode_d_lines_p24.png"),
          width = 1400, height = 600, res = 150)
