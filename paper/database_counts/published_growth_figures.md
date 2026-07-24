@@ -172,19 +172,47 @@ This directly illustrates ATAC-seq resource growth, although it provides a two-v
 
 Oki S. et al. *ChIP-Atlas 3.0: a data-mining suite to explore chromosome architecture together with large-scale regulome data.* Nucleic Acids Research. 2024;52(W1):W45-W53. DOI: 10.1093/nar/gkae358.
 
-**Useful item**
+**Useful items**
 
-- Table 2 reports experiment and interval counts by experiment type and database version.
+- **Table 2** reports experiment and interval counts by experiment type and database version.
 - The unified pipeline identified more than 11 billion genomic intervals, including approximately 2.09 billion ChIP-seq binding intervals and 1.30 billion ATAC-seq/DNase-seq accessibility intervals.
 - The paper reports about a 30% increase in total intervals relative to ChIP-Atlas 2.0.
+- **Table 3** compares ChIP-Atlas with Cistrome DB, ReMap, GTRD, and MethBank across data sources, supported assays, preprocessing, experiment counts, organisms, genome assemblies, analysis tools, and access requirements.
+
+**Why Table 3 is especially useful**
+
+Table 3 demonstrates that the relevant interval ecosystem is distributed across multiple large services rather than contained in one archive. More importantly for Hammock, its genome-assembly row exposes the number and diversity of coordinate systems supported by these resources. It can therefore motivate both repository scale and cross-reference fragmentation.
+
+The comparison includes, among others:
+
+- ChIP-Atlas: hg19, hg38, mm9, mm10, rn6, dm3, dm6, ce10, ce11, and sacCer3.
+- Cistrome DB: hg38 and mm10.
+- ReMap: hg38, mm10, dm6, and TAIR10, with some legacy human and mouse data available through lift-over.
+- GTRD: hg38, mm10, TAIR10, ce11, danRer11, dm6, rn6, sacCer3, and spo2.
+- MethBank: multiple animal and plant assemblies.
+
+**Potential use**
+
+Rather than reproduce the full service-feature matrix in the main manuscript, derive a compact table with one row per service and columns for:
+
+1. service;
+2. assay classes;
+3. reported number of experiments;
+4. number of organisms;
+5. number of explicitly listed assemblies;
+6. assemblies or assembly families;
+7. whether lift-over is used.
+
+The full transcription should remain in source data, while the manuscript table should emphasize scale and coordinate-system diversity. Counts in the original table use different inclusion rules across services and should not be interpreted as directly harmonized measurements.
 
 **Why useful**
 
-This is highly relevant to Hammock because it counts genomic intervals themselves, not merely studies or files.
+This is highly relevant to Hammock because it counts genomic intervals themselves, not merely studies or files, and Table 3 connects those data to a fragmented multi-repository, multi-assembly ecosystem.
 
 **Source**
 
 - https://doi.org/10.1093/nar/gkae358
+- https://pmc.ncbi.nlm.nih.gov/articles/PMC11223792/
 
 ## Preliminary recommendation for the paper
 
@@ -192,15 +220,16 @@ A compact motivation figure could combine:
 
 1. **Repository growth:** redraw the annual cumulative ChIP-Atlas experiment counts from Table 1 of the 2026 update.
 2. **Interval scale:** report the billions of ChIP-seq and accessibility intervals from ChIP-Atlas 3.0.
-3. **Reference fragmentation:** add our own reproducible ENCODE or ChIP-Atlas counts grouped by genome assembly.
+3. **Reference fragmentation:** use Table 3 of ChIP-Atlas 3.0 as the published starting point, then add our own reproducible current counts grouped by genome assembly.
 
 This would create a clear progression:
 
-> the number of experiments is growing, those experiments produce billions of intervals, and the intervals are divided among incompatible reference coordinate systems.
+> the number of experiments is growing, those experiments produce billions of intervals, and the intervals are distributed across multiple repositories and incompatible reference coordinate systems.
 
 ## Caveats
 
 - Published repository totals count different units: studies, experiments, samples, runs, files, bytes, bases, or intervals. They should not be plotted on a shared numeric axis without clear labeling.
 - ChIP-Atlas counts SRX-based experiments and may include multiple assay classes. Assay-specific values should be taken from the appropriate table or recomputed from a released metadata snapshot.
+- Counts reported for different services may use different inclusion, filtering, and deduplication rules and are not necessarily directly comparable.
 - Published figures may be redrawn from reported numerical data with citation; copying the original image may require publisher permission depending on license.
 - Any transcription of values from a published table should be stored as a small source-data file with the citation, table identifier, and transcription date.
