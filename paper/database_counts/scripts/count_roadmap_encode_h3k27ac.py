@@ -27,7 +27,7 @@ ROADMAP_NARROWPEAK_URL = (
     "https://egg2.wustl.edu/roadmap/data/byFileType/peaks/consolidated/narrowPeak/"
 )
 ENCODE_SEARCH_URL = "https://www.encodeproject.org/search/"
-USER_AGENT = "hammock-database-counts/1.0"
+USER_AGENT = "hammock-database-counts/1.1"
 
 
 def pair_count(n: int) -> int:
@@ -43,15 +43,8 @@ def write_tsv(path: Path, rows: Iterable[dict[str, Any]], fields: list[str]) -> 
 
 
 def build_ssl_context(ca_bundle: str | None, insecure: bool) -> ssl.SSLContext:
-    """Build a request-specific SSL context.
-
-    A managed cluster may intercept HTTPS with a locally trusted CA that is not
-    present in a Conda environment's default trust store. The preferred remedy
-    is to supply that CA bundle explicitly, not to disable verification.
-    """
     if insecure:
         return ssl._create_unverified_context()
-
     candidates = [
         ca_bundle,
         os.environ.get("SSL_CERT_FILE"),
@@ -60,11 +53,9 @@ def build_ssl_context(ca_bundle: str | None, insecure: bool) -> ssl.SSLContext:
     ]
     try:
         import certifi  # type: ignore
-
         candidates.append(certifi.where())
     except ImportError:
         pass
-
     for candidate in candidates:
         if candidate and Path(candidate).is_file():
             return ssl.create_default_context(cafile=candidate)
@@ -77,10 +68,8 @@ def open_url(request: urllib.request.Request, ssl_context: ssl.SSLContext):
     except urllib.error.URLError as exc:
         if isinstance(exc.reason, ssl.SSLCertVerificationError):
             raise RuntimeError(
-                "TLS certificate verification failed. On a managed cluster, pass the "
-                "cluster CA bundle with --ca-bundle /path/to/ca.pem (preferred), set "
-                "SSL_CERT_FILE, or use --insecure only as a last resort for these "
-                "public metadata endpoints."
+                "TLS certificate verification failed. Pass --ca-bundle /path/to/ca.pem, "
+                "set SSL_CERT_FILE, or use --insecure only as a last resort."
             ) from exc
         raise
 
@@ -106,18 +95,13 @@ class LinkParser(HTMLParser):
         self.links: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag != "a":
-            return
-        href = dict(attrs).get("href")
-        if href:
-            self.links.append(href)
+        if tag == "a":
+            href = dict(attrs).get("href")
+            if href:
+                self.links.append(href)
 
 
-def count_roadmap(
-    url: str,
-    target: str,
-    ssl_context: ssl.SSLContext,
-) -> list[dict[str, Any]]:
+def count_roadmap(url: str, target: str, ssl_context: ssl.SSLContext) -> list[dict[str, Any]]:
     parser = LinkParser()
     parser.feed(fetch_text(url, ssl_context))
     pattern = re.compile(rf"^(E\d+)-{re.escape(target)}\.narrowPeak\.gz$", re.IGNORECASE)
@@ -125,10 +109,8 @@ def count_roadmap(
     for href in sorted(set(parser.links)):
         name = urllib.parse.unquote(Path(href).name)
         match = pattern.match(name)
-        if not match:
-            continue
-        rows.append(
-            {
+        if match:
+            rows.append({
                 "repository": "Roadmap Epigenomics",
                 "dataset_id": match.group(1),
                 "file_accession": "",
@@ -136,9 +118,9 @@ def count_roadmap(
                 "assembly": "hg19",
                 "file_format": "narrowPeak",
                 "output_type": "consolidated narrow peaks",
+                "output_category": "annotation",
                 "download_url": urllib.parse.urljoin(url, href),
-            }
-        )
+            })
     return rows
 
 
@@ -157,49 +139,66 @@ def encode_search_url(target: str, assembly: str) -> str:
     return ENCODE_SEARCH_URL + "?" + urllib.parse.urlencode(params)
 
 
-def embedded_value(record: dict[str, Any], path: str, default: str = "") -> str:
-    value: Any = record
-    for part in path.split("."):
-        if not isinstance(value, dict):
-            return default
-        value = value.get(part)
+def extract_accession(value: Any, collection: str) -> str:
+    """Extract an accession from an embedded object or /collection/ACCESSION/ path."""
+    if isinstance(value, dict):
+        accession = value.get("accession")
+        if isinstance(accession, str) and accession:
+            return accession
+        value = value.get("@id", "")
     if isinstance(value, str):
-        return value
-    return default
+        match = re.search(rf"/{re.escape(collection)}/([^/]+)/?", value)
+        if match:
+            return match.group(1)
+    return ""
 
 
 def count_encode(
     target: str,
     assembly: str,
     ssl_context: ssl.SSLContext,
-) -> list[dict[str, Any]]:
-    url = encode_search_url(target, assembly)
-    payload = fetch_json(url, ssl_context)
-    candidates = []
+) -> tuple[list[dict[str, Any]], dict[str, int], list[dict[str, Any]]]:
+    payload = fetch_json(encode_search_url(target, assembly), ssl_context)
+    candidates: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+
     for record in payload.get("@graph", []):
         output_type = str(record.get("output_type", ""))
         file_type = str(record.get("file_type", ""))
-        if "peak" not in output_type.casefold():
-            continue
-        if "bed" not in file_type.casefold() and record.get("file_format") != "bed":
-            continue
-        dataset_id = embedded_value(record, "dataset.accession")
+        output_category = str(record.get("output_category", ""))
+        dataset_id = extract_accession(record.get("dataset"), "experiments")
         accession = str(record.get("accession", ""))
         href = str(record.get("href", ""))
-        candidates.append(
-            {
-                "repository": "ENCODE",
-                "dataset_id": dataset_id,
-                "file_accession": accession,
-                "target": target,
-                "assembly": assembly,
-                "file_format": file_type or "bed",
-                "output_type": output_type,
-                "download_url": urllib.parse.urljoin("https://www.encodeproject.org", href),
-                "preferred_default": bool(record.get("preferred_default", False)),
-                "date_created": str(record.get("date_created", "")),
-            }
-        )
+
+        reason = ""
+        if "peak" not in output_type.casefold():
+            reason = "output_type_not_peak"
+        elif "bed" not in file_type.casefold() and record.get("file_format") != "bed":
+            reason = "not_bed"
+        elif not dataset_id:
+            reason = "missing_experiment_accession"
+        elif output_category and output_category.casefold() != "annotation":
+            reason = f"unexpected_output_category:{output_category}"
+        elif not accession:
+            reason = "missing_file_accession"
+        elif not href:
+            reason = "missing_download_href"
+
+        row = {
+            "repository": "ENCODE",
+            "dataset_id": dataset_id,
+            "file_accession": accession,
+            "target": target,
+            "assembly": assembly,
+            "file_format": file_type or "bed",
+            "output_type": output_type,
+            "output_category": output_category,
+            "download_url": urllib.parse.urljoin("https://www.encodeproject.org", href),
+            "preferred_default": bool(record.get("preferred_default", False)),
+            "date_created": str(record.get("date_created", "")),
+            "rejection_reason": reason,
+        }
+        (rejected if reason else candidates).append(row)
 
     rank_terms = (
         "optimal IDR thresholded peaks",
@@ -212,19 +211,31 @@ def count_encode(
     rank = {name.casefold(): index for index, name in enumerate(rank_terms)}
     grouped: dict[str, list[dict[str, Any]]] = {}
     for row in candidates:
-        grouped.setdefault(row["dataset_id"] or row["file_accession"], []).append(row)
+        grouped.setdefault(row["dataset_id"], []).append(row)
 
     selected = []
     for rows in grouped.values():
-        rows.sort(
-            key=lambda row: (
-                not row["preferred_default"],
-                rank.get(row["output_type"].casefold(), len(rank)),
-                row["file_accession"],
-            )
-        )
+        rows.sort(key=lambda row: (
+            not row["preferred_default"],
+            rank.get(row["output_type"].casefold(), len(rank)),
+            row["date_created"],
+            row["file_accession"],
+        ))
         selected.append(rows[0])
-    return sorted(selected, key=lambda row: (row["dataset_id"], row["file_accession"]))
+
+    diagnostics = {
+        "api_file_records": len(payload.get("@graph", [])),
+        "eligible_peak_bed_records": len(candidates),
+        "rejected_records": len(rejected),
+        "unique_experiments": len(grouped),
+        "experiments_with_multiple_candidate_files": sum(
+            1 for rows in grouped.values() if len(rows) > 1
+        ),
+        "duplicate_candidate_files_removed": len(candidates) - len(grouped),
+        "selected_files": len(selected),
+        "selected_missing_dataset_id": sum(1 for row in selected if not row["dataset_id"]),
+    }
+    return sorted(selected, key=lambda row: (row["dataset_id"], row["file_accession"])), diagnostics, rejected
 
 
 def main() -> int:
@@ -232,21 +243,8 @@ def main() -> int:
     parser.add_argument("--target", default="H3K27ac")
     parser.add_argument("--roadmap-url", default=ROADMAP_NARROWPEAK_URL)
     parser.add_argument("--encode-assembly", default="GRCh38")
-    parser.add_argument(
-        "--ca-bundle",
-        help=(
-            "PEM file containing trusted certificate authorities. Useful on managed "
-            "clusters that intercept HTTPS with a local CA."
-        ),
-    )
-    parser.add_argument(
-        "--insecure",
-        action="store_true",
-        help=(
-            "Disable TLS certificate verification for public metadata requests. "
-            "Use only when a trusted cluster CA bundle is unavailable."
-        ),
-    )
+    parser.add_argument("--ca-bundle")
+    parser.add_argument("--insecure", action="store_true")
     parser.add_argument(
         "--output-dir",
         type=Path,
@@ -257,25 +255,44 @@ def main() -> int:
     retrieved_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     ssl_context = build_ssl_context(args.ca_bundle, args.insecure)
     roadmap = count_roadmap(args.roadmap_url, args.target, ssl_context)
-    encode = count_encode(args.target, args.encode_assembly, ssl_context)
+    encode, encode_diagnostics, encode_rejected = count_encode(
+        args.target, args.encode_assembly, ssl_context
+    )
     if not roadmap:
         raise RuntimeError("No Roadmap narrowPeak files matched the requested target")
     if not encode:
-        raise RuntimeError("No ENCODE peak BED files matched the requested target")
+        raise RuntimeError("No ENCODE experiment-level peak BED files matched the requested target")
 
     stem = f"roadmap_encode_{args.target.lower()}"
     manifest_path = args.output_dir / f"{stem}_manifest.tsv"
     summary_path = args.output_dir / f"{stem}_summary.tsv"
     provenance_path = args.output_dir / f"{stem}_provenance.json"
+    audit_path = args.output_dir / f"{stem}_encode_audit.tsv"
 
     manifest = roadmap + encode
     for row in manifest:
         row["retrieved_at_utc"] = retrieved_at
-    fields = [
-        "repository", "dataset_id", "file_accession", "target", "assembly",
-        "file_format", "output_type", "download_url", "retrieved_at_utc",
-    ]
-    write_tsv(manifest_path, manifest, fields)
+    write_tsv(
+        manifest_path,
+        manifest,
+        [
+            "repository", "dataset_id", "file_accession", "target", "assembly",
+            "file_format", "output_type", "output_category", "download_url",
+            "retrieved_at_utc",
+        ],
+    )
+
+    for row in encode_rejected:
+        row["retrieved_at_utc"] = retrieved_at
+    write_tsv(
+        audit_path,
+        encode_rejected,
+        [
+            "dataset_id", "file_accession", "target", "assembly", "file_format",
+            "output_type", "output_category", "preferred_default", "rejection_reason",
+            "download_url", "retrieved_at_utc",
+        ],
+    )
 
     n_roadmap = len(roadmap)
     n_encode = len(encode)
@@ -333,24 +350,29 @@ def main() -> int:
         "encode": {
             "search_url": encode_search_url(args.target, args.encode_assembly),
             "assembly": args.encode_assembly,
-            "selection": "one released peak BED per experiment, preferring preferred_default and IDR/replicated outputs",
+            "selection": (
+                "one released experiment-linked peak BED per experiment; prefer "
+                "preferred_default, then IDR/replicated output rank"
+            ),
             "file_count": n_encode,
+            "diagnostics": encode_diagnostics,
         },
         "cross_repository_pair_policy": (
-            "Roadmap_count multiplied by ENCODE_count; these pairs share target and species "
-            "but cannot be compared directly with coordinate-overlap methods because their assemblies differ"
+            "Roadmap_count multiplied by ENCODE unique-experiment count; pairs share target "
+            "and species but use incompatible assemblies"
         ),
         "tls": {
             "certificate_verification": not args.insecure,
             "ca_bundle_argument": args.ca_bundle or "",
             "environment_ca_bundle": env_ca_bundle,
         },
-        "outputs": [str(manifest_path), str(summary_path)],
+        "outputs": [str(manifest_path), str(summary_path), str(audit_path)],
     }
     provenance_path.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
 
     print(f"Roadmap hg19 {args.target} narrowPeak files: {n_roadmap:,}")
-    print(f"ENCODE {args.encode_assembly} {args.target} peak BED files: {n_encode:,}")
+    print(f"ENCODE {args.encode_assembly} unique experiments/files selected: {n_encode:,}")
+    print("ENCODE audit: " + ", ".join(f"{k}={v:,}" for k, v in encode_diagnostics.items()))
     print(f"Cross-resource incompatible pairs: {n_roadmap * n_encode:,}")
     return 0
 
