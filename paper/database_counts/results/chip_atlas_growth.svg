@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="576pt" height="345.6pt" viewBox="0 0 576 345.6" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-07-24T00:00:00</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator><cc:Agent><dc:title>Matplotlib</dc:title></cc:Agent></dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <rect width="576" height="345.6" fill="white"/>
+ <text x="288" y="24" text-anchor="middle" font-family="DejaVu Sans" font-size="14">Growth of ChIP-Atlas, 2015–2025</text>
+ <line x1="60" y1="285" x2="560" y2="285" stroke="#000" stroke-width="0.8"/>
+ <line x1="60" y1="40" x2="60" y2="285" stroke="#000" stroke-width="0.8"/>
+ <g stroke="#b0b0b0" stroke-opacity="0.25" stroke-width="0.8">
+  <line x1="60" y1="285" x2="560" y2="285"/><line x1="60" y1="236" x2="560" y2="236"/><line x1="60" y1="187" x2="560" y2="187"/><line x1="60" y1="138" x2="560" y2="138"/><line x1="60" y1="89" x2="560" y2="89"/><line x1="60" y1="40" x2="560" y2="40"/>
+ </g>
+ <polyline fill="none" stroke="#1f77b4" stroke-width="2" points="60,266.5 110,259.4 160,249.6 210,240.7 260,220.3 310,207.1 360,188.8 410,107.7 460,84.8 510,60.0 560,57.3"/>
+ <g fill="#1f77b4" stroke="#1f77b4">
+  <circle cx="60" cy="266.5" r="3"/><circle cx="110" cy="259.4" r="3"/><circle cx="160" cy="249.6" r="3"/><circle cx="210" cy="240.7" r="3"/><circle cx="260" cy="220.3" r="3"/><circle cx="310" cy="207.1" r="3"/><circle cx="360" cy="188.8" r="3"/><circle cx="410" cy="107.7" r="3"/><circle cx="460" cy="84.8" r="3"/><circle cx="510" cy="60.0" r="3"/><circle cx="560" cy="57.3" r="3"/>
+ </g>
+ <g font-family="DejaVu Sans" font-size="8" text-anchor="end">
+  <text x="52" y="288">0</text><text x="52" y="239">100,000</text><text x="52" y="190">200,000</text><text x="52" y="141">300,000</text><text x="52" y="92">400,000</text><text x="52" y="43">500,000</text>
+ </g>
+ <g font-family="DejaVu Sans" font-size="8" text-anchor="end" transform="rotate(-45)">
+  <text x="-150" y="49">2015</text><text x="-115" y="84">2016</text><text x="-79" y="120">2017</text><text x="-44" y="155">2018</text><text x="-8" y="191">2019</text><text x="27" y="226">2020</text><text x="62" y="262">2021</text><text x="98" y="297">2022</text><text x="133" y="332">2023</text><text x="168" y="368">2024</text><text x="204" y="403">2025</text>
+ </g>
+ <text x="310" y="326" text-anchor="middle" font-family="DejaVu Sans" font-size="10">Year</text>
+ <text x="16" y="162" text-anchor="middle" font-family="DejaVu Sans" font-size="10" transform="rotate(-90 16 162)">Cumulative experiments</text>
+ <text x="70" y="105" font-family="DejaVu Sans" font-size="8">hg38, mm10, dm6, ce11 added</text>
+ <line x1="205" y1="109" x2="306" y2="203" stroke="#000"/><polygon points="310,207 303,204 307,200" fill="#000"/>
+ <text x="230" y="150" font-family="DejaVu Sans" font-size="8">ATAC-seq and Bisulfite-seq added</text>
+ <line x1="350" y1="153" x2="357" y2="184" stroke="#000"/><polygon points="360,189 354,184 359,183" fill="#000"/>
+ <text x="6" y="340" font-family="DejaVu Sans" font-size="7">Source: ChIP-Atlas 2025 update, Table 1 (doi:10.1093/nar/gkag378).</text>
+</svg>
