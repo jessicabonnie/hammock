@@ -83,7 +83,28 @@ Run:
 python paper/database_counts/scripts/plot_chip_atlas_geo_comparison.py
 ```
 
-Python dependencies for these analyses are `pandas` and `matplotlib`.
+## NCBI SRA experiment growth series
+
+The SRA analysis counts cumulative **Experiment records**, not Runs. NCBI defines an SRA Experiment as a unique sequencing result for a specific sample and the main publishable SRA unit. This is more comparable to ChIP-Atlas experiments than the run counts used in published SRA storage-growth figures.
+
+Files:
+
+- `scripts/fetch_sra_experiment_growth.py`: queries NCBI ESearch for cumulative year-end Experiment counts and writes a provenance-rich TSV.
+- `sources/sra_entrez_experiments.md`: counting-unit definition, exact query method, sources, and limitations.
+- `source_data/sra_annual_experiment_counts.tsv`: generated output to commit after running the retrieval script.
+- `scripts/plot_sra_experiment_growth.py`: validates and plots the generated series.
+- `results/sra_experiment_growth.svg` and `results/sra_experiment_growth.png`: generated outputs.
+
+Run:
+
+```bash
+python paper/database_counts/scripts/fetch_sra_experiment_growth.py --email YOUR_EMAIL
+python paper/database_counts/scripts/plot_sra_experiment_growth.py
+```
+
+The retrieval script requires network access. Each output row records its retrieval date, exact Entrez query, and generated query URL. ChIP-Atlas contains processed subsets of SRA experiments, so the two series overlap and must not be added together.
+
+Python dependencies for the plotting analyses are `pandas` and `matplotlib`. The SRA retrieval script uses only the Python standard library.
 
 ## Initial repository-counting scope
 
