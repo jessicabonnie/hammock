@@ -1,0 +1,12 @@
+year	cumulative_experiments	track_type_event	genome_assembly_event	source_table
+2015	37720	ChIP-seq; DNase-seq	hg19; mm9	Table 1
+2016	52249			Table 1
+2017	72199		rn6; dm3; ce10; sacCer3 added	Table 1
+2018	90322			Table 1
+2019	131903			Table 1
+2020	158863		hg38; mm10; dm6; ce11 added	Table 1
+2021	196136	ATAC-seq; Bisulfite-seq added		Table 1
+2022	361856			Table 1
+2023	408697	Annotation tracks added		Table 1
+2024	459231			Table 1
+2025	464655			Table 1
