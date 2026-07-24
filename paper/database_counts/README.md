@@ -49,7 +49,24 @@ From the repository root, run:
 python paper/database_counts/scripts/plot_chip_atlas_growth.py
 ```
 
-Python dependencies are `pandas` and `matplotlib`.
+## NCBI GEO growth series
+
+The second analysis uses the official GEO repository history table rather than digitizing a published plot. It takes the fourth-quarter snapshot for every complete calendar year from 2001 through 2025 and graphs cumulative GEO Series and Sample records.
+
+Files:
+
+- `source_data/geo_annual_q4_counts.tsv`: official year-end counts for GEO Series, Platforms, and Samples.
+- `sources/geo_history.md`: first-party source, related publication, retrieval date, counting units, and transcription policy.
+- `scripts/plot_geo_growth.py`: validates the cumulative series and generates the figure.
+- `results/geo_growth.svg` and `results/geo_growth.png`: generated outputs.
+
+From the repository root, run:
+
+```bash
+python paper/database_counts/scripts/plot_geo_growth.py
+```
+
+Python dependencies for both growth analyses are `pandas` and `matplotlib`.
 
 ## Initial repository-counting scope
 
