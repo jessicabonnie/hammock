@@ -12,7 +12,10 @@ import argparse
 import csv
 import json
 import math
+import os
 import re
+import ssl
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -39,18 +42,61 @@ def write_tsv(path: Path, rows: Iterable[dict[str, Any]], fields: list[str]) -> 
         writer.writerows(rows)
 
 
-def fetch_text(url: str) -> str:
+def build_ssl_context(ca_bundle: str | None, insecure: bool) -> ssl.SSLContext:
+    """Build a request-specific SSL context.
+
+    A managed cluster may intercept HTTPS with a locally trusted CA that is not
+    present in a Conda environment's default trust store. The preferred remedy
+    is to supply that CA bundle explicitly, not to disable verification.
+    """
+    if insecure:
+        return ssl._create_unverified_context()
+
+    candidates = [
+        ca_bundle,
+        os.environ.get("SSL_CERT_FILE"),
+        os.environ.get("REQUESTS_CA_BUNDLE"),
+        os.environ.get("CURL_CA_BUNDLE"),
+    ]
+    try:
+        import certifi  # type: ignore
+
+        candidates.append(certifi.where())
+    except ImportError:
+        pass
+
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return ssl.create_default_context(cafile=candidate)
+    return ssl.create_default_context()
+
+
+def open_url(request: urllib.request.Request, ssl_context: ssl.SSLContext):
+    try:
+        return urllib.request.urlopen(request, timeout=180, context=ssl_context)
+    except urllib.error.URLError as exc:
+        if isinstance(exc.reason, ssl.SSLCertVerificationError):
+            raise RuntimeError(
+                "TLS certificate verification failed. On a managed cluster, pass the "
+                "cluster CA bundle with --ca-bundle /path/to/ca.pem (preferred), set "
+                "SSL_CERT_FILE, or use --insecure only as a last resort for these "
+                "public metadata endpoints."
+            ) from exc
+        raise
+
+
+def fetch_text(url: str, ssl_context: ssl.SSLContext) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=180) as response:
+    with open_url(request, ssl_context) as response:
         return response.read().decode("utf-8", errors="replace")
 
 
-def fetch_json(url: str) -> dict[str, Any]:
+def fetch_json(url: str, ssl_context: ssl.SSLContext) -> dict[str, Any]:
     request = urllib.request.Request(
         url,
         headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
     )
-    with urllib.request.urlopen(request, timeout=180) as response:
+    with open_url(request, ssl_context) as response:
         return json.load(response)
 
 
@@ -67,9 +113,13 @@ class LinkParser(HTMLParser):
             self.links.append(href)
 
 
-def count_roadmap(url: str, target: str) -> list[dict[str, Any]]:
+def count_roadmap(
+    url: str,
+    target: str,
+    ssl_context: ssl.SSLContext,
+) -> list[dict[str, Any]]:
     parser = LinkParser()
-    parser.feed(fetch_text(url))
+    parser.feed(fetch_text(url, ssl_context))
     pattern = re.compile(rf"^(E\d+)-{re.escape(target)}\.narrowPeak\.gz$", re.IGNORECASE)
     rows = []
     for href in sorted(set(parser.links)):
@@ -118,9 +168,13 @@ def embedded_value(record: dict[str, Any], path: str, default: str = "") -> str:
     return default
 
 
-def count_encode(target: str, assembly: str) -> list[dict[str, Any]]:
+def count_encode(
+    target: str,
+    assembly: str,
+    ssl_context: ssl.SSLContext,
+) -> list[dict[str, Any]]:
     url = encode_search_url(target, assembly)
-    payload = fetch_json(url)
+    payload = fetch_json(url, ssl_context)
     candidates = []
     for record in payload.get("@graph", []):
         output_type = str(record.get("output_type", ""))
@@ -147,8 +201,6 @@ def count_encode(target: str, assembly: str) -> list[dict[str, Any]]:
             }
         )
 
-    # Select one released peak BED per experiment. Prefer ENCODE's preferred_default,
-    # then IDR/replicated outputs, then newest accession as a deterministic fallback.
     rank_terms = (
         "optimal IDR thresholded peaks",
         "conservative IDR thresholded peaks",
@@ -181,6 +233,21 @@ def main() -> int:
     parser.add_argument("--roadmap-url", default=ROADMAP_NARROWPEAK_URL)
     parser.add_argument("--encode-assembly", default="GRCh38")
     parser.add_argument(
+        "--ca-bundle",
+        help=(
+            "PEM file containing trusted certificate authorities. Useful on managed "
+            "clusters that intercept HTTPS with a local CA."
+        ),
+    )
+    parser.add_argument(
+        "--insecure",
+        action="store_true",
+        help=(
+            "Disable TLS certificate verification for public metadata requests. "
+            "Use only when a trusted cluster CA bundle is unavailable."
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path(__file__).resolve().parents[1] / "results",
@@ -188,8 +255,9 @@ def main() -> int:
     args = parser.parse_args()
 
     retrieved_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    roadmap = count_roadmap(args.roadmap_url, args.target)
-    encode = count_encode(args.target, args.encode_assembly)
+    ssl_context = build_ssl_context(args.ca_bundle, args.insecure)
+    roadmap = count_roadmap(args.roadmap_url, args.target, ssl_context)
+    encode = count_encode(args.target, args.encode_assembly, ssl_context)
     if not roadmap:
         raise RuntimeError("No Roadmap narrowPeak files matched the requested target")
     if not encode:
@@ -245,6 +313,14 @@ def main() -> int:
     ]
     write_tsv(summary_path, summary, list(summary[-1].keys()))
 
+    env_ca_bundle = next(
+        (
+            os.environ.get(name, "")
+            for name in ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE")
+            if os.environ.get(name)
+        ),
+        "",
+    )
     provenance = {
         "retrieved_at_utc": retrieved_at,
         "target": args.target,
@@ -264,6 +340,11 @@ def main() -> int:
             "Roadmap_count multiplied by ENCODE_count; these pairs share target and species "
             "but cannot be compared directly with coordinate-overlap methods because their assemblies differ"
         ),
+        "tls": {
+            "certificate_verification": not args.insecure,
+            "ca_bundle_argument": args.ca_bundle or "",
+            "environment_ca_bundle": env_ca_bundle,
+        },
         "outputs": [str(manifest_path), str(summary_path)],
     }
     provenance_path.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
