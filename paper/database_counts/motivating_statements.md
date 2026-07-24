@@ -38,6 +38,10 @@ This file collects candidate statements developed during the database-count anal
 
 > A raw BED-file count can be misleading when one repository distributes one file per experiment while another distributes target-level or catalog-level files that aggregate thousands of experiments. Reproducible comparisons must record the granularity represented by each file.
 
+> A repository record that lists several supported assemblies does not by itself prove that a downloadable BED file exists for every experiment–assembly combination. Assembly labels define candidate coordinate-specific outputs; physical files must be verified before they are counted.
+
+> Experiment counts and verified BED-file counts may therefore differ in either direction: one experiment may have multiple verified reference-specific BED files, while another may have no downloadable peak BED at the selected threshold.
+
 ## Possible narrative sequence
 
 1. Public repositories contain a rapidly growing number of functional-genomics experiments.
