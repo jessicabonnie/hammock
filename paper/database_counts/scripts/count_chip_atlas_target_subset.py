@@ -29,6 +29,19 @@ DEFAULT_TARGET = "CTCF"
 DEFAULT_AG_CLASS = "TFs and others"
 DEFAULT_QVAL = "5"
 
+# The current ChIP-Atlas endpoint returns compact positional rows under
+# {"data": string[][]}. This order is documented in the ChIP-Atlas client.
+COMPACT_FIELDS = (
+    "srx",
+    "sra",
+    "geo",
+    "genome",
+    "agClass",
+    "agSubClass",
+    "clClass",
+    "clSubClass",
+)
+
 # ChIP-Atlas assembly labels currently encountered or historically documented.
 # Unknown labels are preserved and assigned species="unknown" rather than dropped.
 ASSEMBLY_SPECIES = {
@@ -68,28 +81,51 @@ def get_field(record: dict[str, Any], *names: str) -> str:
     return ""
 
 
+def compact_row_to_record(row: list[Any] | tuple[Any, ...]) -> dict[str, Any]:
+    """Convert the positional ChIP-Atlas API representation to a mapping."""
+    if len(row) < len(COMPACT_FIELDS):
+        raise ValueError(
+            "Compact experiment row has fewer than 8 fields: "
+            f"received {len(row)} fields; first values={list(row)[:4]!r}"
+        )
+    return {field: row[index] for index, field in enumerate(COMPACT_FIELDS)}
+
+
 def load_records(url: str) -> list[dict[str, Any]]:
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "hammock-database-counts/1.1"},
+        headers={"User-Agent": "hammock-database-counts/1.2"},
     )
     with urllib.request.urlopen(request, timeout=180) as response:
         payload = json.load(response)
 
     if isinstance(payload, list):
-        records = payload
+        raw_records: Any = payload
     elif isinstance(payload, dict):
-        records = next(
-            (payload[key] for key in ("experiments", "data", "results") if isinstance(payload.get(key), list)),
+        raw_records = next(
+            (
+                payload[key]
+                for key in ("experiments", "data", "results")
+                if isinstance(payload.get(key), list)
+            ),
             None,
         )
-        if records is None:
+        if raw_records is None:
             raise ValueError(f"Unrecognized JSON object keys: {sorted(payload)}")
     else:
         raise ValueError(f"Unexpected JSON type: {type(payload).__name__}")
 
-    if not all(isinstance(item, dict) for item in records):
-        raise ValueError("Experiment list contains non-object records")
+    records: list[dict[str, Any]] = []
+    for index, item in enumerate(raw_records):
+        if isinstance(item, dict):
+            records.append(item)
+        elif isinstance(item, (list, tuple)):
+            records.append(compact_row_to_record(item))
+        else:
+            raise ValueError(
+                "Experiment list contains an unsupported record type at "
+                f"index {index}: {type(item).__name__}; value={item!r}"
+            )
     return records
 
 
@@ -269,6 +305,8 @@ def main() -> int:
     provenance = {
         "source": "ChIP-Atlas",
         "source_url": args.url,
+        "source_json_shape": "object with data as compact positional rows",
+        "compact_field_order": list(COMPACT_FIELDS),
         "retrieved_at_utc": retrieved_at,
         "filters": {
             "species": args.species or "all species inferred from assembly labels",
