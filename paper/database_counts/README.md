@@ -83,23 +83,6 @@ Run:
 python paper/database_counts/scripts/plot_chip_atlas_geo_comparison.py
 ```
 
-## GenBank and WGS growth series
-
-The third analysis follows the convention used in the GenBank 2024 Update: one August release per year beginning with release 173 in 2009. It retains traditional GenBank and WGS counts separately and derives explicit combined totals for sequence records and base pairs.
-
-Files:
-
-- `source_data/genbank_august_growth_2009_2025.tsv`: official August release counts and derived totals.
-- `sources/genbank_statistics.md`: source, publication, counting-unit definitions, and construction notes.
-- `scripts/plot_genbank_growth.py`: validates component sums and generates log-scale growth plots.
-- `results/genbank_growth.svg` and `results/genbank_growth.png`: generated outputs.
-
-Run:
-
-```bash
-python paper/database_counts/scripts/plot_genbank_growth.py
-```
-
 Python dependencies for these analyses are `pandas` and `matplotlib`.
 
 ## Initial repository-counting scope
