@@ -43,7 +43,7 @@ Files:
 - `results/chip_atlas_growth.svg`: version-controlled vector figure.
 - `results/chip_atlas_growth.png`: generated locally by the plotting script; the PNG may be omitted from version control when the SVG is sufficient.
 
-From the repository root, run:
+Run:
 
 ```bash
 python paper/database_counts/scripts/plot_chip_atlas_growth.py
@@ -60,13 +60,47 @@ Files:
 - `scripts/plot_geo_growth.py`: validates the cumulative series and generates the figure.
 - `results/geo_growth.svg` and `results/geo_growth.png`: generated outputs.
 
-From the repository root, run:
+Run:
 
 ```bash
 python paper/database_counts/scripts/plot_geo_growth.py
 ```
 
-Python dependencies for both growth analyses are `pandas` and `matplotlib`.
+## Shared-axis ChIP-Atlas and GEO comparison
+
+The harmonized comparison places ChIP-Atlas cumulative experiments and GEO cumulative Series on the same linear y-axis for the overlapping years 2015–2025. GEO Samples are excluded because they use a different counting unit and are much larger in scale.
+
+Files:
+
+- `source_data/chip_atlas_geo_comparison_2015_2025.tsv`: joined annual series.
+- `sources/chip_atlas_geo_comparison.md`: comparability and construction notes.
+- `scripts/plot_chip_atlas_geo_comparison.py`: validates and generates the shared-axis figure.
+- `results/chip_atlas_geo_comparison.svg` and `results/chip_atlas_geo_comparison.png`: generated outputs.
+
+Run:
+
+```bash
+python paper/database_counts/scripts/plot_chip_atlas_geo_comparison.py
+```
+
+## GenBank and WGS growth series
+
+The third analysis follows the convention used in the GenBank 2024 Update: one August release per year beginning with release 173 in 2009. It retains traditional GenBank and WGS counts separately and derives explicit combined totals for sequence records and base pairs.
+
+Files:
+
+- `source_data/genbank_august_growth_2009_2025.tsv`: official August release counts and derived totals.
+- `sources/genbank_statistics.md`: source, publication, counting-unit definitions, and construction notes.
+- `scripts/plot_genbank_growth.py`: validates component sums and generates log-scale growth plots.
+- `results/genbank_growth.svg` and `results/genbank_growth.png`: generated outputs.
+
+Run:
+
+```bash
+python paper/database_counts/scripts/plot_genbank_growth.py
+```
+
+Python dependencies for these analyses are `pandas` and `matplotlib`.
 
 ## Initial repository-counting scope
 
