@@ -48,32 +48,18 @@ blocks <- data.frame(
   ymax = c(n_roadmap, n_total, n_total, n_roadmap)
 )
 
+# Keep labels deliberately compact so that they fit within the smaller blocks.
 block_labels <- transform(
   blocks,
   x = (xmin + xmax) / 2,
   y = (ymin + ymax) / 2,
   label = c(
-    paste0(
-      "Roadmap × Roadmap\n",
-      "hg19\n",
-      comma(roadmap_pairs), " pairs"
-    ),
-    paste0(
-      "BLUEPRINT × BLUEPRINT\n",
-      "hg38\n",
-      comma(blueprint_pairs), " pairs"
-    ),
-    paste0(
-      "Roadmap × BLUEPRINT\n",
-      "hg19 × hg38\n",
-      comma(blocked_pairs), " blocked pairs"
-    ),
-    paste0(
-      "BLUEPRINT × Roadmap\n",
-      "hg38 × hg19\n",
-      comma(blocked_pairs), " blocked pairs"
-    )
-  )
+    paste0("Roadmap\nhg19\n", comma(roadmap_pairs), " pairs"),
+    paste0("BLUEPRINT\nhg38\n", comma(blueprint_pairs), " pairs"),
+    paste0("Reference mismatch\n", comma(blocked_pairs), " blocked"),
+    paste0("Reference mismatch\n", comma(blocked_pairs), " blocked")
+  ),
+  text_size = c(4.1, 3.1, 3.2, 3.2)
 )
 
 axis_breaks <- c(
@@ -82,8 +68,8 @@ axis_breaks <- c(
 )
 
 axis_labels <- c(
-  paste0("Roadmap\nhg19\nn = ", comma(n_roadmap)),
-  paste0("BLUEPRINT\nhg38\nn = ", comma(n_blueprint))
+  paste0("Roadmap\nhg19 (n = ", comma(n_roadmap), ")"),
+  paste0("BLUEPRINT\nhg38 (n = ", comma(n_blueprint), ")")
 )
 
 comparison_matrix <- ggplot() +
@@ -102,10 +88,12 @@ comparison_matrix <- ggplot() +
   geom_hline(yintercept = n_roadmap, linewidth = 1) +
   geom_text(
     data = block_labels,
-    aes(x = x, y = y, label = label),
-    lineheight = 1.1,
-    size = 4
+    aes(x = x, y = y, label = label, size = text_size),
+    lineheight = 1.05,
+    fontface = "bold",
+    show.legend = FALSE
   ) +
+  scale_size_identity() +
   scale_x_continuous(
     breaks = axis_breaks,
     labels = axis_labels,
@@ -122,33 +110,34 @@ comparison_matrix <- ggplot() +
       "Reference mismatch" = "#F4CCCC"
     )
   ) +
-  coord_fixed() +
+  coord_fixed(clip = "off") +
   labs(
-    title = "Reference mismatch blocks cross-resource H3K27ac comparisons",
+    title = "Reference mismatch blocks cross-resource\nH3K27ac comparisons",
     subtitle = paste0(
-      comma(n_roadmap), " Roadmap hg19 BED files and ",
-      comma(n_blueprint), " BLUEPRINT hg38 BED files"
+      comma(n_roadmap), " Roadmap hg19 files and ",
+      comma(n_blueprint), " BLUEPRINT hg38 files"
     ),
     x = NULL,
     y = NULL,
     fill = NULL,
     caption = paste0(
       comma(blocked_pairs), " of ", comma(all_pairs),
-      " unique file pairs (", number(blocked_percent, accuracy = 0.1),
-      "%) cross the hg19–hg38 reference boundary."
+      " unique pairs (", number(blocked_percent, accuracy = 0.1),
+      "%) cross the hg19–hg38 boundary."
     )
   ) +
   theme_minimal(base_size = 12) +
   theme(
     panel.grid = element_blank(),
-    axis.text = element_text(size = 10),
+    axis.text.x = element_text(size = 9, margin = margin(t = 7)),
+    axis.text.y = element_text(size = 9, margin = margin(r = 7)),
     axis.ticks = element_blank(),
     legend.position = "bottom",
     legend.title = element_blank(),
-    plot.title = element_text(face = "bold", size = 16),
-    plot.subtitle = element_text(size = 11),
-    plot.caption = element_text(hjust = 0),
-    plot.margin = margin(15, 20, 15, 15)
+    plot.title = element_text(face = "bold", size = 15, lineheight = 1.05),
+    plot.subtitle = element_text(size = 10.5, margin = margin(b = 10)),
+    plot.caption = element_text(hjust = 0, size = 9, margin = margin(t = 10)),
+    plot.margin = margin(16, 24, 16, 18)
   )
 
 print(comparison_matrix)
@@ -156,21 +145,15 @@ print(comparison_matrix)
 output_dir <- "paper/database_counts/results"
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
+# PNG only for now. A wider canvas gives the title and axis labels room.
 ggsave(
   filename = file.path(output_dir, "roadmap_blueprint_reference_matrix.png"),
   plot = comparison_matrix,
-  width = 8,
-  height = 7,
+  width = 9,
+  height = 7.5,
   units = "in",
-  dpi = 300
-)
-
-ggsave(
-  filename = file.path(output_dir, "roadmap_blueprint_reference_matrix.pdf"),
-  plot = comparison_matrix,
-  width = 8,
-  height = 7,
-  units = "in"
+  dpi = 300,
+  bg = "white"
 )
 
 summary_table <- data.frame(
