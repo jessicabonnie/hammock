@@ -1,0 +1,6 @@
+subset_id	organism	assay	normalized_target	file_granularity	assemblies	priority	rationale	status
+human_ctcf_chipseq	Homo sapiens	ChIP-seq	CTCF	experiment_or_sample_peak_bed	hg19;hg38	primary	Well-defined protein target with many experiments and clear cross-assembly fragmentation	planned
+human_h3k27ac_chipseq	Homo sapiens	ChIP-seq	H3K27ac	experiment_or_sample_peak_bed	hg19;hg38	secondary	Widely profiled active-regulatory mark and realistic tissue/cell-state comparison set	planned
+human_h3k4me3_chipseq	Homo sapiens	ChIP-seq	H3K4me3	experiment_or_sample_peak_bed	hg19;hg38	secondary	Widely profiled promoter mark with relatively sharp peaks	candidate
+human_h3k27me3_chipseq	Homo sapiens	ChIP-seq	H3K27me3	experiment_or_sample_peak_bed	hg19;hg38	exploratory	Broad repressive domains provide a contrasting interval-length distribution	candidate
+human_atac_tissue_matched	Homo sapiens	ATAC-seq	accessible_chromatin	experiment_or_sample_peak_bed	hg19;hg38	exploratory	Same assay objective grouped within one tissue or cell-type class	candidate
