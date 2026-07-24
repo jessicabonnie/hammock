@@ -83,45 +83,7 @@ Run:
 python paper/database_counts/scripts/plot_chip_atlas_geo_comparison.py
 ```
 
-## NCBI SRA experiment growth series
-
-The SRA analysis counts cumulative **Experiment records**, not Runs. NCBI defines an SRA Experiment as a unique sequencing result for a specific sample and the main publishable SRA unit.
-
-SRA is substantially larger than GEO Series and ChIP-Atlas, so its raw counts should be plotted separately. A shared raw-count axis would flatten the two smaller series and obscure their growth.
-
-Files:
-
-- `scripts/fetch_sra_experiment_growth.py`: queries NCBI ESearch for cumulative year-end Experiment counts and writes a provenance-rich TSV.
-- `sources/sra_entrez_experiments.md`: counting-unit definition, exact query method, sources, and limitations.
-- `source_data/sra_annual_experiment_counts.tsv`: generated output to commit after running the retrieval script.
-- `scripts/plot_sra_experiment_growth.py`: validates and plots the raw SRA series on its own axis.
-- `results/sra_experiment_growth.svg` and `results/sra_experiment_growth.png`: generated outputs.
-
-Run:
-
-```bash
-python paper/database_counts/scripts/fetch_sra_experiment_growth.py --email YOUR_EMAIL
-python paper/database_counts/scripts/plot_sra_experiment_growth.py
-```
-
-The retrieval script requires network access. Each output row records its retrieval date, exact Entrez query, and generated query URL. ChIP-Atlas contains processed subsets of SRA experiments, so the two series overlap and must not be added together.
-
-## Normalized three-repository comparison
-
-To compare growth rates rather than absolute repository size, `scripts/plot_normalized_repository_growth.py` indexes ChIP-Atlas experiments, GEO Series, and SRA Experiments to **2015 = 100**. This preserves each repository's relative growth while avoiding the misleading raw-scale comparison.
-
-Run after generating the SRA source table:
-
-```bash
-python paper/database_counts/scripts/plot_normalized_repository_growth.py
-```
-
-Outputs:
-
-- `results/normalized_repository_growth.svg`
-- `results/normalized_repository_growth.png`
-
-Python dependencies for the plotting analyses are `pandas` and `matplotlib`. The SRA retrieval script uses only the Python standard library.
+Python dependencies for the plotting analyses are `pandas` and `matplotlib`.
 
 ## Initial repository-counting scope
 
