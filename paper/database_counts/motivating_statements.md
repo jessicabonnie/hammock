@@ -30,6 +30,16 @@ This file collects candidate statements developed during the database-count anal
 
 > The primary inventory should therefore retain every reported assembly, with species- and assembly-restricted analyses treated as derived views rather than as the default dataset.
 
+## Cross-repository H3K27ac example
+
+Roadmap's consolidated H3K27ac files are compressed narrowPeak interval files, with one observed peak profile associated with each Roadmap epigenome identifier. Here, "epigenome" describes the biological sample or consolidated profile represented by the file; it does not mean that the object is something other than a BED-like interval file. ENCODE contributes one selected H3K27ac peak BED per unique experiment. These are comparable as dataset-level H3K27ac peak profiles, although their processing and biological-unit granularity are not identical and should be stated explicitly.
+
+> After selecting one peak BED per ENCODE experiment, the combined Roadmap–ENCODE H3K27ac collection contains 548 human dataset-level peak profiles. Of the 149,878 possible profile pairs, 44,100 connect a Roadmap hg19 profile with an ENCODE GRCh38 profile and therefore cannot be compared directly using coordinate-overlap methods.
+
+> Nearly 30% of all pairwise comparisons in a combined Roadmap–ENCODE human H3K27ac peak collection cross the reference-assembly boundary and are unavailable to conventional BED overlap without lift-over or remapping.
+
+> This comparison treats each Roadmap consolidated epigenome peak file and each selected ENCODE experiment-level peak file as one dataset-level interval profile. The files are suitable for collection-level similarity analysis, but the two resources do not represent identical experimental units.
+
 ## BED files, experiments, and intervals
 
 > File counts, experiment counts, and interval counts describe different aspects of repository scale and should be reported separately.
