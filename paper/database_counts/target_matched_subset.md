@@ -75,8 +75,43 @@ For histone marks, normalization should standardize capitalization and punctuati
 
 For a subset containing `n` BED files, an exhaustive all-pairs analysis requires `n(n-1)/2` file comparisons. The paper may report both the number of files and the corresponding number of pairwise comparisons, but the comparison count must be presented as a derived value rather than a repository statistic.
 
-## First implementation
+The summary also distinguishes:
 
-Start with the complete ChIP-Atlas experiment list because ChIP-Atlas exposes antigen classes, genome assemblies, experiment identifiers, and BED-download workflows. Use its antigen-count endpoint to verify the extracted totals. Then repeat the same target normalization for Cistrome DB and ReMap.
+- comparisons possible within hg19;
+- comparisons possible within hg38;
+- cross-assembly pairs that cannot be compared directly without conversion or a reference-independent method;
+- the hypothetical total if all coordinate systems were directly comparable.
 
-ChIP-Atlas documents endpoints for listing antigen subclasses with experiment counts and for retrieving the full experiment list. ReMap provides target pages with dataset tables and target-level BED downloads. These interfaces should be recorded with a retrieval date in the provenance file.
+## ChIP-Atlas implementation
+
+The script `scripts/count_chip_atlas_target_subset.py` downloads the public ChIP-Atlas experiment list and selects records using exact, case-insensitive matching on:
+
+- assembly: `hg19` or `hg38`;
+- antigen class: `TFs and others`;
+- antigen subclass: `CTCF`.
+
+It treats one selected ChIP-Atlas experiment as one experiment-level peak BED at one specified q-value threshold. This avoids counting the same biological experiment three times merely because ChIP-Atlas publishes three thresholded BED files.
+
+Run from the repository root:
+
+```bash
+python paper/database_counts/scripts/count_chip_atlas_target_subset.py
+```
+
+The script writes:
+
+- `results/chip_atlas_ctcf_human_manifest.tsv`: every included experiment and its BED URL;
+- `results/chip_atlas_ctcf_human_summary.tsv`: counts by assembly and derived comparison workloads;
+- `results/chip_atlas_ctcf_human_provenance.json`: retrieval date, source URL, filters, and counting unit.
+
+The same script can produce the secondary histone-mark examples by changing the target and antigen class, for example:
+
+```bash
+python paper/database_counts/scripts/count_chip_atlas_target_subset.py \
+  --target H3K27ac \
+  --antigen-class Histone
+```
+
+## Validation
+
+The extracted experiment totals should be checked against the ChIP-Atlas antigen-count endpoint for the same assembly, antigen class, cell-type scope, and retrieval date. The manifest remains the authoritative audit trail because it records the included experiment identifiers rather than only an aggregate count.
