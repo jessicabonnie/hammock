@@ -125,10 +125,8 @@ blocked_labels <- data.frame(
 file_labels <- data.frame(
   marker = counts$marker,
   label = paste0(
-    "Roadmap ChIP-seq peak BEDs: n = ",
-    comma(counts$roadmap_hg19_bed_count),
-    "\nBLUEPRINT ChIP-seq peak BEDs: n = ",
-    comma(counts$blueprint_hg38_bed_count)
+    "Roadmap n = ", comma(counts$roadmap_hg19_bed_count),
+    "\nBLUEPRINT n = ", comma(counts$blueprint_hg38_bed_count)
   ),
   stringsAsFactors = FALSE
 )
@@ -157,7 +155,7 @@ pairwise_plot <- ggplot(
     data = file_labels,
     aes(x = marker, y = -lower_room * 0.32, label = label),
     inherit.aes = FALSE,
-    size = 2.8,
+    size = 3.0,
     lineheight = 0.95,
     vjust = 1
   ) +
