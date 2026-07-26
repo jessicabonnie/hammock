@@ -121,6 +121,11 @@ blocked_labels <- data.frame(
 
 file_labels <- data.frame(
   marker = counts$marker,
+  comparison_class = factor(
+    "Blocked Roadmap x BLUEPRINT",
+    levels = levels(plot_data$comparison_class)
+  ),
+  pair_count = counts$blocked_cross_reference_pairs,
   label = paste0(
     "Roadmap n = ", comma(counts$roadmap_hg19_bed_count),
     "\nBLUEPRINT n = ", comma(counts$blueprint_hg38_bed_count)
@@ -129,7 +134,6 @@ file_labels <- data.frame(
 )
 
 max_pairs <- max(plot_data$pair_count)
-lower_room <- max_pairs * 0.16
 upper_room <- max_pairs * 0.14
 
 pairwise_plot <- ggplot(
@@ -151,15 +155,18 @@ pairwise_plot <- ggplot(
   ) +
   geom_text(
     data = file_labels,
-    aes(x = marker, y = -lower_room * 0.32, label = label),
-    inherit.aes = FALSE,
+    aes(label = label),
+    position = position_dodge(width = 0.82),
+    vjust = 0.5,
+    color = "white",
+    fontface = "bold",
     size = 3.0,
     lineheight = 0.95,
-    vjust = 1
+    inherit.aes = TRUE
   ) +
   scale_y_continuous(
     labels = label_number(scale_cut = cut_short_scale()),
-    limits = c(-lower_room, max_pairs + upper_room),
+    limits = c(0, max_pairs + upper_room),
     expand = expansion(mult = c(0, 0))
   ) +
   scale_fill_manual(
