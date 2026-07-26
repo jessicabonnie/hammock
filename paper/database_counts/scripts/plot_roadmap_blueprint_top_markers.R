@@ -123,13 +123,13 @@ file_labels <- data.frame(
   marker = counts$marker,
   label = paste0(
     "Roadmap n = ", comma(counts$roadmap_hg19_bed_count),
-    "; BLUEPRINT n = ", comma(counts$blueprint_hg38_bed_count)
+    "\nBLUEPRINT n = ", comma(counts$blueprint_hg38_bed_count)
   ),
   stringsAsFactors = FALSE
 )
 
 max_pairs <- max(plot_data$pair_count)
-lower_room <- max_pairs * 0.12
+lower_room <- max_pairs * 0.16
 upper_room <- max_pairs * 0.14
 
 pairwise_plot <- ggplot(
@@ -151,9 +151,10 @@ pairwise_plot <- ggplot(
   ) +
   geom_text(
     data = file_labels,
-    aes(x = marker, y = -lower_room * 0.45, label = label),
+    aes(x = marker, y = -lower_room * 0.32, label = label),
     inherit.aes = FALSE,
     size = 3.0,
+    lineheight = 0.95,
     vjust = 1
   ) +
   scale_y_continuous(
