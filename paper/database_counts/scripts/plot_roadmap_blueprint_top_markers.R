@@ -14,7 +14,7 @@ suppressPackageStartupMessages({
 })
 
 input_path <- "paper/database_counts/results/roadmap_blueprint_top5_markers.tsv"
-output_dir <- "paper/database_counts/results"
+output_dir <- "paper/figures"
 output_path <- file.path(
   output_dir,
   "roadmap_blueprint_top5_marker_pairwise_comparisons.png"
