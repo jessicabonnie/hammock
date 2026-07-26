@@ -103,12 +103,15 @@ plot_data$comparison_class <- factor(
   )
 )
 
+# A three-category dodge with width 0.82 places the third bar one-third of the
+# dodge width to the right of the marker center. Set that x position explicitly
+# because an annotation layer containing only the red category would otherwise
+# be centered by position_dodge().
+dodge_width <- 0.82
+third_bar_offset <- dodge_width / 3
+
 blocked_labels <- data.frame(
-  marker = counts$marker,
-  comparison_class = factor(
-    "Blocked Roadmap x BLUEPRINT",
-    levels = levels(plot_data$comparison_class)
-  ),
+  marker_x = seq_len(nrow(counts)) + third_bar_offset,
   pair_count = counts$blocked_cross_reference_pairs,
   label = paste0(
     comma(counts$blocked_cross_reference_pairs),
@@ -121,11 +124,6 @@ blocked_labels <- data.frame(
 
 file_labels <- data.frame(
   marker = counts$marker,
-  comparison_class = factor(
-    "Blocked Roadmap x BLUEPRINT",
-    levels = levels(plot_data$comparison_class)
-  ),
-  pair_count = counts$blocked_cross_reference_pairs,
   label = paste0(
     "Roadmap n = ", comma(counts$roadmap_hg19_bed_count),
     "\nBLUEPRINT n = ", comma(counts$blueprint_hg38_bed_count)
@@ -134,6 +132,7 @@ file_labels <- data.frame(
 )
 
 max_pairs <- max(plot_data$pair_count)
+lower_room <- max_pairs * 0.16
 upper_room <- max_pairs * 0.14
 
 pairwise_plot <- ggplot(
@@ -141,32 +140,28 @@ pairwise_plot <- ggplot(
   aes(x = marker, y = pair_count, fill = comparison_class)
 ) +
   geom_col(
-    position = position_dodge(width = 0.82),
+    position = position_dodge(width = dodge_width),
     width = 0.72
   ) +
   geom_text(
     data = blocked_labels,
-    aes(label = label),
-    position = position_dodge(width = 0.82),
+    aes(x = marker_x, y = pair_count, label = label),
+    inherit.aes = FALSE,
     vjust = -0.25,
     size = 3.2,
-    lineheight = 0.95,
-    inherit.aes = TRUE
+    lineheight = 0.95
   ) +
   geom_text(
     data = file_labels,
-    aes(label = label),
-    position = position_dodge(width = 0.82),
-    vjust = 0.5,
-    color = "white",
-    fontface = "bold",
+    aes(x = marker, y = -lower_room * 0.32, label = label),
+    inherit.aes = FALSE,
     size = 3.0,
     lineheight = 0.95,
-    inherit.aes = TRUE
+    vjust = 1
   ) +
   scale_y_continuous(
     labels = label_number(scale_cut = cut_short_scale()),
-    limits = c(0, max_pairs + upper_room),
+    limits = c(-lower_room, max_pairs + upper_room),
     expand = expansion(mult = c(0, 0))
   ) +
   scale_fill_manual(
