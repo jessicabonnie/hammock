@@ -76,19 +76,19 @@ counts$marker <- factor(counts$marker, levels = counts$marker)
 plot_data <- rbind(
   data.frame(
     marker = counts$marker,
-    comparison_class = "Roadmap within hg19",
+    comparison_class = "Roadmap hg19: within-resource pairs",
     pair_count = counts$roadmap_within_pairs,
     stringsAsFactors = FALSE
   ),
   data.frame(
     marker = counts$marker,
-    comparison_class = "BLUEPRINT within hg38",
+    comparison_class = "BLUEPRINT hg38: within-resource pairs",
     pair_count = counts$blueprint_within_pairs,
     stringsAsFactors = FALSE
   ),
   data.frame(
     marker = counts$marker,
-    comparison_class = "Blocked Roadmap x BLUEPRINT",
+    comparison_class = "Blocked Roadmap hg19 x BLUEPRINT hg38 pairs",
     pair_count = counts$blocked_cross_reference_pairs,
     stringsAsFactors = FALSE
   )
@@ -97,9 +97,9 @@ plot_data <- rbind(
 plot_data$comparison_class <- factor(
   plot_data$comparison_class,
   levels = c(
-    "Roadmap within hg19",
-    "BLUEPRINT within hg38",
-    "Blocked Roadmap x BLUEPRINT"
+    "Roadmap hg19: within-resource pairs",
+    "BLUEPRINT hg38: within-resource pairs",
+    "Blocked Roadmap hg19 x BLUEPRINT hg38 pairs"
   )
 )
 
@@ -125,8 +125,10 @@ blocked_labels <- data.frame(
 file_labels <- data.frame(
   marker = counts$marker,
   label = paste0(
-    "Roadmap n = ", comma(counts$roadmap_hg19_bed_count),
-    "\nBLUEPRINT n = ", comma(counts$blueprint_hg38_bed_count)
+    "Roadmap ChIP-seq peak BEDs: n = ",
+    comma(counts$roadmap_hg19_bed_count),
+    "\nBLUEPRINT ChIP-seq peak BEDs: n = ",
+    comma(counts$blueprint_hg38_bed_count)
   ),
   stringsAsFactors = FALSE
 )
@@ -155,7 +157,7 @@ pairwise_plot <- ggplot(
     data = file_labels,
     aes(x = marker, y = -lower_room * 0.32, label = label),
     inherit.aes = FALSE,
-    size = 3.0,
+    size = 2.8,
     lineheight = 0.95,
     vjust = 1
   ) +
@@ -166,23 +168,26 @@ pairwise_plot <- ggplot(
   ) +
   scale_fill_manual(
     values = c(
-      "Roadmap within hg19" = "#88B04B",
-      "BLUEPRINT within hg38" = "#6FA8DC",
-      "Blocked Roadmap x BLUEPRINT" = "#D9827C"
+      "Roadmap hg19: within-resource pairs" = "#88B04B",
+      "BLUEPRINT hg38: within-resource pairs" = "#6FA8DC",
+      "Blocked Roadmap hg19 x BLUEPRINT hg38 pairs" = "#D9827C"
     )
   ) +
   labs(
-    title = "Reference mismatch blocks Roadmap-BLUEPRINT comparisons",
+    title = "Reference mismatch blocks histone-mark ChIP-seq peak comparisons",
     subtitle = paste0(
-      "Top five shared histone marks ranked by blocked cross-reference pairs"
+      "Processed peak BED files from Roadmap (hg19) and BLUEPRINT (hg38); ",
+      "top five shared histone marks ranked by blocked cross-reference pairs"
     ),
     x = NULL,
-    y = "Number of pairwise BED-file comparisons",
+    y = "Number of pairwise ChIP-seq peak BED-file comparisons",
     fill = NULL,
     caption = paste0(
-      "Within-resource bars count directly comparable file pairs on the native reference. ",
-      "Blocked bars count Roadmap hg19 x BLUEPRINT hg38 pairs that cannot be compared ",
-      "directly by coordinate overlap."
+      "Subset shown: processed histone-mark ChIP-seq peak BED files, including ",
+      "BED/narrowPeak/broadPeak/gappedPeak-like outputs, deduplicated by download URL. ",
+      "Green and blue bars count within-resource file pairs that share a native reference. ",
+      "Red bars count Roadmap hg19 x BLUEPRINT hg38 pairs that cannot be compared ",
+      "directly by coordinate overlap without remapping or coordinate conversion."
     )
   ) +
   theme_minimal(base_size = 12) +
@@ -192,13 +197,14 @@ pairwise_plot <- ggplot(
     axis.text.x = element_text(face = "bold", size = 10),
     axis.title.y = element_text(margin = margin(r = 10)),
     legend.position = "bottom",
+    legend.text = element_text(size = 9),
     plot.title = element_text(face = "bold", size = 15, lineheight = 1.05),
     plot.subtitle = element_text(
       size = 10.5,
       lineheight = 1.1,
       margin = margin(b = 12)
     ),
-    plot.caption = element_text(hjust = 0, size = 9, lineheight = 1.1),
+    plot.caption = element_text(hjust = 0, size = 8.6, lineheight = 1.1),
     plot.margin = margin(16, 18, 24, 18)
   )
 
