@@ -16,6 +16,26 @@ pip install -e . --no-build-isolation   # builds the C++ extension
 pytest tests/
 ```
 
+**Cluster compiler caveat (Mode D depends on it).** Build the extension with the
+**conda env's own compiler**, not a spack `gcc/9.3.0` env-module. A loaded gcc
+module sets `CC`/`CXX` to a spack gcc that bakes its own (old) `libstdc++` dir
+into `_core`'s DT_RPATH *first*; that old libstdc++ loads before the conda one
+and breaks `import digest` (`GLIBCXX_… not found`) → Mode D silently degrades
+(now a hard error, see divergence #6). CMakeLists adds an `$ORIGIN`-relative
+DT_RPATH to the env lib, but it only wins if the spack paths aren't injected
+ahead of it — so build like:
+
+```bash
+CR=$CONDA_PREFIX   # the refactor env (claude-ref-comparison)
+rm -rf build/      # wipe cached CMakeCache when changing compiler
+CC=$CR/bin/x86_64-conda-linux-gnu-gcc CXX=$CR/bin/x86_64-conda-linux-gnu-g++ \
+  pip install -e . --no-build-isolation
+# verify: readelf -d <_core.so> | grep RPATH  → $ORIGIN/../../.. first, no gcc-9.3.0
+#         python -c "from hammock.modes.sequence import _DIGEST_AVAILABLE as d; print(d)"  → True
+```
+
+See `memory/project_modeD_zero_rpath_digest.md`.
+
 The bed2fasta tests (`tests/test_bed2fasta*.py`) and their `--ref` end-to-end
 paths need `bedtools` (and `samtools` for indexing) on `PATH` — `ml bedtools
 samtools` on the cluster; they self-skip otherwise. Mode D parity needs the
