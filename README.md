@@ -17,27 +17,34 @@ $ cat refs.txt
 ref.bed
 ```
 
-`hammock queries.txt refs.txt --mode A` produces a CSV of all pairwise
-Jaccard estimates:
+`hammock queries.txt refs.txt` produces a CSV of all pairwise Jaccard
+estimates (BED input → interval mode by default):
 
 ```
 file1,file2,sketch_type,mode,precision,num_hashes,kmer_size,window_size,jaccard_similarity,containment
-sample1.bed,ref.bed,hyperloglog,A,18,NA,NA,NA,0.812...,1.0
-sample2.bed,ref.bed,hyperloglog,A,18,NA,NA,NA,0.534...,1.0
+sample1.bed,ref.bed,hyperloglog,B,18,NA,NA,NA,0.812...,1.0
+sample2.bed,ref.bed,hyperloglog,B,18,NA,NA,NA,0.534...,1.0
 ```
 
 ### Modes
 
-| Mode | Input    | What it sketches |
-|------|----------|------------------|
-| **A** | BED     | Intervals (`chr\tstart\tend` formatted strings) |
-| **B** | BED     | Points: every position inside every interval |
-| **C** | BED     | Combined intervals + points, with subsampling (`--subA`, `--subB`, `--expA`) |
-| **D** | FASTA   | Sliding-window minimizers + canonicalized start/end k-mers |
+The top-level choice is **interval** mode (compare BED interval sets) vs
+**sequence** mode (compare FASTA sequences). Interval mode has three flavors;
+`interval` (base-level overlap) is the default.
 
-Modes are auto-detected from file extension: `.fa/.fasta/.fna/.ffn/.faa/.frn`
-(plus `.gz` variants) → mode D; everything else defaults to mode A unless
-`--subA/--subB/--expA` are set, in which case mode C.
+| `--mode` | Letter | Input | What it sketches |
+|----------|--------|-------|------------------|
+| **`interval`** / `interval-points` | **B** | BED | Base-level points — every position in every interval (base-pair overlap Jaccard, like `bedtools jaccard`). **Default for BED.** |
+| `interval-string` | A | BED | Intervals as exact `chr\tstart\tend` strings |
+| `interval-hybrid` | C | BED | Both, with subsampling (`--subA`, `--subB`, `--expA`) |
+| **`sequence`** | D | FASTA | Sliding-window minimizers + canonicalized start/end k-mers. **Default for FASTA / `--ref`.** |
+
+The `mode` **column in the CSV keeps the letter** (A/B/C/D) for compatibility;
+the names above are just the CLI/`--mode` spelling (letters still accepted).
+
+Modes are auto-detected: `.fa/.fasta/.fna/.ffn/.faa/.frn` (plus `.gz`) or any
+`--ref*` flag → **sequence** mode; otherwise → **interval** mode (B), except that
+`--subA`/`--expA` (interval-string knobs) select **interval-hybrid** (C).
 
 **BED→FASTA (Mode D from BED input):** pass `--ref`/`--ref1`/`--ref2` and the
 two lists are treated as BED files, converted to FASTA with `bedtools getfasta`
@@ -101,15 +108,18 @@ hammock fetch-ref hg38 --ref-cache-dir /shared/refs    # downloads + indexes onc
 ## CLI
 
 ```
-hammock <queries.txt> <refs.txt> --mode {A,B,C,D} [options]
+hammock <queries.txt> <refs.txt> [--mode MODE] [options]
 
+  --mode MODE               interval (default, BED) | sequence (FASTA/--ref);
+                            advanced: interval-string (A), interval-points (B),
+                            interval-hybrid (C). Letters A/B/C/D also accepted.
   -p, --precision N         HyperLogLog precision (4..24, default 18)
-  --subA F                  Mode C: subsampling rate for intervals
-  --subB F                  Mode B/C: subsampling rate for points
-  --expA F                  Mode C: power-of-10 multiplier for A intervals
-  --mixed-stride            Mode B/C: deterministic interval-independent point subsampling
-  -k, --kmer_size N         Mode D: k-mer length (default 8)
-  -w, --window_size N       Mode D: window size (default 40)
+  --subA F                  interval-hybrid: subsampling rate for interval strings
+  --subB F                  interval-points/hybrid: subsampling rate for points
+  --expA F                  interval-hybrid: power-of-10 multiplier for interval strings
+  --mixed-stride            interval-points/hybrid: deterministic point subsampling
+  -k, --kmer_size N         sequence mode: k-mer length (default 8)
+  -w, --window_size N       sequence mode: window size (default 40)
   --seed N                  Hash seed (default 42; xxh64 throughout)
   --threads N               Default min(8, cpu_count())
   --full-paths              Use full paths in CSV file1/file2 columns instead of basenames
@@ -142,14 +152,17 @@ collide.
 ## Examples
 
 ```bash
-# Mode A on two sets of BED files, 8 threads, full paths in output:
-hammock queries.txt refs.txt --mode A -p 18 --threads 8 --full-paths -o results
+# Interval mode (default) on two sets of BED files, 8 threads, full paths:
+hammock queries.txt refs.txt -p 18 --threads 8 --full-paths -o results
 
-# Mode C with 30% point subsampling and an A-side multiplier:
-hammock queries.txt refs.txt --mode C --subB 0.3 --expA 0.5 -o results
+# Interval-string flavor (exact interval boundaries) explicitly:
+hammock queries.txt refs.txt --mode interval-string -o results
 
-# Mode D, k=10, window=30:
-hammock fastas.txt fastas.txt --mode D -k 10 -w 30 -o seq_results
+# Interval-hybrid with 30% point subsampling and an interval-string multiplier:
+hammock queries.txt refs.txt --mode interval-hybrid --subB 0.3 --expA 0.5 -o results
+
+# Sequence mode, k=10, window=30:
+hammock fastas.txt fastas.txt --mode sequence -k 10 -w 30 -o seq_results
 
 # BED→FASTA: compare two BED-peak lists as sequences, both on hg38
 # (requires `ml bedtools`; hg38 must be cached — see fetch-ref below):
@@ -163,7 +176,7 @@ hammock human_peaks.txt mouse_peaks.txt \
 hammock fetch-ref hg38 --ref-cache-dir /shared/refs
 
 # Quiet sequential run (e.g. inside a Snakemake job):
-hammock queries.txt refs.txt --mode A --threads 1
+hammock queries.txt refs.txt --mode interval --threads 1
 ```
 
 ## Layout

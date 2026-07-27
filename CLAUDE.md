@@ -105,11 +105,21 @@ These are deliberate; parity tests that touch them are skipped or projected.
    `_acceleration_type='Python'` so orig falls through to the buggy slow
    path and returns `jaccard_similarity=0` even self-vs-self on synthetic
    FASTAs. We use `_core.HLLSketch.add_hash64(hash_val)` unconditionally
-   — matching the *intent* of orig's fast path. Parity tests still pass
-   on the `tiny.fa` fixtures (which happen to not trigger the slow-path
-   bug), but synthetic-FASTA outputs will differ from orig. The earlier
-   "always 0" observation in memory turned out to be this bug; see
-   `memory/project_modeD_no_ends_zero_bug.md`.
+   — matching the *intent* of orig's fast path. Consequently our Mode D
+   `jaccard_similarity` differs from orig **even on `tiny.fa`** (e.g. 0.75
+   vs orig's 0.7903 at k=5,w=20): the minimizer *sets* are identical (same
+   `digest`), but orig's slow path hashes the *decimal digits* of each
+   minimizer hash as k-mers while we ingest the raw 64-bit hash. So Mode D
+   parity is **structural, not byte-equal** — `tests/test_mode_d_parity.py`
+   asserts matching structural columns + well-formed similarity values, not
+   equality. (An earlier byte-equal version only "passed" because
+   `shutil.which("hammock")` resolved to the orig binary and self-compared;
+   run the refactor env's `bin` first on PATH to actually exercise it.)
+   The earlier "always 0" observation in memory turned out to be this bug;
+   see `memory/project_modeD_no_ends_zero_bug.md`. For the separate
+   silent-zero-from-broken-`digest` failure mode (RPATH shadowing
+   libstdc++), see `memory/project_modeD_zero_rpath_digest.md`;
+   `sketch_fasta` now raises loudly instead of falling back silently.
 
 ## Mode D BED→FASTA (bed2fasta) — SHIPPED
 
@@ -160,6 +170,24 @@ Deferred (not v1): in-run downloading / remote streaming (`twoBitToFa` over
 HTTP fails on firewalled compute nodes), per-file references within a list
 (`--ref1/--ref2` are per-list), and reference chr-prefix auto-fixup (cf.
 `experiments/primate-phylogeny` `peak_chr_prefix`).
+
+## Mode naming + default (user-facing)
+
+The CLI presents two top-level modes — **interval** (BED) and **sequence**
+(FASTA) — with A/B/C as deprioritized interval *flavors*. Names map to the
+canonical single letters used everywhere internally (and in the CSV `mode`
+column / output filename, which **keep the letter** for orig parity):
+
+- `interval` / `interval-points` → **B** (base-level points; the default for BED)
+- `interval-string` → **A** (exact interval strings)
+- `interval-hybrid` → **C** (both; `--subA`/`--subB`/`--expA`)
+- `sequence` → **D** (FASTA; the default for FASTA or any `--ref*` flag)
+
+`--mode` accepts names or letters (`_MODE_ALIASES`/`_normalize_mode` in
+`cli.py`, normalized to the letter at parse time). **The BED autodetect default
+flipped A→B** (`_autodetect_mode`): plain BED → B; `--subA`/`--expA` →
+C; `--subB` alone stays B. Parity tests pass explicit `--mode`, so they're
+unaffected; `tests/test_autodetect.py` asserts the new default.
 
 ## Not implemented (would need work to add)
 

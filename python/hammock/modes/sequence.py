@@ -149,6 +149,24 @@ def sketch_fasta(path: str, args) -> MinimizerSketch:
     """Read FASTA via BioPython and accumulate one MinimizerSketch over all records."""
     from Bio import SeqIO  # local import: BioPython is only needed for Mode D
 
+    if not _DIGEST_AVAILABLE:
+        # Mode D is meaningless without `digest.window_minimizer`: every sequence
+        # would fall through add_string's empty-minimizer path and be hashed whole,
+        # yielding self=1.0 / cross=0.0 for ALL pairs with no error. Fail loud
+        # instead of emitting silent garbage. A common cause on this cluster is a
+        # stale RPATH in _core.*.so (built with an env-module gcc) shadowing
+        # libstdc++ so `import digest` fails with GLIBCXX_3.4.32 not found — see
+        # memory note project_modeD_zero_rpath_digest.
+        raise RuntimeError(
+            "Mode D (sequence) requires the `digest` module, but it failed to "
+            "import. Every sketch would be whole-sequence-hashed, giving "
+            "jaccard=1.0 self / 0.0 cross for all pairs. Verify `python -c "
+            "'import digest'` works; if it fails with 'GLIBCXX_3.4.32 not found', "
+            "your hammock _core extension has a stale RPATH pulling in an old "
+            "libstdc++ — rebuild _core without a gcc env-module loaded, or "
+            "patchelf --force-rpath the conda lib dir first."
+        )
+
     sketch = MinimizerSketch(
         kmer_size=args.kmer_size,
         window_size=args.window_size,

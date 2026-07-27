@@ -1,4 +1,4 @@
-"""Hammock CLI: pairwise Jaccard similarity for BED intervals (modes A/B/C) or sequences (mode D).
+"""Hammock CLI: pairwise Jaccard similarity in interval modes (A/B/C, BED) or sequence mode (D, FASTA).
 
 Output is a tab-separated file whose query/reference columns default to basenames; pass
 --full-paths for normalized full paths in those columns.
@@ -11,6 +11,30 @@ import subprocess
 import sys
 
 from hammock.runner import run
+
+
+# User-facing mode names → canonical single-letter code used everywhere
+# downstream (and in the CSV `mode` column / output filename, for orig parity).
+# Top-level choice is `interval` (=B) vs `sequence` (=D); A/B/C are the three
+# interval flavors (string / points / hybrid).
+_MODE_ALIASES = {
+    "a": "A", "interval-string": "A", "interval_string": "A",
+    "b": "B", "interval": "B", "interval-points": "B", "interval_points": "B",
+    "c": "C", "interval-hybrid": "C", "interval_hybrid": "C",
+    "d": "D", "sequence": "D",
+}
+
+
+def _normalize_mode(value: str) -> str:
+    """argparse `type` for --mode: accept a name or a letter, return the letter."""
+    key = value.strip().lower()
+    if key in _MODE_ALIASES:
+        return _MODE_ALIASES[key]
+    raise argparse.ArgumentTypeError(
+        f"invalid mode '{value}'. Use 'interval' (=B, default for BED) or "
+        f"'sequence' (=D, default for FASTA/--ref). Advanced interval flavors: "
+        f"interval-string (A), interval-points (B), interval-hybrid (C). "
+        f"The letters A/B/C/D are also accepted.")
 
 
 def parse_args(argv=None):
@@ -26,7 +50,7 @@ def parse_args(argv=None):
         Output: tab-separated; query and reference columns identify inputs using basenames by default.
         Pass --full-paths to use normalized full paths instead.
         """,
-        epilog='BED→FASTA (Mode D): pass --ref/--ref1/--ref2 to treat LIST1/LIST2 as BED '
+        epilog='BED→FASTA (sequence mode): pass --ref/--ref1/--ref2 to treat LIST1/LIST2 as BED '
                'files, convert them to FASTA with bedtools getfasta, and compare the '
                'sequences. A reference is a keyword (hg38, mm10, ...) or a local FASTA path; '
                'cache keywords once on a networked node with `hammock fetch-ref <keyword>`. '
@@ -35,19 +59,25 @@ def parse_args(argv=None):
     )
 
     p.add_argument('filepaths_file', metavar='LIST1',
-                   help='Text file of paths to compare. Normally FASTA/BED files; '
-                        'with a reference flag (--ref/--ref1) these are BED files '
-                        'converted to FASTA via bedtools getfasta.')
+                   help='Text file listing one input path per line (NOT an input '
+                        'file itself). Paths are normally BED/BED.gz or FASTA files; '
+                        'with a reference flag (--ref/--ref1) they must be BED/BED.gz '
+                        'and are converted to FASTA via bedtools getfasta.')
     p.add_argument('primary_file', metavar='LIST2',
-                   help='Text file of primary paths to compare against (see LIST1; '
-                        'uses --ref/--ref2 in BED→FASTA mode).')
+                   help='Text file listing one primary input path per line to compare '
+                        'against (see LIST1; uses --ref/--ref2 in BED→FASTA mode).')
 
-    p.add_argument('--mode', choices=['A', 'B', 'C', 'D'], default=None,
-                   help='''Mode for comparison (auto-detected from inputs if omitted):
-                   A: Compare intervals only (default for BED/BigBed files)
-                   B: Compare points only
-                   C: Compare both intervals and points
-                   D: Compare sequences (default for FASTA files)''')
+    p.add_argument('--mode', type=_normalize_mode, default=None, metavar='MODE',
+                   help='''Comparison mode (auto-detected if omitted). Primary choice:
+                   interval  — compare BED interval sets (default for BED/BigBed input)
+                   sequence  — compare FASTA sequences (default for FASTA or --ref input)
+
+                   `interval` is the base-level overlap comparison (interval-points).
+                   Advanced interval flavors (secondary):
+                     interval-string  (A)  exact interval strings (chr:start:end)
+                     interval-points  (B)  base-level points  [= interval, the default]
+                     interval-hybrid  (C)  both, with subsampling (--subA/--subB/--expA)
+                   The letters A/B/C/D are still accepted (D = sequence).''')
 
     # BED→FASTA (bed2fasta) reference flags. Presence of any of these turns the
     # two positional lists into BED lists that are converted to FASTA (Mode D).
@@ -114,8 +144,8 @@ def parse_args(argv=None):
             p.error("BED→FASTA mode needs a reference for both lists: pass --ref "
                     "(same reference) or both --ref1 and --ref2.")
         if args.mode not in (None, "D"):
-            p.error(f"reference flags imply Mode D (BED→FASTA), but --mode "
-                    f"{args.mode} was given. Drop --mode (or use --mode D).")
+            p.error(f"reference flags imply sequence mode (BED→FASTA), but --mode "
+                    f"{args.mode} was given. Drop --mode (or use --mode sequence).")
         args.mode = "D"
     elif args.ref_cache_dir is not None or args.fasta_outdir is not None:
         p.error("--ref-cache-dir/--fasta-outdir only apply with a reference "
@@ -193,10 +223,11 @@ def _autodetect_mode(args) -> str:
     Strategy:
       * If the user passed --mode explicitly, honor it.
       * Otherwise, classify the first input file (extension, then content
-        peek). FASTA → D, BED → A.
-      * If subA/subB/expA were tweaked, prefer C over A for BED (the orig's
-        Mode C is the natural home for those flags).
-      * If we couldn't classify, fall back to A and warn.
+        peek). FASTA → sequence mode (D), BED → interval mode (interval-points, B).
+      * If an interval-string knob is tweaked (--subA/--expA, which only affect
+        the interval-string side), prefer interval-hybrid mode (C). --subB alone
+        stays in the default interval mode (B natively subsamples points).
+      * If we couldn't classify, fall back to the default interval mode (B).
     """
     if args.mode is not None:
         return args.mode
@@ -205,20 +236,21 @@ def _autodetect_mode(args) -> str:
     kind = _classify_file(first) if first else None
 
     if kind == 'fasta':
-        print("hammock: auto-detected FASTA input → using --mode D.", file=sys.stderr)
+        print("hammock: auto-detected FASTA input → sequence mode (D).", file=sys.stderr)
         return 'D'
     if kind == 'bed':
-        if args.subA != 1.0 or args.subB != 1.0 or args.expA != 0:
-            print("hammock: auto-detected BED input + sub/exp flags → using --mode C.",
-                  file=sys.stderr)
+        if args.subA != 1.0 or args.expA != 0:
+            print("hammock: auto-detected BED input + --subA/--expA → "
+                  "interval-hybrid mode (C).", file=sys.stderr)
             return 'C'
-        print("hammock: auto-detected BED input → using --mode A.", file=sys.stderr)
-        return 'A'
+        print("hammock: auto-detected BED input → interval mode "
+              "(interval-points, B).", file=sys.stderr)
+        return 'B'
 
-    # Couldn't tell — keep the original default but make it visible.
-    print("hammock: could not auto-detect input type; defaulting to --mode A. "
-          "Pass --mode explicitly to silence this warning.", file=sys.stderr)
-    return 'A'
+    # Couldn't tell — fall back to the default interval mode, but make it visible.
+    print("hammock: could not auto-detect input type; defaulting to interval "
+          "mode (B). Pass --mode explicitly to silence this warning.", file=sys.stderr)
+    return 'B'
 
 
 def _resolve_sketch_type(args) -> str:
@@ -269,6 +301,17 @@ def main(argv=None) -> int:
     if argv and argv[0] == "fetch-ref":
         return _fetch_ref_main(argv[1:])
     args = parse_args(argv)
+
+    # Guard early (before autodetect): the positionals must be list-of-paths
+    # files, not input files. Fails fast with a clear message.
+    from hammock.runner import _guard_is_list_file
+    for arg_name, list_file in (("LIST1", args.filepaths_file),
+                                ("LIST2", args.primary_file)):
+        msg = _guard_is_list_file(list_file, arg_name)
+        if msg:
+            print(f"Error: {msg}", file=sys.stderr)
+            return 2
+
     args.mode = _autodetect_mode(args)
     args.sketch_type = _resolve_sketch_type(args)
     if args.threads is None:

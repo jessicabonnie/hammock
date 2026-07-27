@@ -78,9 +78,9 @@ def test_ref_mutually_exclusive_with_ref1(tmp_path: Path) -> None:
 
 def test_ref_plus_explicit_non_d_mode_errors(tmp_path: Path) -> None:
     _, l1, l2 = _setup(tmp_path)
-    r = _run([OURS, str(l1), str(l2), "--ref", "hg38", "--mode", "A"], tmp_path)
+    r = _run([OURS, str(l1), str(l2), "--ref", "hg38", "--mode", "interval"], tmp_path)
     assert r.returncode != 0
-    assert "Mode D" in r.stderr
+    assert "sequence mode" in r.stderr
 
 
 def test_only_one_of_ref1_ref2_errors(tmp_path: Path) -> None:
