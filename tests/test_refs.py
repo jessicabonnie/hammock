@@ -80,6 +80,46 @@ def test_resolve_local_fasta_builds_index(tmp_path: Path) -> None:
     assert (tmp_path / "ref.fa.fai").exists()
 
 
+@pytest.mark.skipif(shutil.which("samtools") is None, reason="needs samtools to faidx")
+def test_resolve_local_readonly_dir_indexes_in_cache(tmp_path: Path) -> None:
+    """A FASTA in a read-only directory (the shared /data case) is symlinked
+    into the cache and indexed there, not next to the source."""
+    refdir = tmp_path / "readonly"
+    refdir.mkdir()
+    fa = refdir / "ref.fa"
+    fa.write_text(">chr1\n" + "ACGT" * 20 + "\n")
+    cache = tmp_path / "cache"
+    import os
+    os.chmod(refdir, 0o500)  # read+execute, no write
+    try:
+        out = refs.resolve_reference(str(fa), str(cache))
+        # Resolved path lives in the (writable) cache, and its .fai is there too.
+        assert str(cache) in out
+        assert os.path.exists(out + ".fai")
+        assert not (refdir / "ref.fa.fai").exists()  # source dir untouched
+    finally:
+        os.chmod(refdir, 0o700)  # restore so tmp cleanup can remove it
+
+
+@pytest.mark.skipif(shutil.which("samtools") is None, reason="needs samtools to faidx")
+def test_resolve_local_gz_publishes_indexed_fasta(tmp_path: Path) -> None:
+    """A local .fa.gz is decompressed + indexed into the cache via the same
+    atomic publish path that fetch-ref uses (temp + os.replace + .done)."""
+    import gzip
+    gz = tmp_path / "ref.fa.gz"
+    with gzip.open(gz, "wt") as fh:
+        fh.write(">chr1\n" + "ACGTACGT" * 10 + "\n")
+    cache = tmp_path / "cache"
+    out = refs.resolve_reference(str(gz), str(cache))
+    assert out.endswith(".fa")
+    assert Path(out).exists()
+    assert Path(out + ".fai").exists()
+    assert Path(out + ".done").exists()      # sentinel written last
+    assert Path(out).read_text().startswith(">chr1")
+    # Second resolve is a cache hit (no re-publish) and returns the same path.
+    assert refs.resolve_reference(str(gz), str(cache)) == out
+
+
 def test_fetch_reference_http_scheme_only(tmp_path: Path) -> None:
     with pytest.raises(ValueError) as e:
         refs.fetch_reference("ftp://example.com/genome.fa.gz", str(tmp_path))
