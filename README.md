@@ -60,6 +60,35 @@ conda install -c bioconda digest
 `digest` is in `[project.optional-dependencies]` as `mode_d`, but bioconda is
 the recommended source — the PyPI `digest` is a different package.
 
+### BED→FASTA mode (`--ref`) requirements
+
+Converting BED lists to FASTA (the `--ref`/`--ref1`/`--ref2` flags, see
+[CLI](#cli)) shells out to external command-line tools — no extra Python
+packages are needed:
+
+| Tool | Needed for | Required? |
+|------|------------|-----------|
+| **bedtools** (`getfasta`) | extracting sequences from a reference | **required** |
+| **samtools** (`faidx`)    | indexing references (`.fai`)          | recommended — falls back to `bedtools` building the index if the reference dir is writable |
+
+Make sure both are on `PATH` before running. On an HPC cluster with environment
+modules:
+
+```bash
+ml bedtools samtools          # or: ml UCSC_Genome_Browser/2021 (bundles bedtools)
+```
+
+Reference genomes are supplied as a **keyword** (`hg38`, `mm10`, `hg19`, `mm39`,
+`hs1`), a **local FASTA path**, or a URL. Keywords are resolved from a local
+cache and are **never downloaded during a run** (HPC compute nodes are usually
+firewalled). Populate the cache once on a networked (login) node:
+
+```bash
+hammock fetch-ref hg38 --ref-cache-dir /shared/refs    # downloads + indexes once
+```
+
+`fetch-ref` needs `samtools` on `PATH` and network access (http(s) only).
+
 ## CLI
 
 ```
@@ -78,7 +107,24 @@ hammock <queries.txt> <refs.txt> --mode {A,B,C,D} [options]
   -o, --outprefix PREFIX    Output prefix (default "hammock")
   --memory-limit-gb F       Soft memory cap (default 0 = disabled)
   --verbose                 Per-file sketching progress on stderr
+
+  BED→FASTA (Mode D) — treat the two lists as BED files, convert via bedtools:
+  --ref REF                 Reference for BOTH lists (keyword | local FASTA | URL)
+  --ref1 REF                Reference for list 1 (mutually exclusive with --ref)
+  --ref2 REF                Reference for list 2 (mutually exclusive with --ref)
+  --ref-cache-dir DIR       Cached/indexed references (default: $HAMMOCK_REF_CACHE
+                            or ~/.hammock/refs)
+  --fasta-outdir DIR        Keep generated FASTAs (default: temp dir, auto-cleaned)
+
+hammock fetch-ref <keyword|url> [--ref-cache-dir DIR] [--force]
+                            Download + index a reference into the cache
+                            (run once on a networked/login node)
 ```
+
+Any `--ref*` flag reinterprets the two positional lists as BED files, forces
+Mode D, and adds trailing `ref1`/`ref2` columns to the CSV (they are `"NA"` for
+plain FASTA runs). Both list references must be given (`--ref`, or both `--ref1`
+and `--ref2`). Requires `bedtools` — see [Installation](#installation).
 
 The output filename embeds the parameters (e.g.
 `hammock_hll_p18_jaccA_B0.50.csv`) so output from different runs doesn't
@@ -95,6 +141,17 @@ hammock queries.txt refs.txt --mode C --subB 0.3 --expA 0.5 -o results
 
 # Mode D, k=10, window=30:
 hammock fastas.txt fastas.txt --mode D -k 10 -w 30 -o seq_results
+
+# BED→FASTA: compare two BED-peak lists as sequences, both on hg38
+# (requires `ml bedtools`; hg38 must be cached — see fetch-ref below):
+hammock peaks1.txt peaks2.txt --ref hg38 --ref-cache-dir /shared/refs -o seq_out
+
+# Cross-reference: list 1 from hg38, list 2 from mm10, using local FASTAs:
+hammock human_peaks.txt mouse_peaks.txt \
+        --ref1 /refs/hg38.fa --ref2 /refs/mm10.fa -o cross_out
+
+# Populate the reference cache once on a login node:
+hammock fetch-ref hg38 --ref-cache-dir /shared/refs
 
 # Quiet sequential run (e.g. inside a Snakemake job):
 hammock queries.txt refs.txt --mode A --threads 1

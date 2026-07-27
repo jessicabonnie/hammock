@@ -16,6 +16,11 @@ pip install -e . --no-build-isolation   # builds the C++ extension
 pytest tests/
 ```
 
+The bed2fasta tests (`tests/test_bed2fasta*.py`) and their `--ref` end-to-end
+paths need `bedtools` (and `samtools` for indexing) on `PATH` — `ml bedtools
+samtools` on the cluster; they self-skip otherwise. Mode D parity needs the
+conda-orig env (see Parity environments).
+
 The wheel includes a standalone `hammock-cpp` binary built from the same
 `hammock_core` static lib (in `build/`); intended for max-speed Mode B
 benchmarking, no Python in the loop.
