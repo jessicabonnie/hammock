@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pytest
 
+from hammock.modes import sequence as seqmod
 from hammock.modes.sequence import MinimizerSketch, _DIGEST_AVAILABLE
 
 digest_only = pytest.mark.skipif(not _DIGEST_AVAILABLE, reason="digest not installed")
@@ -41,3 +42,18 @@ def test_n_runs_are_ingested_not_skipped() -> None:
     alln = MinimizerSketch(kmer_size=8, window_size=40, precision=12)
     alln.add_string("N" * 200)
     assert alln.minimizer_hll.estimate_cardinality() > 0
+
+
+def test_sketch_fasta_errors_loudly_without_digest(tmp_path, monkeypatch) -> None:
+    """If `digest` failed to import, Mode D must raise — not silently
+    whole-sequence-hash into fake 0.0 cross-similarities. Guards the RPATH/
+    GLIBCXX regression (memory: project_modeD_zero_rpath_digest)."""
+    fa = tmp_path / "x.fa"
+    fa.write_text(">r\n" + "ACGTACGTAC" * 20 + "\n")
+
+    class _Args:
+        kmer_size, window_size, seed, precision = 8, 40, 42, 12
+
+    monkeypatch.setattr(seqmod, "_DIGEST_AVAILABLE", False)
+    with pytest.raises(RuntimeError, match="requires the `digest` module"):
+        seqmod.sketch_fasta(str(fa), _Args())
