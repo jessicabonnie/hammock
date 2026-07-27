@@ -62,16 +62,26 @@ def test_autodetect_fasta_picks_d(tmp_path: Path) -> None:
     assert cli._autodetect_mode(_ns(list_path=lst)) == "D"
 
 
-def test_autodetect_bed_picks_a(tmp_path: Path) -> None:
+def test_autodetect_bed_picks_interval_points_b(tmp_path: Path) -> None:
+    # BED default is now interval mode = interval-points (B), not A.
     lst = tmp_path / "files.txt"
     lst.write_text(str(DATA / "tiny_a.bed") + "\n")
-    assert cli._autodetect_mode(_ns(list_path=lst)) == "A"
+    assert cli._autodetect_mode(_ns(list_path=lst)) == "B"
 
 
-def test_autodetect_bed_with_subsampling_picks_c(tmp_path: Path) -> None:
+def test_autodetect_bed_with_subA_picks_hybrid_c(tmp_path: Path) -> None:
+    # --subA / --expA are interval-string knobs → interval-hybrid (C).
     lst = tmp_path / "files.txt"
     lst.write_text(str(DATA / "tiny_a.bed") + "\n")
     assert cli._autodetect_mode(_ns(list_path=lst, subA=0.5)) == "C"
+    assert cli._autodetect_mode(_ns(list_path=lst, expA=1.0)) == "C"
+
+
+def test_autodetect_bed_subB_only_stays_interval_b(tmp_path: Path) -> None:
+    # --subB alone: interval-points (B) natively subsamples points, so stay in B.
+    lst = tmp_path / "files.txt"
+    lst.write_text(str(DATA / "tiny_a.bed") + "\n")
+    assert cli._autodetect_mode(_ns(list_path=lst, subB=0.3)) == "B"
 
 
 def test_explicit_mode_wins(tmp_path: Path) -> None:
@@ -87,5 +97,23 @@ def test_autodetect_skips_comments_and_blanks(tmp_path: Path) -> None:
     assert cli._autodetect_mode(_ns(list_path=lst)) == "D"
 
 
-def test_autodetect_missing_list_falls_back_to_a(tmp_path: Path) -> None:
-    assert cli._autodetect_mode(_ns(list_path=tmp_path / "nope.txt")) == "A"
+def test_autodetect_missing_list_falls_back_to_interval_b(tmp_path: Path) -> None:
+    assert cli._autodetect_mode(_ns(list_path=tmp_path / "nope.txt")) == "B"
+
+
+# ---- --mode name aliases → canonical letter --------------------------------
+
+@pytest.mark.parametrize("value,expected", [
+    ("interval", "B"), ("interval-points", "B"), ("interval_points", "B"), ("B", "B"),
+    ("sequence", "D"), ("D", "D"),
+    ("interval-string", "A"), ("A", "A"), ("a", "A"),
+    ("interval-hybrid", "C"), ("C", "C"),
+    ("Interval", "B"), ("SEQUENCE", "D"),  # case-insensitive
+])
+def test_normalize_mode_aliases(value: str, expected: str) -> None:
+    assert cli._normalize_mode(value) == expected
+
+
+def test_normalize_mode_rejects_unknown() -> None:
+    with pytest.raises(argparse.ArgumentTypeError):
+        cli._normalize_mode("nonsense")

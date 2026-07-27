@@ -161,6 +161,24 @@ HTTP fails on firewalled compute nodes), per-file references within a list
 (`--ref1/--ref2` are per-list), and reference chr-prefix auto-fixup (cf.
 `experiments/primate-phylogeny` `peak_chr_prefix`).
 
+## Mode naming + default (user-facing)
+
+The CLI presents two top-level modes — **interval** (BED) and **sequence**
+(FASTA) — with A/B/C as deprioritized interval *flavors*. Names map to the
+canonical single letters used everywhere internally (and in the CSV `mode`
+column / output filename, which **keep the letter** for orig parity):
+
+- `interval` / `interval-points` → **B** (base-level points; the default for BED)
+- `interval-string` → **A** (exact interval strings)
+- `interval-hybrid` → **C** (both; `--subA`/`--subB`/`--expA`)
+- `sequence` → **D** (FASTA; the default for FASTA or any `--ref*` flag)
+
+`--mode` accepts names or letters (`_MODE_ALIASES`/`_normalize_mode` in
+`cli.py`, normalized to the letter at parse time). **The BED autodetect default
+flipped A→B** (`_autodetect_mode`): plain BED → B; `--subA`/`--expA` →
+C; `--subB` alone stays B. Parity tests pass explicit `--mode`, so they're
+unaffected; `tests/test_autodetect.py` asserts the new default.
+
 ## Not implemented (would need work to add)
 
 - Sketch types: `--minhash`, `--exact`, `--minimizer` for A/B/C. Phase 1
