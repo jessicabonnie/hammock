@@ -16,6 +16,11 @@ pip install -e . --no-build-isolation   # builds the C++ extension
 pytest tests/
 ```
 
+The bed2fasta tests (`tests/test_bed2fasta*.py`) and their `--ref` end-to-end
+paths need `bedtools` (and `samtools` for indexing) on `PATH` — `ml bedtools
+samtools` on the cluster; they self-skip otherwise. Mode D parity needs the
+conda-orig env (see Parity environments).
+
 The wheel includes a standalone `hammock-cpp` binary built from the same
 `hammock_core` static lib (in `build/`); intended for max-speed Mode B
 benchmarking, no Python in the loop.
@@ -106,13 +111,61 @@ These are deliberate; parity tests that touch them are skipped or projected.
    "always 0" observation in memory turned out to be this bug; see
    `memory/project_modeD_no_ends_zero_bug.md`.
 
+## Mode D BED→FASTA (bed2fasta) — SHIPPED
+
+Two BED lists, each tagged with a reference, are converted to FASTA and run
+through Mode D. `python/hammock/refs.py` (reference resolution),
+`python/hammock/bed2fasta.py` (extraction), wired into `runner._run_bed2fasta`.
+
+- **Flags:** `--ref` (both lists) XOR `--ref1`/`--ref2` (per list);
+  `--ref-cache-dir`, `--fasta-outdir`. Any reference flag forces Mode D and
+  reinterprets the two positional lists as BED files. Combining a reference
+  flag with `--mode A|B|C` is an error.
+- **A reference is a keyword (`hg38`, `mm10`, `hg19`, `mm39`, `hs1`) or a local
+  FASTA path.** `resolve_reference` **never downloads during a run** (HPC
+  compute nodes are firewalled): a keyword must already be cached, else it
+  raises with the exact `hammock fetch-ref <kw> --ref-cache-dir <dir>` command.
+  `hammock fetch-ref` is a separate subcommand (run on a login node) that
+  downloads + decompresses + indexes into the cache atomically (temp +
+  `os.replace` + `.done` sentinel; http(s) only; size-capped).
+- **Single extraction backend: `bedtools getfasta`** (default strand, headers
+  `chrom:start-end`). `twoBitToFa` was deliberately *not* used — its `-bed`
+  mode reverse-complements minus-strand intervals and headers by BED-name,
+  which would silently diverge from getfasta and corrupt
+  `jaccard_similarity_with_ends`. Needs `bedtools` on PATH (`ml bedtools`);
+  `samtools` (`ml samtools`) is used to index references when available.
+- **Silent-zero guard:** a chromosome-name mismatch (`chr1` vs `1`) makes
+  bedtools warn + skip intervals but exit 0, yielding an empty FASTA →
+  Jaccard≈0. `bed_to_fasta` turns an empty output or a "not found"/"WARNING"
+  stderr into a hard `ConversionError`. It also warns on high-N extractions
+  (assembly gaps → spurious shared minimizers) and record-count shortfalls.
+- **CSV additions:** Mode D now emits **always-present trailing `ref1`/`ref2`
+  columns** (`"NA"` for plain FASTA runs; matches the `num_hashes="NA"`
+  convention). Parity tests project them out (`tests/test_mode_d_parity.py`
+  `_PROJECTED_OUT`); the exact-header assertion in `tests/test_mode_d.py` was
+  updated. A/B/C output and `_row_prefix` are untouched. The output filename is
+  tagged `_<ref1tag>-vs-<ref2tag>` so cross-reference runs to the same `-o`
+  don't overwrite each other.
+- **CSV labels** are the original BED basenames (captured before the FASTA
+  paths are swapped in), honoring `--full-paths`; generated FASTAs use unique
+  per-index names so same-basename BEDs in different dirs never collide.
+- **Cross-reference caveat:** cross-species Mode D Jaccard (e.g. hg38 vs mm10)
+  measures **shared k-mer content — repeat/low-complexity-driven — not
+  homology.** The `k=8` default suits within-reference use; prefer larger `k`
+  for cross-species (cf. `memory/project_primate_phylogeny_substrate_engineering.md`,
+  where deep topology failed without repeat-masking / larger k). Chromosome
+  naming must match the reference; N-runs inflate similarity.
+
+Deferred (not v1): in-run downloading / remote streaming (`twoBitToFa` over
+HTTP fails on firewalled compute nodes), per-file references within a list
+(`--ref1/--ref2` are per-list), and reference chr-prefix auto-fixup (cf.
+`experiments/primate-phylogeny` `peak_chr_prefix`).
+
 ## Not implemented (would need work to add)
 
 - Sketch types: `--minhash`, `--exact`, `--minimizer` for A/B/C. Phase 1
   shipped HLL only. The `BagMinHashSketch` C++ class exists; the CLI/runner
   glue doesn't.
-- Mode D BED→FASTA flags `--bed1/--ref1/--bed2/--ref2`. Phase 5 in the plan.
-- Reference-name resolution (`--reference mm10`). Phase 6 (aspirational).
 - File-level multiprocessing fallback (we use threads only).
 
 ## Parity environments

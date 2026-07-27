@@ -52,11 +52,15 @@ def test_mode_d_runs_and_self_jaccard_is_one(tmp_path: Path) -> None:
         "precision", "num_hashes", "kmer_size", "window_size",
         "jaccard_similarity", *cont_block,
         "jaccard_similarity_with_ends", *[c + "_with_ends" for c in cont_block],
+        "ref1", "ref2",
     ]
     # self-pair must be Jaccard = 1.0 (and containment = 1.0) on both halves.
     header = csv[0].split(",")
     self_row = csv[1].split(",")
     assert self_row[0] == "tiny.fa" and self_row[1] == "tiny.fa"
+    # Plain FASTA Mode D (no reference flags): ref1/ref2 columns are "NA".
+    assert self_row[header.index("ref1")] == "NA"
+    assert self_row[header.index("ref2")] == "NA"
     for name in ("jaccard_similarity", "jaccard_similarity_with_ends",
                  "containment_AB", "containment_BA",
                  "containment_AB_with_ends", "containment_BA_with_ends",
