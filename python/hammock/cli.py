@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
 import sys
 
 from hammock.runner import run
@@ -29,10 +30,13 @@ def parse_args(argv=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    p.add_argument('filepaths_file',
-                   help='Text file containing paths to files to be compared')
-    p.add_argument('primary_file',
-                   help='Text file containing paths to primary files to compare against')
+    p.add_argument('filepaths_file', metavar='LIST1',
+                   help='Text file of paths to compare. Normally FASTA/BED files; '
+                        'with a reference flag (--ref/--ref1) these are BED files '
+                        'converted to FASTA via bedtools getfasta.')
+    p.add_argument('primary_file', metavar='LIST2',
+                   help='Text file of primary paths to compare against (see LIST1; '
+                        'uses --ref/--ref2 in BED→FASTA mode).')
 
     p.add_argument('--mode', choices=['A', 'B', 'C', 'D'], default=None,
                    help='''Mode for comparison (auto-detected from inputs if omitted):
@@ -40,6 +44,24 @@ def parse_args(argv=None):
                    B: Compare points only
                    C: Compare both intervals and points
                    D: Compare sequences (default for FASTA files)''')
+
+    # BED→FASTA (bed2fasta) reference flags. Presence of any of these turns the
+    # two positional lists into BED lists that are converted to FASTA (Mode D).
+    ref = p.add_argument_group('BED→FASTA references (Mode D)')
+    ref.add_argument('--ref', default=None,
+                     help='Reference for BOTH lists: a keyword (hg38, mm10, ...) '
+                          'or a local FASTA path. Mutually exclusive with --ref1/--ref2.')
+    ref.add_argument('--ref1', default=None,
+                     help='Reference for LIST1 (keyword or local FASTA path).')
+    ref.add_argument('--ref2', default=None,
+                     help='Reference for LIST2 (keyword or local FASTA path).')
+    ref.add_argument('--ref-cache-dir', default=None,
+                     help='Directory of cached/indexed references (default: '
+                          '$HAMMOCK_REF_CACHE or ~/.hammock/refs). Populate '
+                          'keywords once with `hammock fetch-ref`.')
+    ref.add_argument('--fasta-outdir', default=None,
+                     help='Keep the generated FASTA files here instead of a '
+                          'temp dir (which is auto-cleaned).')
 
     p.add_argument('--outprefix', '-o', '--out', type=str, default="hammock", help='The output file prefix')
     p.add_argument('--full-paths', action='store_true',
@@ -75,6 +97,26 @@ def parse_args(argv=None):
                         'single-hash: one xxh64 for gate+ingestion; opt-in parity divergence.')
 
     args = p.parse_args(argv)
+
+    # ---- BED→FASTA reference validation -------------------------------------
+    if args.ref is not None and (args.ref1 is not None or args.ref2 is not None):
+        p.error("--ref is mutually exclusive with --ref1/--ref2.")
+    if args.ref is not None:
+        args.ref1 = args.ref2 = args.ref
+
+    args.bed2fasta = args.ref1 is not None or args.ref2 is not None
+    if args.bed2fasta:
+        if args.ref1 is None or args.ref2 is None:
+            p.error("BED→FASTA mode needs a reference for both lists: pass --ref "
+                    "(same reference) or both --ref1 and --ref2.")
+        if args.mode not in (None, "D"):
+            p.error(f"reference flags imply Mode D (BED→FASTA), but --mode "
+                    f"{args.mode} was given. Drop --mode (or use --mode D).")
+        args.mode = "D"
+    elif args.ref_cache_dir is not None or args.fasta_outdir is not None:
+        p.error("--ref-cache-dir/--fasta-outdir only apply with a reference "
+                "flag (--ref/--ref1/--ref2).")
+
     # Hardcoded constants the runner still reads. Hash is always xxh64; the
     # CSV `num_hashes` column is "NA" for HLL/minimizer (only meaningful for
     # MinHash, which isn't shipped).
@@ -194,7 +236,34 @@ def _apply_memory_limit(gb: float) -> None:
         print(f"Warning: could not set memory limit: {e}", file=sys.stderr)
 
 
+def _fetch_ref_main(argv) -> int:
+    """`hammock fetch-ref <keyword|url>`: download + index a reference into the
+    cache. Meant to be run once on a networked (login) node — compute nodes are
+    typically firewalled, so comparison runs never download."""
+    fp = argparse.ArgumentParser(
+        prog="hammock fetch-ref",
+        description="Download and index a reference genome into the cache.")
+    fp.add_argument("spec", help="Reference keyword (hg38, mm10, hg19, mm39, hs1) "
+                                 "or an http(s) URL to a .fa.gz")
+    fp.add_argument("--ref-cache-dir", default=None,
+                    help="Cache directory (default: $HAMMOCK_REF_CACHE or ~/.hammock/refs)")
+    fp.add_argument("--force", action="store_true",
+                    help="Re-fetch even if already cached")
+    a = fp.parse_args(argv)
+    from hammock import refs as refs_mod
+    try:
+        path = refs_mod.fetch_reference(a.spec, a.ref_cache_dir, force=a.force)
+    except (ValueError, RuntimeError, OSError, subprocess.CalledProcessError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+    print(path)
+    return 0
+
+
 def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv and argv[0] == "fetch-ref":
+        return _fetch_ref_main(argv[1:])
     args = parse_args(argv)
     args.mode = _autodetect_mode(args)
     args.sketch_type = _resolve_sketch_type(args)

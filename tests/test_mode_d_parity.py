@@ -43,7 +43,9 @@ def _files_list(tmp_path: Path, *names: str) -> Path:
 # comparing CSVs.
 _BASES = ("containment_AB", "containment_BA",
           "cosketch_geom", "cosketch_arith", "cosketch_max")
-_PROJECTED_OUT = set(_BASES) | {b + "_with_ends" for b in _BASES}
+# ref1/ref2 are hammock_claude additions (always-present Mode D provenance
+# columns) that orig does not emit; project them out too.
+_PROJECTED_OUT = set(_BASES) | {b + "_with_ends" for b in _BASES} | {"ref1", "ref2"}
 
 
 def _projected(csv_text: str) -> list[tuple]:
