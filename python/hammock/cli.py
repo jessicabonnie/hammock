@@ -1,6 +1,6 @@
 """Hammock CLI: pairwise Jaccard similarity in interval modes (A/B/C, BED) or sequence mode (D, FASTA).
 
-Output is a tab-separated file whose query/reference columns default to basenames; pass
+Output is a comma-separated CSV whose file1/file2 columns default to basenames; pass
 --full-paths for normalized full paths in those columns.
 """
 from __future__ import annotations
@@ -47,7 +47,7 @@ def parse_args(argv=None):
         - Any tab-delimited file with at least 3 columns (chr, start, end) in BED-style format
         - Sequence files (.fa, .fasta, .fna, .ffn, .faa, .frn) - automatically uses mode D
 
-        Output: tab-separated; query and reference columns identify inputs using basenames by default.
+        Output: comma-separated CSV; the file1/file2 columns identify inputs using basenames by default.
         Pass --full-paths to use normalized full paths instead.
         """,
         epilog='BED→FASTA (sequence mode): pass --ref/--ref1/--ref2 to treat LIST1/LIST2 as BED '
@@ -60,35 +60,42 @@ def parse_args(argv=None):
 
     p.add_argument('filepaths_file', metavar='LIST1',
                    help='Text file listing one input path per line (NOT an input '
-                        'file itself). Paths are normally BED/BED.gz or FASTA files; '
-                        'with a reference flag (--ref/--ref1) they must be BED/BED.gz '
-                        'and are converted to FASTA via bedtools getfasta.')
+                        'file itself). This is the query side (side "A": the file1 '
+                        'and containment_AB columns; paired with --ref1). Paths are '
+                        'normally BED/BED.gz or FASTA; with a reference flag '
+                        '(--ref/--ref1) they must be BED/BED.gz and are converted to '
+                        'FASTA via bedtools getfasta.')
     p.add_argument('primary_file', metavar='LIST2',
-                   help='Text file listing one primary input path per line to compare '
-                        'against (see LIST1; uses --ref/--ref2 in BED→FASTA mode).')
+                   help='Text file listing one input path per line, compared against '
+                        'LIST1. This is the reference side (side "B": the file2 and '
+                        'containment_BA columns; paired with --ref2). Same format rules '
+                        'as LIST1. (May be the same file as LIST1 for all-vs-all.)')
 
     p.add_argument('--mode', type=_normalize_mode, default=None, metavar='MODE',
                    help='''Comparison mode (auto-detected if omitted). Primary choice:
-                   interval  — compare BED interval sets (default for BED/BigBed input)
-                   sequence  — compare FASTA sequences (default for FASTA or --ref input)
+                     interval  — compare BED interval sets  (default for BED/BigBed input)
+                     sequence  — compare FASTA sequences     (default for FASTA or --ref input)
 
-                   `interval` is the base-level overlap comparison (interval-points).
-                   Advanced interval flavors (secondary):
-                     interval-string  (A)  exact interval strings (chr:start:end)
-                     interval-points  (B)  base-level points  [= interval, the default]
-                     interval-hybrid  (C)  both, with subsampling (--subA/--subB/--expA)
+                   "interval" is just the friendly name for interval-points (B), the
+                   base-level overlap comparison — they are the SAME mode. The two
+                   other interval flavors are advanced/secondary:
+                     interval-string  (A)  exact tab-joined interval strings (chr<TAB>start<TAB>end)
+                     interval-points  (B)  base-level points   [= interval, the default]
+                     interval-hybrid  (C)  both A and B, with subsampling (--subA/--subB/--expA)
                    The letters A/B/C/D are still accepted (D = sequence).''')
 
     # BED→FASTA (bed2fasta) reference flags. Presence of any of these turns the
     # two positional lists into BED lists that are converted to FASTA (Mode D).
     ref = p.add_argument_group('BED→FASTA references (Mode D)')
     ref.add_argument('--ref', default=None,
-                     help='Reference for BOTH lists: a keyword (hg38, mm10, ...) '
-                          'or a local FASTA path. Mutually exclusive with --ref1/--ref2.')
+                     help='Reference for BOTH lists: a keyword (hg38, mm10, ...), a '
+                          'local FASTA path, or a URL. Keywords and URLs must already '
+                          'be in the cache (a run never downloads — use `hammock '
+                          'fetch-ref`). Mutually exclusive with --ref1/--ref2.')
     ref.add_argument('--ref1', default=None,
-                     help='Reference for LIST1 (keyword or local FASTA path).')
+                     help='Reference for LIST1 (keyword, local FASTA path, or cached URL).')
     ref.add_argument('--ref2', default=None,
-                     help='Reference for LIST2 (keyword or local FASTA path).')
+                     help='Reference for LIST2 (keyword, local FASTA path, or cached URL).')
     ref.add_argument('--ref-cache-dir', default=None,
                      help='Directory of cached/indexed references (default: '
                           '$HAMMOCK_REF_CACHE or ~/.hammock/refs). Populate '
