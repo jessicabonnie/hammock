@@ -26,7 +26,11 @@ def parse_args(argv=None):
         Output: tab-separated; query and reference columns identify inputs using basenames by default.
         Pass --full-paths to use normalized full paths instead.
         """,
-        epilog='Tip: use --full-paths when filenames repeat in different directories or for joining outputs to path-based manifests.',
+        epilog='BED→FASTA (Mode D): pass --ref/--ref1/--ref2 to treat LIST1/LIST2 as BED '
+               'files, convert them to FASTA with bedtools getfasta, and compare the '
+               'sequences. A reference is a keyword (hg38, mm10, ...) or a local FASTA path; '
+               'cache keywords once on a networked node with `hammock fetch-ref <keyword>`. '
+               'Tip: use --full-paths when filenames repeat in different directories.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 

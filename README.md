@@ -39,6 +39,15 @@ Modes are auto-detected from file extension: `.fa/.fasta/.fna/.ffn/.faa/.frn`
 (plus `.gz` variants) → mode D; everything else defaults to mode A unless
 `--subA/--subB/--expA` are set, in which case mode C.
 
+**BED→FASTA (Mode D from BED input):** pass `--ref`/`--ref1`/`--ref2` and the
+two lists are treated as BED files, converted to FASTA with `bedtools getfasta`
+against the given reference(s), then compared as sequences. This enables
+cross-reference comparisons (e.g. hg38-derived vs mm10-derived peak sequences).
+See [Installation](#installation) for the `bedtools`/`samtools` requirements and
+[CLI](#cli) for the flags. Note: cross-species Mode D Jaccard reflects shared
+k-mer content (repeat/low-complexity-driven), not homology — prefer a larger
+`-k` than the default for cross-species runs.
+
 ## Installation
 
 ```bash
