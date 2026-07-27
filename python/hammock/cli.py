@@ -59,12 +59,13 @@ def parse_args(argv=None):
     )
 
     p.add_argument('filepaths_file', metavar='LIST1',
-                   help='Text file of paths to compare. Normally FASTA/BED files; '
-                        'with a reference flag (--ref/--ref1) these are BED files '
-                        'converted to FASTA via bedtools getfasta.')
+                   help='Text file listing one input path per line (NOT an input '
+                        'file itself). Paths are normally BED/BED.gz or FASTA files; '
+                        'with a reference flag (--ref/--ref1) they must be BED/BED.gz '
+                        'and are converted to FASTA via bedtools getfasta.')
     p.add_argument('primary_file', metavar='LIST2',
-                   help='Text file of primary paths to compare against (see LIST1; '
-                        'uses --ref/--ref2 in BED→FASTA mode).')
+                   help='Text file listing one primary input path per line to compare '
+                        'against (see LIST1; uses --ref/--ref2 in BED→FASTA mode).')
 
     p.add_argument('--mode', type=_normalize_mode, default=None, metavar='MODE',
                    help='''Comparison mode (auto-detected if omitted). Primary choice:
