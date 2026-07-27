@@ -301,6 +301,17 @@ def main(argv=None) -> int:
     if argv and argv[0] == "fetch-ref":
         return _fetch_ref_main(argv[1:])
     args = parse_args(argv)
+
+    # Guard early (before autodetect): the positionals must be list-of-paths
+    # files, not input files. Fails fast with a clear message.
+    from hammock.runner import _guard_is_list_file
+    for arg_name, list_file in (("LIST1", args.filepaths_file),
+                                ("LIST2", args.primary_file)):
+        msg = _guard_is_list_file(list_file, arg_name)
+        if msg:
+            print(f"Error: {msg}", file=sys.stderr)
+            return 2
+
     args.mode = _autodetect_mode(args)
     args.sketch_type = _resolve_sketch_type(args)
     if args.threads is None:

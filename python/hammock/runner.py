@@ -42,6 +42,40 @@ def _read_paths(list_file: str) -> List[str]:
     return paths
 
 
+def _looks_like_input_data(line: str) -> str | None:
+    """Return 'FASTA'/'BED' if `line` is sequence/interval DATA rather than a
+    filesystem path — i.e. the user passed an input file where a list-of-paths
+    was expected. Returns None for a normal path line."""
+    if line.startswith('>') or line.startswith(';'):
+        return 'FASTA'
+    fields = line.split('\t')
+    if len(fields) >= 3 and fields[1].isdigit() and fields[2].isdigit():
+        return 'BED'
+    return None
+
+
+def _guard_is_list_file(list_file: str, arg_name: str) -> str | None:
+    """If `list_file` looks like an actual BED/FASTA input file (not a text file
+    listing one path per line), return an error message; else None."""
+    try:
+        with open(list_file) as f:
+            for line in f:
+                s = line.strip()
+                if not s or s.startswith('#') or s.startswith(('track', 'browser')):
+                    continue
+                kind = _looks_like_input_data(s)
+                if kind:
+                    return (
+                        f"{arg_name} ({list_file}) looks like a {kind} file, not a "
+                        f"list of paths. Pass a text file that lists one input path "
+                        f"per line, e.g.  ls *.bed > list.txt  (then: hammock list.txt "
+                        f"other_list.txt ...).")
+                return None  # first real line looks like a path — OK
+    except OSError:
+        return None  # let the normal open/read error surface downstream
+    return None
+
+
 def _label(path: str, full_paths: bool) -> str:
     return os.path.normpath(path) if full_paths else os.path.basename(path)
 
