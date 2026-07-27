@@ -46,6 +46,21 @@ if(pybind11_FOUND)
     pybind11_add_module(_core MODULE bindings/_core.cpp)
     target_link_libraries(_core PRIVATE hammock_core)
     target_compile_options(_core PRIVATE -O3 -march=native)
+    # On Linux, bake a DT_RPATH to the interpreter env's lib dir so _core loads
+    # that env's libstdc++ (not a stale one an env-module puts on
+    # LD_LIBRARY_PATH). _core installs to <prefix>/lib/pythonX.Y/site-packages/
+    # hammock/, so $ORIGIN/../../.. is <prefix>/lib. We use OLD dtags
+    # (--disable-new-dtags → DT_RPATH, not DT_RUNPATH) precisely because
+    # DT_RPATH is searched BEFORE LD_LIBRARY_PATH; DT_RUNPATH would lose to it.
+    # Without this, a module's old libstdc++ loads first and shadows the newer
+    # one, so `import digest` fails (GLIBCXX_… not found) and Mode D silently
+    # returns 0. See memory/project_modeD_zero_rpath_digest.
+    if(UNIX AND NOT APPLE)
+        set_target_properties(_core PROPERTIES
+            INSTALL_RPATH "$ORIGIN/../../.."
+            BUILD_WITH_INSTALL_RPATH ON)
+        target_link_options(_core PRIVATE "-Wl,--disable-new-dtags")
+    endif()
     install(TARGETS _core LIBRARY DESTINATION hammock)
 endif()
 
