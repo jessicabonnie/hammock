@@ -182,9 +182,16 @@ panel_a <- ggplot() +
     legend.position = "none"
   )
 
-# Panel B: comparison classes over unique unordered pairs ---------------------
-XREF_LABEL <- "Same tissue,\ndifferent reference"
-DIFF_LABEL <- "Different tissue,\nany reference"
+# Panel B: three comparison classes over unique unordered pairs ---------------
+# The 36 unique pairs split into three classes rather than two. Splitting the
+# old "different tissue, any reference" class separates the two situations it
+# conflated, and makes the tissue-vs-reference claim a balanced 9-vs-9 contrast
+# (same tissue with the reference changed vs. same reference with the tissue
+# changed) instead of a 9-vs-27 comparison.
+LAB_ST_DR <- "Same tissue\nDifferent reference"
+LAB_DT_SR <- "Different tissue\nSame reference"
+LAB_DT_DR <- "Different tissue\nDifferent reference"
+CLASS_LEVELS <- c(LAB_ST_DR, LAB_DT_SR, LAB_DT_DR)
 
 classified <- pairs %>%
   filter(key_a != key_b) %>%
@@ -193,12 +200,24 @@ classified <- pairs %>%
     .b = pmax(key_a, key_b)
   ) %>%
   distinct(.a, .b, .keep_all = TRUE) %>%
-  left_join(meta %>% select(key, tissue_a = tissue), by = c(".a" = "key")) %>%
-  left_join(meta %>% select(key, tissue_b = tissue), by = c(".b" = "key")) %>%
+  left_join(
+    meta %>% select(key, tissue_a = tissue, ref_a = ref),
+    by = c(".a" = "key")
+  ) %>%
+  left_join(
+    meta %>% select(key, tissue_b = tissue, ref_b = ref),
+    by = c(".b" = "key")
+  ) %>%
   mutate(
+    same_tissue = tissue_a == tissue_b,
+    same_ref = ref_a == ref_b,
     pair_class = factor(
-      if_else(tissue_a == tissue_b, XREF_LABEL, DIFF_LABEL),
-      levels = c(XREF_LABEL, DIFF_LABEL)
+      case_when(
+        same_tissue & !same_ref ~ LAB_ST_DR,
+        !same_tissue & same_ref ~ LAB_DT_SR,
+        TRUE ~ LAB_DT_DR
+      ),
+      levels = CLASS_LEVELS
     ),
     x_pos = as.numeric(pair_class)
   )
@@ -210,55 +229,145 @@ if (nrow(classified) != expected_pairs) {
     call. = FALSE
   )
 }
+# Each tissue appears exactly once per reference, so no pair can share both.
+if (any(classified$same_tissue & classified$same_ref)) {
+  stop("Design is not one sample per tissue per reference.", call. = FALSE)
+}
 
-xref <- classified %>%
-  filter(pair_class == XREF_LABEL) %>%
-  pull(similarity)
-diff_tissue <- classified %>%
-  filter(pair_class == DIFF_LABEL) %>%
-  pull(similarity)
+by_class <- split(classified$similarity, classified$pair_class)
+st_dr <- by_class[[LAB_ST_DR]]
+dt_sr <- by_class[[LAB_DT_SR]]
+dt_dr <- by_class[[LAB_DT_DR]]
 
-auc <- mean(
-  outer(xref, diff_tissue, ">") + 0.5 * outer(xref, diff_tissue, "==")
+auc_gt <- function(x, y) {
+  mean(outer(x, y, ">") + 0.5 * outer(x, y, "=="))
+}
+
+# Exact constrained label permutation -----------------------------------------
+# The nine peak sets form a 3 x 3 tissue-by-reference design, so the 36 pairs
+# are not 36 independent observations and a rank-sum test on them is not valid.
+# Instead permute the tissue labels *within each reference*, which preserves the
+# reference composition (every reference still contributes one sample per label)
+# and asks only whether tissue identity is related to sequence similarity.
+#
+# There are (3!)^3 = 216 such labelings. Relabeling the three tissue names
+# globally leaves every comparison class unchanged, so those 216 labelings
+# induce only 216 / 3! = 36 distinct classifications and the smallest attainable
+# p-value is 6 / 216 = 1 / 36 ~ 0.028.
+#
+# Note that the "different tissue, same reference" class is invariant: within a
+# reference the three permuted labels are always distinct. The null therefore
+# varies only through which cross-reference pairs count as same-tissue, which is
+# exactly the comparison of interest.
+all_perms <- function(x) {
+  if (length(x) <= 1) return(list(x))
+  do.call(c, lapply(seq_along(x), function(i) {
+    lapply(all_perms(x[-i]), function(rest) c(x[i], rest))
+  }))
+}
+
+refs <- sort(unique(meta$ref))
+ref_units <- lapply(refs, function(r) {
+  meta %>% filter(ref == r) %>% arrange(sample_id) %>% select(key, tissue)
+})
+n_per_ref <- unique(vapply(ref_units, nrow, integer(1)))
+if (length(n_per_ref) != 1) {
+  stop("References contribute differing numbers of samples.", call. = FALSE)
+}
+
+within_perms <- all_perms(seq_len(n_per_ref))
+perm_grid <- as.matrix(
+  expand.grid(rep(list(seq_along(within_perms)), length(refs)))
 )
-test_result <- wilcox.test(xref, diff_tissue, alternative = "greater")
+
+# AUC is the test statistic: it is a rank statistic of the full class ordering,
+# so it does not hinge on a single order statistic the way a median difference
+# does. The median difference is reported as a descriptive effect size only.
+stat_from_labels <- function(labels) {
+  same <- labels[classified$.a] == labels[classified$.b]
+  g_st_dr <- classified$similarity[same & !classified$same_ref]
+  g_dt_sr <- classified$similarity[!same & classified$same_ref]
+  c(
+    auc = auc_gt(g_st_dr, g_dt_sr),
+    delta = median(g_st_dr) - median(g_dt_sr)
+  )
+}
+
+labels_for <- function(perm_row) {
+  out <- character(0)
+  for (i in seq_along(ref_units)) {
+    unit <- ref_units[[i]]
+    out[unit$key] <- unit$tissue[within_perms[[perm_row[i]]]]
+  }
+  out
+}
+
+observed_labels <- setNames(meta$tissue, meta$key)
+observed <- stat_from_labels(observed_labels)
+null_stats <- t(apply(perm_grid, 1, function(r) stat_from_labels(labels_for(r))))
+
+n_perms <- nrow(null_stats)
+perm_p_auc <- mean(null_stats[, "auc"] >= observed[["auc"]])
+perm_p_delta <- mean(null_stats[, "delta"] >= observed[["delta"]])
+min_attainable_p <- (factorial(n_per_ref)) / n_perms
+
+auc <- observed[["auc"]]
+delta <- observed[["delta"]]
 
 stats <- tibble::tibble(
   metric = SIM_COL,
-  n_xref = length(xref),
-  n_diff = length(diff_tissue),
-  median_xref = median(xref),
-  median_diff = median(diff_tissue),
-  delta = median(xref) - median(diff_tissue),
-  auc = auc,
-  wilcoxon_p = test_result$p.value
+  n_st_dr = length(st_dr),
+  n_dt_sr = length(dt_sr),
+  n_dt_dr = length(dt_dr),
+  median_st_dr = median(st_dr),
+  median_dt_sr = median(dt_sr),
+  median_dt_dr = median(dt_dr),
+  delta_balanced = delta,
+  auc_balanced = auc,
+  n_permutations = n_perms,
+  perm_p_auc = perm_p_auc,
+  perm_p_delta = perm_p_delta,
+  min_attainable_p = min_attainable_p
 )
 message("Comparison classes over ", nrow(classified), " unique pairs:")
 print(as.data.frame(stats), digits = 5)
-
-annotation_b <- sprintf(
-  "AUC = %.2f\nMann–Whitney p = %s\nΔ median = %+.3f",
-  auc,
-  format(signif(test_result$p.value, 2), scientific = TRUE),
-  stats$delta
+message(
+  "Balanced contrast: ", LAB_ST_DR %>% str_replace("\n", ", "), " (n = ",
+  length(st_dr), ") vs ", LAB_DT_SR %>% str_replace("\n", ", "), " (n = ",
+  length(dt_sr), ")"
+)
+message(
+  "Exact constrained permutation over ", n_perms, " labelings; ",
+  "largest AUC under the null = ",
+  signif(max(null_stats[null_stats[, "auc"] < auc, "auc"]), 4),
+  "; largest median difference under the null = ",
+  signif(max(null_stats[null_stats[, "delta"] < delta, "delta"]), 4)
 )
 
-separation <- min(xref) - max(diff_tissue)
+annotation_b <- sprintf(
+  "AUC = %.2f\nΔ median = %+.3f\nExact permutation p = %.3f",
+  auc,
+  delta,
+  perm_p_auc
+)
+
+other_max <- max(c(dt_sr, dt_dr))
+separation <- min(st_dr) - other_max
 gap_layer <- if (separation > 0) {
   list(
     annotate(
       "rect",
       xmin = 0.4,
-      xmax = 2.6,
-      ymin = max(diff_tissue),
-      ymax = min(xref),
+      xmax = length(CLASS_LEVELS) + 0.6,
+      ymin = other_max,
+      ymax = min(st_dr),
       fill = COL_COMPARE,
       alpha = 0.10
     ),
     annotate(
       "text",
-      x = 2.55,
-      y = mean(c(max(diff_tissue), min(xref))),
+      x = length(CLASS_LEVELS) + 0.55,
+      y = mean(c(other_max, min(st_dr))),
       label = "no overlap",
       hjust = 1,
       vjust = 0.5,
@@ -294,6 +403,16 @@ panel_b <- ggplot(classified, aes(x = x_pos, y = similarity)) +
     color = COL_TEXT,
     fatten = 0
   ) +
+  # Bracket marking the two classes the permutation test contrasts.
+  annotate(
+    "segment",
+    x = 1,
+    xend = 2,
+    y = y_upper - y_pad * 0.86,
+    yend = y_upper - y_pad * 0.86,
+    linewidth = 0.35,
+    color = COL_TEXT
+  ) +
   annotate(
     "label",
     x = 1.5,
@@ -309,8 +428,8 @@ panel_b <- ggplot(classified, aes(x = x_pos, y = similarity)) +
   ) +
   scale_color_manual(
     values = setNames(
-      c(COL_HAMMOCK, COL_BEDTOOLS),
-      c(XREF_LABEL, DIFF_LABEL)
+      c(COL_HAMMOCK, COL_BEDTOOLS, "#98A2AC"),
+      CLASS_LEVELS
     ),
     guide = "none"
   ) +
@@ -323,24 +442,25 @@ panel_b <- ggplot(classified, aes(x = x_pos, y = similarity)) +
     limits = c(y_range[1], y_upper),
     expand = expansion(mult = c(0.03, 0.02))
   ) +
-  coord_cartesian(xlim = c(0.4, 2.6)) +
+  coord_cartesian(xlim = c(0.4, length(CLASS_LEVELS) + 0.6)) +
   labs(
     title = sprintf(
-      "B  Same-tissue pairs rank above different-tissue pairs\n(n = %d and %d unique pairs)",
-      length(xref),
-      length(diff_tissue)
+      "B  Same-tissue pairs rank above every different-tissue pair\n(n = %d, %d, and %d unique pairs)",
+      length(st_dr),
+      length(dt_sr),
+      length(dt_dr)
     ),
     x = NULL,
     y = "Sequence-mode Jaccard"
   ) +
   theme_paper() +
   theme(
-    axis.text.x = element_text(size = 9, lineheight = 0.95),
+    axis.text.x = element_text(size = 8.4, lineheight = 0.95),
     legend.position = "none"
   )
 
 figure <- panel_a + panel_b +
-  plot_layout(widths = c(1.25, 1)) +
+  plot_layout(widths = c(1, 1)) +
   plot_annotation(
     title = "Sequence sketches group samples by tissue, not by reference genome",
     theme = theme(
@@ -357,7 +477,7 @@ figure <- panel_a + panel_b +
 
 CairoPNG(
   filename = out_png,
-  width = 11.6,
+  width = 12.4,
   height = 5.9,
   units = "in",
   res = 300,
