@@ -35,8 +35,47 @@ K <- 10
 W <- 30
 P <- 12
 SIM_COL <- "jaccard_similarity"
-ARI_VALUE <- 0.910
-NMI_VALUE <- 0.961
+EXPECTED_ARI <- 0.910
+EXPECTED_NMI <- 0.961
+
+# -----------------------------------------------------------------------------
+# Paper palette interface
+# -----------------------------------------------------------------------------
+# Replace these defaults when a paper-wide palette is finalized. Every color
+# used by this figure is obtained from PAPER_PALETTE or TISSUE_COLORS below.
+# A future shared palette file can define the same objects and be sourced here.
+PAPER_PALETTE <- list(
+  text = "#20262D",
+  branch = "#46515C",
+  axis = "#6B747D",
+  cluster_outline = "#8A939C",
+  background = "#FFFFFF"
+)
+
+TISSUE_COLORS <- c(
+  fBrain = "#4477AA",
+  fHeart = "#CC6677",
+  fIntestine_Sm = "#DDCC77",
+  fKidney = "#117733",
+  fLung = "#88CCEE",
+  fMuscle_arm = "#AA4499",
+  fMuscle_back = "#882255",
+  fMuscle_leg = "#CC99BB",
+  fSkin = "#44AA99",
+  fStomach = "#999933"
+)
+
+shared_palette <- file.path(repo_root, "paper", "palette.R")
+if (file.exists(shared_palette)) {
+  palette_env <- new.env(parent = emptyenv())
+  sys.source(shared_palette, envir = palette_env)
+  if (exists("PAPER_PALETTE", envir = palette_env, inherits = FALSE)) {
+    PAPER_PALETTE <- get("PAPER_PALETTE", envir = palette_env)
+  }
+  if (exists("TISSUE_COLORS", envir = palette_env, inherits = FALSE)) {
+    TISSUE_COLORS <- get("TISSUE_COLORS", envir = palette_env)
+  }
+}
 
 experiment_dir <- file.path(repo_root, "experiments", "maurano_dhs_validation")
 default_csv <- file.path(
@@ -130,31 +169,44 @@ for (i in seq_len(nrow(pairs))) mat[pairs$stem1[i], pairs$stem2[i]] <- pairs$sim
 mat[is.na(mat)] <- t(mat)[is.na(mat)]
 if (anyNA(mat)) stop("Similarity matrix is incomplete.", call. = FALSE)
 diag(mat) <- 1
-# Clamp in place: pmin/pmax copy attributes from their first argument, so a
-# leading scalar would strip dim/dimnames and break as.dist() downstream.
 mat[] <- pmin(pmax(mat, 0), 1)
 
 hc <- hclust(as.dist(1 - mat), method = "average")
 tissue_by_stem <- setNames(key$tissue, key$stem)
 true_tissue <- tissue_by_stem[hc$labels]
-predicted <- cutree(hc, k = length(unique(true_tissue)))
+n_clusters <- length(unique(true_tissue))
+predicted <- cutree(hc, k = n_clusters)
 ari <- adjusted_rand(true_tissue, predicted)
 nmi <- normalized_mi(true_tissue, predicted)
 
-# Guard against accidentally plotting a different configuration or data revision.
-if (abs(ari - ARI_VALUE) > 0.005 || abs(nmi - NMI_VALUE) > 0.005) {
+if (abs(ari - EXPECTED_ARI) > 0.005 || abs(nmi - EXPECTED_NMI) > 0.005) {
   warning(sprintf(
     "Observed ARI/NMI (%.3f/%.3f) differ from expected manuscript values (%.3f/%.3f).",
-    ari, nmi, ARI_VALUE, NMI_VALUE
+    ari, nmi, EXPECTED_ARI, EXPECTED_NMI
   ))
 }
 
 ordered_stems <- hc$labels[hc$order]
 ordered_tissues <- tissue_by_stem[ordered_stems]
+ordered_clusters <- predicted[ordered_stems]
 unique_tissues <- unique(key$tissue)
-tissue_palette <- setNames(hue_pal(l = 58, c = 95)(length(unique_tissues)), unique_tissues)
-label_colors <- tissue_palette[ordered_tissues]
+
+missing_colors <- setdiff(unique_tissues, names(TISSUE_COLORS))
+if (length(missing_colors) > 0) {
+  fallback <- hue_pal(l = 58, c = 90)(length(missing_colors))
+  TISSUE_COLORS <- c(TISSUE_COLORS, setNames(fallback, missing_colors))
+}
+label_colors <- TISSUE_COLORS[ordered_tissues]
 hc$labels <- short_label(hc$labels)
+
+# Build one subtle outline per contiguous predicted-cluster run. The outline
+# rises to the MRCA height of the leaves in the run, matching the dendrogram cut
+# without competing with the tissue colors.
+coph <- as.matrix(cophenetic(hc))
+max_h <- max(hc$height)
+singleton_h <- max_h * 0.045
+run_id <- cumsum(c(1, diff(ordered_clusters) != 0))
+cluster_runs <- split(seq_along(ordered_clusters), run_id)
 
 CairoPNG(
   filename = out_png,
@@ -162,9 +214,9 @@ CairoPNG(
   height = 6.8,
   units = "in",
   res = 300,
-  bg = "white"
+  bg = PAPER_PALETTE$background
 )
-op <- par(mar = c(7.2, 4.5, 3.2, 9.5), family = "sans")
+op <- par(mar = c(7.2, 4.5, 3.1, 9.5), family = "sans")
 on.exit({ par(op); dev.off() }, add = TRUE)
 
 plot(
@@ -176,17 +228,27 @@ plot(
   sub = "",
   ylab = "1 − Jaccard",
   axes = TRUE,
-  cex.axis = 0.9
+  cex.axis = 0.9,
+  col = PAPER_PALETTE$branch
 )
 
-mtext(
-  sprintf("ARI = %.3f   NMI = %.3f", ari, nmi),
-  side = 3,
-  line = 0.25,
-  adj = 1,
-  cex = 0.85,
-  col = "#46515C"
-)
+for (run in cluster_runs) {
+  run_stems <- ordered_stems[run]
+  box_top <- if (length(run) >= 2) {
+    max(coph[run_stems, run_stems, drop = FALSE]) * 1.02
+  } else {
+    singleton_h
+  }
+  rect(
+    xleft = min(run) - 0.42,
+    ybottom = par("usr")[3],
+    xright = max(run) + 0.42,
+    ytop = box_top,
+    border = adjustcolor(PAPER_PALETTE$cluster_outline, alpha.f = 0.72),
+    lwd = 1.15,
+    xpd = NA
+  )
+}
 
 mtext(
   hc$labels[hc$order],
@@ -195,14 +257,14 @@ mtext(
   col = label_colors,
   las = 2,
   line = 0.45,
-  cex = 0.78
+  cex = 0.80
 )
 
 legend(
   x = par("usr")[2] + diff(par("usr")[1:2]) * 0.025,
   y = par("usr")[4],
   legend = display_tissue(unique_tissues),
-  fill = tissue_palette[unique_tissues],
+  fill = TISSUE_COLORS[unique_tissues],
   border = NA,
   bty = "n",
   cex = 0.72,
@@ -211,4 +273,5 @@ legend(
   title.adj = 0
 )
 
+message(sprintf("ARI = %.3f; NMI = %.3f", ari, nmi))
 message("Wrote: ", out_png)
