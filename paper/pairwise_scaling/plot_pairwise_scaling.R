@@ -1,17 +1,9 @@
 #!/usr/bin/env Rscript
 
 # Figure 3 — Pairwise scaling of hammock versus BEDTools
-#
-# Creates a publication-ready two-panel PNG using the same CairoPNG device
-# used by the existing plotting scripts in docs/scripts/.
-#
-# Usage:
-#   Rscript paper/pairwise_scaling/plot_pairwise_scaling.R
-#   Rscript paper/pairwise_scaling/plot_pairwise_scaling.R path/to/output.png
+# Creates a publication-ready two-panel PNG using CairoPNG.
 
-required_packages <- c(
-  "dplyr", "readr", "ggplot2", "scales", "patchwork", "Cairo"
-)
+required_packages <- c("dplyr", "readr", "ggplot2", "scales", "patchwork", "Cairo")
 missing_packages <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
 ]
@@ -32,7 +24,6 @@ suppressPackageStartupMessages({
   library(Cairo)
 })
 
-# Resolve repository-relative paths.
 script_arg <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
 if (length(script_arg) != 1) {
   stop("Could not determine the script path. Run with Rscript.", call. = FALSE)
@@ -63,7 +54,6 @@ for (path in c(synthetic_csv, maurano_summary_csv, maurano_bedtools_csv)) {
   if (!file.exists(path)) stop("Input file not found: ", path, call. = FALSE)
 }
 
-# Shared publication palette.
 COL_BEDTOOLS <- "#46515C"
 COL_HAMMOCK <- "#007C83"
 COL_COMPARE <- "#D28B35"
@@ -76,11 +66,11 @@ theme_paper <- function(base_size = 10.5) {
   theme_classic(base_size = base_size, base_family = base_family) +
     theme(
       plot.title = element_text(
-        face = "bold", size = rel(1.08), color = COL_TEXT,
-        margin = margin(b = 4)
+        face = "bold", size = rel(1.06), color = COL_TEXT,
+        lineheight = 1.05, margin = margin(b = 4)
       ),
       plot.subtitle = element_text(
-        size = rel(0.88), color = "#56616C", lineheight = 1.05,
+        size = rel(0.84), color = "#56616C", lineheight = 1.08,
         margin = margin(b = 8)
       ),
       axis.title = element_text(color = COL_TEXT),
@@ -89,32 +79,15 @@ theme_paper <- function(base_size = 10.5) {
       axis.ticks = element_line(color = "#6B747D", linewidth = 0.35),
       panel.grid.major.y = element_line(color = COL_GRID, linewidth = 0.35),
       panel.grid.minor = element_blank(),
-      legend.position = "top",
-      legend.justification = "left",
-      legend.box.just = "left",
       legend.title = element_blank(),
-      legend.text = element_text(size = rel(0.82), color = COL_TEXT),
-      legend.key.width = grid::unit(1.2, "lines"),
+      legend.text = element_text(size = rel(0.8), color = COL_TEXT),
+      legend.key.width = grid::unit(1.1, "lines"),
       plot.margin = margin(6, 8, 6, 6)
     )
 }
 
-# -----------------------------------------------------------------------------
-# Panel A: synthetic scaling
-# -----------------------------------------------------------------------------
+# Panel A: synthetic scaling ----------------------------------------------------
 synthetic_raw <- read_csv(synthetic_csv, show_col_types = FALSE)
-
-required_synthetic <- c(
-  "num_files", "num_threads", "precision", "sub_b", "tool",
-  "mean_wall_time", "std_wall_time", "mean_comparison_time"
-)
-missing_synthetic <- setdiff(required_synthetic, names(synthetic_raw))
-if (length(missing_synthetic) > 0) {
-  stop(
-    "Synthetic input lacks columns: ",
-    paste(missing_synthetic, collapse = ", "), call. = FALSE
-  )
-}
 
 synthetic_bt <- synthetic_raw %>%
   filter(tool == "bedtools") %>%
@@ -265,12 +238,13 @@ panel_a <- ggplot(
   theme(
     axis.text.x.top = element_text(size = 7.7, color = "#59636D"),
     axis.title.x.top = element_text(size = 8.5, color = "#59636D"),
+    legend.position = "top",
+    legend.justification = "left",
+    legend.box.just = "left",
     legend.margin = margin(b = 2)
   )
 
-# -----------------------------------------------------------------------------
-# Panel B: Maurano real-data benchmark
-# -----------------------------------------------------------------------------
+# Panel B: Maurano real-data benchmark ----------------------------------------
 maurano_summary <- read_csv(maurano_summary_csv, show_col_types = FALSE)
 maurano_bedtools <- read_csv(maurano_bedtools_csv, show_col_types = FALSE)
 
@@ -279,7 +253,8 @@ missing_summary <- setdiff(required_summary, names(maurano_summary))
 if (length(missing_summary) > 0) {
   stop(
     "Maurano summary lacks columns: ",
-    paste(missing_summary, collapse = ", "), call. = FALSE
+    paste(missing_summary, collapse = ", "),
+    call. = FALSE
   )
 }
 if (!all(c("rep", "run_id", "wall_time") %in% names(maurano_bedtools))) {
@@ -300,6 +275,7 @@ if (nrow(mixed_stride) != 3) {
 bars <- bind_rows(
   tibble(
     condition = "BEDTools",
+    legend_group = "BEDTools",
     tool = "BEDTools",
     wall = bt_wall,
     mae = NA_real_
@@ -310,6 +286,10 @@ bars <- bind_rows(
       subB == 0.1 ~ "hammock\nsubB = 0.1",
       subB == 0.01 ~ "hammock\nsubB = 0.01"
     ),
+    legend_group = case_when(
+      subB == 1 ~ "hammock: no subsampling",
+      TRUE ~ "hammock: subsampled"
+    ),
     tool = "hammock",
     wall = wall_median,
     mae
@@ -317,6 +297,10 @@ bars <- bind_rows(
 ) %>%
   mutate(
     condition = factor(condition, levels = condition),
+    legend_group = factor(
+      legend_group,
+      levels = c("BEDTools", "hammock: no subsampling", "hammock: subsampled")
+    ),
     speedup = bt_wall / wall,
     label = if_else(
       tool == "BEDTools",
@@ -330,7 +314,7 @@ bars <- bind_rows(
     )
   )
 
-panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = condition)) +
+panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = legend_group)) +
   geom_col(width = 0.68) +
   geom_text(
     aes(label = label),
@@ -341,32 +325,36 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = condition)) +
   ) +
   scale_fill_manual(values = c(
     "BEDTools" = COL_BEDTOOLS,
-    "hammock\nno subsampling" = COL_HAMMOCK,
-    "hammock\nsubB = 0.1" = COL_HAMMOCK_LIGHT,
-    "hammock\nsubB = 0.01" = COL_COMPARE
+    "hammock: no subsampling" = COL_HAMMOCK,
+    "hammock: subsampled" = COL_HAMMOCK_LIGHT
   )) +
   scale_y_continuous(
     labels = label_number(accuracy = 1),
     expand = expansion(mult = c(0, 0.27))
   ) +
   labs(
-    title = "B  Real-data speed can be increased with controlled approximation",
-    subtitle = paste0(
-      "Maurano fetal-tissue DHS; 20 BED files; 190 unique pairs; ",
-      "interval mode; p = 18; 8 threads"
-    ),
+    title = "B  Controlled approximation further reduces runtime",
+    subtitle = "Maurano fetal-tissue DHS\n20 BED files; 190 pairs; interval mode; p = 18; 8 threads",
     x = NULL,
-    y = "Wall time (seconds)"
+    y = "Wall time (seconds)",
+    fill = NULL
   ) +
+  guides(fill = guide_legend(nrow = 1, byrow = TRUE)) +
   theme_paper() +
   theme(
     axis.text.x = element_text(size = 8.8, lineheight = 0.95),
-    legend.position = "none"
+    legend.position = "top",
+    legend.justification = "center",
+    legend.box.just = "center",
+    legend.direction = "horizontal",
+    legend.margin = margin(b = 3),
+    plot.title = element_text(size = 10.5, lineheight = 1.05),
+    plot.subtitle = element_text(size = 8.6, lineheight = 1.08)
   )
 
-# Assemble and save with the same CairoPNG pattern used by docs/scripts/.
+# Assemble without collecting or globally overriding legends.
 figure <- panel_a + panel_b +
-  plot_layout(widths = c(1.35, 1), guides = "collect") +
+  plot_layout(widths = c(1.35, 1)) +
   plot_annotation(
     title = "Hammock expands feasible all-pairs comparison as interval collections grow",
     subtitle = paste0(
@@ -384,13 +372,12 @@ figure <- panel_a + panel_b +
       ),
       plot.margin = margin(8, 8, 8, 8)
     )
-  ) &
-  theme(legend.position = "top")
+  )
 
 CairoPNG(
   filename = out_png,
   width = 14.2,
-  height = 6.6,
+  height = 6.8,
   units = "in",
   res = 300,
   bg = "white"
