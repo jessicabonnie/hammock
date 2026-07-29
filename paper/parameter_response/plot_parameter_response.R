@@ -8,8 +8,7 @@
 #
 # Both panels are read from docs/data/mode_d_summary.csv at HyperLogLog
 # precision p = 24, similarity column `jaccard_similarity` (minimizer only),
-# reference `bedtools`. Every printed number is computed from that file; none
-# are transcribed from experiment notes.
+# reference `bedtools`. Reported values are computed from that file.
 #
 # Usage:
 #   Rscript paper/parameter_response/plot_parameter_response.R [output.png]
@@ -44,7 +43,6 @@ script_dir <- dirname(normalizePath(script_path, mustWork = TRUE))
 repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 
 summary_csv <- file.path(repo_root, "docs", "data", "mode_d_summary.csv")
-
 argv <- commandArgs(trailingOnly = TRUE)
 out_png <- if (length(argv) >= 1) {
   normalizePath(argv[1], mustWork = FALSE)
@@ -52,9 +50,7 @@ out_png <- if (length(argv) >= 1) {
   file.path(repo_root, "paper", "figures", "parameter_response.png")
 }
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
-if (!file.exists(summary_csv)) {
-  stop("Input file not found: ", summary_csv, call. = FALSE)
-}
+if (!file.exists(summary_csv)) stop("Input file not found: ", summary_csv, call. = FALSE)
 
 PRECISION <- 24
 SIM_COLUMN <- "jaccard_similarity"
@@ -67,13 +63,11 @@ COL_GRID <- "#D9DEE3"
 COL_MARK <- "#20262D"
 base_family <- "sans"
 
-# k is ordinal, so the series ramp is one hue, light to dark (steps 300-700 of
-# the reference blue ramp). The lightest step clears the 2:1 ordinal floor on a
-# white surface. Distinct point shapes carry the same ordering, so identity
-# never rests on colour alone -- which matters here because the three largest
-# k values trace nearly identical curves in A and exactly identical ones in B.
+# These values are intentionally centralized so a future paper-wide palette can
+# replace them without touching the plotting logic.
 K_COLORS <- c("#86B6EF", "#5598E7", "#2A78D6", "#184F95", "#0D366B")
 K_SHAPES <- c(21, 24, 22, 23, 25)
+K_LINETYPES <- c("solid", "22", "42", "13", "longdash")
 
 theme_paper <- function(base_size = 10.5) {
   theme_classic(base_size = base_size, base_family = base_family) +
@@ -91,7 +85,7 @@ theme_paper <- function(base_size = 10.5) {
       panel.grid.minor = element_blank(),
       legend.title = element_text(size = rel(0.9), color = COL_TEXT),
       legend.text = element_text(size = rel(0.85), color = COL_TEXT),
-      legend.key.width = grid::unit(1.6, "lines"),
+      legend.key.width = grid::unit(1.7, "lines"),
       plot.margin = margin(10, 12, 10, 10)
     )
 }
@@ -118,45 +112,38 @@ if (nrow(sweep) == 0) {
   stop("No rows for p = ", PRECISION, ", column ", SIM_COLUMN, call. = FALSE)
 }
 
-# k = 5 is present only at w = 5 and w = 20 (and its w = 5 correlation is
-# undefined), so it is not a sweep and cannot be drawn as a response curve.
+# k = 5 has too few usable windows to form a response curve.
 dropped <- sweep %>% filter(k < 8)
 sweep <- sweep %>% filter(k >= 8)
 if (nrow(dropped) > 0) {
   message(sprintf(
-    "Excluded %d row(s) with k < 8 (too few window settings to form a curve): %s",
+    "Excluded %d row(s) with k < 8: %s",
     nrow(dropped),
     paste(sprintf("k=%d,w=%d", dropped$k, dropped$w), collapse = "; ")
   ))
 }
 
-# Shared ordered-categorical window axis: identical positions in both panels.
 w_levels <- sort(unique(sweep$w))
 k_levels <- sort(unique(sweep$k))
 if (length(k_levels) > length(K_COLORS)) {
-  stop("More k values than palette steps; extend K_COLORS/K_SHAPES.", call. = FALSE)
+  stop("More k values than palette steps; extend K_COLORS/K_SHAPES/K_LINETYPES.", call. = FALSE)
 }
+
 k_colors <- setNames(K_COLORS[seq_along(k_levels)], as.character(k_levels))
 k_shapes <- setNames(K_SHAPES[seq_along(k_levels)], as.character(k_levels))
+k_linetypes <- setNames(K_LINETYPES[seq_along(k_levels)], as.character(k_levels))
 
-# k = 15, 20 and 25 give byte-identical ARI at every window, and near-identical
-# Pearson r, so undodged curves would hide two of the three series entirely. A
-# small symmetric offset -- the same one in both panels, so the panels stay
-# registered -- separates them without changing any plotted value.
-DODGE <- 0.08
 sweep <- sweep %>%
   mutate(
-    w_index = match(w, w_levels),
-    k_index = match(k, k_levels),
-    x = w_index + (k_index - (length(k_levels) + 1) / 2) * DODGE,
+    x = match(w, w_levels),
     k_label = factor(as.character(k), levels = as.character(k_levels))
   )
 
 guide_x <- match(FIG6_W, w_levels)
 if (is.na(guide_x)) stop("w = ", FIG6_W, " is absent from the sweep.", call. = FALSE)
 
-best_numeric <- sweep %>% filter(!is.na(pearson)) %>% slice_max(pearson, n = 1)
-best_mae <- sweep %>% filter(!is.na(mae)) %>% slice_min(mae, n = 1)
+best_numeric <- sweep %>% filter(!is.na(pearson)) %>% slice_max(pearson, n = 1, with_ties = FALSE)
+best_mae <- sweep %>% filter(!is.na(mae)) %>% slice_min(mae, n = 1, with_ties = FALSE)
 fig6 <- sweep %>% filter(k == FIG6_K, w == FIG6_W)
 if (nrow(fig6) != 1) {
   stop("Expected exactly one k = ", FIG6_K, ", w = ", FIG6_W, " row.", call. = FALSE)
@@ -176,13 +163,21 @@ message(sprintf(
 ))
 
 annot_numeric <- sprintf(
-  "Best numerical agreement (k = %d, w = %d)\nr = %.4f;  ARI = %.3f",
+  "Best numerical agreement\nk = %d, w = %d\nr = %.4f; ARI = %.3f",
   best_numeric$k, best_numeric$w, best_numeric$pearson, best_numeric$ari
 )
 annot_fig6 <- sprintf(
-  "Figure 6 setting (k = %d, w = %d)\nr = %.4f;  ARI = %.3f",
+  "Figure 6 setting\nk = %d, w = %d\nr = %.4f; ARI = %.3f",
   fig6$k, fig6$w, fig6$pearson, fig6$ari
 )
+
+high_k <- sweep %>% filter(k >= 15, !is.na(ari))
+high_k_ari <- unique(round(high_k$ari, 12))
+high_k_label <- if (length(high_k_ari) == 1) {
+  sprintf("k = 15, 20, and 25 overlap\nARI = %.3f", high_k_ari)
+} else {
+  NULL
+}
 
 series_layers <- function(df, yvar) {
   list(
@@ -193,17 +188,21 @@ series_layers <- function(df, yvar) {
     ),
     geom_line(
       data = df,
-      aes(x = x, y = .data[[yvar]], color = k_label, group = k_label),
+      aes(
+        x = x, y = .data[[yvar]], color = k_label,
+        linetype = k_label, group = k_label
+      ),
       linewidth = 0.85, na.rm = TRUE
     ),
     geom_point(
       data = df,
       aes(x = x, y = .data[[yvar]], fill = k_label, shape = k_label),
-      color = "white", stroke = 0.3, size = 2.3, na.rm = TRUE
+      color = "white", stroke = 0.3, size = 2.4, na.rm = TRUE
     ),
     scale_color_manual(values = k_colors, name = "k-mer size"),
     scale_fill_manual(values = k_colors, name = "k-mer size"),
     scale_shape_manual(values = k_shapes, name = "k-mer size"),
+    scale_linetype_manual(values = k_linetypes, name = "k-mer size"),
     scale_x_continuous(
       breaks = seq_along(w_levels),
       labels = w_levels,
@@ -217,19 +216,19 @@ panel_a <- ggplot() +
   series_layers(sweep, "pearson") +
   geom_point(
     data = best_numeric, aes(x = x, y = pearson),
-    shape = 21, size = 4.6, stroke = 0.9, fill = NA, color = COL_MARK
+    shape = 21, size = 4.8, stroke = 1.0, fill = NA, color = COL_MARK
   ) +
   annotate(
     "segment",
-    x = best_numeric$x - 0.05, xend = best_numeric$x - 0.28,
+    x = best_numeric$x - 0.05, xend = best_numeric$x - 0.30,
     y = best_numeric$pearson + 0.005, yend = best_numeric$pearson + 0.033,
     color = COL_MARK, linewidth = 0.35
   ) +
   annotate(
     "text",
-    x = best_numeric$x - 0.34, y = best_numeric$pearson + 0.038,
+    x = best_numeric$x - 0.36, y = best_numeric$pearson + 0.038,
     label = annot_numeric, hjust = 1, vjust = 0,
-    size = 2.9, lineheight = 1.15, color = COL_TEXT, family = base_family
+    size = 2.85, lineheight = 1.12, color = COL_TEXT, family = base_family
   ) +
   scale_y_continuous(
     labels = label_number(accuracy = 0.1),
@@ -252,16 +251,22 @@ panel_b <- ggplot() +
   ) +
   annotate(
     "segment",
-    x = fig6$x + 0.13, xend = fig6$x + 0.36,
+    x = fig6$x + 0.10, xend = fig6$x + 0.34,
     y = fig6$ari + 0.02, yend = fig6$ari + 0.055,
     color = COL_MARK, linewidth = 0.35
   ) +
   annotate(
     "text",
-    x = fig6$x + 0.42, y = fig6$ari + 0.058, label = annot_fig6,
-    hjust = 0, vjust = 0,
-    size = 2.9, lineheight = 1.15, color = COL_TEXT, family = base_family
+    x = fig6$x + 0.40, y = fig6$ari + 0.058,
+    label = annot_fig6, hjust = 0, vjust = 0,
+    size = 2.85, lineheight = 1.12, color = COL_TEXT, family = base_family
   ) +
+  {if (!is.null(high_k_label)) annotate(
+    "text",
+    x = length(w_levels) - 0.15, y = high_k_ari + 0.045,
+    label = high_k_label, hjust = 1, vjust = 0,
+    size = 2.75, lineheight = 1.1, color = "#46515C", family = base_family
+  )} +
   scale_y_continuous(
     labels = label_number(accuracy = 0.1),
     limits = c(-0.09, 1.12),
@@ -290,7 +295,8 @@ figure <- panel_a + panel_b +
   guides(
     color = guide_legend(nrow = 1, order = 1),
     fill = guide_legend(nrow = 1, order = 1),
-    shape = guide_legend(nrow = 1, order = 1)
+    shape = guide_legend(nrow = 1, order = 1),
+    linetype = guide_legend(nrow = 1, order = 1)
   ) &
   theme(
     legend.position = "bottom",
