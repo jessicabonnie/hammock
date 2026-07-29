@@ -25,6 +25,12 @@ The introduction establishes two barriers to systematic comparison of genomic in
 
 ### 2.2 Interval sketching expands feasible all-pairs BED comparison
 
+![Figure 3](figures/pairwise_scaling.png)
+
+**Figure 3. Hammock expands feasible all-pairs comparison as interval collections grow.** (A) Wall time for hammock and BEDTools across synthetic collections of increasing size, with 10,000 intervals per BED file. Hammock constructs one reusable sketch per file and separates sketch-construction time from fixed-size sketch comparison, whereas the BEDTools workflow repeatedly performs exact comparisons over the underlying interval files. The number of unique file pairs grows as \(N(N-1)/2\), causing the performance advantage of sketch reuse to increase with collection size. (B) Wall time on 20 Maurano fetal-tissue DNase hypersensitivity BED files (190 unique pairs). Hammock is faster than the parallelized BEDTools workflow without subsampling, while mixed-stride subsampling at `subB = 0.1` and `subB = 0.01` further reduces runtime with little change relative to hammock's own unsubsampled similarity estimates. Together, the synthetic and real-data benchmarks show that hammock improves the feasibility of exhaustive pairwise analysis through both reusable sketches and optional approximation within sketch construction.
+
+**Figure 3 composition.** Panel A should use `docs/figures/synthetic_nscaling.png` (data: `docs/data/cpp_vs_bedtools_t16_20260512_160412.csv`; script: `docs/scripts/synthetic_nscaling.R`). Before final assembly, replace the current \(N^2\) pair-count labels with the number of unique unordered pairs, \(N(N-1)/2\). Panel B should use `docs/figures/maurano_speed_bars.png` (data: `docs/data/maurano_subB_summary.csv` and `docs/data/maurano_bedtools.csv`; script: `docs/scripts/maurano_speed.R`). The two panels should use harmonized typography, panel labels, tool colors, and wall-time units. The final composite should be written to `paper/figures/pairwise_scaling.png`.
+
 ### 2.3 Interval sketches preserve exact-overlap similarity structure
 
 ### 2.4 Sequence sketches enable comparison across genome references
