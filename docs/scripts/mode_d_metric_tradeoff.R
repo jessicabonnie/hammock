@@ -1,6 +1,9 @@
 #!/usr/bin/env Rscript
-# Paper Fig 6 — sequence mode: numerical agreement (Pearson r vs bedtools)
-# against biological-clustering recovery (ARI vs tissue labels), per config.
+# Supplementary to paper Fig 7 — sequence mode: numerical agreement (Pearson r
+# vs bedtools) against biological-clustering recovery (ARI vs tissue labels),
+# per config. This is the compact Pareto-style view of the same sweep that
+# paper/parameter_response/plot_parameter_response.R shows as paired
+# parameter-response curves; the manuscript figure is the latter.
 #
 # The headline point: the best-numerical config and the best-clustering config
 # are NOT the same cell. One point per sequence-mode (k, w) config at HLL
