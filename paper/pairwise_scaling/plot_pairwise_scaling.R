@@ -57,7 +57,6 @@ for (path in c(synthetic_csv, maurano_summary_csv, maurano_bedtools_csv)) {
 COL_BEDTOOLS <- "#46515C"
 COL_HAMMOCK <- "#007C83"
 COL_COMPARE <- "#D28B35"
-COL_HAMMOCK_LIGHT <- "#6BB7B5"
 COL_GRID <- "#D9DEE3"
 COL_TEXT <- "#20262D"
 base_family <- "sans"
@@ -67,12 +66,9 @@ theme_paper <- function(base_size = 10.5) {
     theme(
       plot.title = element_text(
         face = "bold", size = rel(1.06), color = COL_TEXT,
-        lineheight = 1.05, margin = margin(b = 4)
+        lineheight = 1.05, margin = margin(b = 6)
       ),
-      plot.subtitle = element_text(
-        size = rel(0.84), color = "#56616C", lineheight = 1.08,
-        margin = margin(b = 8)
-      ),
+      plot.subtitle = element_blank(),
       axis.title = element_text(color = COL_TEXT),
       axis.text = element_text(color = COL_TEXT),
       axis.line = element_line(color = "#6B747D", linewidth = 0.35),
@@ -222,10 +218,6 @@ panel_a <- ggplot(
   ) +
   labs(
     title = "A  Sketch reuse increases the advantage as collections grow",
-    subtitle = sprintf(
-      "Synthetic BED collections; 10,000 intervals per file; p = %d; %d threads; three runs per configuration",
-      synthetic$precision[1], synthetic$threads[1]
-    ),
     x = "Number of BED files (N)",
     y = "Wall time (seconds, log scale)"
   ) +
@@ -275,7 +267,6 @@ if (nrow(mixed_stride) != 3) {
 bars <- bind_rows(
   tibble(
     condition = "BEDTools",
-    legend_group = "BEDTools",
     tool = "BEDTools",
     wall = bt_wall,
     mae = NA_real_
@@ -286,10 +277,6 @@ bars <- bind_rows(
       subB == 0.1 ~ "hammock\nsubB = 0.1",
       subB == 0.01 ~ "hammock\nsubB = 0.01"
     ),
-    legend_group = case_when(
-      subB == 1 ~ "hammock: no subsampling",
-      TRUE ~ "hammock: subsampled"
-    ),
     tool = "hammock",
     wall = wall_median,
     mae
@@ -297,10 +284,7 @@ bars <- bind_rows(
 ) %>%
   mutate(
     condition = factor(condition, levels = condition),
-    legend_group = factor(
-      legend_group,
-      levels = c("BEDTools", "hammock: no subsampling", "hammock: subsampled")
-    ),
+    tool = factor(tool, levels = c("BEDTools", "hammock")),
     speedup = bt_wall / wall,
     label = if_else(
       tool == "BEDTools",
@@ -314,7 +298,7 @@ bars <- bind_rows(
     )
   )
 
-panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = legend_group)) +
+panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
   geom_col(width = 0.68) +
   geom_text(
     aes(label = label),
@@ -325,34 +309,24 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = legend_group)) +
   ) +
   scale_fill_manual(values = c(
     "BEDTools" = COL_BEDTOOLS,
-    "hammock: no subsampling" = COL_HAMMOCK,
-    "hammock: subsampled" = COL_HAMMOCK_LIGHT
+    "hammock" = COL_HAMMOCK
   )) +
   scale_y_continuous(
     labels = label_number(accuracy = 1),
     expand = expansion(mult = c(0, 0.27))
   ) +
   labs(
-    title = "B  Controlled approximation further reduces runtime",
-    subtitle = "Maurano fetal-tissue DHS\n20 BED files; 190 pairs; interval mode; p = 18; 8 threads",
+    title = "B  Subsampling further reduces runtime",
     x = NULL,
-    y = "Wall time (seconds)",
-    fill = NULL
+    y = "Wall time (seconds)"
   ) +
-  guides(fill = guide_legend(nrow = 1, byrow = TRUE)) +
   theme_paper() +
   theme(
     axis.text.x = element_text(size = 8.8, lineheight = 0.95),
-    legend.position = "top",
-    legend.justification = "center",
-    legend.box.just = "center",
-    legend.direction = "horizontal",
-    legend.margin = margin(b = 3),
-    plot.title = element_text(size = 10.5, lineheight = 1.05),
-    plot.subtitle = element_text(size = 8.6, lineheight = 1.08)
+    legend.position = "none",
+    plot.title = element_text(size = 10.5, lineheight = 1.05)
   )
 
-# Assemble without collecting or globally overriding legends.
 figure <- panel_a + panel_b +
   plot_layout(widths = c(1.35, 1)) +
   plot_annotation(
@@ -377,7 +351,7 @@ figure <- panel_a + panel_b +
 CairoPNG(
   filename = out_png,
   width = 14.2,
-  height = 6.8,
+  height = 6.5,
   units = "in",
   res = 300,
   bg = "white"
