@@ -2,7 +2,7 @@
 
 # Figure 3 — Pairwise scaling of hammock versus BEDTools
 #
-# Creates a publication-ready two-panel figure:
+# Creates a publication-ready two-panel PNG:
 #   A. Synthetic N-scaling with 10,000 intervals per BED file.
 #   B. Maurano fetal-tissue DHS benchmark with optional mixed-stride
 #      subsampling during hammock sketch construction.
@@ -12,18 +12,15 @@
 #   docs/data/maurano_subB_summary.csv
 #   docs/data/maurano_bedtools.csv
 #
-# Outputs:
+# Output:
 #   paper/figures/pairwise_scaling.png
-#   paper/figures/pairwise_scaling.pdf
 #
 # Usage from any working directory:
 #   Rscript paper/pairwise_scaling/plot_pairwise_scaling.R
 #
-# Optional first argument: alternate PNG output path. The PDF is written beside it.
+# Optional first argument: alternate PNG output path.
 
-required_packages <- c(
-  "dplyr", "readr", "ggplot2", "scales", "patchwork", "Cairo"
-)
+required_packages <- c("dplyr", "readr", "ggplot2", "scales", "patchwork")
 missing_packages <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
 ]
@@ -41,21 +38,14 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(scales)
   library(patchwork)
-  library(Cairo)
 })
 
-# -----------------------------------------------------------------------------
-# Resolve repository-relative paths
-# -----------------------------------------------------------------------------
-
-script_path <- sub(
-  "^--file=", "",
-  grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)[1]
-)
-if (is.na(script_path) || !nzchar(script_path)) {
+# Resolve repository-relative paths.
+script_arg <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
+if (length(script_arg) != 1) {
   stop("Could not determine the script path. Run with Rscript.", call. = FALSE)
 }
-
+script_path <- sub("^--file=", "", script_arg)
 script_dir <- dirname(normalizePath(script_path, mustWork = TRUE))
 repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 
@@ -75,26 +65,19 @@ out_png <- if (length(argv) >= 1) {
 } else {
   file.path(repo_root, "paper", "figures", "pairwise_scaling.png")
 }
-out_pdf <- sub("\\.[Pp][Nn][Gg]$", ".pdf", out_png)
-if (identical(out_pdf, out_png)) out_pdf <- paste0(out_png, ".pdf")
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 
 for (path in c(synthetic_csv, maurano_summary_csv, maurano_bedtools_csv)) {
   if (!file.exists(path)) stop("Input file not found: ", path, call. = FALSE)
 }
 
-# -----------------------------------------------------------------------------
-# Shared visual system
-# -----------------------------------------------------------------------------
-
-# Restrained, colorblind-friendly palette. BEDTools is neutral; hammock is teal.
+# Shared visual system: restrained and colorblind-friendly.
 COL_BEDTOOLS <- "#46515C"
 COL_HAMMOCK <- "#007C83"
 COL_COMPARE <- "#D28B35"
 COL_HAMMOCK_LIGHT <- "#6BB7B5"
 COL_GRID <- "#D9DEE3"
 COL_TEXT <- "#20262D"
-
 base_family <- "sans"
 
 theme_paper <- function(base_size = 10.5) {
@@ -108,7 +91,7 @@ theme_paper <- function(base_size = 10.5) {
         size = rel(0.88), color = "#56616C", lineheight = 1.05,
         margin = margin(b = 8)
       ),
-      axis.title = element_text(face = "plain", color = COL_TEXT),
+      axis.title = element_text(color = COL_TEXT),
       axis.text = element_text(color = COL_TEXT),
       axis.line = element_line(color = "#6B747D", linewidth = 0.35),
       axis.ticks = element_line(color = "#6B747D", linewidth = 0.35),
@@ -124,20 +107,14 @@ theme_paper <- function(base_size = 10.5) {
     )
 }
 
-format_seconds <- function(x) {
-  label_number(accuracy = 0.1, big.mark = ",")(x)
-}
-
 # -----------------------------------------------------------------------------
 # Panel A: synthetic scaling
 # -----------------------------------------------------------------------------
-
 synthetic_raw <- read_csv(synthetic_csv, show_col_types = FALSE)
 
 required_synthetic <- c(
   "num_files", "num_threads", "precision", "sub_b", "tool",
-  "mean_wall_time", "std_wall_time", "mean_sketch_creation_time",
-  "mean_comparison_time"
+  "mean_wall_time", "std_wall_time", "mean_comparison_time"
 )
 missing_synthetic <- setdiff(required_synthetic, names(synthetic_raw))
 if (length(missing_synthetic) > 0) {
@@ -147,7 +124,6 @@ if (length(missing_synthetic) > 0) {
   )
 }
 
-# Use the unsubsampled hammock implementation for the clean scaling comparison.
 synthetic_bt <- synthetic_raw %>%
   filter(tool == "bedtools") %>%
   transmute(
@@ -165,7 +141,6 @@ synthetic_hm <- synthetic_raw %>%
     num_files,
     wall_time = mean_wall_time,
     wall_sd = std_wall_time,
-    sketch_time = mean_sketch_creation_time,
     comparison_time = mean_comparison_time,
     threads = num_threads,
     precision
@@ -189,30 +164,22 @@ if (nrow(synthetic) == 0) {
 
 synthetic_long <- bind_rows(
   synthetic %>% transmute(
-    num_files,
-    value = wall_time_bedtools,
-    error = wall_sd_bedtools,
+    num_files, value = wall_time_bedtools, error = wall_sd_bedtools,
     series = "BEDTools total"
   ),
   synthetic %>% transmute(
-    num_files,
-    value = wall_time_hammock,
-    error = wall_sd_hammock,
+    num_files, value = wall_time_hammock, error = wall_sd_hammock,
     series = "hammock total"
   ),
   synthetic %>% transmute(
-    num_files,
-    value = pmax(comparison_time, 1e-4),
-    error = NA_real_,
+    num_files, value = pmax(comparison_time, 1e-4), error = NA_real_,
     series = "hammock sketch comparison"
   )
 ) %>%
   mutate(
     series = factor(
       series,
-      levels = c(
-        "BEDTools total", "hammock total", "hammock sketch comparison"
-      )
+      levels = c("BEDTools total", "hammock total", "hammock sketch comparison")
     )
   )
 
@@ -223,9 +190,7 @@ pair_labels <- format(
   big.mark = ",",
   trim = TRUE
 )
-
 largest <- synthetic %>% slice_max(num_files, n = 1, with_ties = FALSE)
-speedup_label <- sprintf("%.1f× faster", largest$speedup)
 
 panel_a <- ggplot(
   synthetic_long,
@@ -255,34 +220,28 @@ panel_a <- ggplot(
     "label",
     x = largest$num_files / 1.18,
     y = sqrt(largest$wall_time_hammock * largest$wall_time_bedtools),
-    label = speedup_label,
-    size = 3.0,
+    label = sprintf("%.1f× faster", largest$speedup),
+    size = 3,
     label.size = 0,
-    fill = scales::alpha("white", 0.9),
+    fill = alpha("white", 0.9),
     color = COL_TEXT,
     hjust = 1
   ) +
-  scale_color_manual(
-    values = c(
-      "BEDTools total" = COL_BEDTOOLS,
-      "hammock total" = COL_HAMMOCK,
-      "hammock sketch comparison" = COL_COMPARE
-    )
-  ) +
-  scale_linetype_manual(
-    values = c(
-      "BEDTools total" = "solid",
-      "hammock total" = "solid",
-      "hammock sketch comparison" = "22"
-    )
-  ) +
-  scale_shape_manual(
-    values = c(
-      "BEDTools total" = 16,
-      "hammock total" = 17,
-      "hammock sketch comparison" = 15
-    )
-  ) +
+  scale_color_manual(values = c(
+    "BEDTools total" = COL_BEDTOOLS,
+    "hammock total" = COL_HAMMOCK,
+    "hammock sketch comparison" = COL_COMPARE
+  )) +
+  scale_linetype_manual(values = c(
+    "BEDTools total" = "solid",
+    "hammock total" = "solid",
+    "hammock sketch comparison" = "22"
+  )) +
+  scale_shape_manual(values = c(
+    "BEDTools total" = 16,
+    "hammock total" = 17,
+    "hammock sketch comparison" = 15
+  )) +
   scale_x_continuous(
     trans = log2_trans(),
     breaks = n_breaks,
@@ -318,9 +277,8 @@ panel_a <- ggplot(
   )
 
 # -----------------------------------------------------------------------------
-# Panel B: real-data Maurano benchmark
+# Panel B: Maurano real-data benchmark
 # -----------------------------------------------------------------------------
-
 maurano_summary <- read_csv(maurano_summary_csv, show_col_types = FALSE)
 maurano_bedtools <- read_csv(maurano_bedtools_csv, show_col_types = FALSE)
 
@@ -359,8 +317,7 @@ bars <- bind_rows(
     condition = case_when(
       subB == 1 ~ "hammock\nno subsampling",
       subB == 0.1 ~ "hammock\nsubB = 0.1",
-      subB == 0.01 ~ "hammock\nsubB = 0.01",
-      TRUE ~ as.character(subB)
+      subB == 0.01 ~ "hammock\nsubB = 0.01"
     ),
     tool = "hammock",
     wall = wall_median,
@@ -370,73 +327,55 @@ bars <- bind_rows(
   mutate(
     condition = factor(condition, levels = condition),
     speedup = bt_wall / wall,
-    fill_group = case_when(
-      tool == "BEDTools" ~ "BEDTools",
-      grepl("no subsampling", condition) ~ "hammock: no subsampling",
-      TRUE ~ "hammock: subsampled"
-    ),
-    annotation = case_when(
-      tool == "BEDTools" ~ sprintf("%.1f s", wall),
-      is.na(mae) | mae == 0 ~ sprintf("%.1f s\n%.2f× faster", wall, speedup),
-      TRUE ~ sprintf(
-        "%.1f s\n%.2f× faster\nΔJ = %.1e",
-        wall, speedup, mae
+    label = if_else(
+      tool == "BEDTools",
+      sprintf("%.1f s\nreference", wall),
+      sprintf(
+        "%.1f s\n%.2f× faster\nΔJ = %s",
+        wall,
+        speedup,
+        if_else(mae == 0, "0", formatC(mae, format = "e", digits = 1))
       )
     )
   )
 
-n_files_maurano <- length(unique(c(
-  maurano_bedtools$file_a,
-  maurano_bedtools$file_b
-)))
-n_pairs_maurano <- n_files_maurano * (n_files_maurano - 1) / 2
-
-panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = fill_group)) +
-  geom_col(width = 0.66) +
+panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = condition)) +
+  geom_col(width = 0.68) +
   geom_text(
-    aes(label = annotation),
-    vjust = -0.25,
+    aes(label = label),
+    vjust = -0.28,
     size = 3.05,
     lineheight = 0.95,
     color = COL_TEXT
   ) +
-  scale_fill_manual(
-    values = c(
-      "BEDTools" = COL_BEDTOOLS,
-      "hammock: no subsampling" = COL_HAMMOCK,
-      "hammock: subsampled" = COL_HAMMOCK_LIGHT
-    )
-  ) +
+  scale_fill_manual(values = c(
+    "BEDTools" = COL_BEDTOOLS,
+    "hammock\nno subsampling" = COL_HAMMOCK,
+    "hammock\nsubB = 0.1" = COL_HAMMOCK_LIGHT,
+    "hammock\nsubB = 0.01" = COL_COMPARE
+  )) +
   scale_y_continuous(
-    limits = c(0, max(bars$wall) * 1.42),
-    breaks = pretty_breaks(n = 6),
     labels = label_number(accuracy = 1),
-    expand = expansion(mult = c(0, 0.01))
+    expand = expansion(mult = c(0, 0.27))
   ) +
   labs(
-    title = "B  The same advantage is observed on real DHS data",
-    subtitle = sprintf(
-      "Maurano fetal tissues; %d BED files; %s unique pairs; interval mode; p = 18; 8 threads",
-      n_files_maurano,
-      format(n_pairs_maurano, big.mark = ",", scientific = FALSE)
+    title = "B  Real-data speed can be increased with controlled approximation",
+    subtitle = paste0(
+      "Maurano fetal-tissue DHS; 20 BED files; 190 unique pairs; ",
+      "interval mode; p = 18; 8 threads"
     ),
     x = NULL,
-    y = "Wall time (seconds)",
-    fill = NULL
+    y = "Wall time (seconds)"
   ) +
-  guides(fill = "none") +
   theme_paper() +
   theme(
     axis.text.x = element_text(size = 8.8, lineheight = 0.95),
     legend.position = "none"
   )
 
-# -----------------------------------------------------------------------------
-# Assemble and save
-# -----------------------------------------------------------------------------
-
+# Assemble and save using the standard PNG device; Cairo is not required.
 figure <- panel_a + panel_b +
-  plot_layout(widths = c(1.35, 1.0), guides = "collect") +
+  plot_layout(widths = c(1.35, 1), guides = "collect") +
   plot_annotation(
     title = "Hammock expands feasible all-pairs comparison as interval collections grow",
     subtitle = paste0(
@@ -457,26 +396,15 @@ figure <- panel_a + panel_b +
   ) &
   theme(legend.position = "top")
 
-CairoPNG(
-  filename = out_png,
-  width = 14.2,
-  height = 6.6,
-  units = "in",
-  res = 300,
-  bg = "white"
-)
-print(figure)
-dev.off()
-
 ggsave(
-  filename = out_pdf,
+  filename = out_png,
   plot = figure,
-  device = cairo_pdf,
+  device = "png",
   width = 14.2,
   height = 6.6,
   units = "in",
+  dpi = 300,
   bg = "white"
 )
 
 message("Wrote: ", out_png)
-message("Wrote: ", out_pdf)
