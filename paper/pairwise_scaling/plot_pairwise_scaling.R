@@ -2,25 +2,15 @@
 
 # Figure 3 — Pairwise scaling of hammock versus BEDTools
 #
-# Creates a publication-ready two-panel PNG:
-#   A. Synthetic N-scaling with 10,000 intervals per BED file.
-#   B. Maurano fetal-tissue DHS benchmark with optional mixed-stride
-#      subsampling during hammock sketch construction.
+# Creates a publication-ready two-panel PNG without requiring X11 or Cairo.
 #
-# Inputs:
-#   docs/data/cpp_vs_bedtools_t16_20260512_160412.csv
-#   docs/data/maurano_subB_summary.csv
-#   docs/data/maurano_bedtools.csv
-#
-# Output:
-#   paper/figures/pairwise_scaling.png
-#
-# Usage from any working directory:
+# Usage:
 #   Rscript paper/pairwise_scaling/plot_pairwise_scaling.R
-#
-# Optional first argument: alternate PNG output path.
+#   Rscript paper/pairwise_scaling/plot_pairwise_scaling.R path/to/output.png
 
-required_packages <- c("dplyr", "readr", "ggplot2", "scales", "patchwork")
+required_packages <- c(
+  "dplyr", "readr", "ggplot2", "scales", "patchwork", "ragg"
+)
 missing_packages <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
 ]
@@ -71,7 +61,7 @@ for (path in c(synthetic_csv, maurano_summary_csv, maurano_bedtools_csv)) {
   if (!file.exists(path)) stop("Input file not found: ", path, call. = FALSE)
 }
 
-# Shared visual system: restrained and colorblind-friendly.
+# Shared publication palette.
 COL_BEDTOOLS <- "#46515C"
 COL_HAMMOCK <- "#007C83"
 COL_COMPARE <- "#D28B35"
@@ -222,7 +212,7 @@ panel_a <- ggplot(
     y = sqrt(largest$wall_time_hammock * largest$wall_time_bedtools),
     label = sprintf("%.1f× faster", largest$speedup),
     size = 3,
-    label.size = 0,
+    linewidth = 0,
     fill = alpha("white", 0.9),
     color = COL_TEXT,
     hjust = 1
@@ -294,7 +284,6 @@ if (!all(c("rep", "run_id", "wall_time") %in% names(maurano_bedtools))) {
   stop("Maurano BEDTools input lacks rep, run_id, or wall_time.", call. = FALSE)
 }
 
-# Each pairwise row repeats the wall time for its run, so deduplicate runs first.
 bt_runs <- maurano_bedtools %>% distinct(rep, run_id, wall_time)
 bt_wall <- median(bt_runs$wall_time, na.rm = TRUE)
 
@@ -373,7 +362,7 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = condition)) +
     legend.position = "none"
   )
 
-# Assemble and save using the standard PNG device; Cairo is not required.
+# Assemble and save through ragg, which is fully headless and does not use X11.
 figure <- panel_a + panel_b +
   plot_layout(widths = c(1.35, 1), guides = "collect") +
   plot_annotation(
@@ -396,15 +385,15 @@ figure <- panel_a + panel_b +
   ) &
   theme(legend.position = "top")
 
-ggsave(
+ragg::agg_png(
   filename = out_png,
-  plot = figure,
-  device = "png",
   width = 14.2,
   height = 6.6,
   units = "in",
-  dpi = 300,
-  bg = "white"
+  res = 300,
+  background = "white"
 )
+print(figure)
+dev.off()
 
 message("Wrote: ", out_png)
