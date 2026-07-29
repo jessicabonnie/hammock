@@ -176,7 +176,7 @@ ari <- adjusted_rand(true_tissue, predicted)
 nmi <- normalized_mi(true_tissue, predicted)
 
 # Match the original experiment figure: one colour per tissue, tissue-coloured
-# leaf labels, and blue rectangles showing the k = number-of-tissues cut.
+# leaf labels, and blue rectangles outlining contiguous organ-level clades.
 tissues <- tissue_by_stem[hc$labels]
 tissue_levels <- unique(tissues)
 tissue_palette <- setNames(hue_pal()(length(tissue_levels)), tissue_levels)
@@ -229,10 +229,7 @@ plot(
   hc,
   hang = -1,
   labels = FALSE,
-  main = sprintf(
-    "Sequence mode k=%d w=%d p=%d (no ends) — ARI = %.3f, NMI = %.3f",
-    K, W, P, ari, nmi
-  ),
+  main = "Sequence sketches recover fetal-tissue organization",
   xlab = "",
   sub = "",
   ylab = "1 − Jaccard",
