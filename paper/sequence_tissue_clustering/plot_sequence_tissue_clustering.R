@@ -75,10 +75,37 @@ strip_ext <- function(x) {
 }
 
 short_label <- function(stem) {
-  # Preserve the original figure labels: tissue prefix plus accession, while
-  # dropping processing metadata after the first period.
-  sub("\\..*$", "", stem)
+  # Leaves are labelled by accession only; tissue identity is carried by the
+  # label colour and the legend.
+  sub("^[^-]*-", "", sub("\\..*$", "", stem))
 }
+
+# Readable legend text for the ENCODE Biosample_term_name values. Anything not
+# listed falls back to a generic cleanup (drop the fetal "f", underscores to
+# spaces) so a new tissue never breaks the figure.
+TISSUE_DISPLAY <- c(
+  fBrain = "Brain",
+  fHeart = "Heart",
+  fIntestine_Sm = "Small intestine",
+  fKidney_renal_cortex_L = "Kidney (renal cortex)",
+  fLung = "Lung",
+  fMuscle_arm = "Muscle (arm)",
+  fMuscle_back = "Muscle (back)",
+  fMuscle_leg = "Muscle (leg)",
+  fSkin_fibro_bicep_R = "Skin fibroblast (bicep)",
+  fStomach = "Stomach"
+)
+
+display_tissue <- function(x) {
+  out <- unname(TISSUE_DISPLAY[x])
+  fallback <- gsub("_", " ", sub("^f(?=[A-Z])", "", x, perl = TRUE))
+  fallback <- paste0(toupper(substr(fallback, 1, 1)), substr(fallback, 2, nchar(fallback)))
+  ifelse(is.na(out), fallback, out)
+}
+
+# Coarse organ grouping used for the cluster boxes: subtypes of the same organ
+# (fMuscle_arm/_back/_leg) are boxed as one group.
+tissue_group <- function(x) sub("_.*$", "", sub("^f(?=[A-Z])", "", x, perl = TRUE))
 
 adjusted_rand <- function(a, b) {
   tab <- table(a, b)
@@ -155,6 +182,36 @@ tissue_levels <- unique(tissues)
 tissue_palette <- setNames(hue_pal()(length(tissue_levels)), tissue_levels)
 label_colors <- tissue_palette[tissues]
 ord <- hc$order
+
+# Boxes mark organ-level clades rather than the k = n_tissues cut. The cut can
+# split a genuine clade (the two fBrain samples land in separate singleton
+# clusters at k = 10) and it separates the muscle subtypes, so each contiguous
+# run of one organ group gets a single box drawn up to that run's MRCA height.
+coph <- as.matrix(cophenetic(hc))
+group_by_leaf <- tissue_group(tissues)
+ordered_stems <- hc$labels[ord]
+ordered_groups <- group_by_leaf[ord]
+group_runs <- split(
+  seq_along(ordered_groups),
+  cumsum(c(1, diff(as.integer(factor(ordered_groups, levels = unique(ordered_groups)))) != 0))
+)
+max_height <- max(hc$height)
+
+box_tops <- vapply(group_runs, function(run) {
+  if (length(run) < 2) return(max_height * 0.05)
+  inside <- ordered_stems[run]
+  mrca <- max(coph[inside, inside])
+  outside <- setdiff(ordered_stems, inside)
+  # A non-monophyletic run would be drawn as a box enclosing foreign leaves.
+  if (length(outside) > 0 && mrca >= min(coph[inside, outside])) {
+    warning(sprintf(
+      "Group '%s' is not monophyletic; its box spans leaves from other groups.",
+      ordered_groups[run[1]]
+    ))
+  }
+  mrca * 1.03
+}, numeric(1))
+
 hc$labels <- short_label(hc$labels)
 
 CairoPNG(
@@ -192,18 +249,27 @@ mtext(
   cex = 0.8
 )
 
-rect.hclust(hc, k = n_tissues, border = "steelblue")
+for (i in seq_along(group_runs)) {
+  run <- group_runs[[i]]
+  rect(
+    xleft = min(run) - 0.45,
+    ybottom = par("usr")[3],
+    xright = max(run) + 0.45,
+    ytop = box_tops[i],
+    border = "steelblue"
+  )
+}
 
 legend(
   x = par("usr")[2] + diff(par("usr")[1:2]) * 0.02,
   y = par("usr")[4],
-  legend = names(tissue_palette),
+  legend = display_tissue(names(tissue_palette)),
   fill = tissue_palette,
   border = NA,
   bty = "n",
   cex = 0.75,
   xpd = NA,
-  title = "tissue",
+  title = "Fetal tissue",
   title.adj = 0
 )
 
