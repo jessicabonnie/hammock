@@ -9,7 +9,7 @@
 #
 # Default analysis:
 #   similarity = jaccard_similarity (minimizer-only / no ends)
-#   k = 10, w = 30, p = 12
+#   k = 10, w = 30, p = 24
 #   linkage = average
 #   number of displayed clusters = number of annotated tissue labels (10)
 #
@@ -48,7 +48,7 @@ repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 
 K <- 10
 W <- 30
-P <- 12
+P <- 24
 DEFAULT_SIM_COL <- "jaccard_similarity"
 
 experiment_dir <- file.path(repo_root, "experiments", "maurano_dhs_validation")
