@@ -157,6 +157,7 @@ stats <- cross %>%
     n = n(),
     pearson = cor(hammock_jaccard, bedtools_jaccard, method = "pearson"),
     spearman = cor(hammock_jaccard, bedtools_jaccard, method = "spearman"),
+    kendall = cor(hammock_jaccard, bedtools_jaccard, method = "kendall"),
     mae = mean(abs(gap)),
     .groups = "drop"
   )
@@ -171,8 +172,11 @@ if (nrow(ref_stats) != 1) {
 ref_points <- cross %>% filter(precision == REFERENCE_PRECISION)
 
 annotation_a <- sprintf(
-  "Pearson r = %.4f\nSpearman ρ = %.4f\nn = %d",
-  ref_stats$pearson, ref_stats$spearman, ref_stats$n
+  "Spearman ρ = %.4f\nKendall τ = %.4f\nPearson r = %.4f\nn = %d",
+  ref_stats$spearman,
+  ref_stats$kendall,
+  ref_stats$pearson,
+  ref_stats$n
 )
 
 # Crop Panel A to the observed off-diagonal region, with equal axis limits so
@@ -209,7 +213,7 @@ panel_a <- ggplot(ref_points, aes(x = bedtools_jaccard, y = hammock_jaccard)) +
     y = plot_limits[2] - 0.025 * diff(plot_limits),
     label = annotation_a,
     hjust = 0, vjust = 1,
-    size = 3.0, lineheight = 1.05,
+    size = 2.85, lineheight = 1.04,
     linewidth = 0, fill = alpha("white", 0.88), color = COL_TEXT
   ) +
   coord_equal(xlim = plot_limits, ylim = plot_limits, expand = FALSE) +
