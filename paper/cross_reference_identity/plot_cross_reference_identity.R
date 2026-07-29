@@ -2,30 +2,6 @@
 
 # Figure 5 — Sequence sketches group samples by tissue rather than by reference
 # Creates a publication-ready two-panel PNG using CairoPNG.
-#
-#   Panel A: UPGMA dendrogram over the 9 sample x reference sketches.
-#   Panel B: pairwise similarity for same-tissue/cross-reference pairs versus
-#            different-tissue pairs, over unique unordered pairs only.
-#
-# Two choices differ from experiments/ref-comparison/scripts/, deliberately:
-#
-#   1. Mirrored pairs are collapsed. Hammock emits the full 9 x 9 matrix, so
-#      every unordered pair appears twice. The experiment scripts drop only
-#      self-comparisons, which doubles n (18 v 54 instead of 9 v 27) and makes
-#      the rank-sum p-value invalid -- the published 1.3e-10 is below
-#      1 / choose(36, 9) = 1.1e-8, the smallest value attainable at the true
-#      sample size. Medians are unaffected; the test is not.
-#   2. SIM_COL is the minimizer-only Jaccard, not the minimizer+ends variant
-#      the experiment scripts plot. On deduplicated pairs at k=10, w=10 the
-#      minimizer-only metric separates the two classes completely (AUC = 1.00)
-#      while minimizer+ends overlaps (AUC = 0.90) -- peak boundaries shift
-#      between assemblies, so end k-mers carry reference-specific signal that
-#      works against the cross-reference claim. Set SIM_COL below to compare.
-#
-# Usage:
-#   ml r/4.3.0 libjpeg/9c
-#   Rscript paper/cross_reference_identity/plot_cross_reference_identity.R
-#   Rscript paper/cross_reference_identity/plot_cross_reference_identity.R path/to/output.png
 
 required_packages <- c(
   "dplyr", "readr", "stringr", "ggplot2", "scales", "ggdendro", "patchwork",
@@ -87,9 +63,6 @@ COL_COMPARE <- "#D28B35"
 COL_GRID <- "#D9DEE3"
 COL_TEXT <- "#20262D"
 base_family <- "sans"
-
-# Tissue palette carried over from experiments/ref-comparison so the paper
-# figure and the experiment figures stay visually comparable.
 TISSUE_PAL <- c(heart = "#c1272d", liver = "#7f3f00", lung = "#4575b4")
 
 theme_paper <- function(base_size = 10.5) {
@@ -115,26 +88,29 @@ theme_paper <- function(base_size = 10.5) {
     )
 }
 
-# -----------------------------------------------------------------------------
-# Load: hammock long-form output keyed on {sample} x {reference}
-# -----------------------------------------------------------------------------
-# Each FASTA lives at .../fastas/{peak_type}/{ref}/{sample}.fa, so the sample is
-# the basename and the reference is the parent directory.
 meta <- read_tsv(meta_tsv, show_col_types = FALSE) %>%
   mutate(key = paste(sample_id, ref, sep = "__"))
 
 raw <- read_csv(peaks_csv, show_col_types = FALSE)
 if (!SIM_COL %in% names(raw)) {
-  stop("Similarity column '", SIM_COL, "' not present in ", basename(peaks_csv),
-       call. = FALSE)
+  stop(
+    "Similarity column '", SIM_COL, "' not present in ", basename(peaks_csv),
+    call. = FALSE
+  )
 }
 
 pairs <- raw %>%
   mutate(
-    key_a = paste(str_remove(basename(file1), "\\.fa$"),
-                  basename(dirname(file1)), sep = "__"),
-    key_b = paste(str_remove(basename(file2), "\\.fa$"),
-                  basename(dirname(file2)), sep = "__"),
+    key_a = paste(
+      str_remove(basename(file1), "\\.fa$"),
+      basename(dirname(file1)),
+      sep = "__"
+    ),
+    key_b = paste(
+      str_remove(basename(file2), "\\.fa$"),
+      basename(dirname(file2)),
+      sep = "__"
+    ),
     similarity = .data[[SIM_COL]]
   ) %>%
   select(key_a, key_b, similarity)
@@ -142,13 +118,13 @@ pairs <- raw %>%
 keys <- sort(unique(c(pairs$key_a, pairs$key_b)))
 missing_keys <- setdiff(keys, meta$key)
 if (length(missing_keys) > 0) {
-  stop("Metadata is missing entries for: ",
-       paste(missing_keys, collapse = ", "), call. = FALSE)
+  stop(
+    "Metadata is missing entries for: ", paste(missing_keys, collapse = ", "),
+    call. = FALSE
+  )
 }
 
-# -----------------------------------------------------------------------------
-# Panel A: UPGMA over 1 - Jaccard
-# -----------------------------------------------------------------------------
+# Panel A: UPGMA over 1 - Jaccard ---------------------------------------------
 n <- length(keys)
 sim <- matrix(NA_real_, n, n, dimnames = list(keys, keys))
 for (i in seq_len(nrow(pairs))) {
@@ -160,9 +136,6 @@ diag(sim) <- 1
 
 hc <- hclust(as.dist(1 - sim), method = "average")
 dd <- dendro_data(as.dendrogram(hc), type = "rectangle")
-
-# Render leaves on the right and the root on the left by swapping the axes of
-# the dendrogram segments directly, which keeps the label layer in plot space.
 s <- segment(dd)
 segs <- data.frame(x = s$y, y = s$x, xend = s$yend, yend = s$xend)
 
@@ -176,12 +149,15 @@ panel_a <- ggplot() +
   geom_segment(
     data = segs,
     aes(x = x, y = y, xend = xend, yend = yend),
-    linewidth = 0.5, color = COL_TEXT
+    linewidth = 0.5,
+    color = COL_TEXT
   ) +
   geom_text(
     data = leaf_labels,
     aes(x = 0, y = plot_y, label = pretty, color = tissue),
-    hjust = 0, nudge_x = x_max * 0.03, size = 3.2
+    hjust = 0,
+    nudge_x = x_max * 0.03,
+    size = 3.2
   ) +
   scale_color_manual(values = TISSUE_PAL, guide = "none") +
   scale_x_reverse(
@@ -191,7 +167,8 @@ panel_a <- ggplot() +
   labs(
     title = sprintf(
       "A  Tissue identity dominates reference choice\n(%s; %s)",
-      KW_LABEL, PEAK_LABEL
+      KW_LABEL,
+      PEAK_LABEL
     ),
     x = "1 − Jaccard (UPGMA)",
     y = NULL
@@ -205,9 +182,7 @@ panel_a <- ggplot() +
     legend.position = "none"
   )
 
-# -----------------------------------------------------------------------------
-# Panel B: comparison classes over unique unordered pairs
-# -----------------------------------------------------------------------------
+# Panel B: comparison classes over unique unordered pairs ---------------------
 XREF_LABEL <- "Same tissue,\ndifferent reference"
 DIFF_LABEL <- "Different tissue,\nany reference"
 
@@ -217,8 +192,6 @@ classified <- pairs %>%
     .a = pmin(key_a, key_b),
     .b = pmax(key_a, key_b)
   ) %>%
-  # Collapse the mirrored rows: this is the deduplication the experiment
-  # scripts omit.
   distinct(.a, .b, .keep_all = TRUE) %>%
   left_join(meta %>% select(key, tissue_a = tissue), by = c(".a" = "key")) %>%
   left_join(meta %>% select(key, tissue_b = tissue), by = c(".b" = "key")) %>%
@@ -227,24 +200,27 @@ classified <- pairs %>%
       if_else(tissue_a == tissue_b, XREF_LABEL, DIFF_LABEL),
       levels = c(XREF_LABEL, DIFF_LABEL)
     ),
-    # A numeric x keeps the class positions on a continuous scale, so the
-    # separating band and the statistics label can be placed by coordinate.
     x_pos = as.numeric(pair_class)
   )
 
 expected_pairs <- n * (n - 1) / 2
 if (nrow(classified) != expected_pairs) {
-  stop("Expected ", expected_pairs, " unique pairs, got ", nrow(classified),
-       call. = FALSE)
+  stop(
+    "Expected ", expected_pairs, " unique pairs, got ", nrow(classified),
+    call. = FALSE
+  )
 }
 
-xref <- classified %>% filter(pair_class == XREF_LABEL) %>% pull(similarity)
-diff_tissue <- classified %>% filter(pair_class == DIFF_LABEL) %>% pull(similarity)
+xref <- classified %>%
+  filter(pair_class == XREF_LABEL) %>%
+  pull(similarity)
+diff_tissue <- classified %>%
+  filter(pair_class == DIFF_LABEL) %>%
+  pull(similarity)
 
-# AUC is the rank-sum statistic rescaled: the fraction of (same-tissue,
-# different-tissue) comparisons in which the same-tissue pair scores higher.
-# At this sample size it is the more honest summary of the two.
-auc <- mean(outer(xref, diff_tissue, ">") + 0.5 * outer(xref, diff_tissue, "=="))
+auc <- mean(
+  outer(xref, diff_tissue, ">") + 0.5 * outer(xref, diff_tissue, "==")
+)
 test_result <- wilcox.test(xref, diff_tissue, alternative = "greater")
 
 stats <- tibble::tibble(
@@ -267,26 +243,38 @@ annotation_b <- sprintf(
   stats$delta
 )
 
-# Shade the separating band only when the classes genuinely do not overlap;
-# drawing it unconditionally would assert a gap that may not be there.
 separation <- min(xref) - max(diff_tissue)
 gap_layer <- if (separation > 0) {
   list(
     annotate(
       "rect",
-      xmin = 0.4, xmax = 2.6, ymin = max(diff_tissue), ymax = min(xref),
-      fill = COL_COMPARE, alpha = 0.10
+      xmin = 0.4,
+      xmax = 2.6,
+      ymin = max(diff_tissue),
+      ymax = min(xref),
+      fill = COL_COMPARE,
+      alpha = 0.10
     ),
     annotate(
       "text",
-      x = 2.55, y = mean(c(max(diff_tissue), min(xref))),
-      label = "no overlap", hjust = 1, vjust = 0.5,
-      size = 2.9, color = COL_COMPARE
+      x = 2.55,
+      y = mean(c(max(diff_tissue), min(xref))),
+      label = "no overlap",
+      hjust = 1,
+      vjust = 0.5,
+      size = 2.9,
+      color = COL_COMPARE
     )
   )
 } else {
   list()
 }
+
+# Reserve space above the observations for the statistics box so it cannot
+# obscure points in either comparison class.
+y_range <- range(classified$similarity, finite = TRUE)
+y_pad <- max(diff(y_range) * 0.32, 0.015)
+y_upper <- y_range[2] + y_pad
 
 set.seed(1)
 panel_b <- ggplot(classified, aes(x = x_pos, y = similarity)) +
@@ -294,34 +282,53 @@ panel_b <- ggplot(classified, aes(x = x_pos, y = similarity)) +
   geom_point(
     aes(color = pair_class),
     position = position_jitter(width = 0.14, height = 0),
-    size = 2.1, alpha = 0.75
+    size = 2.1,
+    alpha = 0.75
   ) +
   stat_summary(
     aes(group = pair_class),
-    fun = median, geom = "crossbar",
-    width = 0.42, linewidth = 0.4, color = COL_TEXT, fatten = 0
+    fun = median,
+    geom = "crossbar",
+    width = 0.42,
+    linewidth = 0.4,
+    color = COL_TEXT,
+    fatten = 0
   ) +
   annotate(
     "label",
-    x = 0.42, y = max(classified$similarity),
+    x = 1.5,
+    y = y_upper,
     label = annotation_b,
-    hjust = 0, vjust = 1, size = 2.85, lineheight = 1.04,
-    linewidth = 0, fill = alpha("white", 0.88), color = COL_TEXT
+    hjust = 0.5,
+    vjust = 1,
+    size = 2.85,
+    lineheight = 1.04,
+    linewidth = 0,
+    fill = alpha("white", 0.92),
+    color = COL_TEXT
   ) +
   scale_color_manual(
-    values = setNames(c(COL_HAMMOCK, COL_BEDTOOLS), c(XREF_LABEL, DIFF_LABEL)),
+    values = setNames(
+      c(COL_HAMMOCK, COL_BEDTOOLS),
+      c(XREF_LABEL, DIFF_LABEL)
+    ),
     guide = "none"
   ) +
   scale_x_continuous(
     breaks = seq_along(levels(classified$pair_class)),
     labels = levels(classified$pair_class)
   ) +
-  scale_y_continuous(labels = label_number(accuracy = 0.01)) +
+  scale_y_continuous(
+    labels = label_number(accuracy = 0.01),
+    limits = c(y_range[1], y_upper),
+    expand = expansion(mult = c(0.03, 0.02))
+  ) +
   coord_cartesian(xlim = c(0.4, 2.6)) +
   labs(
     title = sprintf(
       "B  Same-tissue pairs rank above different-tissue pairs\n(n = %d and %d unique pairs)",
-      length(xref), length(diff_tissue)
+      length(xref),
+      length(diff_tissue)
     ),
     x = NULL,
     y = "Sequence-mode Jaccard"
@@ -338,8 +345,11 @@ figure <- panel_a + panel_b +
     title = "Sequence sketches group samples by tissue, not by reference genome",
     theme = theme(
       plot.title = element_text(
-        family = base_family, face = "bold", size = 15,
-        color = COL_TEXT, margin = margin(b = 10)
+        family = base_family,
+        face = "bold",
+        size = 15,
+        color = COL_TEXT,
+        margin = margin(b = 10)
       ),
       plot.margin = margin(12, 16, 12, 12)
     )
