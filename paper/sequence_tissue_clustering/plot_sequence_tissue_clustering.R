@@ -130,7 +130,9 @@ for (i in seq_len(nrow(pairs))) mat[pairs$stem1[i], pairs$stem2[i]] <- pairs$sim
 mat[is.na(mat)] <- t(mat)[is.na(mat)]
 if (anyNA(mat)) stop("Similarity matrix is incomplete.", call. = FALSE)
 diag(mat) <- 1
-mat <- pmin(1, pmax(0, mat))
+# Clamp in place: pmin/pmax copy attributes from their first argument, so a
+# leading scalar would strip dim/dimnames and break as.dist() downstream.
+mat[] <- pmin(pmax(mat, 0), 1)
 
 hc <- hclust(as.dist(1 - mat), method = "average")
 tissue_by_stem <- setNames(key$tissue, key$stem)
