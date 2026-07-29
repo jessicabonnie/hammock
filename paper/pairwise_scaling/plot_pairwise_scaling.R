@@ -2,14 +2,15 @@
 
 # Figure 3 — Pairwise scaling of hammock versus BEDTools
 #
-# Creates a publication-ready two-panel PNG without requiring X11 or Cairo.
+# Creates a publication-ready two-panel PNG using the same CairoPNG device
+# used by the existing plotting scripts in docs/scripts/.
 #
 # Usage:
 #   Rscript paper/pairwise_scaling/plot_pairwise_scaling.R
 #   Rscript paper/pairwise_scaling/plot_pairwise_scaling.R path/to/output.png
 
 required_packages <- c(
-  "dplyr", "readr", "ggplot2", "scales", "patchwork", "ragg"
+  "dplyr", "readr", "ggplot2", "scales", "patchwork", "Cairo"
 )
 missing_packages <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
@@ -28,6 +29,7 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(scales)
   library(patchwork)
+  library(Cairo)
 })
 
 # Resolve repository-relative paths.
@@ -362,7 +364,7 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = condition)) +
     legend.position = "none"
   )
 
-# Assemble and save through ragg, which is fully headless and does not use X11.
+# Assemble and save with the same CairoPNG pattern used by docs/scripts/.
 figure <- panel_a + panel_b +
   plot_layout(widths = c(1.35, 1), guides = "collect") +
   plot_annotation(
@@ -385,13 +387,13 @@ figure <- panel_a + panel_b +
   ) &
   theme(legend.position = "top")
 
-ragg::agg_png(
+CairoPNG(
   filename = out_png,
   width = 14.2,
   height = 6.6,
   units = "in",
   res = 300,
-  background = "white"
+  bg = "white"
 )
 print(figure)
 dev.off()
