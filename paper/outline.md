@@ -24,7 +24,7 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 
 ### 2.1 Hammock represents interval sets in complementary coordinate and sequence spaces
 
-![Figure 2](figures/hammock_workflow_07292026.png)
+![Figure 2](figures/hammock_workflow.png)
 
 **Figure 2. Hammock provides complementary coordinate- and sequence-based representations of genomic interval sets.** (A) Public interval collections are large, comparisons scale quadratically with the number of files, and BED coordinates are tied to specific reference genomes. (B) In interval mode, each BED file is summarized as a reusable sketch of covered genomic positions, enabling fast all-pairs similarity comparisons within a shared reference. (C) In sequence mode, interval sequences are extracted from each file's native reference FASTA, representative k-mers are selected using minimizers, and the resulting sequence sketches are compared across references without requiring direct coordinate overlap. The two modes therefore answer complementary questions: whether interval sets occupy similar genomic locations and whether they contain similar underlying sequence.
 
