@@ -103,9 +103,33 @@ display_tissue <- function(x) {
   ifelse(is.na(out), fallback, out)
 }
 
-# Coarse organ grouping used for the cluster boxes: subtypes of the same organ
-# (fMuscle_arm/_back/_leg) are boxed as one group.
-tissue_group <- function(x) sub("_.*$", "", sub("^f(?=[A-Z])", "", x, perl = TRUE))
+# Name written under each box. Short by design — a box can be a single leaf, and
+# the full legend text ("Kidney (renal cortex)") would overrun its neighbours.
+GROUP_DISPLAY <- c(
+  fBrain = "Brain",
+  fHeart = "Heart",
+  fIntestine_Sm = "Small\nintestine",
+  fKidney_renal_cortex_L = "Kidney",
+  fLung = "Lung",
+  fMuscle_arm = "Arm",
+  fMuscle_back = "Back",
+  fMuscle_leg = "Leg",
+  fSkin_fibro_bicep_R = "Skin",
+  fStomach = "Stomach"
+)
+
+# Tissues that share an organ carry only their body part above, and the organ is
+# named once in a bracket spanning their boxes.
+BRACKET_GROUP <- c(
+  fMuscle_arm = "Muscle",
+  fMuscle_back = "Muscle",
+  fMuscle_leg = "Muscle"
+)
+
+display_group <- function(x) {
+  out <- unname(GROUP_DISPLAY[x])
+  ifelse(is.na(out), display_tissue(x), out)
+}
 
 adjusted_rand <- function(a, b) {
   tab <- table(a, b)
@@ -176,41 +200,39 @@ ari <- adjusted_rand(true_tissue, predicted)
 nmi <- normalized_mi(true_tissue, predicted)
 
 # Match the original experiment figure: one colour per tissue, tissue-coloured
-# leaf labels, and blue rectangles outlining contiguous organ-level clades.
+# leaf labels, and rectangles outlining contiguous same-tissue label runs.
 tissues <- tissue_by_stem[hc$labels]
 tissue_levels <- unique(tissues)
 tissue_palette <- setNames(hue_pal()(length(tissue_levels)), tissue_levels)
 label_colors <- tissue_palette[tissues]
 ord <- hc$order
 
-# Boxes mark organ-level clades rather than the k = n_tissues cut. The cut can
-# split a genuine clade (the two fBrain samples land in separate singleton
-# clusters at k = 10) and it separates the muscle subtypes, so each contiguous
-# run of one organ group gets a single box drawn up to that run's MRCA height.
+# Boxes group the leaf labels, not the tree itself: each contiguous run of one
+# tissue in the leaf order gets a box drawn around its labels in the bottom
+# margin. Grouping is by annotated tissue rather than by the k = n_tissues cut,
+# which can split a genuine clade (the two fBrain samples land in separate
+# singleton clusters at k = 10).
 coph <- as.matrix(cophenetic(hc))
-group_by_leaf <- tissue_group(tissues)
 ordered_stems <- hc$labels[ord]
-ordered_groups <- group_by_leaf[ord]
+ordered_groups <- tissues[ord]
 group_runs <- split(
   seq_along(ordered_groups),
   cumsum(c(1, diff(as.integer(factor(ordered_groups, levels = unique(ordered_groups)))) != 0))
 )
-max_height <- max(hc$height)
 
-box_tops <- vapply(group_runs, function(run) {
-  if (length(run) < 2) return(max_height * 0.05)
+# Diagnostic only — a boxed label run that is not monophyletic means the tree
+# interleaves that tissue with others even though its labels sit side by side.
+for (run in group_runs) {
+  if (length(run) < 2) next
   inside <- ordered_stems[run]
-  mrca <- max(coph[inside, inside])
   outside <- setdiff(ordered_stems, inside)
-  # A non-monophyletic run would be drawn as a box enclosing foreign leaves.
-  if (length(outside) > 0 && mrca >= min(coph[inside, outside])) {
+  if (length(outside) > 0 && max(coph[inside, inside]) >= min(coph[inside, outside])) {
     warning(sprintf(
-      "Group '%s' is not monophyletic; its box spans leaves from other groups.",
+      "Group '%s' is not monophyletic; its labels are boxed but its clade is not.",
       ordered_groups[run[1]]
     ))
   }
-  mrca * 1.03
-}, numeric(1))
+}
 
 hc$labels <- short_label(hc$labels)
 
@@ -222,7 +244,7 @@ CairoPNG(
   res = 300,
   bg = "white"
 )
-op <- par(mar = c(6, 4, 3, 10), family = "sans")
+op <- par(mar = c(7, 4, 3, 2), family = "sans")
 on.exit({ par(op); dev.off() }, add = TRUE)
 
 plot(
@@ -236,39 +258,130 @@ plot(
   cex = 0.85
 )
 
-mtext(
-  text = hc$labels[ord],
-  side = 1,
-  at = seq_along(ord),
+LABEL_CEX <- 0.8
+GROUP_CEX <- 0.7
+
+# Everything below the tree is placed relative to the leaf tips (y = 0) rather
+# than to the plot region edge: par("usr")[3] sits ~4% of the height below the
+# tips, and hanging the labels off it left a wide empty band. Vertical distances
+# are specified in inches and converted, so they hold at any device size.
+usr <- par("usr")
+user_y <- function(inches) inches * diff(usr[3:4]) / par("pin")[2]
+
+gap <- user_y(0.10)  # tree tips to the top of the label block
+pad <- user_y(0.04)  # box padding around the labels
+label_top <- -gap
+# Labels are rotated, so their vertical extent is the string *width*.
+label_bottom <- label_top -
+  user_y(max(strwidth(hc$labels, units = "inches", cex = LABEL_CEX)))
+
+text(
+  x = seq_along(ord),
+  y = label_top,
+  labels = hc$labels[ord],
   col = label_colors[ord],
-  las = 2,
-  line = 0.5,
-  cex = 0.8
+  srt = 90,
+  adj = c(1, 0.5),
+  cex = LABEL_CEX,
+  xpd = NA
 )
+
+box_top <- label_top + pad
+box_bottom <- label_bottom - pad
+
+# Each box takes the colour of the tissue it encompasses; a run is one tissue by
+# construction, so the first leaf's colour is the run's colour.
+group_colors <- label_colors[ord][vapply(group_runs, function(run) run[1], integer(1))]
 
 for (i in seq_along(group_runs)) {
   run <- group_runs[[i]]
   rect(
     xleft = min(run) - 0.45,
-    ybottom = par("usr")[3],
+    ybottom = box_bottom,
     xright = max(run) + 0.45,
-    ytop = box_tops[i],
-    border = "steelblue"
+    ytop = box_top,
+    border = group_colors[i],
+    xpd = NA
   )
 }
 
-legend(
-  x = par("usr")[2] + diff(par("usr")[1:2]) * 0.02,
-  y = par("usr")[4],
-  legend = display_tissue(names(tissue_palette)),
-  fill = tissue_palette,
-  border = NA,
-  bty = "n",
-  cex = 0.75,
-  xpd = NA,
-  title = "Fetal tissue",
-  title.adj = 0
-)
+# Tissue name under each box. The names are slanted because several boxes are a
+# single leaf wide and a horizontal name would overrun its neighbours.
+group_tissues <- vapply(group_runs, function(run) ordered_groups[run[1]], character(1))
+group_labels <- display_group(group_tissues)
+group_centers <- vapply(group_runs, function(run) mean(range(run)), numeric(1))
+
+user_x <- function(inches) inches * diff(usr[1:2]) / par("pin")[1]
+line_h <- par("cin")[2] * GROUP_CEX * 1.15  # inches per line of a name
+name_parts <- strsplit(group_labels, "\n", fixed = TRUE)
+name_widths <- lapply(name_parts, strwidth, units = "inches", cex = GROUP_CEX)
+name_lines <- lengths(name_parts)
+
+# Slanted names run parallel to each other, so a name overlaps its right-hand
+# neighbour unless the horizontal gap between them, projected onto the
+# perpendicular, clears its block: gap * sin(angle) > lines * line_h. A two-line
+# name beside a single-leaf box is the binding case, so the angle is derived
+# rather than fixed, and only steepens past 45 when it has to.
+anchor_gaps <- diff(group_centers) * par("pin")[1] / diff(usr[1:2])
+needed_sine <- if (length(anchor_gaps) > 0) {
+  max(tail(name_lines, -1) * line_h / anchor_gaps) * 1.15
+} else 0
+GROUP_ANGLE <- min(70, max(45, asin(min(1, needed_sine)) * 180 / pi))
+slant <- GROUP_ANGLE * pi / 180
+
+# Every name ends at the same point relative to its box — just under the box
+# centre — and hangs down the slant from there. Drawn one line at a time:
+# text() right-justifies the lines of a multi-line string, which would push the
+# short "Small" up the slant into the leaf labels. Left-aligning the lines
+# instead leaves the short one hanging away from them.
+#
+# Multi-line names are stacked so their *last* line sits where a one-line name
+# would, with earlier lines above it. Stacking downwards instead would leave
+# "intestine" a full line further from the leaves than every other name.
+name_anchor <- box_bottom - pad
+
+for (i in seq_along(group_labels)) {
+  widths <- name_widths[[i]]
+  for (j in seq_along(name_parts[[i]])) {
+    along <- widths[j] - max(widths)  # short lines start back down the slant
+    perp <- (name_lines[i] - j - 0.5) * line_h  # last line at the box, rest above
+    text(
+      x = group_centers[i] + user_x(along * cos(slant) - perp * sin(slant)),
+      y = name_anchor + user_y(along * sin(slant) + perp * cos(slant)),
+      labels = name_parts[[i]][j],
+      srt = GROUP_ANGLE,
+      adj = c(1, 0.5),
+      cex = GROUP_CEX,
+      xpd = NA
+    )
+  }
+}
+
+# Organ bracket. Ends tick up towards the names it spans; the organ word sits in
+# a gap left in the middle of the horizontal line.
+group_brackets <- unname(BRACKET_GROUP[group_tissues])
+for (organ in unique(group_brackets[!is.na(group_brackets)])) {
+  members <- which(group_brackets %in% organ)
+  leaves <- unlist(group_runs[members])
+  # Clear the deepest name in the span: the lower-left corner of its last line.
+  depth <- max(vapply(members, function(i) {
+    max(name_widths[[i]]) * sin(slant) + line_h * cos(slant)
+  }, numeric(1)))
+  y_line <- name_anchor - user_y(depth + 0.08)
+  tick <- user_y(0.06)
+  x_left <- min(leaves) - 0.45
+  x_right <- max(leaves) + 0.45
+  x_mid <- (x_left + x_right) / 2
+  gap_half <- user_x(strwidth(organ, units = "inches", cex = GROUP_CEX) / 2 + 0.05)
+  segments(
+    x0 = c(x_left, x_right, x_left, x_mid + gap_half),
+    y0 = c(y_line, y_line, y_line, y_line),
+    x1 = c(x_left, x_right, x_mid - gap_half, x_right),
+    y1 = c(y_line + tick, y_line + tick, y_line, y_line),
+    xpd = NA
+  )
+  text(x_mid, y_line, organ, adj = c(0.5, 0.5), cex = GROUP_CEX, xpd = NA)
+}
 
 message(sprintf("ARI = %.3f; NMI = %.3f", ari, nmi))
 message("Wrote: ", out_png)
