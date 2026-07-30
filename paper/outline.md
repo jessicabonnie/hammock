@@ -6,11 +6,6 @@ Modern interval collections are limited by two boundaries: the computational cos
 
 ## I. Introduction
 
-The introduction establishes two barriers to systematic comparison of genomic interval collections:
-
-1. the computational cost of expanding all-pairs comparisons as repositories grow; and
-2. the dependence of coordinate-overlap methods on a shared reference genome.
-
 Increased availability of high-throughput sequencing has facilitated a corresponding increase in large-scale modern sequencing projects which produce vast numbers of genomic annotation datasets which then, themselves, become part of the genomic data ecosystem. Large-scale initiatives such as the ENCODE Project\cite{encode_2012}, the Roadmap Epigenomics Project\cite{roadmap_2015}, GTex[REF], and the 1000 Genomes Project\cite{10002015global} make datasets publicly available, providing unprecedented opportunities for integrative analysis. Among the most common and biologically informative outputs of these projects are genomic intervals: contiguous stretches of the genome that define transcription factor binding sites, chromatin accessibility peaks, histone modifications, structural variants, and splicing junctions. Such interval datasets have become a cornerstone of downstream analyses that seek to characterize genome function and variation across populations, tissues, cell types, and experimental conditions. In particular, pairwise comparison of interval datasets presents a measurement of biological similarity, such as identifying conserved regulatory elements between tissues. Tools such as \program{BEDTools} provide exact calculations of these measures\cite{quinlan2010bedtools}, but the computational cost of pairwise overlap calculations grows rapidly with the size of modern repositories. In practice, this creates a scalability bottleneck that hampers systematic comparisons across the interval datasets now available\cite{li2020design}.
 
 The numbers of files in these interval databases continue to grow every year. ChIP-Atlas, for example, expanded from 37,720 accumulated experiments in 2015 to 464,655 in 2025, while repositories such as ENCODE contain thousands of additional ChIP-seq and chromatin-accessibility experiments.
@@ -119,18 +114,6 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 ## References
 
 ## Supplementary Methods
-
-### S1. Quantification of public interval collections
-
-#### S1.1 ChIP-Atlas experiment counts
-
-#### S1.2 ENCODE assay counts
-
-#### S1.3 Roadmap and BLUEPRINT file selection
-
-#### S1.4 Reference-assembly classification
-
-#### S1.5 Pairwise-comparison calculations
 
 ## Supplementary Results
 
