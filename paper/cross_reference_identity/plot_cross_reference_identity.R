@@ -53,9 +53,10 @@ for (path in c(peaks_csv, meta_tsv)) {
 }
 
 COL_TEXT <- "#20262D"
-COL_GRID <- "#D9DEE3"
 base_family <- "sans"
-TISSUE_PAL <- c(heart = "#c1272d", liver = "#7f3f00", lung = "#4575b4")
+# Okabe-Ito hues (colour-vision-deficiency safe), darkened where needed so the
+# leaf labels clear ~4.5:1 contrast on white as body text.
+TISSUE_PAL <- c(heart = "#B8500B", liver = "#00745B", lung = "#0072B2")
 
 meta <- read_tsv(meta_tsv, show_col_types = FALSE) %>%
   mutate(key = paste(sample_id, ref, sep = "__"))
@@ -110,15 +111,110 @@ segs <- data.frame(x = s$y, y = s$x, xend = s$yend, yend = s$xend)
 
 leaf_labels <- label(dd) %>%
   left_join(meta %>% select(key, tissue, ref), by = c("label" = "key")) %>%
-  mutate(pretty = paste(tissue, ref, sep = " · "), plot_y = x)
+  mutate(pretty = paste(str_to_title(tissue), ref, sep = " · "), plot_y = x)
 
 x_max <- max(segs$x, segs$xend)
+
+# Panel width = the tree (left of zero) plus a gutter that holds the leaf
+# labels and the organ glyphs. Ticks and the axis line stay inside the tree
+# half: the gutter is not distance, so it must not pick up (negative) breaks
+# or carry the axis rule.
+TREE_PAD <- 1.04
+LABEL_PAD <- 0.56
+tree_frac <- TREE_PAD / (TREE_PAD + LABEL_PAD)
+ICON_X <- -x_max * 0.39
+
+x_breaks <- pretty(c(0, x_max), n = 4)
+x_breaks <- x_breaks[x_breaks >= 0 & x_breaks <= x_max]
+
+# --- Organ glyphs ----------------------------------------------------------
+# Hand-drawn silhouettes, defined in a unit box and rendered at a fixed
+# absolute size so the panel aspect never distorts them. Each is stroked in
+# its tissue colour, matching the leaf labels it sits beside.
+ICON_SIZE <- grid::unit(0.44, "in")
+
+outline <- function(x, y, gp) {
+  grid::xsplineGrob(x = x, y = y, shape = -0.75, open = FALSE, gp = gp)
+}
+
+stroke <- function(x, y, gp) {
+  grid::xsplineGrob(x = x, y = y, shape = -0.75, open = TRUE, gp = gp)
+}
+
+ORGAN_SHAPES <- list(
+  # Anatomical heart: tilted ventricular mass with the apex low-left, an aortic
+  # arch over the base, vena cava and pulmonary stubs, interventricular groove.
+  heart = function(gp) {
+    body_x <- c(0.30, 0.16, 0.14, 0.26, 0.48, 0.70, 0.82, 0.80, 0.62, 0.44)
+    body_y <- c(0.06, 0.28, 0.52, 0.68, 0.72, 0.68, 0.52, 0.32, 0.12, 0.04)
+    grid::gList(
+      outline(body_x, body_y, gp),
+      # aortic arch
+      stroke(c(0.40, 0.39, 0.50, 0.61, 0.62), c(0.70, 0.88, 0.96, 0.87, 0.72), gp),
+      # superior vena cava
+      stroke(c(0.71, 0.76, 0.74), c(0.66, 0.80, 0.93), gp),
+      # pulmonary trunk
+      stroke(c(0.31, 0.26, 0.28), c(0.70, 0.82, 0.93), gp),
+      # interventricular groove
+      stroke(c(0.47, 0.40, 0.31), c(0.71, 0.42, 0.10), gp)
+    )
+  },
+  liver = function(gp) {
+    lx <- c(0.05, 0.13, 0.32, 0.60, 0.85, 0.95, 0.90, 0.70, 0.44, 0.20)
+    ly <- c(0.36, 0.60, 0.75, 0.79, 0.69, 0.51, 0.33, 0.21, 0.22, 0.28)
+    grid::gList(
+      outline(lx, ly, gp),
+      # falciform ligament — the notch that reads as "liver"
+      grid::linesGrob(c(0.56, 0.52), c(0.78, 0.46), gp = gp)
+    )
+  },
+  lung = function(gp) {
+    lobe_x <- c(0.56, 0.72, 0.88, 0.92, 0.82, 0.66, 0.58, 0.55)
+    lobe_y <- c(0.70, 0.72, 0.55, 0.32, 0.10, 0.08, 0.26, 0.48)
+    grid::gList(
+      outline(lobe_x, lobe_y, gp),
+      outline(1 - lobe_x, lobe_y, gp),
+      grid::linesGrob(c(0.5, 0.5), c(0.96, 0.80), gp = gp),          # trachea
+      grid::linesGrob(c(0.33, 0.5, 0.67), c(0.70, 0.80, 0.70), gp = gp)  # bronchi
+    )
+  }
+)
+
+organ_grob <- function(tissue, color) {
+  if (is.null(ORGAN_SHAPES[[tissue]])) {
+    stop("No organ glyph defined for tissue: ", tissue, call. = FALSE)
+  }
+  gp <- grid::gpar(
+    col = color, fill = NA, lwd = 1.3, lineend = "round", linejoin = "round"
+  )
+  # The outer grobTree absorbs the viewport annotation_custom() forces onto the
+  # top-level grob; the inner gTree keeps the glyph at its absolute size.
+  grid::grobTree(grid::gTree(
+    children = ORGAN_SHAPES[[tissue]](gp),
+    vp = grid::viewport(width = ICON_SIZE, height = ICON_SIZE)
+  ))
+}
+
+organ_positions <- leaf_labels %>%
+  group_by(tissue) %>%
+  summarise(y = mean(plot_y), .groups = "drop")
+
+organ_layers <- lapply(seq_len(nrow(organ_positions)), function(i) {
+  tissue <- organ_positions$tissue[i]
+  annotation_custom(
+    organ_grob(tissue, unname(TISSUE_PAL[tissue])),
+    # Extents are in data space: the coord maps them through scale_x_reverse,
+    # so ICON_X goes in as-is (negating it lands the glyph inside the tree).
+    xmin = ICON_X, xmax = ICON_X,
+    ymin = organ_positions$y[i], ymax = organ_positions$y[i]
+  )
+})
 
 panel <- ggplot() +
   geom_segment(
     data = segs,
     aes(x = x, y = y, xend = xend, yend = yend),
-    linewidth = 0.6,
+    linewidth = 0.5,
     color = COL_TEXT
   ) +
   geom_text(
@@ -126,11 +222,19 @@ panel <- ggplot() +
     aes(x = 0, y = plot_y, label = pretty, color = tissue),
     hjust = 0,
     nudge_x = x_max * 0.03,
-    size = 4.0
+    size = 3.2,
+    fontface = "bold"
+  ) +
+  organ_layers +
+  annotate(
+    "segment",
+    x = x_max * TREE_PAD, xend = 0, y = -Inf, yend = -Inf,
+    color = "#6B747D", linewidth = 0.4
   ) +
   scale_color_manual(values = TISSUE_PAL, guide = "none") +
   scale_x_reverse(
-    limits = c(x_max * 1.05, -x_max * 0.72),
+    limits = c(x_max * TREE_PAD, -x_max * LABEL_PAD),
+    breaks = x_breaks,
     labels = label_number(accuracy = 0.01),
     expand = expansion(mult = c(0, 0))
   ) +
@@ -139,28 +243,30 @@ panel <- ggplot() +
     x = "1 − Jaccard (UPGMA)",
     y = NULL
   ) +
-  theme_classic(base_size = 12, base_family = base_family) +
+  theme_classic(base_size = 11, base_family = base_family) +
   theme(
     plot.title = element_text(
-      face = "bold", color = COL_TEXT, margin = margin(b = 10)
+      size = 12, face = "bold", color = COL_TEXT, margin = margin(b = 8)
     ),
     axis.title = element_text(color = COL_TEXT),
+    # Centre the x title under the tree, not under the label gutter.
+    axis.title.x = element_text(
+      color = COL_TEXT, hjust = tree_frac / 2, margin = margin(t = 4)
+    ),
     axis.text = element_text(color = COL_TEXT),
-    axis.line = element_line(color = "#6B747D", linewidth = 0.4),
     axis.ticks = element_line(color = "#6B747D", linewidth = 0.4),
-    axis.line.y = element_blank(),
+    # The x rule is drawn as an annotate() segment so it stops at zero.
+    axis.line = element_blank(),
     axis.ticks.y = element_blank(),
     axis.text.y = element_blank(),
-    panel.grid.major.x = element_line(color = COL_GRID, linewidth = 0.35),
-    panel.grid.major.y = element_blank(),
-    panel.grid.minor = element_blank(),
-    plot.margin = margin(14, 18, 14, 14)
+    panel.grid = element_blank(),
+    plot.margin = margin(12, 14, 10, 12)
   )
 
 CairoPNG(
   filename = out_png,
-  width = 8.8,
-  height = 6.4,
+  width = 7.0,
+  height = 3.9,
   units = "in",
   res = 300,
   bg = "white"
