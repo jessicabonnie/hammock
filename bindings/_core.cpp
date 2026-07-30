@@ -9,6 +9,9 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <atomic>
+#include <exception>
+#include <functional>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -87,22 +90,76 @@ BagMinHashSketch sketch_bed_file_bmh(const std::string& path,
     return sketch;
 }
 
+// An exception may not propagate out of an OpenMP structured block: escaping a
+// `#pragma omp parallel for` calls std::terminate rather than unwinding, so a
+// mismatched-precision throw inside the pair loops used to SIGABRT the whole
+// interpreter instead of surfacing as a Python RuntimeError. Validating the
+// operands up front keeps the common failure out of the parallel region
+// entirely; OmpError below catches whatever else might still throw.
+void require_uniform_precision(const std::vector<HLLSketch>& a,
+                               const std::vector<HLLSketch>& b) {
+    if (a.empty() || b.empty()) return;
+    const size_t p = a[0].precision();
+    const size_t h = a[0].hash_size_bits();
+    for (const auto& v : {std::cref(a), std::cref(b)}) {
+        for (const auto& s : v.get()) {
+            if (s.precision() != p || s.hash_size_bits() != h) {
+                throw std::invalid_argument(
+                    "all sketches must share precision and hash size; got p=" +
+                    std::to_string(s.precision()) + " alongside p=" +
+                    std::to_string(p));
+            }
+        }
+    }
+}
+
+// Captures the first exception thrown inside a parallel region so it can be
+// rethrown once the region has closed.
+class OmpError {
+public:
+    bool tripped() const { return failed_.load(std::memory_order_relaxed); }
+
+    void capture() {
+#pragma omp critical(hammock_omp_error)
+        {
+            if (!err_) err_ = std::current_exception();
+        }
+        failed_.store(true, std::memory_order_relaxed);
+    }
+
+    void rethrow_if_set() const {
+        if (err_) std::rethrow_exception(err_);
+    }
+
+private:
+    std::atomic<bool> failed_{false};
+    std::exception_ptr err_;
+};
+
 // Compute pairwise Jaccard between two lists of HLL sketches into a (N, M) matrix.
 py::array_t<double> pairwise_jaccard_hll(const std::vector<HLLSketch>& a,
                                          const std::vector<HLLSketch>& b) {
+    require_uniform_precision(a, b);
     const py::ssize_t n = static_cast<py::ssize_t>(a.size());
     const py::ssize_t m = static_cast<py::ssize_t>(b.size());
     py::array_t<double> out({n, m});
     auto buf = out.mutable_unchecked<2>();
+    OmpError err;
     {
         py::gil_scoped_release release;
 #pragma omp parallel for collapse(2) schedule(static)
         for (py::ssize_t i = 0; i < n; i++) {
             for (py::ssize_t j = 0; j < m; j++) {
-                buf(i, j) = a[i].jaccard_similarity(b[j]);
+                if (err.tripped()) continue;
+                try {
+                    buf(i, j) = a[i].jaccard_similarity(b[j]);
+                } catch (...) {
+                    err.capture();
+                }
             }
         }
     }
+    err.rethrow_if_set();
     return out;
 }
 
@@ -115,6 +172,7 @@ py::array_t<double> pairwise_jaccard_hll(const std::vector<HLLSketch>& a,
 std::tuple<py::array_t<double>, py::array_t<double>, py::array_t<double>>
 pairwise_metrics_hll(const std::vector<HLLSketch>& a,
                      const std::vector<HLLSketch>& b) {
+    require_uniform_precision(a, b);
     const py::ssize_t n = static_cast<py::ssize_t>(a.size());
     const py::ssize_t m = static_cast<py::ssize_t>(b.size());
     py::array_t<double> jaccard({n, m});
@@ -123,6 +181,7 @@ pairwise_metrics_hll(const std::vector<HLLSketch>& a,
     auto jbuf = jaccard.mutable_unchecked<2>();
     auto abbuf = cont_ab.mutable_unchecked<2>();
     auto babuf = cont_ba.mutable_unchecked<2>();
+    OmpError err;
     {
         py::gil_scoped_release release;
         std::vector<double> a_card(n);
@@ -138,13 +197,19 @@ pairwise_metrics_hll(const std::vector<HLLSketch>& a,
 #pragma omp parallel for collapse(2) schedule(static)
         for (py::ssize_t i = 0; i < n; i++) {
             for (py::ssize_t j = 0; j < m; j++) {
-                jbuf(i, j) = a[i].jaccard_similarity(b[j]);
-                const double inter = a[i].intersection_size(b[j]);
-                abbuf(i, j) = (a_card[i] > 0) ? (inter / a_card[i]) : 0.0;
-                babuf(i, j) = (b_card[j] > 0) ? (inter / b_card[j]) : 0.0;
+                if (err.tripped()) continue;
+                try {
+                    jbuf(i, j) = a[i].jaccard_similarity(b[j]);
+                    const double inter = a[i].intersection_size(b[j]);
+                    abbuf(i, j) = (a_card[i] > 0) ? (inter / a_card[i]) : 0.0;
+                    babuf(i, j) = (b_card[j] > 0) ? (inter / b_card[j]) : 0.0;
+                } catch (...) {
+                    err.capture();
+                }
             }
         }
     }
+    err.rethrow_if_set();
     return {std::move(jaccard), std::move(cont_ab), std::move(cont_ba)};
 }
 
@@ -170,6 +235,16 @@ PYBIND11_MODULE(_core, m) {
         .def("estimate_jaccard",
              [](const HLLSketch& self, const HLLSketch& other) {
                  return self.jaccard_similarity(other);
+             },
+             py::arg("other"))
+        // Inclusion-exclusion |A| + |B| - |A u B|, clamped at 0 — the estimator
+        // behind the containment/cosketch columns, and a different quantity
+        // from estimate_jaccard's register-equality statistic. Exposed so the
+        // two paths are separately testable; see
+        // tests/test_containment_estimator.py.
+        .def("estimate_intersection",
+             [](const HLLSketch& self, const HLLSketch& other) {
+                 return self.intersection_size(other);
              },
              py::arg("other"))
         .def("merge_new",

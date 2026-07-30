@@ -72,7 +72,12 @@ These are deliberate; parity tests that touch them are skipped or projected.
    parity-comparable.
 2. **Containment + co-sketch columns.** Orig's single `containment` column
    was a placeholder. We replace it with a five-column block, computed
-   from the HLL register-equality intersection:
+   from the **inclusion-exclusion** intersection — `|A| + |B| - |A ∪ B|`,
+   Ertl estimator on each, union by register-wise max, clamped to `>= 0`
+   (`HLLSketch::intersection_size`, `cpp/src/hll_sketch.cpp:146`). Same
+   formula as orig's `hyperloglog.py estimate_intersection`. This is **not**
+   the register-equality path that `jaccard_similarity` uses — see the
+   estimator note below, it matters:
    - `containment_AB = |A ∩ B| / |A|`
    - `containment_BA = |A ∩ B| / |B|`
    - `cosketch_geom  = sqrt(C_AB · C_BA)`
@@ -89,6 +94,36 @@ These are deliberate; parity tests that touch them are skipped or projected.
    `_with_ends`).
 
    Parity tests project these columns out before comparing.
+
+   **The two estimator families in a row are on different scales — do not
+   mix them.** `jaccard_similarity` is register-equality, which carries a
+   chance-agreement floor `c` (two registers tie when different elements
+   have equal ρ). The containment/cosketch block is inclusion-exclusion and
+   carries no such floor. Measured on *disjoint* inputs at p=16, n=2×10⁵:
+   `jaccard_similarity = 0.168` while `containment_AB = 0.000`. So
+   `jaccard_similarity` is an affine transform `c + (1−c)·J` of set-Jaccard
+   — rank-faithful, not value-faithful — while the containments estimate the
+   true set quantities. `c` is set by the load factor λ = n/m *and* by the
+   cardinality ratio |A|/|B|, not by precision as such: measured 0.180 at
+   p=12/16/20 (m ≪ n, saturated) but 0.045 at p=24 once m > n, and it nearly
+   vanishes at large size ratios. It is **not** a constant you can subtract.
+
+   Consequence: a set-Jaccard estimate is recoverable from the existing
+   columns with no rerun — `J = 1/(1/C_AB + 1/C_BA − 1)`. Both containments
+   are computed from one shared `inter`, so this reconstruction recovers the
+   inclusion-exclusion estimator *exactly* (roundtrip error ~1e-16), not an
+   approximation of it.
+
+   **Neither estimator dominates — pick by what you need.** The
+   reconstruction wins on *calibration* (MAE vs bedtools 5×10⁻⁴ at p=20 vs
+   0.15 for `jaccard_similarity`), but `jaccard_similarity` wins on
+   *resolution* at low J in the saturated regime: rescaled into J units by
+   its slope, its error sd at p=16, J<0.05 is 0.0014 against the
+   reconstruction's 0.0024. The reconstruction is also censored at 0 by the
+   `>= 0` clamp (25/90 pairs at p=12, all low-J) and is uninformative below
+   J ≈ a few/√m. Use the reconstruction for magnitude, `jaccard_similarity`
+   for ranking/clustering. Full tables and caveats:
+   `docs/jaccard-definitional-gap.md`.
 3. **Default `--subB-method=mixed-stride`** — deterministic chr-keyed
    stride sampling. Orig's pipx-installed 0.4.0 didn't accept the flag
    at all (it lived only in WIP changes). We made mixed-stride the

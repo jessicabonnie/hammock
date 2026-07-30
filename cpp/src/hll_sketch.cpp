@@ -150,6 +150,9 @@ double HLLSketch::intersection_size(const AbstractSketch& other) const {
     if (!o) {
         throw std::runtime_error("Cannot compute intersection between different sketch types");
     }
+    if (precision_ != o->precision_) {
+        throw std::runtime_error("HLLs must have same precision for intersection");
+    }
     auto u = union_with(other);
     HLLSketch* hu = dynamic_cast<HLLSketch*>(u.get());
     if (!hu) throw std::runtime_error("union_with returned wrong type");
@@ -161,6 +164,13 @@ std::unique_ptr<AbstractSketch> HLLSketch::union_with(const AbstractSketch& othe
     const HLLSketch* o = dynamic_cast<const HLLSketch*>(&other);
     if (!o) {
         throw std::runtime_error("Cannot compute union between different sketch types");
+    }
+    // Without this the loop below reads o->registers_[i] for i < this->
+    // num_registers_ — a heap overread (and, via the write, corruption) when
+    // the operand has the smaller precision. jaccard_similarity and merge_max
+    // both guard; this one did not.
+    if (precision_ != o->precision_ || hash_size_ != o->hash_size_) {
+        throw std::runtime_error("HLLs must have same precision for union");
     }
     auto result = std::make_unique<HLLSketch>(precision_, hash_size_);
     for (size_t i = 0; i < num_registers_; ++i) {
