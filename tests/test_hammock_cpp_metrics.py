@@ -11,6 +11,7 @@ equality achievable rather than merely close agreement.
 from __future__ import annotations
 
 import csv
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -27,14 +28,32 @@ _METRIC_COLS = [
 
 def _find_hammock_cpp() -> Path | None:
     """The binary is built into build/<wheel-tag>/ and is NOT installed into
-    the wheel (CMakeLists: users run `cmake --install` separately)."""
-    hits = sorted(_REPO.glob("build/*/hammock-cpp"))
-    return hits[0] if hits else None
+    the wheel (CMakeLists: users run `cmake --install` separately).
+
+    Pick the NEWEST, not the alphabetically first: with both cp310 and cp311
+    build dirs present, sorted()[0] would pin a stale binary and "bit-for-bit"
+    would then be asserted against old C++.
+    """
+    hits = list(_REPO.glob("build/*/hammock-cpp"))
+    return max(hits, key=lambda p: p.stat().st_mtime) if hits else None
 
 
 _BIN = _find_hammock_cpp()
+# `build/` is gitignored and there is no CI, so a wheel install makes every
+# test here vanish -- silently, as a bare `s`. This is the only cross-
+# implementation check in the suite, so allow it to be made mandatory.
 pytestmark = pytest.mark.skipif(
-    _BIN is None, reason="hammock-cpp not built (see build/<tag>/hammock-cpp)")
+    _BIN is None and not os.environ.get("HAMMOCK_REQUIRE_CPP"),
+    reason="hammock-cpp not built (see build/<tag>/hammock-cpp); "
+           "set HAMMOCK_REQUIRE_CPP=1 to make this a failure instead")
+
+
+def test_binary_is_not_stale():
+    """A binary older than its source silently validates the wrong code."""
+    assert _BIN is not None, "hammock-cpp not built (HAMMOCK_REQUIRE_CPP is set)"
+    src = _REPO / "cpp" / "app" / "hammock_cli.cpp"
+    assert _BIN.stat().st_mtime >= src.stat().st_mtime, (
+        f"{_BIN} is older than {src} -- rebuild before trusting these results")
 
 
 @pytest.fixture

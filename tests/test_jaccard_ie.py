@@ -102,9 +102,55 @@ def test_empty_sketches_score_zero():
     assert _ie(other, empty) == 0.0
 
 
+def _known_jaccard_pair(precision: int, n_a: int, n_b: int, n_shared: int):
+    """Two sketches over integer key ranges with an exactly known set Jaccard."""
+    assert n_shared <= min(n_a, n_b)
+    # Distinct universes per element index, hashed so the low bits (which pick
+    # the register) are unstructured.
+    def h(i: int) -> int:
+        return random.Random(i).getrandbits(64)
+    shared = [h(i) for i in range(n_shared)]
+    a = _sketch(precision, shared + [h(1_000_000 + i) for i in range(n_a - n_shared)])
+    b = _sketch(precision, shared + [h(5_000_000 + i) for i in range(n_b - n_shared)])
+    true_j = n_shared / (n_a + n_b - n_shared)
+    return a, b, true_j
+
+
+def test_ie_tracks_true_jaccard_on_asymmetric_sets():
+    """Pins the *magnitude* on a pair whose cardinalities differ 10x.
+
+    This is the assertion that actually constrains the formula: at |A| != |B|
+    the two containments differ, so I-E is separated from the family of wrong
+    expressions (geometric/harmonic/min of the containments) that coincide with
+    it whenever c_ab == c_ba.
+    """
+    a, b, true_j = _known_jaccard_pair(18, n_a=200_000, n_b=20_000, n_shared=20_000)
+    assert true_j == pytest.approx(0.1)          # B is a strict subset of A
+    j_ie, j_re = _ie(a, b), _regeq(a, b)
+    assert j_ie == pytest.approx(true_j, abs=0.01)
+    # Register-equality is biased upward, but note the bias is SMALL here
+    # (measured 0.111 vs 0.100): the chance floor shrinks as |A|/|B| grows --
+    # ~0.058 at a 10:1 ratio versus 0.1699 at 1:1 -- which is exactly why it
+    # cannot be treated as a constant offset. Assert the ordering that holds
+    # in every regime rather than a margin that does not.
+    assert j_re > true_j
+    assert abs(j_ie - true_j) < abs(j_re - true_j)
+
+
+def test_ie_tracks_true_jaccard_at_moderate_overlap():
+    a, b, true_j = _known_jaccard_pair(18, n_a=100_000, n_b=100_000, n_shared=10_000)
+    assert true_j == pytest.approx(10_000 / 190_000)
+    assert _ie(a, b) == pytest.approx(true_j, abs=0.01)
+
+
 def test_disjoint_inputs_separate_the_two_estimators():
-    """The headline regression: on disjoint inputs at high load,
-    register-equality sits near its chance floor while I-E does not."""
+    """On disjoint inputs at high load, register-equality sits near its chance
+    floor while I-E collapses toward zero.
+
+    Note the I-E side is a weak assertion by construction -- it is satisfied by
+    a formula that always returns 0 -- so it is here to characterize the floor,
+    not to pin the formula. The magnitude tests above do that.
+    """
     n = 200_000
     rng = random.Random(20260731)
     # Must be genuinely random 64-bit values: HLL takes the register index from
@@ -114,11 +160,10 @@ def test_disjoint_inputs_separate_the_two_estimators():
     b = _sketch(16, [rng.getrandbits(64) for _ in range(n)])
 
     j_re, j_ie = _regeq(a, b), _ie(a, b)
-    # Measured ~0.168 and ~0.0039 at this (p, n). Wide margins: the floor is a
-    # function of n/m, so these are regime-dependent, not code constants.
+    # Theory puts the high-load equal-cardinality floor at 0.1699; measured
+    # 0.166 here. Wide margins -- it is a function of n/m, not a code constant.
     assert j_re > 0.10, j_re
     assert j_ie < 0.02, j_ie
-    assert j_re > 10 * j_ie, (j_re, j_ie)
 
 
 def test_high_overlap_estimators_converge():

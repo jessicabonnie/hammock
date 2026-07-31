@@ -150,8 +150,12 @@ def test_jaccard_ie_matches_direct_inclusion_exclusion():
     """
     from hammock.runner import _jaccard_ie_from_containments
 
-    a = [range_sketch(14, 0, 5000), range_sketch(14, 2500, 7500)]
-    b = [range_sketch(14, 0, 5000), range_sketch(14, 5000, 10000)]
+    # Cardinalities must be ASYMMETRIC. With |A| == |B| the two containments
+    # coincide and a whole family of wrong formulas (geometric mean of the
+    # containments, min, harmonic mean, ...) agrees with I-E exactly, so a
+    # symmetric fixture pins almost nothing.
+    a = [range_sketch(14, 0, 40000), range_sketch(14, 0, 4000)]
+    b = [range_sketch(14, 0, 4000), range_sketch(14, 2000, 42000)]
 
     _, c_ab, c_ba = _core.pairwise_metrics_hll(a, b)
     jac_ie = _jaccard_ie_from_containments(c_ab, c_ba)
