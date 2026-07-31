@@ -59,8 +59,12 @@ def test_binary_is_not_stale():
     srcs += list((_REPO / "cpp" / "src").glob("*.cpp"))
     srcs += list((_REPO / "cpp" / "include").rglob("*.hpp"))
     newest = max(srcs, key=lambda p: p.stat().st_mtime)
+    # mtime-based, so a `git checkout`/`git merge` that only touches timestamps
+    # trips it too. That direction is the safe one -- it fails loud and a
+    # rebuild clears it -- but say so, or the message reads as a real drift.
     assert _BIN.stat().st_mtime >= newest.stat().st_mtime, (
-        f"{_BIN} is older than {newest} -- rebuild before trusting these results")
+        f"{_BIN} is older than {newest} -- rebuild before trusting these "
+        f"results (a git checkout also refreshes source mtimes)")
 
 
 @pytest.fixture
