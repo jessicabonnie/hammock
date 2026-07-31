@@ -265,7 +265,24 @@ tests/                 # pytest: unit + parity tests
 
 A standalone `hammock-cpp` binary is built alongside the wheel for max-speed
 benchmarking — same algorithms as `hammock`, no Python in the loop. Useful
-when measuring Mode B throughput.
+when measuring Mode B throughput. It writes a **tab**-separated file.
+
+By default it emits only `query`, `reference`, `jaccard_similarity`, which
+keeps the timed pairwise phase as cheap as possible. Pass **`--metrics`** to
+emit the same block as the Python CLI — `jaccard_similarity_ie`,
+`containment_AB`/`containment_BA`, and the three `cosketch_*` columns — which
+is what you want when the output is going to be analyzed rather than timed:
+
+```bash
+hammock-cpp queries.txt refs.txt --mode B -p 20 --metrics -o out
+```
+
+The metric values are **bit-for-bit identical** to the Python CLI's on the same
+input (`tests/test_hammock_cpp_metrics.py` asserts exact equality). `--metrics`
+costs a union plus a cardinality estimate per pair, so leave it off for timing
+runs; it also tags the output filename, so the two shapes never collide. It is
+rejected with `--peak-height`, where the BagMinHash backend makes
+inclusion-exclusion meaningless.
 
 ## Testing
 
