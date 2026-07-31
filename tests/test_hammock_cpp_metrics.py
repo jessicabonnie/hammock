@@ -52,9 +52,15 @@ pytestmark = pytest.mark.skipif(
 def test_binary_is_not_stale():
     """A binary older than its source silently validates the wrong code."""
     assert _BIN is not None, "hammock-cpp not built (HAMMOCK_REQUIRE_CPP is set)"
-    src = _REPO / "cpp" / "app" / "hammock_cli.cpp"
-    assert _BIN.stat().st_mtime >= src.stat().st_mtime, (
-        f"{_BIN} is older than {src} -- rebuild before trusting these results")
+    # Check the whole core, not just the CLI: a stale libhammock_core.a (i.e.
+    # an old hll_sketch.cpp) with a freshly-compiled CLI would otherwise pass,
+    # and "bit-for-bit" would be asserted against old estimator code.
+    srcs = [_REPO / "cpp" / "app" / "hammock_cli.cpp"]
+    srcs += list((_REPO / "cpp" / "src").glob("*.cpp"))
+    srcs += list((_REPO / "cpp" / "include").rglob("*.hpp"))
+    newest = max(srcs, key=lambda p: p.stat().st_mtime)
+    assert _BIN.stat().st_mtime >= newest.stat().st_mtime, (
+        f"{_BIN} is older than {newest} -- rebuild before trusting these results")
 
 
 @pytest.fixture

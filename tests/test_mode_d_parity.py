@@ -113,7 +113,10 @@ def test_mode_d_structural_parity(tmp_path: Path, k: int, w: int, p: int) -> Non
         f1, f2 = r[header.index("file1")], r[header.index("file2")]
         for i in sim_cols:
             v = float(r[i])
-            assert 0.0 <= v <= 1.0, f"{header[i]}={v} out of [0,1] ({f1},{f2})"
+            # containment_* is emitted unclamped and can exceed 1 by ~1 ulp
+            # (inter is a difference of three Ertl estimates), so allow slack.
+            assert -1e-9 <= v <= 1.0 + 1e-9, \
+                f"{header[i]}={v} out of [0,1] ({f1},{f2})"
             if f1 == f2:
                 assert v == pytest.approx(1.0), \
                     f"self-pair {header[i]}={v} != 1.0 for {f1}"

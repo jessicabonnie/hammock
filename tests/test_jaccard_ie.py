@@ -72,11 +72,15 @@ def test_no_warnings_emitted():
 
     import numpy as np
 
-    a = np.array([[0.0, 0.5], [1.0, 0.0]])
-    b = np.array([[0.5, 0.0], [1.0, 0.0]])
-    with warnings.catch_warnings():
+    # Include subnormals and non-finite values: 1/1e-320 overflows, and the
+    # gate has to keep that off the live branch too.
+    a = np.array([[0.0, 0.5], [1.0, 0.0], [1e-320, 5e-324], [np.nan, np.inf]])
+    b = np.array([[0.5, 0.0], [1.0, 0.0], [1e-320, 1.0], [1.0, -1.0]])
+    with warnings.catch_warnings(), np.errstate(all="raise"):
         warnings.simplefilter("error")
-        _jaccard_ie_from_containments(a, b)
+        out = _jaccard_ie_from_containments(a, b)
+    assert np.all(np.isfinite(out)), out
+    assert np.all((out >= 0.0) & (out <= 1.0)), out
 
 
 # --- against real sketches --------------------------------------------------

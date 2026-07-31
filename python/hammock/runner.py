@@ -37,20 +37,30 @@ def _jaccard_ie_from_containments(c_ab, c_ba):
     Both are |A n B| / |.| over the same inclusion-exclusion intersection, so
         1 / (1/C_AB + 1/C_BA - 1) == |A n B| / (|A| + |B| - |A n B|).
 
-    Containments are clamped to 1.0 first: they can exceed it by float noise
-    (measured 1.0000000000050957 at p=18), and c <= 1 forces denom >= 1, so
-    neither a division by zero nor an out-of-range result is reachable. A zero
-    containment means the intersection estimate was zero -- genuinely empty, or
-    clamped from a negative in HLLSketch::intersection_size -- and is scored
-    0.0. Matches experiments/bedtools_benchmark/estimator_compare.py, except
-    that this clamps its inputs.
+    Containments are clamped to 1.0 first. They can exceed it by a few ulp:
+    `inter = cA + cB - cUnion` is a difference of three Ertl estimates, and
+    while the union estimate is monotone (union registers are element-wise max)
+    so `inter <= min(cA, cB)` holds mathematically, rounding can push the ratio
+    just past 1 -- measured 0.2% of random pairs across p=4..20, max excess one
+    ulp. Clamping guarantees `denom >= 1`, so neither a division by zero nor an
+    out-of-range result is reachable. A zero containment means the intersection
+    estimate was zero -- genuinely empty, or clamped from a negative in
+    HLLSketch::intersection_size -- and is scored 0.0.
+
+    Note the emitted `containment_AB`/`containment_BA` columns are NOT clamped,
+    so reconstructing J_ie from them can differ from this column in the last
+    couple of digits. Matches
+    experiments/bedtools_benchmark/estimator_compare.py, except for the clamp.
 
     Unlike `jaccard_similarity` (register equality), this carries no
     chance-agreement floor, so it is comparable to `bedtools jaccard`.
     """
     c_ab = np.minimum(np.asarray(c_ab, dtype=float), 1.0)
     c_ba = np.minimum(np.asarray(c_ba, dtype=float), 1.0)
-    ok = (c_ab > 0) & (c_ba > 0)
+    # Gate at 1e-300 rather than 0: below that the reciprocal overflows and
+    # numpy warns (or raises under np.seterr(all='raise')). Real containments
+    # bottom out around 1e-19, so this only affects hand-fed input.
+    ok = (c_ab > 1e-300) & (c_ba > 1e-300)
     # The inner np.where keeps the (eagerly evaluated) reciprocals off the
     # zero branch, so no divide-by-zero warning is ever emitted.
     safe_ab = np.where(ok, c_ab, 1.0)

@@ -11,6 +11,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <type_traits>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -52,6 +54,30 @@ double jaccard_ie_from_containments(double c_ab, double c_ba) {
     c_ba = std::min(c_ba, 1.0);
     if (!(c_ab > 0.0 && c_ba > 0.0)) return 0.0;
     return 1.0 / (1.0 / c_ab + 1.0 / c_ba - 1.0);
+}
+
+// Guarded numeric parsing. Bare std::sto* throws out of main on a
+// non-numeric argument -- `hammock-cpp -p abc` used to SIGABRT -- and silently
+// truncates trailing garbage (`-p 4.9` parsed as 4). Reject both.
+template <typename T>
+bool parse_num(const char* name, const char* text, T& out) {
+    try {
+        size_t pos = 0;
+        if constexpr (std::is_floating_point_v<T>) {
+            const double v = std::stod(text, &pos);
+            if (text[pos] != '\0') { std::cerr << "Error: " << name << " expects a number (got '" << text << "')\n"; return false; }
+            out = static_cast<T>(v);
+        } else {
+            const long long v = std::stoll(text, &pos);
+            if (text[pos] != '\0') { std::cerr << "Error: " << name << " expects an integer (got '" << text << "')\n"; return false; }
+            if (v < 0 && std::is_unsigned_v<T>) { std::cerr << "Error: " << name << " must not be negative (got " << v << ")\n"; return false; }
+            out = static_cast<T>(v);
+        }
+        return true;
+    } catch (const std::exception&) {
+        std::cerr << "Error: " << name << " expects a number (got '" << text << "')\n";
+        return false;
+    }
 }
 
 void print_help(const char* prog) {
@@ -105,25 +131,25 @@ bool parse_args(int argc, char** argv, Args& out) {
         } else if (a == "--mode" && i + 1 < argc) {
             out.mode = argv[++i];
         } else if (a == "--subA" && i + 1 < argc) {
-            out.subA = std::stod(argv[++i]);
+            if (!parse_num("--subA", argv[++i], out.subA)) return false;
         } else if (a == "--subB" && i + 1 < argc) {
-            out.subB = std::stod(argv[++i]);
+            if (!parse_num("--subB", argv[++i], out.subB)) return false;
         } else if (a == "--seed" && i + 1 < argc) {
-            out.seed = std::stoull(argv[++i]);
+            if (!parse_num("--seed", argv[++i], out.seed)) return false;
         } else if (a == "--gate-seed" && i + 1 < argc) {
-            out.gate_seed = static_cast<uint32_t>(std::stoul(argv[++i]));
+            if (!parse_num("--gate-seed", argv[++i], out.gate_seed)) return false;
         } else if (a == "--expA" && i + 1 < argc) {
-            out.expA = std::stod(argv[++i]);
+            if (!parse_num("--expA", argv[++i], out.expA)) return false;
         } else if ((a == "--precision" || a == "-p") && i + 1 < argc) {
-            out.precision = std::stoul(argv[++i]);
+            if (!parse_num("--precision", argv[++i], out.precision)) return false;
         } else if ((a == "--separator" || a == "-s") && i + 1 < argc) {
             out.separator = argv[++i];
         } else if ((a == "--output" || a == "-o" || a == "--outprefix") && i + 1 < argc) {
             out.outprefix = argv[++i];
         } else if ((a == "--threads" || a == "-t") && i + 1 < argc) {
-            out.threads = std::stoi(argv[++i]);
+            if (!parse_num("--threads", argv[++i], out.threads)) return false;
         } else if (a == "--peak-height" && i + 1 < argc) {
-            out.peak_height_column = std::stoi(argv[++i]);
+            if (!parse_num("--peak-height", argv[++i], out.peak_height_column)) return false;
         } else if (a == "--metrics") {
             out.metrics = true;
         } else if (!a.empty() && a[0] != '-') {
@@ -302,8 +328,13 @@ int main(int argc, char** argv) {
     // union_with() allocates a fresh sketch per pair (16 MiB at p=24), and the
     // precision guards inside it throw. An exception escaping an OpenMP
     // structured block calls std::terminate, so catch and latch instead.
+    // Fixed buffer, not std::string: the exception this most plausibly catches
+    // is bad_alloc (union_with allocates 16 MiB per pair at p=24), and a
+    // std::string assignment would allocate again -- throwing out of the
+    // critical section and calling std::terminate, i.e. exactly what the latch
+    // exists to prevent. snprintf into stack storage cannot allocate.
     std::atomic<bool> failed{false};
-    std::string first_error;
+    char first_error[256] = {0};
 #pragma omp parallel for collapse(2) schedule(static)
     for (size_t i = 0; i < n; i++) {
         for (size_t j = 0; j < m; j++) {
@@ -327,13 +358,26 @@ int main(int argc, char** argv) {
             } catch (const std::exception& e) {
 #pragma omp critical
                 {
-                    if (!failed.exchange(true)) first_error = e.what();
+                    if (!failed.exchange(true))
+                        std::snprintf(first_error, sizeof(first_error), "%s", e.what());
+                }
+            } catch (...) {
+                // Anything not derived from std::exception would otherwise
+                // escape the parallel region and terminate.
+#pragma omp critical
+                {
+                    if (!failed.exchange(true))
+                        std::snprintf(first_error, sizeof(first_error),
+                                      "unknown exception");
                 }
             }
         }
     }
     if (failed.load()) {
         std::fclose(fp);
+        // Remove the header-only file: downstream harnesses glob for the
+        // output and would otherwise collect it as a valid zero-row result.
+        std::remove(out_path.c_str());
         std::cerr << "Error computing pairwise metrics: " << first_error << "\n";
         return 1;
     }
