@@ -152,6 +152,10 @@ size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sket
 
 #pragma omp parallel reduction(+:total_points,sampled_points)
         {
+            // Safe inside an unguarded `omp parallel`: precision/hash_size were
+            // read off main_hll, whose own ctor already validated them, so
+            // validated_precision() cannot throw here. Keep that true if these
+            // ever become free parameters -- an escaping throw would terminate.
             HLLSketch local(precision, hash_size);
 #pragma omp for schedule(static) nowait
             for (size_t i = 0; i < intervals.size(); i++) {
@@ -254,6 +258,10 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
 
 #pragma omp parallel reduction(+:total_interval_elements,kept_intervals,total_points,sampled_points)
         {
+            // Safe inside an unguarded `omp parallel`: precision/hash_size were
+            // read off main_hll, whose own ctor already validated them, so
+            // validated_precision() cannot throw here. Keep that true if these
+            // ever become free parameters -- an escaping throw would terminate.
             HLLSketch local(precision, hash_size);
             size_t te = 0, kept = 0, tp = 0, sp = 0;
 #pragma omp for schedule(static) nowait

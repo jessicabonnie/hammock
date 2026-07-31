@@ -41,14 +41,21 @@ _PROJECTED_OUT = {
     "containment",
     "containment_AB", "containment_BA",
     "cosketch_geom", "cosketch_arith", "cosketch_max",
+    # A *Jaccard* column is projected out here, which looks wrong at a glance.
+    # It isn't: jaccard_similarity_ie is a second, inclusion-exclusion
+    # estimator emitted alongside the register-equality one. Orig has no
+    # counterpart, so there is nothing to be unfaithful to. The column that
+    # must stay byte-equal -- jaccard_similarity -- is still compared.
+    "jaccard_similarity_ie",
 }
 
 
 def _projected_rows(csv_text: str) -> list[tuple]:
-    """Drop containment/cosketch columns before comparing.
+    """Drop containment/cosketch and inclusion-exclusion columns before comparing.
 
-    Parity is only required for the Jaccard column; orig 0.4.0 has no
-    counterpart for our containment/cosketch surface.
+    Parity is required for `jaccard_similarity` (the register-equality column
+    orig also emits); orig 0.4.0 has no counterpart for our containment,
+    cosketch, or inclusion-exclusion surface.
     """
     lines = csv_text.strip().split("\n")
     header = lines[0].split(",")
@@ -123,8 +130,9 @@ def test_mode_b_subB_actually_subsamples(tmp_path: Path) -> None:
     full = next(tmp_path.glob("full*.csv")).read_text().splitlines()
     sub = next(tmp_path.glob("sub*.csv")).read_text().splitlines()
     # cross-pair Jaccard column should differ between full sampling and 25% sampling
-    full_jac = full[2].split(",")[8]
-    sub_jac = sub[2].split(",")[8]
+    jac_col = full[0].split(",").index("jaccard_similarity")
+    full_jac = full[2].split(",")[jac_col]
+    sub_jac = sub[2].split(",")[jac_col]
     assert full_jac != sub_jac, f"--subB 0.25 produced same Jaccard as no subsampling ({full_jac})"
 
 

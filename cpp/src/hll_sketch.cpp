@@ -3,18 +3,35 @@
 #include <cmath>
 #include <stdexcept>
 
-HLLSketch::HLLSketch(size_t precision, size_t hash_size)
-    : precision_(precision),
-      hash_size_(hash_size),
-      num_registers_(static_cast<size_t>(1) << precision),
-      registers_(num_registers_, 0) {
-    if (precision < 4) {
-        throw std::invalid_argument("HLL precision must be >= 4");
-    }
+namespace {
+
+// Validate before any member initializer runs. Member initializers execute in
+// declaration order and precede the constructor body, so a check written in
+// the body is unreachable for exactly the inputs that break: `1 << precision`
+// is UB at precision >= 64, and `registers_(1 << 32, 0)` would try to allocate
+// 4 GiB before the body could reject it. `precision_` is declared first
+// (hll_sketch.hpp:62), so routing the check through it runs first of all.
+//
+// The upper bound also keeps `hash_size_ - precision_` (max rho, computed as
+// size_t at hll_sketch.hpp:34 and .cpp:110) from underflowing: at precision 65
+// it wrapped to SIZE_MAX and turned the estimator loop into ~1.8e19 iterations.
+size_t validated_precision(size_t precision, size_t hash_size) {
     if (hash_size != 32 && hash_size != 64) {
         throw std::invalid_argument("hash_size must be 32 or 64");
     }
+    if (precision < 4 || precision > 24) {
+        throw std::invalid_argument("HLL precision must be in 4..24");
+    }
+    return precision;
 }
+
+}  // namespace
+
+HLLSketch::HLLSketch(size_t precision, size_t hash_size)
+    : precision_(validated_precision(precision, hash_size)),
+      hash_size_(hash_size),
+      num_registers_(static_cast<size_t>(1) << precision_),
+      registers_(num_registers_, 0) {}
 
 // HLLSketch::add is defined inline in the header.
 

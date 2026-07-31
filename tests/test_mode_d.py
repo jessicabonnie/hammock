@@ -50,8 +50,9 @@ def test_mode_d_runs_and_self_jaccard_is_one(tmp_path: Path) -> None:
     assert csv[0].split(",") == [
         "file1", "file2", "sketch_type", "mode",
         "precision", "num_hashes", "kmer_size", "window_size",
-        "jaccard_similarity", *cont_block,
-        "jaccard_similarity_with_ends", *[c + "_with_ends" for c in cont_block],
+        "jaccard_similarity", "jaccard_similarity_ie", *cont_block,
+        "jaccard_similarity_with_ends", "jaccard_similarity_ie_with_ends",
+        *[c + "_with_ends" for c in cont_block],
         "ref1", "ref2",
     ]
     # self-pair must be Jaccard = 1.0 (and containment = 1.0) on both halves.
@@ -61,7 +62,11 @@ def test_mode_d_runs_and_self_jaccard_is_one(tmp_path: Path) -> None:
     # Plain FASTA Mode D (no reference flags): ref1/ref2 columns are "NA".
     assert self_row[header.index("ref1")] == "NA"
     assert self_row[header.index("ref2")] == "NA"
+    # Exact 1.0, not approx, for the inclusion-exclusion columns too: for
+    # identical registers the union estimate equals both cardinalities
+    # bitwise, so inter = 2c - c = c exactly and 1/(1 + 1 - 1) == 1.0.
     for name in ("jaccard_similarity", "jaccard_similarity_with_ends",
+                 "jaccard_similarity_ie", "jaccard_similarity_ie_with_ends",
                  "containment_AB", "containment_BA",
                  "containment_AB_with_ends", "containment_BA_with_ends",
                  "cosketch_geom", "cosketch_geom_with_ends"):

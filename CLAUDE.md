@@ -36,6 +36,15 @@ CC=$CR/bin/x86_64-conda-linux-gnu-gcc CXX=$CR/bin/x86_64-conda-linux-gnu-g++ \
 
 See `memory/project_modeD_zero_rpath_digest.md`.
 
+**Never add `-Ofast` or `-ffast-math` to CMakeLists.** Measured: the Ertl
+estimator produces bit-identical output across `-O0/-O2/-O3` and every
+`-march=` we tried (x86-64, v2, haswell, skylake-avx512, native) — the τ/σ
+loops are loop-carried so nothing reassociates. `-Ofast` is the one flag that
+moves it (87/199 values differ), and it would silently shift every
+cardinality-derived column: `containment_*`, `cosketch_*`, and
+`jaccard_similarity_ie`. (`jaccard_similarity` itself is an exact ratio of two
+integer register counts and is immune.)
+
 The bed2fasta tests (`tests/test_bed2fasta*.py`) and their `--ref` end-to-end
 paths need `bedtools` (and `samtools` for indexing) on `PATH` — `ml bedtools
 samtools` on the cluster; they self-skip otherwise. Mode D parity needs the
@@ -101,18 +110,30 @@ These are deliberate; parity tests that touch them are skipped or projected.
    have equal ρ). The containment/cosketch block is inclusion-exclusion and
    carries no such floor. Measured on *disjoint* inputs at p=16, n=2×10⁵:
    `jaccard_similarity = 0.168` while `containment_AB = 0.000`. So
-   `jaccard_similarity` is an affine transform `c + (1−c)·J` of set-Jaccard
-   — rank-faithful, not value-faithful — while the containments estimate the
-   true set quantities. `c` is set by the load factor λ = n/m *and* by the
-   cardinality ratio |A|/|B|, not by precision as such: measured 0.180 at
-   p=12/16/20 (m ≪ n, saturated) but 0.045 at p=24 once m > n, and it nearly
-   vanishes at large size ratios. It is **not** a constant you can subtract.
+   `jaccard_similarity` is *approximately* an affine transform `c + (1−c)·J`
+   of set-Jaccard, while the containments estimate the true set quantities.
+   Two qualifications, both measured, both load-bearing:
 
-   Consequence: a set-Jaccard estimate is recoverable from the existing
-   columns with no rerun — `J = 1/(1/C_AB + 1/C_BA − 1)`. Both containments
-   are computed from one shared `inter`, so this reconstruction recovers the
-   inclusion-exclusion estimator *exactly* (roundtrip error ~1e-16), not an
-   approximation of it.
+   - **The affine model is only approximate.** Residuals reach ±0.025 (>10σ)
+     in the saturated regime, largest at J→0 and J→1 and *negative* there.
+     That curvature is why a fitted intercept (0.180) exceeds the true
+     disjoint floor (0.1699) — the two numbers are consistent, not a bug.
+   - **`c` is set by the load factor λ = n/m *and* by the cardinality ratio
+     |A|/|B|**, not by precision as such: 0.1699 as λ→∞ at equal cardinality,
+     but 0.152 at ratio 2, 0.097 at ratio 5, 0.058 at ratio 10; and 0.045 at
+     p=24 once m > n. It is **not** a constant you can subtract, and
+     **`jaccard_similarity` is therefore not rank-faithful across pairs of
+     differing cardinality ratio.** On the 20-sample Maurano corpus (ratio up
+     to 2.2) it inverts bedtools' ordering for 2.5% of pairs (Kendall
+     τ = 0.951). Rank only within comparable pairs.
+
+   Consequence: **`jaccard_similarity_ie` now ships as its own column** (see
+   divergence #7), and the same value is recoverable from `C_AB`/`C_BA` in any
+   CSV that has them — `J = 1/(1/C_AB + 1/C_BA − 1)`, exact to ~2 ulp, not an
+   approximation. **Caveat: CSVs written before 2026-05-14 have the orig
+   `containment` placeholder (constant 1.0) instead of the block, so nothing
+   is recoverable from them** — that includes all the archived interval-mode
+   A/B/C output.
 
    **Neither estimator dominates — pick by what you need.** The
    reconstruction wins on *calibration* (MAE vs bedtools 5×10⁻⁴ at p=20 vs
@@ -121,9 +142,11 @@ These are deliberate; parity tests that touch them are skipped or projected.
    its slope, its error sd at p=16, J<0.05 is 0.0014 against the
    reconstruction's 0.0024. The reconstruction is also censored at 0 by the
    `>= 0` clamp (25/90 pairs at p=12, all low-J) and is uninformative below
-   J ≈ a few/√m. Use the reconstruction for magnitude, `jaccard_similarity`
-   for ranking/clustering. Full tables and caveats:
-   `docs/jaccard-definitional-gap.md`.
+   J ≈ a few/√m. Use `jaccard_similarity_ie` for magnitude and for any
+   comparison spanning different set sizes; `jaccard_similarity` only to rank
+   pairs of comparable size. Note the resolution comparison above was measured
+   with the size ratio pinned near 1 and has not been re-tested across a ratio
+   axis. Full tables and caveats: `docs/jaccard-definitional-gap.md`.
 3. **Default `--subB-method=mixed-stride`** — deterministic chr-keyed
    stride sampling. Orig's pipx-installed 0.4.0 didn't accept the flag
    at all (it lived only in WIP changes). We made mixed-stride the
@@ -175,6 +198,28 @@ These are deliberate; parity tests that touch them are skipped or projected.
    silent-zero-from-broken-`digest` failure mode (RPATH shadowing
    libstdc++), see `memory/project_modeD_zero_rpath_digest.md`;
    `sketch_fasta` now raises loudly instead of falling back silently.
+7. **Second Jaccard column: `jaccard_similarity_ie`** (v0.4.0). Orig emits one
+   Jaccard column, computed by register equality. We emit that column
+   unchanged — byte-equal, and parity tests still compare it — plus a second
+   inclusion-exclusion column immediately after it, and in Mode D a
+   `jaccard_similarity_ie_with_ends` twin. Rationale is divergence #2's
+   estimator note: the register-equality column is not set Jaccard and is not
+   rank-faithful across pairs of differing size, so a run had no
+   bedtools-comparable Jaccard in it even though the underlying quantity was
+   already being computed for the containment block.
+
+   Derived Python-side in `runner._jaccard_ie_from_containments` from the
+   `c_ab`/`c_ba` arrays `pairwise_metrics_hll` already returns — no C++ or
+   binding change, mirroring how `_cosketch_from_containments` works.
+   Containments are clamped to 1.0 first (Ertl noise can push them a few ulp
+   past it), which forces `denom >= 1` and makes divide-by-zero and
+   out-of-range results unreachable rather than merely unlikely. A zero
+   containment scores `J_ie = 0.0`.
+
+   `tests/test_parity_against_original.py` projects the new name out of
+   `_PROJECTED_OUT` — it is a Jaccard column, which looks wrong at a glance,
+   but orig has no counterpart to be unfaithful to and `jaccard_similarity`
+   is still compared byte-for-byte.
 
 ## Mode D BED→FASTA (bed2fasta) — SHIPPED
 

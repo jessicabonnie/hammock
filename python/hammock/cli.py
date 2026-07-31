@@ -37,6 +37,27 @@ def _normalize_mode(value: str) -> str:
         f"The letters A/B/C/D are also accepted.")
 
 
+def _precision(value: str) -> int:
+    """argparse `type` for --precision: an int in 4..24.
+
+    Must return a plain `int` -- the value reaches the output filename
+    (`outprefix.get_new_prefix`) and the CSV `precision` column, so anything
+    that renders differently would change filenames and break parity CSVs.
+
+    Without the bound this reached HLLSketch's constructor unchecked: -p 64
+    returned silently wrong estimates and -p 65 underflowed max-rho to
+    SIZE_MAX, hanging on a ~1.8e19-iteration loop.
+    """
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid int value: '{value}'")
+    if not 4 <= n <= 24:
+        raise argparse.ArgumentTypeError(
+            f"precision must be in 4..24 (got {n})")
+    return n
+
+
 def parse_args(argv=None):
     p = argparse.ArgumentParser(
         description="""Calculate pairwise Jaccard similarities between lists of BED or sequence files.
@@ -107,7 +128,7 @@ def parse_args(argv=None):
     p.add_argument('--outprefix', '-o', '--out', type=str, default="hammock", help='The output file prefix')
     p.add_argument('--full-paths', action='store_true',
                    help='Write normalized paths in CSV file1/file2 columns instead of basenames.')
-    p.add_argument("--precision", "-p", type=int, default=18,
+    p.add_argument("--precision", "-p", type=_precision, default=18,
                    help="Precision for HyperLogLog sketching (4..24)")
     p.add_argument("--subA", type=float, default=1.0, help="Subsampling rate for intervals (0..1)")
     p.add_argument("--subB", type=float, default=1.0, help="Subsampling rate for points (0..1)")

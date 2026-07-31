@@ -3,8 +3,9 @@
 Pairwise Jaccard similarity for BED intervals and FASTA sequences, via
 HyperLogLog sketches. A clean Python + C++ refactor of the original
 [`hammock`](https://github.com/jessicabonnie/hammock); same CLI, faster
-sketching, byte-equal output for modes A/B/C on the parity-tested paths
-(mode D matches structurally — see [Testing](#testing)).
+sketching, byte-equal `jaccard_similarity` for modes A/B/C on the
+parity-tested paths (we add columns orig has no counterpart for; mode D matches
+structurally — see [Testing](#testing)).
 
 ## What it does
 
@@ -22,29 +23,38 @@ ref.bed
 pairwise Jaccard estimates (BED input → interval mode by default):
 
 ```
-file1,file2,sketch_type,mode,precision,num_hashes,kmer_size,window_size,jaccard_similarity,containment_AB,containment_BA,cosketch_geom,cosketch_arith,cosketch_max
-sample1.bed,ref.bed,hyperloglog,B,18,NA,8,40,0.6007,0.7520,0.7508,0.7514,0.7514,0.7520
-sample2.bed,ref.bed,hyperloglog,B,18,NA,8,40,0.3336,1.0000,0.3331,0.5771,0.6665,1.0000
+file1,file2,sketch_type,mode,precision,num_hashes,kmer_size,window_size,jaccard_similarity,jaccard_similarity_ie,containment_AB,containment_BA,cosketch_geom,cosketch_arith,cosketch_max
+sample1.bed,ref.bed,hyperloglog,B,18,NA,8,40,0.7111,0.6190,0.7650,0.7643,0.7647,0.7647,0.7650
+sample2.bed,ref.bed,hyperloglog,B,18,NA,8,40,0.2481,0.1210,0.3827,0.1503,0.2398,0.2665,0.3827
 ```
 
-(`kmer_size`/`window_size` show the sequence-mode defaults `8`/`40` even for
+(Values rounded for display; the CSV writes full precision.
+`kmer_size`/`window_size` show the sequence-mode defaults `8`/`40` even for
 interval runs, where they're unused; `num_hashes` is always `NA`.)
 
 ### Output columns
 
-Every row ends with a Jaccard estimate plus a containment/cosketch block, all
-in `[0, 1]`:
+Every row ends with **two Jaccard estimates** plus a containment/cosketch
+block, all in `[0, 1]`:
 
 | Column | Meaning |
 |--------|---------|
-| `jaccard_similarity` | `|A ∩ B| / |A ∪ B|` (the headline similarity) |
+| `jaccard_similarity` | **Register-equality** statistic: the fraction of active HLL registers holding equal values. This is *not* set Jaccard — it is biased upward, and the bias depends on how loaded the sketches are **and** on `|A|/|B|`. Kept for parity with the original `hammock`. |
+| `jaccard_similarity_ie` | **Set Jaccard** via inclusion-exclusion, `|A ∩ B| / |A ∪ B|` with `|A ∩ B| = |A| + |B| − |A ∪ B|`. Comparable to `bedtools jaccard`. Noisier than the column above at low precision *and* low similarity, and censored at 0 (an exact `0.0` means "estimated ≤ 0", not "measured zero"). |
 | `containment_AB` | `|A ∩ B| / |A|` — fraction of side A (file1/LIST1) covered by B |
 | `containment_BA` | `|A ∩ B| / |B|` — fraction of side B (file2/LIST2) covered by A |
 | `cosketch_geom` / `cosketch_arith` / `cosketch_max` | geometric / arithmetic / max mean of the two containments |
 
+Which to use: `jaccard_similarity_ie` when you want a value comparable to an
+exact tool or to other corpora; `jaccard_similarity` only to rank pairs of
+similar size against each other. See
+[`docs/jaccard-definitional-gap.md`](docs/jaccard-definitional-gap.md).
+
 **Sequence mode (D)** appends a second copy of this block computed on the
 minimizers **plus** canonicalized start/end k-mers, led by
-`jaccard_similarity_with_ends` and suffixed `_with_ends`. Every Mode D row also
+`jaccard_similarity_with_ends` / `jaccard_similarity_ie_with_ends` and suffixed
+`_with_ends`. (Two suffix axes: `_ie` selects the estimator, `_with_ends` the
+sketch, and `_with_ends` always comes last.) Every Mode D row also
 ends with trailing **`ref1`,`ref2`** columns (the reference each list was
 extracted against; `NA` for plain-FASTA runs).
 
@@ -56,7 +66,7 @@ The top-level choice is **interval** mode (compare BED interval sets) vs
 
 | `--mode` | Letter | Input | What it sketches |
 |----------|--------|-------|------------------|
-| **`interval`** / `interval-points` | **B** | BED | Base-level points — every position in every interval (base-pair overlap Jaccard, like `bedtools jaccard`). **Default for BED.** |
+| **`interval`** / `interval-points` | **B** | BED | Base-level points — every position in every interval. Compare `jaccard_similarity_ie` against `bedtools jaccard`, not `jaccard_similarity`. **Default for BED.** |
 | `interval-string` | A | BED | Intervals as exact `chr\tstart\tend` strings |
 | `interval-hybrid` | C | BED | Both, with subsampling (`--subA`, `--subB`, `--expA`) |
 | **`sequence`** | D | FASTA | Sliding-window minimizers + canonicalized start/end k-mers. **Default for FASTA / `--ref`.** |
