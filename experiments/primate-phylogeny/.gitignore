@@ -1,0 +1,20 @@
+# Large data files (results/ is a symlink to /vast/.../primate-phylogeny/results/)
+results/
+*.bam
+*.bam.bai
+*.fastq
+*.fastq.gz
+*.fa
+*.fasta
+*.bed
+*.bed.gz
+
+# Snakemake
+.snakemake/
+*.log
+
+# Temporary
+__pycache__/
+*.pyc
+.Rhistory
+.RData

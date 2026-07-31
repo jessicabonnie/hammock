@@ -1,0 +1,5 @@
+Set memory limit to 28GB (soft limit)
+Using Python implementation
+Changing default sketch type to 'minimizer' for sequence data
+Detected same input file for both arguments - sketches will be computed only once
+Computing all pairwise comparisons directly

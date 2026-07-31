@@ -100,7 +100,7 @@ These are deliberate; parity tests that touch them are skipped or projected.
    was a placeholder. We replace it with a five-column block, computed
    from the **inclusion-exclusion** intersection — `|A| + |B| - |A ∪ B|`,
    Ertl estimator on each, union by register-wise max, clamped to `>= 0`
-   (`HLLSketch::intersection_size`, `cpp/src/hll_sketch.cpp:146`). Same
+   (`HLLSketch::intersection_size`, `cpp/src/hll_sketch.cpp:169`). Same
    formula as orig's `hyperloglog.py estimate_intersection`. This is **not**
    the register-equality path that `jaccard_similarity` uses — see the
    estimator note below, it matters:

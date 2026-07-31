@@ -1,0 +1,9 @@
+Building DAG of jobs...
+Job stats:
+job                 count
+----------------  -------
+all                     1
+cluster_and_plot       20
+mus_homo_hammock       20
+total                  41
+

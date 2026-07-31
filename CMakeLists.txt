@@ -68,8 +68,8 @@ if(HAMMOCK_BUILD_CLI)
     add_executable(hammock-cpp cpp/app/hammock_cli.cpp)
     target_link_libraries(hammock-cpp PRIVATE hammock_core OpenMP::OpenMP_CXX)
     target_compile_options(hammock-cpp PRIVATE -O3 -march=native)
-    # Not installed into the wheel; users who want it on $PATH can
-    # `cmake --install` separately.
+    # Installed into the wheel's bin/ (OPTIONAL: absent from wheels built
+    # without HAMMOCK_BUILD_CLI). Also left in build/<tag>/ for benchmarks.
     install(TARGETS hammock-cpp RUNTIME DESTINATION bin OPTIONAL)
 endif()
 

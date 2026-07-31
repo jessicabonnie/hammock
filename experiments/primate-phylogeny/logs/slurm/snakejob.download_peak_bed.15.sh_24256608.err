@@ -1,0 +1,26 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 1 (use --cores to define parallelism)
+Rules claiming more threads will be scaled down.
+Provided resources: mem_mb=1000, mem_mib=954, disk_mb=1000, disk_mib=954, cpus_per_task=1
+Select jobs to execute...
+/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/python3.10/site-packages/stopit/__init__.py:10: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+
+[Thu May 14 09:35:03 2026]
+rule download_peak_bed:
+    output: /vast/blangme2/jbonnie/hammock/primate-phylogeny/peaks/H3K27ac/bosTau.bed
+    log: /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/logs/download/H3K27ac/bosTau.log
+    jobid: 0
+    reason: Forced execution
+    wildcards: sample=bosTau
+    resources: mem_mb=1000, mem_mib=954, disk_mb=1000, disk_mib=954, tmpdir=/tmp, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=30, cpus_per_task=1
+
+
+        mkdir -p "$(dirname /vast/blangme2/jbonnie/hammock/primate-phylogeny/peaks/H3K27ac/bosTau.bed)" "$(dirname /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/logs/download/H3K27ac/bosTau.log)"
+        # ArrayExpress serves a 302 → follow with -L. Files are not gzipped.
+        curl -fsSL "https://www.ebi.ac.uk/biostudies/files/E-MTAB-2633/bosTau-H3K27Ac_replicated-peaks_macs" -o /vast/blangme2/jbonnie/hammock/primate-phylogeny/peaks/H3K27ac/bosTau.bed 2>/vast/blangme2/jbonnie/hammock/primate-phylogeny/results/logs/download/H3K27ac/bosTau.log
+        
+[Thu May 14 09:35:11 2026]
+Finished job 0.
+1 of 1 steps (100%) done

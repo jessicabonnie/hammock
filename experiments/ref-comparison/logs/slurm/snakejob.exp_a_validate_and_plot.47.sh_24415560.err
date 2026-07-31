@@ -1,0 +1,26 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 2
+Rules claiming more threads will be scaled down.
+Provided resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, cpus_per_task=1
+Select jobs to execute...
+/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/python3.10/site-packages/stopit/__init__.py:10: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+
+[Thu May 14 21:02:21 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/exp_a_mnmzr_p24_jaccD_k15_w30.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k15_w30.log
+    jobid: 0
+    reason: Forced execution
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=15, w=30
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=/tmp, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Rscript --vanilla /home/jbonnie1/interval_sketch/hammock_claude/experiments/ref-comparison/.snakemake/scripts/tmpoha1p3s9.exp_a_validate_plot.R
+Activating environment modules: gcc/9.3.0, r/4.3.0, libjpeg/9c
+Done. Plot saved to /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/cross_ref_validation.png
+Not cleaning up /home/jbonnie1/interval_sketch/hammock_claude/experiments/ref-comparison/.snakemake/scripts/tmpoha1p3s9.exp_a_validate_plot.R
+[Thu May 14 21:02:25 2026]
+Finished job 0.
+1 of 1 steps (100%) done

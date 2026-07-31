@@ -115,7 +115,7 @@ def ie_jaccard(c_ab, c_ba):
     J = I/(|A|+|B|-I); dividing through by I gives 1/(1/C_AB + 1/C_BA - 1).
 
     Returns (value, clamped). A zero containment is NOT "undefined" — it means
-    `intersection_size` hit its `max(0.0, ...)` clamp (hll_sketch.cpp:157), so
+    `intersection_size` hit its `max(0.0, ...)` clamp (hll_sketch.cpp:183), so
     the estimator's actual output is J = 0 and that is what we score. Dropping
     these rows instead (an earlier version did) silently compares the two
     estimators on different row sets: the clamp fires only at low J, so it

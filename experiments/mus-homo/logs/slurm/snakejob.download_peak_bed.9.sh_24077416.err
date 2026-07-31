@@ -1,0 +1,23 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 1 (use --cores to define parallelism)
+Rules claiming more threads will be scaled down.
+Provided resources: mem_mb=1000, mem_mib=954, disk_mb=1000, disk_mib=954, cpus_per_task=1
+Select jobs to execute...
+
+[Tue May 12 17:43:09 2026]
+rule download_peak_bed:
+    output: /vast/blangme2/jbonnie/hammock/mus-homo/peaks/ENCSR757NJT_lung_human.bed.gz
+    log: /vast/blangme2/jbonnie/hammock/mus-homo/results/logs/download/ENCSR757NJT_lung_human.log
+    jobid: 0
+    reason: Forced execution
+    wildcards: sample=ENCSR757NJT_lung_human
+    resources: mem_mb=1000, mem_mib=954, disk_mb=1000, disk_mib=954, tmpdir=/tmp, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=30, cpus_per_task=1
+
+
+        mkdir -p "$(dirname /vast/blangme2/jbonnie/hammock/mus-homo/peaks/ENCSR757NJT_lung_human.bed.gz)" "$(dirname /vast/blangme2/jbonnie/hammock/mus-homo/results/logs/download/ENCSR757NJT_lung_human.log)"
+        curl -fsSL "https://www.encodeproject.org/files/ENCFF190WKI/@@download/ENCFF190WKI.bed.gz" -o /vast/blangme2/jbonnie/hammock/mus-homo/peaks/ENCSR757NJT_lung_human.bed.gz 2>/vast/blangme2/jbonnie/hammock/mus-homo/results/logs/download/ENCSR757NJT_lung_human.log
+        
+[Tue May 12 17:43:11 2026]
+Finished job 0.
+1 of 1 steps (100%) done

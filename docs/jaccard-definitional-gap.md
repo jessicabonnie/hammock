@@ -48,9 +48,11 @@ count. With ρ geometrically distributed, "tie by chance" has a non-trivial
 floor. Its exact value at high load and equal cardinalities is
 `c = Σ_k p_k² / (1 − p_0²) = 0.1699` (measured 0.16992 at p=18, n=2×10⁷).
 The `Σ_k (2^−k)² = ⅓` figure sometimes quoted for this is a *different*
-conditional — the probability two registers tie given both hold exactly one
-element — i.e. the λ→0 limit, which is precisely the regime where most active
-registers are one-sided and cannot tie at all. It overstates the floor ~2×.
+conditional — the probability two registers tie **given both hold exactly one
+element**. That is not the λ→0 limit of `c`: as λ→0 the floor goes to *zero*
+(0.0162 at λ=0.1, 0.0017 at λ=0.01), because almost every active register is
+one-sided and cannot tie at all. ⅓ is not approached at any λ; it overstates
+the floor ~2× at high load and by orders of magnitude at low load.
 
 For sets with low set-Jaccard but substantial union (the realistic case
 for randomly-distributed BED intervals across the genome), most registers
@@ -68,9 +70,13 @@ then 0.0454 at p = 24, where `m` = 16.7 M exceeds `n` ≈ 5 M. So "more
 precision won't fix it" is right in the regime the tool normally runs in,
 and wrong as an absolute statement.
 
-Analytically `c = Σ_k p_k²` where `p_k = e^(−λ2^(−k)) − e^(−λ2^(−(k−1)))` is
-the probability a register lands on value `k`. At λ = 92 that sum is 0.169,
-matching the measured 0.17. Note this is well below the `Σ_k (2^−k)² = 1/3`
+Analytically `c = Σ_{k≥1} p_k² / (1 − p_0²)` where
+`p_k = e^(−λ2^(−k)) − e^(−λ2^(−(k−1)))` is the probability a register lands on
+value `k`. Both restrictions matter: `k = 0` is excluded because
+`matching/active` counts only registers where at least one side is non-zero,
+and the `1 − p_0²` denominator conditions on that same event. (Summing from
+`k = 0` gives 4.53 at λ = 0.1 — not a probability at all.) At λ = 92 the sum is
+0.169, matching the measured 0.17. Note this is well below the `Σ_k (2^−k)² = 1/3`
 figure quoted as the collision bound elsewhere — 1/3 is a different
 conditional (see above), not approached at any realistic λ. `c` is
 effectively a **step**: 0.1699 from λ ≈ 5 upward, flat to four decimals (any
@@ -96,8 +102,8 @@ The extreme cases agree:
 | Input             | Set Jaccard | Register-equality Jaccard |
 | ----------------- | ----------- | ------------------------- |
 | A == B (identical sketches) | 1.0 | 1.0 (every active register matches by construction) |
-| A ∩ B = ∅, |A∪B| ≪ m | 0.0 | 0.0 (no active register pairs to tie) |
-| A ∩ B = ∅, |A∪B| ≫ m | 0.0 | > 0 (chance ties dominate) |
+| A ∩ B = ∅, \|A∪B\| ≪ m | 0.0 | 0.0 (no active register pairs to tie) |
+| A ∩ B = ∅, \|A∪B\| ≫ m | 0.0 | > 0 (chance ties dominate) |
 | 0 < J < 1, large union | J | f(J) > J |
 
 The mapping `f(J)` is monotonic **at fixed `(|A|, |B|)`** (more shared
@@ -105,10 +111,11 @@ elements → more shared argmaxes → more matching registers), but it is not th
 identity — and it is a *different* mapping for each cardinality ratio. So
 ordering is preserved when comparing pairs of the same geometry and **not**
 in general: at p=16 a symmetric pair at J=0.100 and an asymmetric pair
-(|A|=2×10⁵ ⊂ |B|=10⁶) at J=0.200 both score `J_re ≈ 0.263` despite the 2×
-difference in true similarity. (They are not exactly equal; the point is that
-the gap between them is smaller than sketch noise at this precision, so the
-ordering is unrecoverable.) See "Rank fidelity" below.
+(|A|=2×10⁵ ⊂ |B|=10⁶) at J=0.200 score `J_re` = 0.2645 and 0.2630 — a 0.0015
+gap against a 2× difference in true similarity, and in the *wrong direction*.
+(The symmetric value depends weakly on n: 0.2620 at |A|=|B|=2×10⁵, 0.2645 from
+5×10⁵ up. Measured per-pair sd at p=16 is ≈0.0015, so the separation is about
+1σ — recoverable in principle from many replicates, not from one comparison.) See "Rank fidelity" below.
 
 ## Empirical evidence
 
@@ -132,7 +139,7 @@ which is **not** set Jaccard.
 
 Only `jaccard_similarity` uses register equality. The `containment_AB` /
 `containment_BA` columns (and the three `cosketch_*` derived from them) go
-through `HLLSketch::intersection_size` (`cpp/src/hll_sketch.cpp:146`), which
+through `HLLSketch::intersection_size` (`cpp/src/hll_sketch.cpp:169`), which
 uses **inclusion–exclusion** — `|A| + |B| − |A ∪ B|`, Ertl estimator on each,
 union by register-wise max, clamped to `>= 0`. That path has no
 chance-agreement term, so those columns estimate the true set quantities.
@@ -215,13 +222,24 @@ equal-size files, so that is a genuine gap rather than a settled result.
 The "use `jaccard_similarity` for ranking" advice above holds only within a
 fixed pair geometry. Because `c` varies with `|A|/|B|`, the estimator applies a
 *different* transform to each pair, and ordering can invert. The resolution
-limit is roughly `[c(λ,λ) − c(λ, r·λ)] / (1 − c)` for a corpus whose worst
-cardinality ratio is `r`:
+limit for a corpus whose worst cardinality ratio is `r` is the true Jaccard at
+which a ratio-`r` pair first outscores a *disjoint symmetric* pair — i.e. the
+root of `J_re(r, J) = c₁`, `c₁ = 0.1699`:
 
 | ratio `r` | 1.0 | 1.5 | 2.0 | 2.2 | 3.0 | 5.0 | 10 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `c` | 0.1699 | 0.1635 | 0.1520 | 0.1472 | 0.1293 | 0.0969 | 0.0584 |
-| ΔJ below which rank is unreliable | 0 | 0.0077 | 0.0216 | 0.0274 | 0.0490 | 0.0880 | 0.1343 |
+| ΔJ below which rank is unreliable | 0 | 0.0067 | 0.0192 | 0.0245 | 0.0452 | 0.0861 | n/a |
+| affine approx `(c₁−c_r)/(1−c₁)` | 0 | 0.0078 | 0.0216 | 0.0274 | 0.0490 | 0.0880 | 0.1343 |
+
+Both rows are stable in λ (identical to 4 dp from λ=10 to λ=300). The affine
+approximation — which earlier revisions of this file printed as *the* answer —
+runs 12–15% high, because `J_re` is convex in `J` rather than a straight line
+from `c_r` to 1. At `r = 10` there is no root: a ratio-10 pair cannot exceed
+`J = 1/r = 0.1`, and even at full containment it scores `J_re = 0.1375 < c₁`,
+so **every** 10:1 pair ranks below **every** disjoint symmetric pair regardless
+of true similarity. Quoting a ΔJ there would name a gap wider than the entire
+feasible range.
 
 Measured on the 20-sample Maurano fetal DHS corpus (bp coverage 63.4–139.4
 Mbp, so `r` up to 2.20), 190 off-diagonal pairs at p=21:
@@ -235,11 +253,16 @@ Mbp, so `r` up to 2.20), 190 off-diagonal pairs at p=21:
 | largest inverting gap | ΔJ_bedtools = 0.0250 |
 
 The discordance is **systematic, not sketch noise**: the residual from the
-fitted affine model correlates at **−0.885** with `|log(|A|/|B|)|` — the
-further apart two files are in size, the further the pair sits below the
-single-`c` line. (Against the *signed* log ratio it is only −0.31; the effect
-is symmetric in which file is larger, so the absolute ratio is the right
-regressor.) The same statistics recur at p=18 and p=23 (τ = 0.9505, 0.9497)
+affine model correlates at **−0.885** with `\|log(\|A\|/\|B\|)\|` — the further
+apart two files are in size, the further the pair sits below the single-`c`
+line. (Against the *signed* log ratio it is only −0.31; the effect is symmetric
+in which file is larger, so the absolute ratio is the right regressor.) The
+magnitude is fit-dependent and the fit must be named: −0.885 is against
+`c = 0.180`, the value `estimator_compare.py` fits on its *synthetic* corpus.
+Refitting on Maurano itself gives c = 0.1783 (OLS intercept), 0.1968
+(constrained LS) or 0.2004 (mean pointwise), and correlations of −0.90, −0.83,
+−0.82. The sign, the ordering and the significance are robust across all four;
+only the second digit moves. The same statistics recur at p=18 and p=23 (τ = 0.9505, 0.9497)
 on independent sketches, which HLL noise would not do. Note also that a
 Pearson `r` over a full square matrix includes the self-pairs at (1,1), which
 are pure leverage; quote the off-diagonal value.

@@ -1,0 +1,4 @@
+row_type	resource	target	assembly	bed_file_count	files_with_interval_counts	total_intervals	median_intervals_per_file	cell_type_count	tissue_category_count	within_resource_pairwise_comparisons	cross_resource_reference_mismatched_pairs
+resource	Roadmap	H3K27ac	hg19	462	462	93969548	116398	76	21	106491	
+resource	BLUEPRINT	H3K27ac	hg38	173	173	12472154	74007	30	4	14878	
+cross_resource	Roadmap × BLUEPRINT	H3K27ac	hg19 × hg38	635	635	106441702		106	22	121369	79926

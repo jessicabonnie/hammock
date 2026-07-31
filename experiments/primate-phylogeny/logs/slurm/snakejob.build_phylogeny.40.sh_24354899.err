@@ -1,0 +1,26 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 2
+Rules claiming more threads will be scaled down.
+Provided resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, cpus_per_task=1
+Select jobs to execute...
+/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/python3.10/site-packages/stopit/__init__.py:10: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+
+[Thu May 14 16:44:58 2026]
+rule build_phylogeny:
+    input: /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/phylo_mnmzr_p24_jaccD_k10_w15.csv, config/samples.tsv
+    output: /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/metric_spreads.tsv, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/nj_tree_jacc_mz.newick, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/nj_tree_cosmax_mz.newick, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/nj_tree_cosgeom_mz.newick, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/nj_tree_jacc_we.newick, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/nj_tree_cosmax_we.newick, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/nj_tree_cosgeom_we.newick, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/nj_tree_jacc_mz.png, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/nj_tree_cosmax_mz.png, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/nj_tree_cosgeom_mz.png, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/nj_tree_jacc_we.png, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/nj_tree_cosmax_we.png, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/nj_tree_cosgeom_we.png, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/dist_matrix_jacc_mz.tsv, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/dist_matrix_cosmax_mz.tsv, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/dist_matrix_cosgeom_mz.tsv, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/dist_matrix_jacc_we.tsv, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/dist_matrix_cosmax_we.tsv, /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/dist_matrix_cosgeom_we.tsv
+    log: /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/logs/phylo/H3K4me3/k10_w15.log
+    jobid: 0
+    reason: Forced execution
+    wildcards: k=10, w=15
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=/tmp, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Rscript --vanilla /home/jbonnie1/interval_sketch/hammock_claude/experiments/primate-phylogeny/.snakemake/scripts/tmp7xntyn3l.build_phylogeny.R
+Activating environment modules: gcc/9.3.0, r/4.3.0, libjpeg/9c
+Done. Spreads: /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K4me3/k10_w15/metric_spreads.tsv
+Not cleaning up /home/jbonnie1/interval_sketch/hammock_claude/experiments/primate-phylogeny/.snakemake/scripts/tmp7xntyn3l.build_phylogeny.R
+[Thu May 14 16:45:06 2026]
+Finished job 0.
+1 of 1 steps (100%) done

@@ -1,0 +1,9 @@
+row_type	target	species	assembly	candidate_experiment_count	verified_experiment_count	verified_bed_file_count	failed_or_missing_candidate_count	cell_type_class_count	cell_type_count	retrieved_at_utc
+assembly	CTCF	Drosophila melanogaster	dm3	45	45	45	0	4	10	2026-07-24T19:40:28+00:00
+assembly	CTCF	Drosophila melanogaster	dm6	45	45	45	0	4	10	2026-07-24T19:40:28+00:00
+assembly	CTCF	Homo sapiens	hg19	2207	2207	2207	0	20	346	2026-07-24T19:40:28+00:00
+assembly	CTCF	Homo sapiens	hg38	2207	2206	2206	1	20	346	2026-07-24T19:40:28+00:00
+assembly	CTCF	Mus musculus	mm10	1483	1483	1483	0	22	124	2026-07-24T19:40:28+00:00
+assembly	CTCF	Mus musculus	mm9	1483	1483	1483	0	22	124	2026-07-24T19:40:28+00:00
+assembly	CTCF	Rattus norvegicus	rn6	1	1	1	0	1	1	2026-07-24T19:40:28+00:00
+total	CTCF	all selected species	all selected assemblies	3736	3736	7470	1	26	457	2026-07-24T19:40:28+00:00

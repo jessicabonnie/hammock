@@ -1,0 +1,23 @@
+{
+  "retrieved_at_utc": "2026-07-24T20:11:32+00:00",
+  "sources": {
+    "roadmap_hg19": "https://tf.lisanwanglab.org/GADB/metadata/filer.latest.hg19.template",
+    "blueprint_hg38": "https://filer2.niagads.org/browse_faceted_with_search.php"
+  },
+  "important_source_note": "The downloadable FILER template lacked BLUEPRINT although the live FILER2 browser contained BLUEPRINT tracks; BLUEPRINT was therefore parsed from the live filtered catalog.",
+  "selection": {
+    "Roadmap": "native hg19, ChIP-seq, exact H3K27ac, peak BED",
+    "BLUEPRINT": "native hg38 URL path, Blueprint collection, H3K27ac peak BED",
+    "lifted_records": "excluded",
+    "deduplication": "processed download URL"
+  },
+  "counts": {
+    "roadmap_hg19_beds": 462,
+    "blueprint_hg38_beds": 173,
+    "cross_resource_reference_mismatched_pairs": 79926
+  },
+  "outputs": [
+    "/home/jbonnie1/interval_sketch/hammock_claude/paper/database_counts/results/filer_roadmap_blueprint_h3k27ac_manifest.tsv",
+    "/home/jbonnie1/interval_sketch/hammock_claude/paper/database_counts/results/filer_roadmap_blueprint_h3k27ac_summary.tsv"
+  ]
+}
