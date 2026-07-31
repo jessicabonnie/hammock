@@ -170,9 +170,9 @@ The sweep partitions into three regimes:
 
 ![Fig 8 — cross-ref effect-size sweep, broad](../experiments/ref-comparison/figures/sweep_effect_size_broad.png)
 
-**Metric choice at k=10, w=10** (`scripts/exp_a_metric_comparison.R`): of the 12 emitted similarity columns, `jaccard_similarity_with_ends` remains the right default — best Δ/saturation trade-off (broad Δ = 0.086, p = 2.0 × 10⁻⁷). `cosketch_geom_with_ends` is a near-tie (Δ = 0.065). All minimizer-only metrics hit the Wilcoxon p-floor but operate near saturation (medians ≈ 0.99 vs 0.92), so absolute Δ is small. `cosketch_max_with_ends` collapses on narrow (Δ ≈ 0, p ≈ 0.49) — the worst metric in both flavors and not recommended. (The full 12-metric comparison is **Fig S1**, in the Supplementary figures section.)
+**Metric choice at k=10, w=10** (`scripts/exp_a_metric_comparison.R`): of the 12 emitted similarity columns, `jaccard_similarity_with_ends` remains the right default — best Δ/saturation trade-off (broad Δ = 0.086, p = 2.0 × 10⁻⁷). `cosketch_geom_with_ends` is a near-tie (Δ = 0.065). All minimizer-only metrics hit the Wilcoxon p-floor but operate near saturation (medians ≈ 0.99 vs 0.92), so absolute Δ is small. `cosketch_max_with_ends` collapses on narrow (Δ ≈ 0, p ≈ 0.49) — the worst metric in both flavors and not recommended. (The full 12-metric comparison is **Fig S1**, in the Supplementary figures section.) These 12 are the columns emitted at the time of the run; v0.5.0 adds `jaccard_similarity_ie` and its `_with_ends` twin, bringing the emitted total to 14. The comparison has not been re-run, so Fig S1 and every count in this section describe the 12-column schema.
 
-(Note: at k=15, w=15 the minimizer-only signal is already fully separated, so the choice of with-ends vs no-ends matters less; a future replication of this 12-metric comparison at the new headline cell would confirm that observation.)
+(Note: at k=15, w=15 the minimizer-only signal is already fully separated, so the choice of with-ends vs no-ends matters less; a future replication of this comparison at the new headline cell would confirm that observation — and should use the 14-column v0.5.0 schema.)
 
 Practical interpretation: when peaks are aligned to a different human reference than expected, the sketch still produces the same biological neighborhood. At k ≥ 15 the separation is large enough that reference choice is unambiguously a smaller source of variance than tissue identity. This is the property that lets hammock be deployed against heterogeneous catalogs (ENCODE/Roadmap mixtures) without first re-aligning everything.
 
@@ -276,7 +276,7 @@ Two routes recover absolute magnitude. (1) **Sequence mode** at the optimal high
 
 ### 6.2 The cosketch + containment columns are reported but not yet exploited
 
-The five auxiliary similarity columns (containment_AB, containment_BA, cosketch_geom, cosketch_arith, cosketch_max — each in two flavors for sequence mode) are present in every sequence mode output CSV. Current analyses use the jaccard columns as their primary signal. A 12-metric sanity check at the ref-comparison Exp A (k=10, w=10) cell finds `cosketch_geom_with_ends` is a near-tie with `jaccard_similarity_with_ends`, while `cosketch_max` is uniformly the weakest discriminator. A full multi-metric re-evaluation across the (k, w, p) sweep and across the Maurano corpus is a natural fast-follow analysis and may identify a column (likely cosketch_geom on the minimizer-only flavor) that is more robust than jaccard at small precision or small k.
+The five auxiliary similarity columns (containment_AB, containment_BA, cosketch_geom, cosketch_arith, cosketch_max — each in two flavors for sequence mode) are present in every sequence mode output CSV. Current analyses use the jaccard columns as their primary signal. A 12-metric sanity check at the ref-comparison Exp A (k=10, w=10) cell — run before the two `_ie` columns existed — finds `cosketch_geom_with_ends` is a near-tie with `jaccard_similarity_with_ends`, while `cosketch_max` is uniformly the weakest discriminator. A full multi-metric re-evaluation across the (k, w, p) sweep and across the Maurano corpus is a natural fast-follow analysis and may identify a column (likely cosketch_geom on the minimizer-only flavor) that is more robust than jaccard at small precision or small k.
 
 ### 6.3 Reference-robustness is shown on a small panel
 
@@ -308,7 +308,7 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 | 9 | *(hidden — pending rework; PNG on disk: `modeD_flanking/figures/maurano_delta_r_vs_w.png`)* | flanking column choice on real data |
 | 10 | *(hidden — pending rework; PNG on disk: `modeD_flanking/figures/synthetic_phase_diagram.png`)* | flanking on synthetic, φ × mutation phase plane |
 | 11 | *(hidden — pending rework; PNG on disk: `modeD_flanking/figures/synthetic_empirical_vs_analytical.png`)* | analytical φ-prediction validated |
-| S1 (supp) | `ref-comparison/figures/metric_comparison_broad_k10_w10.png` | 12-metric Wilcoxon comparison at k=10, w=10 |
+| S1 (supp) | `ref-comparison/figures/metric_comparison_broad_k10_w10.png` | 12-metric Wilcoxon comparison at k=10, w=10 (pre-v0.5.0 schema) |
 | S2 (supp) | `maurano_dhs_validation/figures/mode_d_pearson_heatmap.png` | full Pearson heatmap grid across precision × column flavor (faceted) |
 | S3 (supp) | `maurano_dhs_validation/figures/mode_d_clustering_ari.png` | full ARI heatmap grid across precision × column flavor (faceted) |
 | S4 (supp) | `docs/figures/mode_d_violins_by_k.png` (data: `docs/data/mode_d_summary.csv`, script: `docs/scripts/mode_d_violins.R`) | per-k Pearson and ARI distributions across full (w, p) sweep |
@@ -320,7 +320,7 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 
 ## Supplementary figures
 
-**Fig S1:** 12-metric Wilcoxon comparison at k=10, w=10 (broad peaks). `jaccard_similarity_with_ends` gives the best Δ/saturation trade-off; `cosketch_geom_with_ends` is a near-tie; `cosketch_max` is the weakest discriminator. Backs the metric-choice discussion in §6.2.
+**Fig S1:** 12-metric Wilcoxon comparison at k=10, w=10 (broad peaks; the pre-v0.5.0 schema, without the two `jaccard_similarity_ie` columns). `jaccard_similarity_with_ends` gives the best Δ/saturation trade-off; `cosketch_geom_with_ends` is a near-tie; `cosketch_max` is the weakest discriminator. Backs the metric-choice discussion in §6.2.
 
 ![Fig S1 — 12-metric Wilcoxon comparison at k=10, w=10, broad](../experiments/ref-comparison/figures/metric_comparison_broad_k10_w10.png)
 

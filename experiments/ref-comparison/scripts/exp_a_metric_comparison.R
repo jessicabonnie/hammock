@@ -3,11 +3,18 @@
 # scripts/exp_a_metric_comparison.R
 #
 # Sanity-check the new Mode D columns (containment + cosketch) on the
-# cross-reference robustness question at one (k, w) cell. For each of the
-# 12 columns (6 minimizer-only + 6 with-ends), compute:
+# cross-reference robustness question at one (k, w) cell. For each similarity
+# column present in the input, compute:
 #   - median(cross_ref) − median(diff_tissue)
 #   - Wilcoxon p (one-sided, cross_ref > diff_tissue)
 # and plot effect size + −log10(p), grouped by sketch flavor.
+#
+# Schema note: hammock < 0.5.0 emitted 12 such columns (6 minimizer-only +
+# 6 with-ends); 0.5.0 adds jaccard_similarity_ie and its _with_ends twin, for
+# 14. The table below lists all 14 and the script keeps only those actually
+# present, so it runs unchanged on CSVs of either vintage -- rather than
+# hard-erroring inside pull(.data[[metric]]), which is what a missing column
+# used to do. It prints which ones it dropped.
 #
 # Usage:
 #   Rscript scripts/exp_a_metric_comparison.R <csv> <metadata_tsv> <out_png> <out_tsv> [peak_type_label]
@@ -37,10 +44,21 @@ metric_groups <- tribble(
   "containment_BA_with_ends",       "minimizer+ends",  "containment_BA",
   "cosketch_geom_with_ends",        "minimizer+ends",  "cosketch_geom",
   "cosketch_arith_with_ends",       "minimizer+ends",  "cosketch_arith",
-  "cosketch_max_with_ends",         "minimizer+ends",  "cosketch_max"
+  "cosketch_max_with_ends",         "minimizer+ends",  "cosketch_max",
+  # hammock >= 0.5.0 only; absent from CSVs written before 2026-07-31.
+  "jaccard_similarity_ie",          "minimizer",       "jaccard_ie",
+  "jaccard_similarity_ie_with_ends","minimizer+ends",  "jaccard_ie"
 )
 
 mat  <- read_csv(csv_file,  show_col_types = FALSE)
+missing_metrics <- setdiff(metric_groups$metric, names(mat))
+if (length(missing_metrics) > 0) {
+  message("note: ", length(missing_metrics), " metric column(s) absent from ",
+          basename(csv_file), " -- skipping: ",
+          paste(missing_metrics, collapse = ", "))
+  metric_groups <- metric_groups %>% filter(!metric %in% missing_metrics)
+}
+if (nrow(metric_groups) == 0) stop("no known similarity columns in ", csv_file)
 meta <- read_tsv(meta_file, show_col_types = FALSE)
 
 pairs <- mat %>%
@@ -80,7 +98,9 @@ stats <- purrr::pmap_dfr(metric_groups, compute_row)
 write_tsv(stats, out_tsv)
 
 # Plot 1: delta (effect size)
-kind_order <- c("jaccard", "containment_AB", "containment_BA",
+# Must list every `kind` in metric_groups: factor() maps an unlisted level to
+# NA and ggplot then drops those bars with only a warning.
+kind_order <- c("jaccard", "jaccard_ie", "containment_AB", "containment_BA",
                 "cosketch_geom", "cosketch_arith", "cosketch_max")
 stats <- stats %>%
   mutate(kind   = factor(kind,   levels = kind_order),

@@ -142,7 +142,10 @@ Notes (both peak types):
 - `scripts/exp_a_validate_plot.R` — per-cell Wilcoxon + 2-panel figure (boxplot + 9×9 heatmap)
 - `scripts/exp_a_sweep_summary.R` — (k × w) effect-size heatmap
 - `scripts/exp_a_dendrogram.R` — UPGMA dendrogram (broad + narrow)
-- `scripts/exp_a_metric_comparison.R` — 12-metric Wilcoxon comparison at one (k, w)
+- `scripts/exp_a_metric_comparison.R` — metric Wilcoxon comparison at one (k, w).
+  The committed figure and TSV cover 12 metrics; hammock 0.5.0 emits 14 (adding
+  `jaccard_similarity_ie` and its `_with_ends` twin), and the script picks those
+  up automatically once the input CSVs are regenerated. Not yet re-run
 - `workflow/Snakefile` — orchestrates peaks → FASTA (bedtools getfasta) → hammock Mode D → R plots
 
 ## Reproducing
