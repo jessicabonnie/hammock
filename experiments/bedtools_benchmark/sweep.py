@@ -42,6 +42,13 @@ ACCURACY_KEYS = [
     "jaccard_n_pairs",
     "jaccard_mae_vs_bt", "jaccard_max_err_vs_bt",
     "jaccard_mae_vs_hll", "jaccard_max_err_vs_hll",
+    # Inclusion-exclusion twin. `jaccard_similarity` is register-equality,
+    # which carries a chance-agreement floor and is NOT on bedtools' scale --
+    # its _vs_bt columns measure the definitional gap, not error. The _ie_
+    # columns are the ones comparable to bedtools. Left None when the sweep
+    # ran with --no-ie. See docs/jaccard-definitional-gap.md.
+    "jaccard_ie_mae_vs_bt", "jaccard_ie_max_err_vs_bt",
+    "jaccard_ie_mae_vs_hll", "jaccard_ie_max_err_vs_hll",
 ]
 # sort_time: wall time to pre-sort BED files for the (run_id, num_files, num_intervals)
 # realization. Pre-sort happens outside per-tool timing (bedtools needs sorted input,
@@ -72,45 +79,65 @@ def parse_bedtools_jaccards(stdout: str):
     return out
 
 
-def parse_hammock_csv(path: str):
-    """Hammock CSV is query\\treference\\tjaccard_similarity (basenames).
+def parse_hammock_csv(path: str, column: str = "jaccard_similarity"):
+    """Read one similarity column out of a hammock-cpp TSV, by header name.
 
-    Returns {(query, reference): jaccard_float}.
+    Returns {(query, reference): value}. Column lookup is by name, not
+    position: without --metrics the file has 3 columns, with it 9, so an
+    index would silently read containment_AB as if it were a Jaccard.
+
+    Raises KeyError if the file exists but lacks `column` -- that means the
+    binary ran without --metrics, and returning {} instead would show up
+    downstream as "no pairs in common", i.e. a silently empty accuracy column
+    rather than a failure.
     """
     out = {}
     if not path or not os.path.exists(path):
         return out
     with open(path) as f:
-        header = f.readline()  # skip
+        header = f.readline().rstrip("\n").split("\t")
+        try:
+            idx = header.index(column)
+        except ValueError:
+            raise KeyError(
+                f"{path} has no {column!r} column (header: {header}). "
+                f"Re-run hammock-cpp with --metrics.") from None
         for line in f:
             parts = line.rstrip("\n").split("\t")
-            if len(parts) < 3:
+            if len(parts) <= idx:
                 continue
             try:
-                out[(parts[0], parts[1])] = float(parts[2])
+                out[(parts[0], parts[1])] = float(parts[idx])
             except ValueError:
                 continue
     return out
 
 
-def jaccard_error_stats(est: dict, *, vs_bt: dict, vs_hll: dict):
+def jaccard_error_stats(est: dict, *, vs_bt: dict, vs_hll: dict, prefix: str = "jaccard"):
     """Compare hammock estimates against TWO ground truths.
 
     vs_bt: bedtools per-pair jaccards (set-jaccard ground truth — definitional gap)
     vs_hll: hammock@p_max per-pair jaccards (HLL ground truth — actual precision/accuracy)
+
+    prefix selects the key family: "jaccard" for register-equality,
+    "jaccard_ie" for inclusion-exclusion. The vs_hll ground truth must be
+    drawn from the SAME estimator as `est` -- comparing IE estimates against a
+    register-equality p_max reference would report the definitional gap as if
+    it were precision error.
     """
-    out = {k: None for k in ACCURACY_KEYS}
+    out = {}
     common_bt = set(est.keys()) & set(vs_bt.keys())
     common_hll = set(est.keys()) & set(vs_hll.keys()) if vs_hll else set()
-    out["jaccard_n_pairs"] = len(common_bt) if common_bt else (len(common_hll) or None)
+    if prefix == "jaccard":
+        out["jaccard_n_pairs"] = len(common_bt) if common_bt else (len(common_hll) or None)
     if common_bt:
         d = np.array([abs(est[k] - vs_bt[k]) for k in common_bt])
-        out["jaccard_mae_vs_bt"] = float(np.mean(d))
-        out["jaccard_max_err_vs_bt"] = float(np.max(d))
+        out[f"{prefix}_mae_vs_bt"] = float(np.mean(d))
+        out[f"{prefix}_max_err_vs_bt"] = float(np.max(d))
     if common_hll:
         d = np.array([abs(est[k] - vs_hll[k]) for k in common_hll])
-        out["jaccard_mae_vs_hll"] = float(np.mean(d))
-        out["jaccard_max_err_vs_hll"] = float(np.max(d))
+        out[f"{prefix}_mae_vs_hll"] = float(np.mean(d))
+        out[f"{prefix}_max_err_vs_hll"] = float(np.max(d))
     return out
 
 
@@ -168,7 +195,7 @@ def _row(axis, tool, *, precision, threads, num_files, num_intervals, run_id, re
     return r
 
 
-def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, num_runs, sub_b_list):
+def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, num_runs, sub_b_list, ie=True):
     """Vary precision; bedtools is precision-independent so it's run once per data realization.
 
     Computes jaccard accuracy with TWO ground truths:
@@ -206,7 +233,19 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
             # so subB=1.0 @ p_max can serve as the HLL ground truth for all
             # other (p, subB) combos.
             estimates: dict = {}
+            estimates_ie: dict = {}
             hm_results: dict = {}
+
+            def _drop(hm):
+                prefix = hm.get("_out_prefix")
+                if not prefix:
+                    return
+                for f in _glob.glob(prefix + "*"):
+                    try:
+                        os.remove(f)
+                    except OSError:
+                        pass
+
             for sub_b in sub_b_list:
                 for p in precisions:
                     print(f"  hammock-cpp p={p} subB={sub_b:g}...", end=" ", flush=True)
@@ -217,26 +256,46 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
                     print(f"{hm['wall_time']:.2f}s wall, {rss:.1f} MB" if rss is not None else f"{hm['wall_time']:.2f}s wall")
                     estimates[(p, sub_b)] = parse_hammock_csv(hm.get("output_csv"))
                     hm_results[(p, sub_b)] = hm
-                    prefix = hm.get("_out_prefix")
-                    if prefix:
-                        for f in _glob.glob(prefix + "*"):
-                            try:
-                                os.remove(f)
-                            except OSError:
-                                pass
+                    _drop(hm)
+
+                    if ie:
+                        # SECOND, UNTIMED pass. --metrics adds a union +
+                        # cardinality per pair, so folding it into the run
+                        # above would inflate comparison_time and break
+                        # comparability with the published RESULTS.md numbers.
+                        # Nothing from this run's timing dict is recorded.
+                        print(f"    + untimed --metrics pass...", end=" ", flush=True)
+                        hm2 = run_hammock(binary, f1, f2, p, num_threads,
+                                          keep_output=True, sub_b=sub_b, metrics=True)
+                        estimates_ie[(p, sub_b)] = parse_hammock_csv(
+                            hm2.get("output_csv"), column="jaccard_similarity_ie")
+                        _drop(hm2)
+                        print(f"{hm2['wall_time']:.2f}s (not recorded)")
 
             hll_truth = estimates.get((p_max, 1.0), {})
+            # IE ground truth must be the IE value at p_max, not the
+            # register-equality one -- they estimate different quantities.
+            hll_truth_ie = estimates_ie.get((p_max, 1.0), {})
 
             for sub_b in sub_b_list:
                 for p in precisions:
                     est = estimates[(p, sub_b)]
-                    err = jaccard_error_stats(est, vs_bt=bt_truth, vs_hll=hll_truth)
-                    mae_bt = err["jaccard_mae_vs_bt"]
-                    mae_hll = err["jaccard_mae_vs_hll"]
-                    mae_bt_s = f"{mae_bt:.4f}" if mae_bt is not None else "n/a"
-                    mae_hll_s = f"{mae_hll:.4f}" if mae_hll is not None else "n/a"
+                    est_ie = estimates_ie.get((p, sub_b), {})
+                    err = {k: None for k in ACCURACY_KEYS}
+                    err.update(jaccard_error_stats(est, vs_bt=bt_truth, vs_hll=hll_truth))
+                    if est_ie:
+                        err.update(jaccard_error_stats(
+                            est_ie, vs_bt=bt_truth, vs_hll=hll_truth_ie,
+                            prefix="jaccard_ie"))
+
+                    def _f(k):
+                        v = err[k]
+                        return f"{v:.4f}" if v is not None else "n/a"
                     print(f"    p={p} subB={sub_b:g}: n={err['jaccard_n_pairs']}, "
-                          f"MAE_bt={mae_bt_s}, MAE_hll={mae_hll_s}")
+                          f"MAE_bt={_f('jaccard_mae_vs_bt')} (register-equality, "
+                          f"includes the definitional gap), "
+                          f"MAE_bt_ie={_f('jaccard_ie_mae_vs_bt')}, "
+                          f"MAE_hll={_f('jaccard_mae_vs_hll')}")
                     merged = dict(hm_results[(p, sub_b)])
                     merged.update(err)
                     rows.append(_row("precision", tool_name_for_subb(sub_b),
@@ -250,6 +309,7 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
                             "run_id": run_i, "precision": p, "sub_b": sub_b,
                             "query": q, "reference": r,
                             "hammock_jaccard": j_hm,
+                            "hammock_jaccard_ie": est_ie.get((q, r)),
                             "bedtools_jaccard": bt_truth.get((q, r)),
                         })
     return rows, pair_rows
@@ -472,11 +532,18 @@ def plot_axis(rows, axis, png_path, title_suffix):
     plt.close(fig)
 
 
-def plot_pair_scatter(pair_rows, png_path, title_suffix):
-    """Scatter of (bedtools_jaccard, hammock_jaccard), one point per pair, colored by precision.
+def plot_pair_scatter(pair_rows, png_path, title_suffix,
+                      value_key="hammock_jaccard",
+                      y_label="hammock jaccard (register-equality)"):
+    """Scatter of (bedtools_jaccard, hammock estimate), one point per pair, colored by precision.
 
     With multiple subB values, plots one panel per subB so each panel keeps a
     clean p-colored scatter.
+
+    value_key selects the estimator. The default register-equality column is
+    NOT on bedtools' scale -- its offset from y=x is the definitional gap, not
+    error -- so the same plot is also emitted for jaccard_similarity_ie, which
+    is. Returns False if there is nothing to plot.
     """
     try:
         import matplotlib  # type: ignore
@@ -487,13 +554,13 @@ def plot_pair_scatter(pair_rows, png_path, title_suffix):
 
     by_subb_p = defaultdict(lambda: defaultdict(list))
     for r in pair_rows:
-        if r.get("bedtools_jaccard") is None or r.get("hammock_jaccard") is None:
+        if r.get("bedtools_jaccard") is None or r.get(value_key) is None:
             continue
         sub_b = r.get("sub_b") if r.get("sub_b") is not None else 1.0
-        by_subb_p[float(sub_b)][r["precision"]].append((r["bedtools_jaccard"], r["hammock_jaccard"]))
+        by_subb_p[float(sub_b)][r["precision"]].append((r["bedtools_jaccard"], r[value_key]))
 
     if not by_subb_p:
-        return
+        return False
 
     sub_bs = sorted(by_subb_p.keys(), reverse=True)
     n = len(sub_bs)
@@ -511,14 +578,15 @@ def plot_pair_scatter(pair_rows, png_path, title_suffix):
         ax.set_xlim(-0.02, 1.02)
         ax.set_ylim(-0.02, 1.02)
         ax.set_xlabel("bedtools jaccard (set Jaccard, ground truth)")
-        ax.set_ylabel("hammock jaccard (register-equality)")
+        ax.set_ylabel(y_label)
         ax.set_title(f"subB={sub_b:g}", fontsize=11)
         ax.grid(True, alpha=0.3)
         ax.legend(loc="upper left", fontsize=9)
-    fig.suptitle(f"Definitional gap: hammock vs bedtools jaccard\n{title_suffix}", fontsize=10)
+    fig.suptitle(f"{y_label} vs bedtools jaccard\n{title_suffix}", fontsize=10)
     fig.tight_layout()
     fig.savefig(png_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
+    return True
 
 
 def main():
@@ -544,6 +612,14 @@ def main():
                              "--subB <val> --subB-method mixed-stride. subB=1.0 "
                              "emits 'hammock_cpp_B' for backwards compat; other "
                              "values emit 'hammock_cpp_B_subB<val>'.")
+
+    parser.add_argument("--no-ie", dest="ie", action="store_false", default=True,
+                        help="Skip the second, untimed --metrics pass on the "
+                             "precision axis. That pass is what supplies the "
+                             "bedtools-comparable jaccard_similarity_ie "
+                             "columns; it re-sketches every input, so it "
+                             "roughly DOUBLES the axis's wall time. Recorded "
+                             "timings come only from the first pass either way.")
 
     args = parser.parse_args()
     sub_b_list = [float(x) for x in args.sub_b_list.split(",") if x.strip()]
@@ -577,7 +653,8 @@ def main():
         print(f"[precision] p ∈ {precisions}, t={args.threads}, files={nf}, "
               f"intervals={args.num_intervals}, subB ∈ {sub_b_list}")
         rows, pair_rows = sweep_precision(binary, precisions, nf, args.num_intervals,
-                                          args.threads, args.runs, sub_b_list)
+                                          args.threads, args.runs, sub_b_list,
+                                          ie=args.ie)
         suffix = f"(t={args.threads}, files={nf}, intervals={args.num_intervals}, subB={subb_tag})"
     elif args.axis == "threads":
         thread_list = [int(x) for x in args.thread_list.split(",")]
@@ -608,7 +685,8 @@ def main():
         with open(pairs_csv, "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=["run_id", "precision", "sub_b",
                                               "query", "reference",
-                                              "bedtools_jaccard", "hammock_jaccard"],
+                                              "bedtools_jaccard", "hammock_jaccard",
+                                              "hammock_jaccard_ie"],
                                extrasaction="ignore")
             w.writeheader()
             for r in pair_rows:
@@ -616,6 +694,11 @@ def main():
         scatter_png = os.path.join(args.figures_dir, stem + "_scatter.png")
         plot_pair_scatter(pair_rows, scatter_png, suffix)
         print(f"Pairs:   {pairs_csv}\nScatter: {scatter_png}")
+        ie_png = os.path.join(args.figures_dir, stem + "_scatter_ie.png")
+        if plot_pair_scatter(pair_rows, ie_png, suffix,
+                             value_key="hammock_jaccard_ie",
+                             y_label="hammock jaccard_similarity_ie (inclusion-exclusion)"):
+            print(f"Scatter (IE): {ie_png}")
     return 0
 
 

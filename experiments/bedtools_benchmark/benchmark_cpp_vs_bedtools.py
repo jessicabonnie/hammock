@@ -154,6 +154,7 @@ def run_hammock(
     keep_output: bool = False,
     sub_b: float = 1.0,
     sub_b_method: str = "mixed-stride",
+    metrics: bool = False,
 ) -> Dict[str, Any]:
     """Run hammock-cpp Mode B and return timing/RSS.
 
@@ -163,6 +164,11 @@ def run_hammock(
     sub_b < 1.0 enables point subsampling using sub_b_method (default
     mixed-stride, matching the post-9778ef8 binary default). At sub_b == 1.0
     we omit the flags to keep the cmd line byte-identical to pre-subB runs.
+
+    metrics=True adds --metrics, which emits jaccard_similarity_ie and the
+    containment/cosketch block. It costs a union + cardinality per pair, so a
+    run with it on is NOT timing-comparable to the published numbers in
+    RESULTS.md -- use it only on untimed accuracy passes.
     """
     with tempfile.NamedTemporaryFile(mode="w", delete=False) as tmp:
         out_prefix = tmp.name
@@ -179,6 +185,8 @@ def run_hammock(
         ]
         if sub_b < 1.0:
             cmd += ["--subB", f"{sub_b:g}", "--subB-method", sub_b_method]
+        if metrics:
+            cmd += ["--metrics"]
         r = run_with_time(cmd)
 
         sketch_s: Optional[float] = None
