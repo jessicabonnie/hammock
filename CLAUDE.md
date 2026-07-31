@@ -217,7 +217,7 @@ These are deliberate; parity tests that touch them are skipped or projected.
    silent-zero-from-broken-`digest` failure mode (RPATH shadowing
    libstdc++), see `memory/project_modeD_zero_rpath_digest.md`;
    `sketch_fasta` now raises loudly instead of falling back silently.
-7. **Second Jaccard column: `jaccard_similarity_ie`** (v0.4.0). Orig emits one
+7. **Second Jaccard column: `jaccard_similarity_ie`** (v0.5.0). Orig emits one
    Jaccard column, computed by register equality. We emit that column
    unchanged — byte-equal, and parity tests still compare it — plus a second
    inclusion-exclusion column immediately after it, and in Mode D a
