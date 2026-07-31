@@ -1,0 +1,27 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 1 (use --cores to define parallelism)
+Rules claiming more threads will be scaled down.
+Provided resources: mem_mb=4000, mem_mib=3815, disk_mb=6031, disk_mib=5752, cpus_per_task=1
+Select jobs to execute...
+/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/python3.10/site-packages/stopit/__init__.py:10: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+
+[Thu May 14 09:35:57 2026]
+rule peak_bed_to_fasta:
+    input: /vast/blangme2/jbonnie/hammock/primate-phylogeny/peaks/H3K27ac/rheMac.bed, /vast/blangme2/jbonnie/hammock/primate-phylogeny/references/rheMac.fa
+    output: /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K27ac/fastas/rheMac.fa
+    log: /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/logs/getfasta/H3K27ac/rheMac.log
+    jobid: 0
+    reason: Forced execution
+    wildcards: sample=rheMac
+    resources: mem_mb=4000, mem_mib=3815, disk_mb=6031, disk_mib=5752, tmpdir=/tmp, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=30, cpus_per_task=1
+
+
+        mkdir -p "$(dirname /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K27ac/fastas/rheMac.fa)" "$(dirname /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/logs/getfasta/H3K27ac/rheMac.log)"
+        tail -n +2 /vast/blangme2/jbonnie/hammock/primate-phylogeny/peaks/H3K27ac/rheMac.bed | tr -d '\r'             | awk -v OFS='\t' -v p='' '{print p $1, $2, $3}'             | bedtools getfasta -fi /vast/blangme2/jbonnie/hammock/primate-phylogeny/references/rheMac.fa -bed /dev/stdin -fo /vast/blangme2/jbonnie/hammock/primate-phylogeny/results/H3K27ac/fastas/rheMac.fa             2>/vast/blangme2/jbonnie/hammock/primate-phylogeny/results/logs/getfasta/H3K27ac/rheMac.log
+        
+Activating environment modules: bedtools/2.30.0
+[Thu May 14 09:36:33 2026]
+Finished job 0.
+1 of 1 steps (100%) done

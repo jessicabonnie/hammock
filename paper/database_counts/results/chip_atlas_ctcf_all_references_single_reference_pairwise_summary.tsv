@@ -1,0 +1,6 @@
+row_type	target	species	comparison_assembly	bed_file_count	unique_experiment_count	cell_type_class_count	cell_type_count	within_reference_pairwise_comparisons	retrieved_at_utc
+species	CTCF	Drosophila melanogaster	dm6	45	45	4	10	990	2026-07-24T19:40:28+00:00
+species	CTCF	Homo sapiens	hg38	2206	2206	20	346	2432115	2026-07-24T19:40:28+00:00
+species	CTCF	Mus musculus	mm10	1483	1483	22	124	1098903	2026-07-24T19:40:28+00:00
+species	CTCF	Rattus norvegicus	rn6	1	1	1	1	0	2026-07-24T19:40:28+00:00
+total	CTCF	all species; not pooled for comparison	one designated assembly per species	3735	3735	26	457	3532008	2026-07-24T19:40:28+00:00

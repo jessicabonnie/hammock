@@ -1,0 +1,159 @@
+# =============================================================================
+# mus-homo Snakefile — tissue-over-species clustering, human + mouse, DNase-seq
+# =============================================================================
+#
+# This pipeline:
+#   download ENCODE peak BED → bedtools getfasta → hammock (k,w sweep) → cluster
+#
+# No nf-core/chipseq required — ENCODE publishes uniform-pipeline peak BEDs
+# as direct downloads, so we can skip the alignment + peak-calling step.
+#
+# Usage:
+#   snakemake --dryrun                              # check job plan
+#   snakemake --profile workflow/slurm_profile/     # submit to SLURM
+#
+# =============================================================================
+
+import csv
+
+configfile: "config/config.yaml"
+
+OUTDIR      = config["outdir"]
+PEAKS_CACHE = config["peaks_cache"]
+HAMMOCK     = config["sketch_bin"]
+PRECISION   = config["precision"]
+KMER_SIZES  = config["kmer_sizes"]
+WIND_SIZES  = config["window_sizes"]
+
+# Filter out (k, w) pairs where w < k — degenerate sketches
+KW_PAIRS = [(k, w) for k in KMER_SIZES for w in WIND_SIZES if w >= k]
+
+# ── Load sample manifest ──────────────────────────────────────────────────────
+
+def load_samples():
+    samples = []
+    with open(config["samples_tsv"]) as fh:
+        for row in csv.DictReader(fh, delimiter="\t"):
+            samples.append(row)
+    return samples
+
+SAMPLES = load_samples()
+SAMPLE_IDS = [s["sample_id"] for s in SAMPLES]
+SAMPLE_BY_ID = {s["sample_id"]: s for s in SAMPLES}
+
+wildcard_constraints:
+    sample = r"[A-Za-z0-9_\-]+",
+    k      = r"\d+",
+    w      = r"\d+",
+
+# ── Target rule ───────────────────────────────────────────────────────────────
+
+rule all:
+    input:
+        [f"{OUTDIR}/k{k}_w{w}/dendrogram.png" for k, w in KW_PAIRS],
+
+# ── Stage 1: download peak BED + getfasta per sample ──────────────────────────
+
+rule download_peak_bed:
+    """Curl one ENCODE peak BED to local cache."""
+    output:
+        bed_gz = f"{PEAKS_CACHE}/{{sample}}.bed.gz",
+    params:
+        url = lambda wc: SAMPLE_BY_ID[wc.sample]["peak_url"],
+    log:
+        f"{OUTDIR}/logs/download/{{sample}}.log"
+    threads: 1
+    resources:
+        mem_mb  = 1000,
+        runtime = 30,
+    shell:
+        """
+        mkdir -p "$(dirname {output.bed_gz})" "$(dirname {log})"
+        curl -fsSL "{params.url}" -o {output.bed_gz} 2>{log}
+        """
+
+rule peak_bed_to_fasta:
+    """bedtools getfasta from per-sample peak BED + per-species reference."""
+    input:
+        bed_gz = f"{PEAKS_CACHE}/{{sample}}.bed.gz",
+        ref    = lambda wc: config["references"][SAMPLE_BY_ID[wc.sample]["ref"]]["fasta"],
+    output:
+        fa = f"{OUTDIR}/fastas/{{sample}}.fa",
+    log:
+        f"{OUTDIR}/logs/getfasta/{{sample}}.log"
+    threads: 1
+    resources:
+        mem_mb  = 4000,
+        runtime = 30,
+    envmodules:
+        "bedtools/2.30.0"
+    shell:
+        """
+        mkdir -p "$(dirname {output.fa})" "$(dirname {log})"
+        # ENCODE bed.gz is narrowPeak-formatted (10-column); first 3 cols are BED3.
+        # Strip to BED3 to be safe (avoids issues with float columns).
+        zcat {input.bed_gz} | awk -v OFS='\\t' '{{print $1, $2, $3}}' \
+            | bedtools getfasta -fi {input.ref} -bed /dev/stdin -fo {output.fa} \
+            2>{log}
+        """
+
+# ── Stage 2: hammock all-vs-all over the 10 sample FASTAs ─────────────────────
+
+rule fasta_list:
+    """Write the list of all 10 sample FASTA paths (one per line)."""
+    input:
+        fas = expand(f"{OUTDIR}/fastas/{{sample}}.fa", sample=SAMPLE_IDS),
+    output:
+        lst = f"{OUTDIR}/fasta_lists/all.txt",
+    run:
+        with open(output.lst, "w") as fh:
+            for fa in input.fas:
+                fh.write(fa + "\n")
+
+rule mus_homo_hammock:
+    """hammock all-vs-all at one (k, w) over the 10-sample DNase-seq panel."""
+    input:
+        lst = f"{OUTDIR}/fasta_lists/all.txt",
+    output:
+        csv = f"{OUTDIR}/k{{k}}_w{{w}}/mus_homo_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}.csv",
+    params:
+        outprefix = lambda wc: f"{OUTDIR}/k{wc.k}_w{wc.w}/mus_homo",
+    log:
+        f"{OUTDIR}/logs/hammock/k{{k}}_w{{w}}.log"
+    threads: 8
+    resources:
+        mem_mb  = 16000,
+        runtime = 720,
+    shell:
+        """
+        {HAMMOCK} {input.lst} {input.lst} \
+            --mode D \
+            --outprefix {params.outprefix} \
+            -k {wildcards.k} \
+            -w {wildcards.w} \
+            --precision {PRECISION} \
+            --full-paths \
+            2>{log}
+        """
+
+# ── Stage 3: clustering + plotting per (k, w) ────────────────────────────────
+
+rule cluster_and_plot:
+    """Hierarchical clustering, dendrogram, PCA, cluster_assignments.tsv."""
+    input:
+        matrix   = f"{OUTDIR}/k{{k}}_w{{w}}/mus_homo_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}.csv",
+        metadata = "config/samples.tsv",
+    output:
+        dendrogram = f"{OUTDIR}/k{{k}}_w{{w}}/dendrogram.png",
+        pca        = f"{OUTDIR}/k{{k}}_w{{w}}/pca.png",
+        clusters   = f"{OUTDIR}/k{{k}}_w{{w}}/cluster_assignments.tsv",
+    params:
+        sim_col = config["primary_sim_col"],
+    log:
+        f"{OUTDIR}/logs/cluster/k{{k}}_w{{w}}.log"
+    envmodules:
+        "gcc/9.3.0",
+        "r/4.3.0",
+        "libjpeg/9c"
+    script:
+        "../scripts/cluster_plot.R"

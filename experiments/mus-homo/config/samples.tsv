@@ -1,0 +1,11 @@
+sample_id	tissue	species	ref	encsr	peak_encff	peak_url	output_type	biosample_summary
+ENCSR792QQE_heart_human	heart	human	GRCh38	ENCSR792QQE	ENCFF273NKF	https://www.encodeproject.org/files/ENCFF273NKF/@@download/ENCFF273NKF.bed.gz	peaks	Homo sapiens heart right ventricle tissue male adult (54 years)
+ENCSR909HFI_liver_human	liver	human	GRCh38	ENCSR909HFI	ENCFF558OLX	https://www.encodeproject.org/files/ENCFF558OLX/@@download/ENCFF558OLX.bed.gz	peaks	Homo sapiens right lobe of liver tissue female adult (53 years)
+ENCSR757NJT_lung_human	lung	human	GRCh38	ENCSR757NJT	ENCFF190WKI	https://www.encodeproject.org/files/ENCFF190WKI/@@download/ENCFF190WKI.bed.gz	peaks	Homo sapiens lower lobe of left lung tissue male adult (60 years)
+ENCSR567EEO_spleen_human	spleen	human	GRCh38	ENCSR567EEO	ENCFF655BXE	https://www.encodeproject.org/files/ENCFF655BXE/@@download/ENCFF655BXE.bed.gz	peaks	Homo sapiens spleen tissue female adult (61 years)
+ENCSR000EIY_brain_human	brain	human	GRCh38	ENCSR000EIY	ENCFF631HBT	https://www.encodeproject.org/files/ENCFF631HBT/@@download/ENCFF631HBT.bed.gz	peaks	Homo sapiens frontal cortex tissue female adult (67 years)
+ENCSR671NPO_heart_mouse	heart	mouse	mm10	ENCSR671NPO	ENCFF418TZF	https://www.encodeproject.org/files/ENCFF418TZF/@@download/ENCFF418TZF.bed.gz	peaks	Mus musculus B6CASTF1/J heart male adult (2 months)
+ENCSR000CNI_liver_mouse	liver	mouse	mm10	ENCSR000CNI	ENCFF185NMA	https://www.encodeproject.org/files/ENCFF185NMA/@@download/ENCFF185NMA.bed.gz	peaks	Mus musculus C57BL/6J liver male adult (2 months)
+ENCSR702AVR_lung_mouse	lung	mouse	mm10	ENCSR702AVR	ENCFF486WYO	https://www.encodeproject.org/files/ENCFF486WYO/@@download/ENCFF486WYO.bed.gz	peaks	Mus musculus B6CASTF1/J lung male adult (2 months)
+ENCSR087PCD_spleen_mouse	spleen	mouse	mm10	ENCSR087PCD	ENCFF069LYD	https://www.encodeproject.org/files/ENCFF069LYD/@@download/ENCFF069LYD.bed.gz	peaks	Mus musculus B6CASTF1/J spleen male adult (2 months)
+ENCSR325RZJ_brain_mouse	brain	mouse	mm10	ENCSR325RZJ	ENCFF247QBU	https://www.encodeproject.org/files/ENCFF247QBU/@@download/ENCFF247QBU.bed.gz	peaks	Mus musculus B6CASTF1/J frontal cortex male adult (2 months)

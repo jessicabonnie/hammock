@@ -139,3 +139,29 @@ def test_pairwise_metrics_matches_scalar_path():
             assert jac[i][j] == pytest.approx(sa.estimate_jaccard(sb))
             assert c_ab[i][j] == pytest.approx(inter / sa.estimate_cardinality())
             assert c_ba[i][j] == pytest.approx(inter / sb.estimate_cardinality())
+
+
+def test_jaccard_ie_matches_direct_inclusion_exclusion():
+    """The shipped `jaccard_similarity_ie` column must equal I/(|A|+|B|-I).
+
+    This is the test that pins the definitional relationship between the new
+    column and the containment block next to it. A "close to zero on disjoint
+    inputs" assertion would pass for a range of wrong formulas; this doesn't.
+    """
+    from hammock.runner import _jaccard_ie_from_containments
+
+    # Cardinalities must be ASYMMETRIC. With |A| == |B| the two containments
+    # coincide and a whole family of wrong formulas (geometric mean of the
+    # containments, min, harmonic mean, ...) agrees with I-E exactly, so a
+    # symmetric fixture pins almost nothing.
+    a = [range_sketch(14, 0, 40000), range_sketch(14, 0, 4000)]
+    b = [range_sketch(14, 0, 4000), range_sketch(14, 2000, 42000)]
+
+    _, c_ab, c_ba = _core.pairwise_metrics_hll(a, b)
+    jac_ie = _jaccard_ie_from_containments(c_ab, c_ba)
+    for i, sa in enumerate(a):
+        for j, sb in enumerate(b):
+            inter = sa.estimate_intersection(sb)
+            union = sa.estimate_cardinality() + sb.estimate_cardinality() - inter
+            expected = inter / union if union > 0 else 0.0
+            assert jac_ie[i][j] == pytest.approx(expected, rel=1e-12)

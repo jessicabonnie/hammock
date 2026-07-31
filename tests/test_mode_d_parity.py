@@ -103,17 +103,29 @@ def test_mode_d_structural_parity(tmp_path: Path, k: int, w: int, p: int) -> Non
     sim_cols = [i for i, c in enumerate(header)
                 if c.startswith(("jaccard_similarity", "containment", "cosketch"))]
     assert sim_cols, "no similarity columns emitted"
+    # containment_AB/BA are *antisymmetric* -- C_AB(a,b) == C_BA(b,a), not
+    # C_AB(b,a) -- so they belong in the range and self-pair checks but must be
+    # excluded from the symmetry check below.
+    sym_cols = [i for i in sim_cols
+                if header[i].startswith(("jaccard_similarity", "cosketch"))]
     by_pair = {}
     for r in rows:
         f1, f2 = r[header.index("file1")], r[header.index("file2")]
         for i in sim_cols:
             v = float(r[i])
-            assert 0.0 <= v <= 1.0, f"{header[i]}={v} out of [0,1] ({f1},{f2})"
-        j = float(r[header.index("jaccard_similarity")])
-        if f1 == f2:
-            assert j == pytest.approx(1.0), f"self-jaccard {j} != 1.0 for {f1}"
-        by_pair[(f1, f2)] = j
-    # (c) Symmetry: J(A,B) == J(B,A).
-    for (a, b), j in by_pair.items():
+            # containment_* is emitted unclamped and can exceed 1 by ~1 ulp
+            # (inter is a difference of three Ertl estimates), so allow slack.
+            assert -1e-9 <= v <= 1.0 + 1e-9, \
+                f"{header[i]}={v} out of [0,1] ({f1},{f2})"
+            if f1 == f2:
+                assert v == pytest.approx(1.0), \
+                    f"self-pair {header[i]}={v} != 1.0 for {f1}"
+        by_pair[(f1, f2)] = {i: float(r[i]) for i in sym_cols}
+    # (c) Symmetry: J(A,B) == J(B,A). Exact for the Jaccard columns (double
+    #     addition is commutative and the union is register-wise max), so
+    #     approx here is generous.
+    for (a, b), vals in by_pair.items():
         if (b, a) in by_pair:
-            assert j == pytest.approx(by_pair[(b, a)]), f"asymmetric J for {a},{b}"
+            for i, v in vals.items():
+                assert v == pytest.approx(by_pair[(b, a)][i]), \
+                    f"asymmetric {header[i]} for {a},{b}"

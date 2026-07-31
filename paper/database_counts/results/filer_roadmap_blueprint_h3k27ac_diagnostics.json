@@ -1,0 +1,251 @@
+{
+  "retrieved_at_utc": "2026-07-24T20:04:16+00:00",
+  "hg19_columns": [
+    "Identifier",
+    "Data Source",
+    "File name",
+    "Number of intervals",
+    "bp covered",
+    "Output type",
+    "Genome build",
+    "cell type",
+    "Biosample type",
+    "Biosamples term id",
+    "Tissue category",
+    "ENCODE Experiment id",
+    "Biological replicate(s)",
+    "Technical replicate",
+    "Antibody",
+    "Assay",
+    "File format",
+    "File size",
+    "filepath",
+    "Downloaded date",
+    "Release date",
+    "Date added to FILER",
+    "Processed File Download URL",
+    "Processed file md5",
+    "wget command",
+    "tabix_index Download",
+    "Link out URL",
+    "Raw File URL",
+    "Raw file download",
+    "Raw file md5",
+    "Data Category",
+    "classification",
+    "Track Description",
+    "system category",
+    "life stage",
+    "trackName"
+  ],
+  "hg38_columns": [
+    "Identifier",
+    "Data Source",
+    "File name",
+    "Number of intervals",
+    "bp covered",
+    "Output type",
+    "Genome build",
+    "cell type",
+    "Biosample type",
+    "Biosamples term id",
+    "Tissue category",
+    "ENCODE Experiment id",
+    "Biological replicate(s)",
+    "Technical replicate",
+    "Antibody",
+    "Assay",
+    "File format",
+    "File size",
+    "filepath",
+    "Downloaded date",
+    "Release date",
+    "Date added to FILER",
+    "Processed File Download URL",
+    "Processed file md5",
+    "wget command",
+    "tabix_index Download",
+    "Link out URL",
+    "Raw File URL",
+    "Raw file download",
+    "Raw file md5",
+    "Data Category",
+    "classification",
+    "Track Description",
+    "system category",
+    "life stage",
+    "trackName"
+  ],
+  "roadmap": {
+    "resource_requested": "roadmap",
+    "assembly_requested": "hg19",
+    "row_count": 26339,
+    "selected_count": 462,
+    "rejection_counts": {
+      "resource": 21061,
+      "target": 4202,
+      "assay": 614
+    },
+    "top_resource_labels": [
+      [
+        "ENCODE",
+        13444
+      ],
+      [
+        "ROADMAP",
+        5151
+      ],
+      [
+        "1k_genome_phase3",
+        2256
+      ],
+      [
+        "FANTOM5",
+        1953
+      ],
+      [
+        "Factorbook_v1_UCSC",
+        1078
+      ],
+      [
+        "EpiMap_Enhancers",
+        831
+      ],
+      [
+        "DASHR2",
+        632
+      ],
+      [
+        "HOMER",
+        425
+      ],
+      [
+        "GTEx_v7",
+        288
+      ],
+      [
+        "ROADMAP_Enhancers",
+        127
+      ],
+      [
+        "FANTOM5_Enhancers",
+        112
+      ],
+      [
+        "Reference_Genome",
+        25
+      ],
+      [
+        "TargetScan_v8",
+        9
+      ],
+      [
+        "Inferno_Genomic_Partition",
+        3
+      ],
+      [
+        "DASHR2_small_RNA_Genes",
+        2
+      ],
+      [
+        "Ensembl_Gene_model",
+        1
+      ],
+      [
+        "RefSeq_Gene_model",
+        1
+      ],
+      [
+        "Repeats",
+        1
+      ]
+    ],
+    "top_h3k27ac_target_labels": [
+      [
+        "H3K27ac",
+        1182
+      ]
+    ]
+  },
+  "blueprint": {
+    "resource_requested": "blueprint",
+    "assembly_requested": "hg38",
+    "row_count": 38457,
+    "selected_count": 0,
+    "rejection_counts": {
+      "resource": 38457
+    },
+    "top_resource_labels": [
+      [
+        "ENCODE",
+        31691
+      ],
+      [
+        "1k_genome_phase3",
+        2162
+      ],
+      [
+        "FANTOM5",
+        1829
+      ],
+      [
+        "EpiMap_Enhancers",
+        831
+      ],
+      [
+        "DASHR2",
+        632
+      ],
+      [
+        "GTEx_v8",
+        490
+      ],
+      [
+        "HOMER",
+        425
+      ],
+      [
+        "ROADMAP",
+        127
+      ],
+      [
+        "ROADMAP_Enhancers",
+        127
+      ],
+      [
+        "FANTOM5_Enhancers",
+        110
+      ],
+      [
+        "Reference_Genome",
+        25
+      ],
+      [
+        "Inferno_Genomic_Partition",
+        3
+      ],
+      [
+        "DASHR2_small_RNA_Genes",
+        2
+      ],
+      [
+        "Ensembl_Gene_model",
+        1
+      ],
+      [
+        "RefSeq_Gene_model",
+        1
+      ],
+      [
+        "Repeats",
+        1
+      ]
+    ],
+    "top_h3k27ac_target_labels": [
+      [
+        "H3K27ac",
+        1274
+      ]
+    ]
+  }
+}

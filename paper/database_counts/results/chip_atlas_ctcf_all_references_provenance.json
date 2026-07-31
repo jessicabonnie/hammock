@@ -1,0 +1,48 @@
+{
+  "source": "ChIP-Atlas",
+  "source_url": "https://chip-atlas.org/data/ExperimentList.json",
+  "retrieved_at_utc": "2026-07-24T19:40:28+00:00",
+  "filters": {
+    "species": "all",
+    "assemblies": "all",
+    "antigen_class_exact": "TFs and others",
+    "target_exact_case_insensitive": "CTCF",
+    "q_value_threshold": "q < 1e-5"
+  },
+  "counting_policy": {
+    "physical_inventory": "all verified experiment/assembly BED files",
+    "pairwise_comparison": "only verified BED files on one designated reference per species; different references and different species are not paired",
+    "designated_comparison_references": {
+      "Homo sapiens": "hg38",
+      "Mus musculus": "mm10",
+      "Drosophila melanogaster": "dm6",
+      "Rattus norvegicus": "rn6",
+      "Caenorhabditis elegans": "ce11",
+      "Saccharomyces cerevisiae": "sacCer3",
+      "Danio rerio": "danRer10",
+      "Xenopus tropicalis": "xenTro9",
+      "Gallus gallus": "galGal5",
+      "Arabidopsis thaliana": "TAIR10"
+    },
+    "no_fallback_policy": "an experiment missing from the designated reference is excluded from pairwise counts rather than replaced with another assembly"
+  },
+  "verification_performed": true,
+  "verification_workers": 16,
+  "records_in_source": 432319,
+  "unique_target_experiments": 3736,
+  "candidate_experiment_assembly_pairs": 7471,
+  "verified_bed_files": 7470,
+  "single_reference_comparison_files": 3735,
+  "records_excluded_for_missing_experiment_id": 0,
+  "records_excluded_for_missing_assembly": 0,
+  "verification_failure_summary": {
+    "HTTP 404": 1
+  },
+  "outputs": [
+    "/home/jbonnie1/interval_sketch/hammock_claude/paper/database_counts/results/chip_atlas_ctcf_all_references_candidate_manifest.tsv",
+    "/home/jbonnie1/interval_sketch/hammock_claude/paper/database_counts/results/chip_atlas_ctcf_all_references_verified_bed_manifest.tsv",
+    "/home/jbonnie1/interval_sketch/hammock_claude/paper/database_counts/results/chip_atlas_ctcf_all_references_physical_file_summary.tsv",
+    "/home/jbonnie1/interval_sketch/hammock_claude/paper/database_counts/results/chip_atlas_ctcf_all_references_single_reference_manifest.tsv",
+    "/home/jbonnie1/interval_sketch/hammock_claude/paper/database_counts/results/chip_atlas_ctcf_all_references_single_reference_pairwise_summary.tsv"
+  ]
+}

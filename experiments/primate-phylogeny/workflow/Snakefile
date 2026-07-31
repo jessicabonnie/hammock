@@ -1,0 +1,219 @@
+# =============================================================================
+# primate-phylogeny Snakefile — recover mammalian phylogeny from Villar 2015
+# H3K4me3 / H3K27ac peak FASTAs via hammock minimizer-sketch similarity.
+# =============================================================================
+#
+# Pipeline:
+#   Villar peak BED (curl)  →  bedtools getfasta  →  hammock all-vs-all
+#                                                         ↓
+#                                  distance matrix  →  NJ tree + plots
+#
+# Sample inclusion is driven by which `ucsc_assembly` keys exist in
+# config.yaml under `references:`. This lets us iterate from a small
+# subset (human + mouse) up to all 20 Villar species as references are
+# acquired.
+#
+# Usage:
+#   snakemake --dryrun
+#   snakemake --profile workflow/slurm_profile/
+#
+# =============================================================================
+
+import csv
+
+configfile: "config/config.yaml"
+
+OUTDIR      = config["outdir"]
+PEAKS_CACHE = config["peaks_cache"]
+HAMMOCK     = config["sketch_bin"]
+PRECISION   = config["precision"]
+KMER_SIZES  = config["kmer_sizes"]
+WIND_SIZES  = config["window_sizes"]
+MARK        = config["mark"]            # "H3K4me3" or "H3K27ac"
+REFS        = config["references"]
+
+# Filter out (k, w) pairs where w < k — degenerate sketches
+KW_PAIRS = [(k, w) for k in KMER_SIZES for w in WIND_SIZES if w >= k]
+
+# Villar peak URLs follow the naming convention used in samples.tsv:
+#   h3k27ac_peak_url, h3k4me3_peak_url
+MARK_TO_URL_COL = {
+    "H3K27ac": "h3k27ac_peak_url",
+    "H3K4me3": "h3k4me3_peak_url",
+}
+URL_COL = MARK_TO_URL_COL[MARK]
+
+# ── Load sample manifest, filtered to species with configured references ─────
+
+def load_samples():
+    samples = []
+    with open(config["samples_tsv"]) as fh:
+        for row in csv.DictReader(fh, delimiter="\t"):
+            if not row.get("species_code"):
+                continue
+            asm = row["ucsc_assembly"]
+            if asm not in REFS:
+                continue
+            samples.append(row)
+    return samples
+
+SAMPLES = load_samples()
+SAMPLE_IDS = [s["species_code"] for s in SAMPLES]
+SAMPLE_BY_ID = {s["species_code"]: s for s in SAMPLES}
+
+if not SAMPLES:
+    raise WorkflowError(
+        "No samples included. Add `ucsc_assembly` keys to config.yaml "
+        "`references:` to enable species from samples.tsv."
+    )
+
+wildcard_constraints:
+    sample = r"[A-Za-z0-9_\-]+",
+    k      = r"\d+",
+    w      = r"\d+",
+
+# ── Target rule ───────────────────────────────────────────────────────────────
+
+rule all:
+    input:
+        [f"{OUTDIR}/{MARK}/k{k}_w{w}/metric_spreads.tsv"             for k, w in KW_PAIRS],
+        [f"{OUTDIR}/{MARK}/k{k}_w{w}/nj_tree_jacc_mz.newick"         for k, w in KW_PAIRS],
+        [f"{OUTDIR}/{MARK}/k{k}_w{w}/nj_tree_cosmax_mz.newick"       for k, w in KW_PAIRS],
+        [f"{OUTDIR}/{MARK}/k{k}_w{w}/nj_tree_cosgeom_mz.newick"      for k, w in KW_PAIRS],
+        [f"{OUTDIR}/{MARK}/k{k}_w{w}/nj_tree_jacc_we.newick"         for k, w in KW_PAIRS],
+        [f"{OUTDIR}/{MARK}/k{k}_w{w}/nj_tree_cosmax_we.newick"       for k, w in KW_PAIRS],
+        [f"{OUTDIR}/{MARK}/k{k}_w{w}/nj_tree_cosgeom_we.newick"      for k, w in KW_PAIRS],
+
+# ── Stage 1: download Villar peak BED per (species, mark) ────────────────────
+
+rule download_peak_bed:
+    """Curl one Villar 2015 peak file (replicated MACS peaks) for one species + mark."""
+    output:
+        bed = f"{PEAKS_CACHE}/{MARK}/{{sample}}.bed",
+    params:
+        url = lambda wc: SAMPLE_BY_ID[wc.sample][URL_COL],
+    log:
+        f"{OUTDIR}/logs/download/{MARK}/{{sample}}.log"
+    threads: 1
+    resources:
+        mem_mb  = 1000,
+        runtime = 30,
+    shell:
+        """
+        mkdir -p "$(dirname {output.bed})" "$(dirname {log})"
+        # ArrayExpress serves a 302 → follow with -L. Files are not gzipped.
+        curl -fsSL "{params.url}" -o {output.bed} 2>{log}
+        """
+
+rule peak_bed_to_fasta:
+    """bedtools getfasta after normalizing the Villar peak file.
+
+    Villar format: 9-col TSV with header, bare chromosome names, CRLF endings.
+    We:
+      1. drop header (`tail -n +2`)
+      2. strip CRLF (`tr -d '\\r'`)
+      3. optionally prepend a chromosome prefix (e.g., "chr") to match the
+         configured reference's naming style
+      4. emit BED3 (`$1, $2, $3`) — keeps getfasta robust against extra cols
+    """
+    input:
+        bed = f"{PEAKS_CACHE}/{MARK}/{{sample}}.bed",
+        ref = lambda wc: REFS[SAMPLE_BY_ID[wc.sample]["ucsc_assembly"]]["fasta"],
+    output:
+        fa = f"{OUTDIR}/{MARK}/fastas/{{sample}}.fa",
+    params:
+        chr_prefix = lambda wc: REFS[SAMPLE_BY_ID[wc.sample]["ucsc_assembly"]].get("peak_chr_prefix", ""),
+    log:
+        f"{OUTDIR}/logs/getfasta/{MARK}/{{sample}}.log"
+    threads: 1
+    resources:
+        mem_mb  = 4000,
+        runtime = 30,
+    envmodules:
+        "bedtools/2.30.0"
+    shell:
+        """
+        mkdir -p "$(dirname {output.fa})" "$(dirname {log})"
+        tail -n +2 {input.bed} | tr -d '\\r' \
+            | awk -v OFS='\\t' -v p='{params.chr_prefix}' '{{print p $1, $2, $3}}' \
+            | bedtools getfasta -fi {input.ref} -bed /dev/stdin -fo {output.fa} \
+            2>{log}
+        """
+
+# ── Stage 2: hammock all-vs-all per (k, w) ────────────────────────────────────
+
+rule fasta_list:
+    """Write the list of all included-species FASTA paths, one per line."""
+    input:
+        fas = expand(f"{OUTDIR}/{MARK}/fastas/{{sample}}.fa", sample=SAMPLE_IDS),
+    output:
+        lst = f"{OUTDIR}/{MARK}/fasta_lists/all.txt",
+    run:
+        with open(output.lst, "w") as fh:
+            for fa in input.fas:
+                fh.write(fa + "\n")
+
+rule phylo_hammock:
+    """hammock all-vs-all at one (k, w) over the included species panel."""
+    input:
+        lst = f"{OUTDIR}/{MARK}/fasta_lists/all.txt",
+    output:
+        csv = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/phylo_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}.csv",
+    params:
+        outprefix = lambda wc: f"{OUTDIR}/{MARK}/k{wc.k}_w{wc.w}/phylo",
+    log:
+        f"{OUTDIR}/logs/hammock/{MARK}/k{{k}}_w{{w}}.log"
+    threads: 8
+    resources:
+        mem_mb  = 16000,
+        runtime = 720,
+    shell:
+        """
+        {HAMMOCK} {input.lst} {input.lst} \
+            --mode D \
+            --outprefix {params.outprefix} \
+            -k {wildcards.k} \
+            -w {wildcards.w} \
+            --precision {PRECISION} \
+            --full-paths \
+            2>{log}
+        """
+
+# ── Stage 3: NJ tree + comparison to known mammalian phylogeny ───────────────
+
+rule build_phylogeny:
+    """Build neighbor-joining trees from hammock similarities, one per
+    chosen metric (jaccard, cosketch_max, cosketch_geom) × sketch variant
+    (minimizer-only, minimizer+ends), and emit a per-cell metric_spreads
+    summary covering all 12 hammock columns."""
+    input:
+        matrix   = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/phylo_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}.csv",
+        metadata = "config/samples.tsv",
+    output:
+        spread_tsv         = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/metric_spreads.tsv",
+        newick_jacc_mz     = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_jacc_mz.newick",
+        newick_cosmax_mz   = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosmax_mz.newick",
+        newick_cosgeom_mz  = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosgeom_mz.newick",
+        newick_jacc_we     = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_jacc_we.newick",
+        newick_cosmax_we   = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosmax_we.newick",
+        newick_cosgeom_we  = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosgeom_we.newick",
+        tree_png_jacc_mz   = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_jacc_mz.png",
+        tree_png_cosmax_mz = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosmax_mz.png",
+        tree_png_cosgeom_mz= f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosgeom_mz.png",
+        tree_png_jacc_we   = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_jacc_we.png",
+        tree_png_cosmax_we = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosmax_we.png",
+        tree_png_cosgeom_we= f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosgeom_we.png",
+        dist_jacc_mz       = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/dist_matrix_jacc_mz.tsv",
+        dist_cosmax_mz     = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/dist_matrix_cosmax_mz.tsv",
+        dist_cosgeom_mz    = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/dist_matrix_cosgeom_mz.tsv",
+        dist_jacc_we       = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/dist_matrix_jacc_we.tsv",
+        dist_cosmax_we     = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/dist_matrix_cosmax_we.tsv",
+        dist_cosgeom_we    = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/dist_matrix_cosgeom_we.tsv",
+    log:
+        f"{OUTDIR}/logs/phylo/{MARK}/k{{k}}_w{{w}}.log"
+    envmodules:
+        "gcc/9.3.0",
+        "r/4.3.0",
+        "libjpeg/9c"
+    script:
+        "../scripts/build_phylogeny.R"

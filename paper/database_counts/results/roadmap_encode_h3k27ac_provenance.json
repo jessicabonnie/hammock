@@ -1,0 +1,37 @@
+{
+  "retrieved_at_utc": "2026-07-24T19:57:09+00:00",
+  "target": "H3K27ac",
+  "roadmap": {
+    "source_url": "https://egg2.wustl.edu/roadmap/data/byFileType/peaks/consolidated/narrowPeak/",
+    "assembly": "hg19",
+    "selection": "consolidated narrowPeak filenames matching E###-TARGET.narrowPeak.gz",
+    "file_count": 98
+  },
+  "encode": {
+    "search_url": "https://www.encodeproject.org/search/?type=File&status=released&file_format=bed&assembly=GRCh38&assay_title=Histone+ChIP-seq&target.label=H3K27ac&limit=all&format=json&frame=embedded",
+    "assembly": "GRCh38",
+    "selection": "one released experiment-linked peak BED per experiment; prefer preferred_default, then IDR/replicated output rank",
+    "file_count": 450,
+    "diagnostics": {
+      "api_file_records": 1795,
+      "eligible_peak_bed_records": 1795,
+      "rejected_records": 0,
+      "unique_experiments": 450,
+      "experiments_with_multiple_candidate_files": 320,
+      "duplicate_candidate_files_removed": 1345,
+      "selected_files": 450,
+      "selected_missing_dataset_id": 0
+    }
+  },
+  "cross_repository_pair_policy": "Roadmap_count multiplied by ENCODE unique-experiment count; pairs share target and species but use incompatible assemblies",
+  "tls": {
+    "certificate_verification": false,
+    "ca_bundle_argument": "",
+    "environment_ca_bundle": "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+  },
+  "outputs": [
+    "/home/jbonnie1/interval_sketch/hammock_claude/paper/database_counts/results/roadmap_encode_h3k27ac_manifest.tsv",
+    "/home/jbonnie1/interval_sketch/hammock_claude/paper/database_counts/results/roadmap_encode_h3k27ac_summary.tsv",
+    "/home/jbonnie1/interval_sketch/hammock_claude/paper/database_counts/results/roadmap_encode_h3k27ac_encode_audit.tsv"
+  ]
+}

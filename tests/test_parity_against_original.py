@@ -27,6 +27,27 @@ def _run(cmd: list[str], cwd: Path) -> None:
     subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True)
 
 
+def test_parity_harness_compares_two_different_binaries(tmp_path: Path) -> None:
+    """Guard against the self-compare trap.
+
+    `OURS` is whatever `hammock` resolves to on PATH. If the refactor env is
+    not first, that is the *original* binary and every parity test below
+    silently compares orig against orig and passes green -- which has bitten
+    this repo before (see CLAUDE.md divergence #6). Columns are projected out
+    by name, so a missing column is indistinguishable from a matching one,
+    which makes the failure mode completely silent.
+    """
+    assert Path(ORIG).resolve() != Path(OURS).resolve(), (ORIG, OURS)
+    files = _files_list(tmp_path)
+    _run([OURS, str(files), str(files), "--mode", "B", "-p", "14",
+          "-o", str(tmp_path / "id")], tmp_path)
+    header = next(tmp_path.glob("id*.csv")).read_text().splitlines()[0].split(",")
+    # Only the refactor emits this column; its presence proves OURS is ours.
+    assert "jaccard_similarity_ie" in header, (
+        f"`hammock` on PATH ({OURS}) does not emit jaccard_similarity_ie -- it "
+        f"is probably the original binary, so the parity tests are vacuous.")
+
+
 def _files_list(tmp_path: Path) -> Path:
     f = tmp_path / "files.txt"
     f.write_text(f"{DATA / 'tiny_a.bed'}\n{DATA / 'tiny_b.bed'}\n")
@@ -41,14 +62,21 @@ _PROJECTED_OUT = {
     "containment",
     "containment_AB", "containment_BA",
     "cosketch_geom", "cosketch_arith", "cosketch_max",
+    # A *Jaccard* column is projected out here, which looks wrong at a glance.
+    # It isn't: jaccard_similarity_ie is a second, inclusion-exclusion
+    # estimator emitted alongside the register-equality one. Orig has no
+    # counterpart, so there is nothing to be unfaithful to. The column that
+    # must stay byte-equal -- jaccard_similarity -- is still compared.
+    "jaccard_similarity_ie",
 }
 
 
 def _projected_rows(csv_text: str) -> list[tuple]:
-    """Drop containment/cosketch columns before comparing.
+    """Drop containment/cosketch and inclusion-exclusion columns before comparing.
 
-    Parity is only required for the Jaccard column; orig 0.4.0 has no
-    counterpart for our containment/cosketch surface.
+    Parity is required for `jaccard_similarity` (the register-equality column
+    orig also emits); orig 0.4.0 has no counterpart for our containment,
+    cosketch, or inclusion-exclusion surface.
     """
     lines = csv_text.strip().split("\n")
     header = lines[0].split(",")
@@ -123,8 +151,9 @@ def test_mode_b_subB_actually_subsamples(tmp_path: Path) -> None:
     full = next(tmp_path.glob("full*.csv")).read_text().splitlines()
     sub = next(tmp_path.glob("sub*.csv")).read_text().splitlines()
     # cross-pair Jaccard column should differ between full sampling and 25% sampling
-    full_jac = full[2].split(",")[8]
-    sub_jac = sub[2].split(",")[8]
+    jac_col = full[0].split(",").index("jaccard_similarity")
+    full_jac = full[2].split(",")[jac_col]
+    sub_jac = sub[2].split(",")[jac_col]
     assert full_jac != sub_jac, f"--subB 0.25 produced same Jaccard as no subsampling ({full_jac})"
 
 

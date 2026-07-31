@@ -1,0 +1,24 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 2
+Rules claiming more threads will be scaled down.
+Provided resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, cpus_per_task=1
+Select jobs to execute...
+
+[Thu May 14 21:00:20 2026]
+rule cluster_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/mus-homo/results/k8_w20/mus_homo_mnmzr_p24_jaccD_k8_w20.csv, config/samples.tsv
+    output: /vast/blangme2/jbonnie/hammock/mus-homo/results/k8_w20/dendrogram.png, /vast/blangme2/jbonnie/hammock/mus-homo/results/k8_w20/pca.png, /vast/blangme2/jbonnie/hammock/mus-homo/results/k8_w20/cluster_assignments.tsv
+    log: /vast/blangme2/jbonnie/hammock/mus-homo/results/logs/cluster/k8_w20.log
+    jobid: 0
+    reason: Forced execution
+    wildcards: k=8, w=20
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=/tmp, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Rscript --vanilla /home/jbonnie1/interval_sketch/hammock_claude/experiments/mus-homo/.snakemake/scripts/tmpkorow7xw.cluster_plot.R
+Activating environment modules: gcc/9.3.0, r/4.3.0, libjpeg/9c
+Done. Outputs: /vast/blangme2/jbonnie/hammock/mus-homo/results/k8_w20/dendrogram.png, /vast/blangme2/jbonnie/hammock/mus-homo/results/k8_w20/pca.png, /vast/blangme2/jbonnie/hammock/mus-homo/results/k8_w20/cluster_assignments.tsv
+Not cleaning up /home/jbonnie1/interval_sketch/hammock_claude/experiments/mus-homo/.snakemake/scripts/tmpkorow7xw.cluster_plot.R
+[Thu May 14 21:00:23 2026]
+Finished job 0.
+1 of 1 steps (100%) done

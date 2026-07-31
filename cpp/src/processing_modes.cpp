@@ -152,6 +152,12 @@ size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sket
 
 #pragma omp parallel reduction(+:total_points,sampled_points)
         {
+            // precision/hash_size were read off main_hll, whose ctor already
+            // validated them, so validated_precision() cannot throw here. Keep
+            // that true if they ever become free parameters. Note this does
+            // NOT make the region exception-safe: registers_ allocates (16 MiB
+            // per thread at p=24) and an escaping bad_alloc would terminate --
+            // unhandled by design, unlike the pairwise loop in hammock_cli.cpp.
             HLLSketch local(precision, hash_size);
 #pragma omp for schedule(static) nowait
             for (size_t i = 0; i < intervals.size(); i++) {
@@ -254,6 +260,12 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
 
 #pragma omp parallel reduction(+:total_interval_elements,kept_intervals,total_points,sampled_points)
         {
+            // precision/hash_size were read off main_hll, whose ctor already
+            // validated them, so validated_precision() cannot throw here. Keep
+            // that true if they ever become free parameters. Note this does
+            // NOT make the region exception-safe: registers_ allocates (16 MiB
+            // per thread at p=24) and an escaping bad_alloc would terminate --
+            // unhandled by design, unlike the pairwise loop in hammock_cli.cpp.
             HLLSketch local(precision, hash_size);
             size_t te = 0, kept = 0, tp = 0, sp = 0;
 #pragma omp for schedule(static) nowait

@@ -1,0 +1,19 @@
+# Large data files (results/ is a symlink to /vast/.../mus-homo/results/)
+results/
+*.bam
+*.bam.bai
+*.fastq
+*.fastq.gz
+*.fa
+*.fasta
+*.bed.gz
+
+# Snakemake
+.snakemake/
+*.log
+
+# Temporary
+__pycache__/
+*.pyc
+.Rhistory
+.RData

@@ -1,0 +1,1498 @@
+Using profile workflow/slurm_profile/ for setting default command line arguments.
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cluster nodes: 100
+Job stats:
+job                        count
+-----------------------  -------
+all                            1
+exp_a_hammock                 40
+exp_a_sweep_summary            2
+exp_a_validate_and_plot       40
+total                         83
+
+Select jobs to execute...
+/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/python3.10/site-packages/stopit/__init__.py:10: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+
+[Thu May 14 20:57:38 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/exp_a_mnmzr_p24_jaccD_k8_w15.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k8_w15.log
+    jobid: 30
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/exp_a_mnmzr_p24_jaccD_k8_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=8, w=15
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/exp_a             -k 8             -w 15             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k8_w15.log
+        
+Submitted job 30 with external jobid 'Submitted batch job 24414605'.
+
+[Thu May 14 20:57:38 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/exp_a_mnmzr_p24_jaccD_k10_w15.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k10_w15.log
+    jobid: 90
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/exp_a_mnmzr_p24_jaccD_k10_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=10, w=15
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/exp_a             -k 10             -w 15             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k10_w15.log
+        
+Submitted job 90 with external jobid 'Submitted batch job 24414606'.
+
+[Thu May 14 20:57:38 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/exp_a_mnmzr_p24_jaccD_k5_w8.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k5_w8.log
+    jobid: 68
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/exp_a_mnmzr_p24_jaccD_k5_w8.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=5, w=8
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/exp_a             -k 5             -w 8             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k5_w8.log
+        
+Submitted job 68 with external jobid 'Submitted batch job 24414607'.
+
+[Thu May 14 20:57:38 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/exp_a_mnmzr_p24_jaccD_k10_w15.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k10_w15.log
+    jobid: 38
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/exp_a_mnmzr_p24_jaccD_k10_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=10, w=15
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/exp_a             -k 10             -w 15             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k10_w15.log
+        
+Submitted job 38 with external jobid 'Submitted batch job 24414608'.
+
+[Thu May 14 20:57:38 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/exp_a_mnmzr_p24_jaccD_k15_w20.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k15_w20.log
+    jobid: 98
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/exp_a_mnmzr_p24_jaccD_k15_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=15, w=20
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/exp_a             -k 15             -w 20             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k15_w20.log
+        
+Submitted job 98 with external jobid 'Submitted batch job 24414609'.
+
+[Thu May 14 20:57:38 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/exp_a_mnmzr_p24_jaccD_k5_w5.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k5_w5.log
+    jobid: 2
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/exp_a_mnmzr_p24_jaccD_k5_w5.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=5, w=5
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/exp_a             -k 5             -w 5             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k5_w5.log
+        
+Submitted job 2 with external jobid 'Submitted batch job 24414610'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/exp_a_mnmzr_p24_jaccD_k15_w20.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k15_w20.log
+    jobid: 46
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/exp_a_mnmzr_p24_jaccD_k15_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=15, w=20
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/exp_a             -k 15             -w 20             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k15_w20.log
+        
+Submitted job 46 with external jobid 'Submitted batch job 24414611'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/exp_a_mnmzr_p24_jaccD_k5_w30.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k5_w30.log
+    jobid: 76
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/exp_a_mnmzr_p24_jaccD_k5_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=5, w=30
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/exp_a             -k 5             -w 30             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k5_w30.log
+        
+Submitted job 76 with external jobid 'Submitted batch job 24414612'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/exp_a_mnmzr_p24_jaccD_k5_w8.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k5_w8.log
+    jobid: 16
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/exp_a_mnmzr_p24_jaccD_k5_w8.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=5, w=8
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/exp_a             -k 5             -w 8             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k5_w8.log
+        
+Submitted job 16 with external jobid 'Submitted batch job 24414613'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/exp_a_mnmzr_p24_jaccD_k5_w5.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k5_w5.log
+    jobid: 54
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/exp_a_mnmzr_p24_jaccD_k5_w5.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=5, w=5
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/exp_a             -k 5             -w 5             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k5_w5.log
+        
+Submitted job 54 with external jobid 'Submitted batch job 24414614'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/exp_a_mnmzr_p24_jaccD_k8_w20.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k8_w20.log
+    jobid: 84
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/exp_a_mnmzr_p24_jaccD_k8_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=8, w=20
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/exp_a             -k 8             -w 20             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k8_w20.log
+        
+Submitted job 84 with external jobid 'Submitted batch job 24414615'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/exp_a_mnmzr_p24_jaccD_k5_w30.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k5_w30.log
+    jobid: 24
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/exp_a_mnmzr_p24_jaccD_k5_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=5, w=30
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/exp_a             -k 5             -w 30             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k5_w30.log
+        
+Submitted job 24 with external jobid 'Submitted batch job 24414616'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/exp_a_mnmzr_p24_jaccD_k8_w20.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k8_w20.log
+    jobid: 32
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/exp_a_mnmzr_p24_jaccD_k8_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=8, w=20
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/exp_a             -k 8             -w 20             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k8_w20.log
+        
+Submitted job 32 with external jobid 'Submitted batch job 24414617'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/exp_a_mnmzr_p24_jaccD_k10_w20.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k10_w20.log
+    jobid: 92
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/exp_a_mnmzr_p24_jaccD_k10_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=10, w=20
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/exp_a             -k 10             -w 20             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k10_w20.log
+        
+Submitted job 92 with external jobid 'Submitted batch job 24414618'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/exp_a_mnmzr_p24_jaccD_k5_w10.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k5_w10.log
+    jobid: 70
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/exp_a_mnmzr_p24_jaccD_k5_w10.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=5, w=10
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/exp_a             -k 5             -w 10             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k5_w10.log
+        
+Submitted job 70 with external jobid 'Submitted batch job 24414619'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/exp_a_mnmzr_p24_jaccD_k8_w15.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k8_w15.log
+    jobid: 82
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/exp_a_mnmzr_p24_jaccD_k8_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=8, w=15
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/exp_a             -k 8             -w 15             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k8_w15.log
+        
+Submitted job 82 with external jobid 'Submitted batch job 24414620'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/exp_a_mnmzr_p24_jaccD_k10_w20.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k10_w20.log
+    jobid: 40
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/exp_a_mnmzr_p24_jaccD_k10_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=10, w=20
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/exp_a             -k 10             -w 20             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k10_w20.log
+        
+Submitted job 40 with external jobid 'Submitted batch job 24414621'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/exp_a_mnmzr_p24_jaccD_k15_w30.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k15_w30.log
+    jobid: 100
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/exp_a_mnmzr_p24_jaccD_k15_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=15, w=30
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/exp_a             -k 15             -w 30             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k15_w30.log
+        
+Submitted job 100 with external jobid 'Submitted batch job 24414622'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/exp_a_mnmzr_p24_jaccD_k15_w30.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k15_w30.log
+    jobid: 48
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/exp_a_mnmzr_p24_jaccD_k15_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=15, w=30
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/exp_a             -k 15             -w 30             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k15_w30.log
+        
+Submitted job 48 with external jobid 'Submitted batch job 24414623'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/exp_a_mnmzr_p24_jaccD_k5_w10.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k5_w10.log
+    jobid: 18
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/exp_a_mnmzr_p24_jaccD_k5_w10.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=5, w=10
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/exp_a             -k 5             -w 10             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k5_w10.log
+        
+Submitted job 18 with external jobid 'Submitted batch job 24414624'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/exp_a_mnmzr_p24_jaccD_k8_w8.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k8_w8.log
+    jobid: 78
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/exp_a_mnmzr_p24_jaccD_k8_w8.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=8, w=8
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/exp_a             -k 8             -w 8             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k8_w8.log
+        
+Submitted job 78 with external jobid 'Submitted batch job 24414625'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/exp_a_mnmzr_p24_jaccD_k8_w30.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k8_w30.log
+    jobid: 86
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/exp_a_mnmzr_p24_jaccD_k8_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=8, w=30
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/exp_a             -k 8             -w 30             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k8_w30.log
+        
+Submitted job 86 with external jobid 'Submitted batch job 24414626'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/exp_a_mnmzr_p24_jaccD_k8_w8.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k8_w8.log
+    jobid: 26
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/exp_a_mnmzr_p24_jaccD_k8_w8.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=8, w=8
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/exp_a             -k 8             -w 8             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k8_w8.log
+        
+Submitted job 26 with external jobid 'Submitted batch job 24414627'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/exp_a_mnmzr_p24_jaccD_k8_w30.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k8_w30.log
+    jobid: 34
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/exp_a_mnmzr_p24_jaccD_k8_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=8, w=30
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/exp_a             -k 8             -w 30             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k8_w30.log
+        
+Submitted job 34 with external jobid 'Submitted batch job 24414628'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/exp_a_mnmzr_p24_jaccD_k10_w30.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k10_w30.log
+    jobid: 94
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/exp_a_mnmzr_p24_jaccD_k10_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=10, w=30
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/exp_a             -k 10             -w 30             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k10_w30.log
+        
+Submitted job 94 with external jobid 'Submitted batch job 24414629'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/exp_a_mnmzr_p24_jaccD_k5_w15.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k5_w15.log
+    jobid: 72
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/exp_a_mnmzr_p24_jaccD_k5_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=5, w=15
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/exp_a             -k 5             -w 15             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k5_w15.log
+        
+Submitted job 72 with external jobid 'Submitted batch job 24414630'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/exp_a_mnmzr_p24_jaccD_k10_w30.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k10_w30.log
+    jobid: 42
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/exp_a_mnmzr_p24_jaccD_k10_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=10, w=30
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/exp_a             -k 10             -w 30             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k10_w30.log
+        
+Submitted job 42 with external jobid 'Submitted batch job 24414631'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/exp_a_mnmzr_p24_jaccD_k20_w20.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k20_w20.log
+    jobid: 102
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/exp_a_mnmzr_p24_jaccD_k20_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=20, w=20
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/exp_a             -k 20             -w 20             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k20_w20.log
+        
+Submitted job 102 with external jobid 'Submitted batch job 24414632'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/exp_a_mnmzr_p24_jaccD_k20_w20.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k20_w20.log
+    jobid: 50
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/exp_a_mnmzr_p24_jaccD_k20_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=20, w=20
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/exp_a             -k 20             -w 20             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k20_w20.log
+        
+Submitted job 50 with external jobid 'Submitted batch job 24414633'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/exp_a_mnmzr_p24_jaccD_k5_w15.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k5_w15.log
+    jobid: 20
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/exp_a_mnmzr_p24_jaccD_k5_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=5, w=15
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/exp_a             -k 5             -w 15             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k5_w15.log
+        
+Submitted job 20 with external jobid 'Submitted batch job 24414634'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/exp_a_mnmzr_p24_jaccD_k8_w10.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k8_w10.log
+    jobid: 80
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/exp_a_mnmzr_p24_jaccD_k8_w10.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=8, w=10
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/exp_a             -k 8             -w 10             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k8_w10.log
+        
+Submitted job 80 with external jobid 'Submitted batch job 24414635'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/exp_a_mnmzr_p24_jaccD_k8_w10.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k8_w10.log
+    jobid: 28
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/exp_a_mnmzr_p24_jaccD_k8_w10.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=8, w=10
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/exp_a             -k 8             -w 10             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k8_w10.log
+        
+Submitted job 28 with external jobid 'Submitted batch job 24414636'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/exp_a_mnmzr_p24_jaccD_k10_w10.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k10_w10.log
+    jobid: 88
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/exp_a_mnmzr_p24_jaccD_k10_w10.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=10, w=10
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/exp_a             -k 10             -w 10             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k10_w10.log
+        
+Submitted job 88 with external jobid 'Submitted batch job 24414637'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/exp_a_mnmzr_p24_jaccD_k10_w10.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k10_w10.log
+    jobid: 36
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/exp_a_mnmzr_p24_jaccD_k10_w10.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=10, w=10
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/exp_a             -k 10             -w 10             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k10_w10.log
+        
+Submitted job 36 with external jobid 'Submitted batch job 24414638'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/exp_a_mnmzr_p24_jaccD_k15_w15.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k15_w15.log
+    jobid: 96
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/exp_a_mnmzr_p24_jaccD_k15_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=15, w=15
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/exp_a             -k 15             -w 15             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k15_w15.log
+        
+Submitted job 96 with external jobid 'Submitted batch job 24414639'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/exp_a_mnmzr_p24_jaccD_k5_w20.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k5_w20.log
+    jobid: 74
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/exp_a_mnmzr_p24_jaccD_k5_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=5, w=20
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/exp_a             -k 5             -w 20             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k5_w20.log
+        
+Submitted job 74 with external jobid 'Submitted batch job 24414640'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/exp_a_mnmzr_p24_jaccD_k15_w15.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k15_w15.log
+    jobid: 44
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/exp_a_mnmzr_p24_jaccD_k15_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=15, w=15
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/exp_a             -k 15             -w 15             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k15_w15.log
+        
+Submitted job 44 with external jobid 'Submitted batch job 24414641'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/exp_a_mnmzr_p24_jaccD_k20_w30.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k20_w30.log
+    jobid: 104
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/exp_a_mnmzr_p24_jaccD_k20_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=20, w=30
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/exp_a             -k 20             -w 30             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/hammock_k20_w30.log
+        
+Submitted job 104 with external jobid 'Submitted batch job 24414642'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/exp_a_mnmzr_p24_jaccD_k20_w30.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k20_w30.log
+    jobid: 52
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/exp_a_mnmzr_p24_jaccD_k20_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=20, w=30
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/exp_a             -k 20             -w 30             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k20_w30.log
+        
+Submitted job 52 with external jobid 'Submitted batch job 24414643'.
+
+[Thu May 14 20:57:39 2026]
+rule exp_a_hammock:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/exp_a_mnmzr_p24_jaccD_k5_w20.csv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k5_w20.log
+    jobid: 22
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/exp_a_mnmzr_p24_jaccD_k5_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=5, w=20
+    threads: 8
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        cat /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/CHM13.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh37.txt /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/fasta_lists/GRCh38.txt > /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/exp_a_all_fastas.txt
+        hammock /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/exp_a_all_fastas.txt                   /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/exp_a_all_fastas.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/exp_a             -k 5             -w 20             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/hammock_k5_w20.log
+        
+Submitted job 22 with external jobid 'Submitted batch job 24414644'.
+[Thu May 14 21:01:30 2026]
+Finished job 76.
+1 of 83 steps (1%) done
+Select jobs to execute...
+
+[Thu May 14 21:01:30 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/exp_a_mnmzr_p24_jaccD_k5_w30.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k5_w30.log
+    jobid: 75
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/exp_a_mnmzr_p24_jaccD_k5_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=5, w=30
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 75 with external jobid 'Submitted batch job 24415467'.
+[Thu May 14 21:01:30 2026]
+Finished job 84.
+2 of 83 steps (2%) done
+Select jobs to execute...
+
+[Thu May 14 21:01:30 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/exp_a_mnmzr_p24_jaccD_k8_w20.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k8_w20.log
+    jobid: 83
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/exp_a_mnmzr_p24_jaccD_k8_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=8, w=20
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 83 with external jobid 'Submitted batch job 24415468'.
+[Thu May 14 21:01:31 2026]
+Finished job 24.
+3 of 83 steps (4%) done
+Select jobs to execute...
+
+[Thu May 14 21:01:31 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/exp_a_mnmzr_p24_jaccD_k5_w30.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k5_w30.log
+    jobid: 23
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/exp_a_mnmzr_p24_jaccD_k5_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=5, w=30
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 23 with external jobid 'Submitted batch job 24415469'.
+[Thu May 14 21:01:31 2026]
+Finished job 86.
+4 of 83 steps (5%) done
+Select jobs to execute...
+
+[Thu May 14 21:01:31 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/exp_a_mnmzr_p24_jaccD_k8_w30.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k8_w30.log
+    jobid: 85
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/exp_a_mnmzr_p24_jaccD_k8_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=8, w=30
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 85 with external jobid 'Submitted batch job 24415470'.
+[Thu May 14 21:01:32 2026]
+Finished job 34.
+5 of 83 steps (6%) done
+[Thu May 14 21:01:32 2026]
+Finished job 94.
+6 of 83 steps (7%) done
+[Thu May 14 21:01:32 2026]
+Finished job 72.
+7 of 83 steps (8%) done
+[Thu May 14 21:01:32 2026]
+Finished job 42.
+8 of 83 steps (10%) done
+[Thu May 14 21:01:32 2026]
+Finished job 20.
+9 of 83 steps (11%) done
+Select jobs to execute...
+
+[Thu May 14 21:01:32 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/exp_a_mnmzr_p24_jaccD_k5_w15.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k5_w15.log
+    jobid: 19
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/exp_a_mnmzr_p24_jaccD_k5_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=5, w=15
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 19 with external jobid 'Submitted batch job 24415471'.
+
+[Thu May 14 21:01:32 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/exp_a_mnmzr_p24_jaccD_k10_w30.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k10_w30.log
+    jobid: 93
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/exp_a_mnmzr_p24_jaccD_k10_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=10, w=30
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 93 with external jobid 'Submitted batch job 24415472'.
+
+[Thu May 14 21:01:32 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/exp_a_mnmzr_p24_jaccD_k8_w30.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k8_w30.log
+    jobid: 33
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/exp_a_mnmzr_p24_jaccD_k8_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=8, w=30
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 33 with external jobid 'Submitted batch job 24415473'.
+
+[Thu May 14 21:01:32 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/exp_a_mnmzr_p24_jaccD_k5_w15.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k5_w15.log
+    jobid: 71
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/exp_a_mnmzr_p24_jaccD_k5_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=5, w=15
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 71 with external jobid 'Submitted batch job 24415474'.
+
+[Thu May 14 21:01:32 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/exp_a_mnmzr_p24_jaccD_k10_w30.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k10_w30.log
+    jobid: 41
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/exp_a_mnmzr_p24_jaccD_k10_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=10, w=30
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 41 with external jobid 'Submitted batch job 24415475'.
+[Thu May 14 21:01:32 2026]
+Finished job 74.
+10 of 83 steps (12%) done
+Select jobs to execute...
+
+[Thu May 14 21:01:32 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/exp_a_mnmzr_p24_jaccD_k5_w20.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k5_w20.log
+    jobid: 73
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/exp_a_mnmzr_p24_jaccD_k5_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=5, w=20
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 73 with external jobid 'Submitted batch job 24415476'.
+[Thu May 14 21:01:33 2026]
+Finished job 22.
+11 of 83 steps (13%) done
+Select jobs to execute...
+
+[Thu May 14 21:01:33 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/exp_a_mnmzr_p24_jaccD_k5_w20.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k5_w20.log
+    jobid: 21
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/exp_a_mnmzr_p24_jaccD_k5_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=5, w=20
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 21 with external jobid 'Submitted batch job 24415477'.
+[Thu May 14 21:02:09 2026]
+Finished job 75.
+12 of 83 steps (14%) done
+[Thu May 14 21:02:09 2026]
+Finished job 83.
+13 of 83 steps (16%) done
+[Thu May 14 21:02:09 2026]
+Finished job 23.
+14 of 83 steps (17%) done
+[Thu May 14 21:02:09 2026]
+Finished job 85.
+15 of 83 steps (18%) done
+[Thu May 14 21:02:09 2026]
+Finished job 19.
+16 of 83 steps (19%) done
+[Thu May 14 21:02:09 2026]
+Finished job 93.
+17 of 83 steps (20%) done
+[Thu May 14 21:02:09 2026]
+Finished job 33.
+18 of 83 steps (22%) done
+[Thu May 14 21:02:09 2026]
+Finished job 71.
+19 of 83 steps (23%) done
+[Thu May 14 21:02:09 2026]
+Finished job 41.
+20 of 83 steps (24%) done
+[Thu May 14 21:02:09 2026]
+Finished job 30.
+21 of 83 steps (25%) done
+Select jobs to execute...
+
+[Thu May 14 21:02:09 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/exp_a_mnmzr_p24_jaccD_k8_w15.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k8_w15.log
+    jobid: 29
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/exp_a_mnmzr_p24_jaccD_k8_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=8, w=15
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 29 with external jobid 'Submitted batch job 24415552'.
+[Thu May 14 21:02:10 2026]
+Finished job 68.
+22 of 83 steps (27%) done
+Select jobs to execute...
+
+[Thu May 14 21:02:10 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/exp_a_mnmzr_p24_jaccD_k5_w8.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k5_w8.log
+    jobid: 67
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/exp_a_mnmzr_p24_jaccD_k5_w8.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=5, w=8
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 67 with external jobid 'Submitted batch job 24415553'.
+[Thu May 14 21:02:10 2026]
+Finished job 32.
+23 of 83 steps (28%) done
+Select jobs to execute...
+
+[Thu May 14 21:02:10 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/exp_a_mnmzr_p24_jaccD_k8_w20.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k8_w20.log
+    jobid: 31
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/exp_a_mnmzr_p24_jaccD_k8_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=8, w=20
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 31 with external jobid 'Submitted batch job 24415554'.
+[Thu May 14 21:02:10 2026]
+Finished job 92.
+24 of 83 steps (29%) done
+Select jobs to execute...
+
+[Thu May 14 21:02:10 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/exp_a_mnmzr_p24_jaccD_k10_w20.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k10_w20.log
+    jobid: 91
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/exp_a_mnmzr_p24_jaccD_k10_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=10, w=20
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 91 with external jobid 'Submitted batch job 24415555'.
+[Thu May 14 21:02:11 2026]
+Finished job 70.
+25 of 83 steps (30%) done
+Select jobs to execute...
+
+[Thu May 14 21:02:11 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/exp_a_mnmzr_p24_jaccD_k5_w10.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k5_w10.log
+    jobid: 69
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/exp_a_mnmzr_p24_jaccD_k5_w10.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=5, w=10
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 69 with external jobid 'Submitted batch job 24415556'.
+[Thu May 14 21:02:11 2026]
+Finished job 82.
+26 of 83 steps (31%) done
+[Thu May 14 21:02:11 2026]
+Finished job 40.
+27 of 83 steps (33%) done
+[Thu May 14 21:02:11 2026]
+Finished job 100.
+28 of 83 steps (34%) done
+Select jobs to execute...
+
+[Thu May 14 21:02:11 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/exp_a_mnmzr_p24_jaccD_k15_w30.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k15_w30.log
+    jobid: 99
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/exp_a_mnmzr_p24_jaccD_k15_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=15, w=30
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 99 with external jobid 'Submitted batch job 24415557'.
+
+[Thu May 14 21:02:11 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/exp_a_mnmzr_p24_jaccD_k8_w15.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k8_w15.log
+    jobid: 81
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/exp_a_mnmzr_p24_jaccD_k8_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=8, w=15
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 81 with external jobid 'Submitted batch job 24415558'.
+
+[Thu May 14 21:02:11 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/exp_a_mnmzr_p24_jaccD_k10_w20.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k10_w20.log
+    jobid: 39
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/exp_a_mnmzr_p24_jaccD_k10_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=10, w=20
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 39 with external jobid 'Submitted batch job 24415559'.
+[Thu May 14 21:02:11 2026]
+Finished job 48.
+29 of 83 steps (35%) done
+[Thu May 14 21:02:11 2026]
+Finished job 18.
+30 of 83 steps (36%) done
+Select jobs to execute...
+
+[Thu May 14 21:02:11 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/exp_a_mnmzr_p24_jaccD_k15_w30.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k15_w30.log
+    jobid: 47
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/exp_a_mnmzr_p24_jaccD_k15_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=15, w=30
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 47 with external jobid 'Submitted batch job 24415560'.
+
+[Thu May 14 21:02:11 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/exp_a_mnmzr_p24_jaccD_k5_w10.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k5_w10.log
+    jobid: 17
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/exp_a_mnmzr_p24_jaccD_k5_w10.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=5, w=10
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 17 with external jobid 'Submitted batch job 24415561'.
+[Thu May 14 21:02:12 2026]
+Finished job 73.
+31 of 83 steps (37%) done
+[Thu May 14 21:02:12 2026]
+Finished job 21.
+32 of 83 steps (39%) done
+[Thu May 14 21:02:23 2026]
+Finished job 90.
+33 of 83 steps (40%) done
+Select jobs to execute...
+
+[Thu May 14 21:02:23 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/exp_a_mnmzr_p24_jaccD_k10_w15.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k10_w15.log
+    jobid: 89
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/exp_a_mnmzr_p24_jaccD_k10_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=10, w=15
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 89 with external jobid 'Submitted batch job 24415585'.
+[Thu May 14 21:02:24 2026]
+Finished job 80.
+34 of 83 steps (41%) done
+Select jobs to execute...
+
+[Thu May 14 21:02:24 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/exp_a_mnmzr_p24_jaccD_k8_w10.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k8_w10.log
+    jobid: 79
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/exp_a_mnmzr_p24_jaccD_k8_w10.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=8, w=10
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 79 with external jobid 'Submitted batch job 24415586'.
+Waiting at most 60 seconds for missing files.
+[Thu May 14 21:02:40 2026]
+Finished job 29.
+35 of 83 steps (42%) done
+[Thu May 14 21:02:40 2026]
+Finished job 67.
+36 of 83 steps (43%) done
+[Thu May 14 21:02:40 2026]
+Finished job 31.
+37 of 83 steps (45%) done
+[Thu May 14 21:02:40 2026]
+Finished job 91.
+38 of 83 steps (46%) done
+Waiting at most 60 seconds for missing files.
+[Thu May 14 21:02:41 2026]
+Finished job 69.
+39 of 83 steps (47%) done
+[Thu May 14 21:02:41 2026]
+Finished job 99.
+40 of 83 steps (48%) done
+[Thu May 14 21:02:41 2026]
+Finished job 81.
+41 of 83 steps (49%) done
+[Thu May 14 21:02:41 2026]
+Finished job 39.
+42 of 83 steps (51%) done
+[Thu May 14 21:02:41 2026]
+Finished job 47.
+43 of 83 steps (52%) done
+[Thu May 14 21:02:41 2026]
+Finished job 17.
+44 of 83 steps (53%) done
+[Thu May 14 21:02:41 2026]
+Finished job 38.
+45 of 83 steps (54%) done
+Select jobs to execute...
+
+[Thu May 14 21:02:41 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/exp_a_mnmzr_p24_jaccD_k10_w15.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k10_w15.log
+    jobid: 37
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/exp_a_mnmzr_p24_jaccD_k10_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=10, w=15
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 37 with external jobid 'Submitted batch job 24415595'.
+[Thu May 14 21:02:41 2026]
+Finished job 16.
+46 of 83 steps (55%) done
+Select jobs to execute...
+
+[Thu May 14 21:02:41 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/exp_a_mnmzr_p24_jaccD_k5_w8.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k5_w8.log
+    jobid: 15
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/exp_a_mnmzr_p24_jaccD_k5_w8.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=5, w=8
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 15 with external jobid 'Submitted batch job 24415596'.
+[Thu May 14 21:02:42 2026]
+Finished job 78.
+47 of 83 steps (57%) done
+Select jobs to execute...
+
+[Thu May 14 21:02:42 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/exp_a_mnmzr_p24_jaccD_k8_w8.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k8_w8.log
+    jobid: 77
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/exp_a_mnmzr_p24_jaccD_k8_w8.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=8, w=8
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 77 with external jobid 'Submitted batch job 24415597'.
+[Thu May 14 21:02:42 2026]
+Finished job 28.
+48 of 83 steps (58%) done
+Select jobs to execute...
+
+[Thu May 14 21:02:42 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/exp_a_mnmzr_p24_jaccD_k8_w10.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k8_w10.log
+    jobid: 27
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/exp_a_mnmzr_p24_jaccD_k8_w10.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=8, w=10
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 27 with external jobid 'Submitted batch job 24415598'.
+[Thu May 14 21:03:15 2026]
+Finished job 37.
+49 of 83 steps (59%) done
+[Thu May 14 21:03:15 2026]
+Finished job 15.
+50 of 83 steps (60%) done
+[Thu May 14 21:03:15 2026]
+Finished job 77.
+51 of 83 steps (61%) done
+[Thu May 14 21:03:15 2026]
+Finished job 27.
+52 of 83 steps (63%) done
+[Thu May 14 21:03:15 2026]
+Finished job 89.
+53 of 83 steps (64%) done
+[Thu May 14 21:03:15 2026]
+Finished job 98.
+54 of 83 steps (65%) done
+Select jobs to execute...
+
+[Thu May 14 21:03:15 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/exp_a_mnmzr_p24_jaccD_k15_w20.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k15_w20.log
+    jobid: 97
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/exp_a_mnmzr_p24_jaccD_k15_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=15, w=20
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 97 with external jobid 'Submitted batch job 24415694'.
+[Thu May 14 21:03:15 2026]
+Finished job 46.
+55 of 83 steps (66%) done
+[Thu May 14 21:03:15 2026]
+Finished job 54.
+56 of 83 steps (67%) done
+[Thu May 14 21:03:15 2026]
+Finished job 26.
+57 of 83 steps (69%) done
+Select jobs to execute...
+
+[Thu May 14 21:03:15 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/exp_a_mnmzr_p24_jaccD_k15_w20.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k15_w20.log
+    jobid: 45
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/exp_a_mnmzr_p24_jaccD_k15_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=15, w=20
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 45 with external jobid 'Submitted batch job 24415695'.
+
+[Thu May 14 21:03:15 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/exp_a_mnmzr_p24_jaccD_k8_w8.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k8_w8.log
+    jobid: 25
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/exp_a_mnmzr_p24_jaccD_k8_w8.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=8, w=8
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 25 with external jobid 'Submitted batch job 24415696'.
+
+[Thu May 14 21:03:15 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/exp_a_mnmzr_p24_jaccD_k5_w5.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k5_w5.log
+    jobid: 53
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/exp_a_mnmzr_p24_jaccD_k5_w5.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=5, w=5
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 53 with external jobid 'Submitted batch job 24415697'.
+[Thu May 14 21:03:16 2026]
+Finished job 88.
+58 of 83 steps (70%) done
+Select jobs to execute...
+
+[Thu May 14 21:03:16 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/exp_a_mnmzr_p24_jaccD_k10_w10.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k10_w10.log
+    jobid: 87
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/exp_a_mnmzr_p24_jaccD_k10_w10.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=10, w=10
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 87 with external jobid 'Submitted batch job 24415698'.
+[Thu May 14 21:03:16 2026]
+Finished job 36.
+59 of 83 steps (71%) done
+[Thu May 14 21:03:16 2026]
+Finished job 96.
+60 of 83 steps (72%) done
+Select jobs to execute...
+
+[Thu May 14 21:03:16 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/exp_a_mnmzr_p24_jaccD_k10_w10.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k10_w10.log
+    jobid: 35
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/exp_a_mnmzr_p24_jaccD_k10_w10.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=10, w=10
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 35 with external jobid 'Submitted batch job 24415699'.
+
+[Thu May 14 21:03:16 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/exp_a_mnmzr_p24_jaccD_k15_w15.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k15_w15.log
+    jobid: 95
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/exp_a_mnmzr_p24_jaccD_k15_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=15, w=15
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 95 with external jobid 'Submitted batch job 24415700'.
+[Thu May 14 21:03:16 2026]
+Finished job 44.
+61 of 83 steps (73%) done
+Select jobs to execute...
+
+[Thu May 14 21:03:16 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/exp_a_mnmzr_p24_jaccD_k15_w15.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k15_w15.log
+    jobid: 43
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/exp_a_mnmzr_p24_jaccD_k15_w15.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=15, w=15
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 43 with external jobid 'Submitted batch job 24415701'.
+[Thu May 14 21:03:16 2026]
+Finished job 104.
+62 of 83 steps (75%) done
+[Thu May 14 21:03:16 2026]
+Finished job 52.
+63 of 83 steps (76%) done
+[Thu May 14 21:03:16 2026]
+Finished job 79.
+64 of 83 steps (77%) done
+Select jobs to execute...
+
+[Thu May 14 21:03:16 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/exp_a_mnmzr_p24_jaccD_k20_w30.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k20_w30.log
+    jobid: 103
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/exp_a_mnmzr_p24_jaccD_k20_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=20, w=30
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 103 with external jobid 'Submitted batch job 24415702'.
+
+[Thu May 14 21:03:16 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/exp_a_mnmzr_p24_jaccD_k20_w30.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k20_w30.log
+    jobid: 51
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/cross_ref_stats.tsv; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/exp_a_mnmzr_p24_jaccD_k20_w30.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=20, w=30
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 51 with external jobid 'Submitted batch job 24415703'.
+Waiting at most 60 seconds for missing files.
+[Thu May 14 21:03:45 2026]
+Finished job 97.
+65 of 83 steps (78%) done
+Waiting at most 60 seconds for missing files.
+[Thu May 14 21:03:46 2026]
+Finished job 45.
+66 of 83 steps (80%) done
+[Thu May 14 21:03:46 2026]
+Finished job 25.
+67 of 83 steps (81%) done
+[Thu May 14 21:03:46 2026]
+Finished job 53.
+68 of 83 steps (82%) done
+[Thu May 14 21:03:46 2026]
+Finished job 87.
+69 of 83 steps (83%) done
+[Thu May 14 21:03:46 2026]
+Finished job 35.
+70 of 83 steps (84%) done
+[Thu May 14 21:03:46 2026]
+Finished job 95.
+71 of 83 steps (86%) done
+[Thu May 14 21:03:46 2026]
+Finished job 102.
+72 of 83 steps (87%) done
+Select jobs to execute...
+
+[Thu May 14 21:03:46 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/exp_a_mnmzr_p24_jaccD_k20_w20.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/validate_plot_k20_w20.log
+    jobid: 101
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/exp_a_mnmzr_p24_jaccD_k20_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow, k=20, w=20
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 101 with external jobid 'Submitted batch job 24415816'.
+[Thu May 14 21:03:46 2026]
+Finished job 50.
+73 of 83 steps (88%) done
+[Thu May 14 21:03:46 2026]
+Finished job 43.
+74 of 83 steps (89%) done
+[Thu May 14 21:03:46 2026]
+Finished job 103.
+75 of 83 steps (90%) done
+[Thu May 14 21:03:46 2026]
+Finished job 51.
+76 of 83 steps (92%) done
+Select jobs to execute...
+
+[Thu May 14 21:03:47 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/exp_a_mnmzr_p24_jaccD_k20_w20.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k20_w20.log
+    jobid: 49
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/exp_a_mnmzr_p24_jaccD_k20_w20.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=20, w=20
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 49 with external jobid 'Submitted batch job 24415817'.
+Waiting at most 60 seconds for missing files.
+[Thu May 14 21:04:16 2026]
+Finished job 101.
+77 of 83 steps (93%) done
+Select jobs to execute...
+
+[Thu May 14 21:04:16 2026]
+rule exp_a_sweep_summary:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/cross_ref_stats.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/sweep_effect_size.png
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/narrow/sweep_effect_size.log
+    jobid: 106
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/sweep_effect_size.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/cross_ref_stats.tsv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=narrow
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 106 with external jobid 'Submitted batch job 24415875'.
+Waiting at most 60 seconds for missing files.
+[Thu May 14 21:04:18 2026]
+Finished job 49.
+78 of 83 steps (94%) done
+[Thu May 14 21:04:26 2026]
+Finished job 2.
+79 of 83 steps (95%) done
+Select jobs to execute...
+
+[Thu May 14 21:04:26 2026]
+rule exp_a_validate_and_plot:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/exp_a_mnmzr_p24_jaccD_k5_w5.csv, config/exp_a_metadata.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/cross_ref_stats.tsv
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/validate_plot_k5_w5.log
+    jobid: 1
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/cross_ref_validation.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/exp_a_mnmzr_p24_jaccD_k5_w5.csv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad, k=5, w=5
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 1 with external jobid 'Submitted batch job 24415961'.
+Waiting at most 60 seconds for missing files.
+[Thu May 14 21:05:17 2026]
+Finished job 106.
+80 of 83 steps (96%) done
+[Thu May 14 21:05:17 2026]
+Finished job 1.
+81 of 83 steps (98%) done
+Select jobs to execute...
+
+[Thu May 14 21:05:17 2026]
+rule exp_a_sweep_summary:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/cross_ref_stats.tsv
+    output: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/sweep_effect_size.png
+    log: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/logs/exp_a/broad/sweep_effect_size.log
+    jobid: 105
+    reason: Missing output files: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/sweep_effect_size.png; Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/cross_ref_stats.tsv, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/cross_ref_stats.tsv
+    wildcards: outdir=/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results, peak_type=broad
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=<TBD>, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+Submitted job 105 with external jobid 'Submitted batch job 24416104'.
+Waiting at most 60 seconds for missing files.
+[Thu May 14 21:06:17 2026]
+Finished job 105.
+82 of 83 steps (99%) done
+Select jobs to execute...
+
+[Thu May 14 21:06:17 2026]
+localrule all:
+    input: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/sweep_effect_size.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/sweep_effect_size.png
+    jobid: 0
+    reason: Input files updated by another job: /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w5/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w8/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k20_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k8_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k15_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/sweep_effect_size.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k15_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w5/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/sweep_effect_size.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w8/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k20_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k10_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w20/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k8_w30/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w10/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k10_w15/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/narrow/k5_w8/cross_ref_validation.png, /vast/blangme2/jbonnie/hammock/claude-ref-comparison/results/exp_a/broad/k5_w8/cross_ref_validation.png
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=/tmp, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+[Thu May 14 21:06:17 2026]
+Finished job 0.
+83 of 83 steps (100%) done
+Complete log: .snakemake/log/2026-05-14T205738.505775.snakemake.log

@@ -31,6 +31,63 @@ def _cosketch_from_containments(c_ab, c_ba):
     return geom, arith, mx
 
 
+def _jaccard_ie_from_containments(c_ab, c_ba):
+    """Set-Jaccard from the two directional containments.
+
+    Both are |A n B| / |.| over the same inclusion-exclusion intersection, so
+        1 / (1/C_AB + 1/C_BA - 1) == |A n B| / (|A| + |B| - |A n B|).
+
+    Containments are clamped to 1.0 first. They can exceed it by a few ulp:
+    `inter = cA + cB - cUnion` is a difference of three Ertl estimates, and
+    while the union estimate is monotone (union registers are element-wise max)
+    so `inter <= min(cA, cB)` holds mathematically, rounding can push the ratio
+    just past 1 -- measured 0.2% of random pairs across p=4..20, max excess one
+    ulp. Clamping guarantees `denom >= 1`, so neither a division by zero nor an
+    out-of-range result is reachable. A zero containment means the intersection
+    estimate was zero -- genuinely empty, or clamped from a negative in
+    HLLSketch::intersection_size -- and is scored 0.0.
+
+    Note the emitted `containment_AB`/`containment_BA` columns are NOT clamped,
+    so reconstructing J_ie from them can differ from this column in the last
+    couple of digits. Matches
+    experiments/bedtools_benchmark/estimator_compare.py, except for the clamp.
+
+    Unlike `jaccard_similarity` (register equality), this carries no
+    chance-agreement floor, so it is comparable to `bedtools jaccard`.
+    """
+    c_ab = np.minimum(np.asarray(c_ab, dtype=float), 1.0)
+    c_ba = np.minimum(np.asarray(c_ba, dtype=float), 1.0)
+    # Gate at 1e-300 rather than 0: below that the reciprocal overflows and
+    # numpy warns (or raises under np.seterr(all='raise')). Real containments
+    # bottom out around 1e-19, so this only affects hand-fed input.
+    ok = (c_ab > 1e-300) & (c_ba > 1e-300)
+    # The inner np.where keeps the (eagerly evaluated) reciprocals off the
+    # zero branch, so no divide-by-zero warning is ever emitted.
+    safe_ab = np.where(ok, c_ab, 1.0)
+    safe_ba = np.where(ok, c_ba, 1.0)
+    denom = 1.0 / safe_ab + 1.0 / safe_ba - 1.0
+    return np.where(ok, 1.0 / denom, 0.0)
+
+
+def _print_estimator_note(args) -> None:
+    """Remind the user that the two Jaccard columns are different estimators.
+
+    Verbose-gated on purpose: stderr is shared with progress output, and a
+    default-on banner is the kind of thing that ends up captured into someone's
+    log parser. The README and docs/jaccard-definitional-gap.md are the
+    canonical explanation; this is a nudge for interactive runs.
+    """
+    if not args.verbose:
+        return
+    print("note: jaccard_similarity (and _with_ends) is register-equality -- "
+          "biased high,\n"
+          "      and the bias depends on both sketch load and |A|/|B|, so rank "
+          "only within\n"
+          "      comparable pairs. The _ie columns are set-Jaccard, comparable "
+          "to bedtools.",
+          file=sys.stderr)
+
+
 def _read_paths(list_file: str) -> List[str]:
     paths = []
     with open(list_file) as f:
@@ -203,9 +260,11 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches,
 
     jac, c_ab, c_ba = _core.pairwise_metrics_hll(minimizer_query, minimizer_ref)
     cs_geom, cs_arith, cs_max = _cosketch_from_containments(c_ab, c_ba)
+    jac_ie = _jaccard_ie_from_containments(c_ab, c_ba)
 
     jac_e, c_ab_e, c_ba_e = _core.pairwise_metrics_hll(merged_query, merged_ref)
     cs_geom_e, cs_arith_e, cs_max_e = _cosketch_from_containments(c_ab_e, c_ba_e)
+    jac_ie_e = _jaccard_ie_from_containments(c_ab_e, c_ba_e)
 
     out_path = get_new_prefix(
         outprefix=args.outprefix,
@@ -221,8 +280,8 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches,
     ) + ".csv"
 
     similarity_measures = (
-        ["jaccard_similarity"] + _CONTAINMENT_COLS
-        + ["jaccard_similarity_with_ends"]
+        ["jaccard_similarity", "jaccard_similarity_ie"] + _CONTAINMENT_COLS
+        + ["jaccard_similarity_with_ends", "jaccard_similarity_ie_with_ends"]
         + [c + "_with_ends" for c in _CONTAINMENT_COLS]
     )
     # ref1/ref2 are always emitted (trailing, "NA" outside bed2fasta mode) so
@@ -236,10 +295,10 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches,
             for j, rlabel in enumerate(ref_labels):
                 row = _row_prefix(args, qlabel, rlabel)
                 row.extend([
-                    float(jac[i, j]),
+                    float(jac[i, j]), float(jac_ie[i, j]),
                     float(c_ab[i, j]), float(c_ba[i, j]),
                     float(cs_geom[i, j]), float(cs_arith[i, j]), float(cs_max[i, j]),
-                    float(jac_e[i, j]),
+                    float(jac_e[i, j]), float(jac_ie_e[i, j]),
                     float(c_ab_e[i, j]), float(c_ba_e[i, j]),
                     float(cs_geom_e[i, j]), float(cs_arith_e[i, j]), float(cs_max_e[i, j]),
                     ref1, ref2,
@@ -248,6 +307,7 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches,
 
     if args.verbose:
         print(f"Wrote {out_path}", file=sys.stderr)
+    _print_estimator_note(args)
     return 0
 
 
@@ -380,6 +440,7 @@ def run(args) -> int:
         print("Computing pairwise Jaccard + containment...", file=sys.stderr)
     jaccard, c_ab, c_ba = _core.pairwise_metrics_hll(query_sketches, ref_sketches)
     cs_geom, cs_arith, cs_max = _cosketch_from_containments(c_ab, c_ba)
+    jac_ie = _jaccard_ie_from_containments(c_ab, c_ba)
 
     out_path = get_new_prefix(
         outprefix=args.outprefix,
@@ -394,7 +455,8 @@ def run(args) -> int:
         window_size=args.window_size,
     ) + ".csv"
 
-    similarity_measures = ["jaccard_similarity"] + _CONTAINMENT_COLS
+    similarity_measures = (["jaccard_similarity", "jaccard_similarity_ie"]
+                           + _CONTAINMENT_COLS)
     header = _build_header(args, similarity_measures)
 
     with open(out_path, "w", newline="") as f:
@@ -406,7 +468,7 @@ def run(args) -> int:
                 rlabel = _label(r, args.full_paths)
                 row = _row_prefix(args, qlabel, rlabel)
                 row.extend([
-                    float(jaccard[i, j]),
+                    float(jaccard[i, j]), float(jac_ie[i, j]),
                     float(c_ab[i, j]), float(c_ba[i, j]),
                     float(cs_geom[i, j]), float(cs_arith[i, j]), float(cs_max[i, j]),
                 ])
@@ -414,4 +476,5 @@ def run(args) -> int:
 
     if args.verbose:
         print(f"Wrote {out_path}", file=sys.stderr)
+    _print_estimator_note(args)
     return 0

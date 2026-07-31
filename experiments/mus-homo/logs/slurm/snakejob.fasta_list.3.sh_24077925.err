@@ -1,0 +1,18 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 2
+Rules claiming more threads will be scaled down.
+Provided resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, cpus_per_task=1
+Select jobs to execute...
+
+[Tue May 12 17:44:41 2026]
+rule fasta_list:
+    input: /vast/blangme2/jbonnie/hammock/mus-homo/results/fastas/ENCSR792QQE_heart_human.fa, /vast/blangme2/jbonnie/hammock/mus-homo/results/fastas/ENCSR909HFI_liver_human.fa, /vast/blangme2/jbonnie/hammock/mus-homo/results/fastas/ENCSR757NJT_lung_human.fa, /vast/blangme2/jbonnie/hammock/mus-homo/results/fastas/ENCSR567EEO_spleen_human.fa, /vast/blangme2/jbonnie/hammock/mus-homo/results/fastas/ENCSR000EIY_brain_human.fa, /vast/blangme2/jbonnie/hammock/mus-homo/results/fastas/ENCSR671NPO_heart_mouse.fa, /vast/blangme2/jbonnie/hammock/mus-homo/results/fastas/ENCSR000CNI_liver_mouse.fa, /vast/blangme2/jbonnie/hammock/mus-homo/results/fastas/ENCSR702AVR_lung_mouse.fa, /vast/blangme2/jbonnie/hammock/mus-homo/results/fastas/ENCSR087PCD_spleen_mouse.fa, /vast/blangme2/jbonnie/hammock/mus-homo/results/fastas/ENCSR325RZJ_brain_mouse.fa
+    output: /vast/blangme2/jbonnie/hammock/mus-homo/results/fasta_lists/all.txt
+    jobid: 0
+    reason: Forced execution
+    resources: mem_mb=8000, mem_mib=7630, disk_mb=1000, disk_mib=954, tmpdir=/tmp, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=60, cpus_per_task=1
+
+[Tue May 12 17:44:41 2026]
+Finished job 0.
+1 of 1 steps (100%) done

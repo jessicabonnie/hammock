@@ -1,0 +1,4 @@
+row_type	repository	target	assembly	bed_file_count	within_reference_pairwise_comparisons	cross_repository_incompatible_pairs	retrieved_at_utc
+repository	Roadmap Epigenomics	H3K27ac	hg19	98	4753		2026-07-24T19:57:09+00:00
+repository	ENCODE	H3K27ac	GRCh38	450	101025		2026-07-24T19:57:09+00:00
+cross_repository	Roadmap Epigenomics × ENCODE	H3K27ac	hg19 × GRCh38	548	105778	44100	2026-07-24T19:57:09+00:00

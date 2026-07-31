@@ -1,0 +1,24 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 4
+Rules claiming more threads will be scaled down.
+Provided resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, cpus_per_task=1
+Select jobs to execute...
+
+[Thu May 14 20:57:18 2026]
+rule mus_homo_hammock:
+    input: /vast/blangme2/jbonnie/hammock/mus-homo/results/fasta_lists/all.txt
+    output: /vast/blangme2/jbonnie/hammock/mus-homo/results/k10_w30/mus_homo_mnmzr_p24_jaccD_k10_w30.csv
+    log: /vast/blangme2/jbonnie/hammock/mus-homo/results/logs/hammock/k10_w30.log
+    jobid: 0
+    reason: Forced execution
+    wildcards: k=10, w=30
+    threads: 4
+    resources: mem_mb=16000, mem_mib=15259, disk_mb=1000, disk_mib=954, tmpdir=/tmp, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=720, cpus_per_task=1
+
+
+        hammock /vast/blangme2/jbonnie/hammock/mus-homo/results/fasta_lists/all.txt /vast/blangme2/jbonnie/hammock/mus-homo/results/fasta_lists/all.txt             --mode D             --outprefix /vast/blangme2/jbonnie/hammock/mus-homo/results/k10_w30/mus_homo             -k 10             -w 30             --precision 24             --full-paths             2>/vast/blangme2/jbonnie/hammock/mus-homo/results/logs/hammock/k10_w30.log
+        
+[Thu May 14 20:58:37 2026]
+Finished job 0.
+1 of 1 steps (100%) done

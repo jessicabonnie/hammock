@@ -1,0 +1,25 @@
+{
+  "retrieved_at_utc": "2026-07-26T19:53:35+00:00",
+  "sources": {
+    "roadmap_hg19": "https://tf.lisanwanglab.org/GADB/metadata/filer.latest.hg19.template",
+    "blueprint_hg38": "https://filer2.niagads.org/browse_faceted_with_search.php"
+  },
+  "ranking": "blocked_cross_reference_pairs = Roadmap count * BLUEPRINT count",
+  "selection": {
+    "Roadmap": "native hg19 Roadmap ChIP-seq histone-mark peak BEDs",
+    "BLUEPRINT": "native hg38 BLUEPRINT ChIP-seq histone-mark BEDs from live FILER2",
+    "markers": "canonical histone-mark labels present in both resources",
+    "deduplication": "processed BED URL"
+  },
+  "counts": {
+    "roadmap_histone_mark_beds": 4664,
+    "blueprint_histone_mark_beds": 722,
+    "shared_markers": 6,
+    "top_n": 5
+  },
+  "outputs": [
+    "/home/jbonnie1/interval_sketch/hammock_claude/paper/database_counts/results/roadmap_blueprint_all_shared_markers.tsv",
+    "/home/jbonnie1/interval_sketch/hammock_claude/paper/database_counts/results/roadmap_blueprint_top5_markers.tsv",
+    "/home/jbonnie1/interval_sketch/hammock_claude/paper/database_counts/results/roadmap_blueprint_shared_marker_manifest.tsv"
+  ]
+}

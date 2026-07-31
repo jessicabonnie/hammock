@@ -1,0 +1,27 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 1 (use --cores to define parallelism)
+Rules claiming more threads will be scaled down.
+Provided resources: mem_mb=4000, mem_mib=3815, disk_mb=5999, disk_mib=5722, cpus_per_task=1
+Select jobs to execute...
+
+[Tue May 12 17:44:10 2026]
+rule peak_bed_to_fasta:
+    input: /vast/blangme2/jbonnie/hammock/mus-homo/peaks/ENCSR909HFI_liver_human.bed.gz, /data/blangme2/jessica/mus_homo/references/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna
+    output: /vast/blangme2/jbonnie/hammock/mus-homo/results/fastas/ENCSR909HFI_liver_human.fa
+    log: /vast/blangme2/jbonnie/hammock/mus-homo/results/logs/getfasta/ENCSR909HFI_liver_human.log
+    jobid: 0
+    reason: Forced execution
+    wildcards: sample=ENCSR909HFI_liver_human
+    resources: mem_mb=4000, mem_mib=3815, disk_mb=5999, disk_mib=5722, tmpdir=/tmp, slurm_partition=parallel, slurm_account=blangme2_scal, runtime=30, cpus_per_task=1
+
+
+        mkdir -p "$(dirname /vast/blangme2/jbonnie/hammock/mus-homo/results/fastas/ENCSR909HFI_liver_human.fa)" "$(dirname /vast/blangme2/jbonnie/hammock/mus-homo/results/logs/getfasta/ENCSR909HFI_liver_human.log)"
+        # ENCODE bed.gz is narrowPeak-formatted (10-column); first 3 cols are BED3.
+        # Strip to BED3 to be safe (avoids issues with float columns).
+        zcat /vast/blangme2/jbonnie/hammock/mus-homo/peaks/ENCSR909HFI_liver_human.bed.gz | awk -v OFS='\t' '{print $1, $2, $3}'             | bedtools getfasta -fi /data/blangme2/jessica/mus_homo/references/grch38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna -bed /dev/stdin -fo /vast/blangme2/jbonnie/hammock/mus-homo/results/fastas/ENCSR909HFI_liver_human.fa             2>/vast/blangme2/jbonnie/hammock/mus-homo/results/logs/getfasta/ENCSR909HFI_liver_human.log
+        
+Activating environment modules: bedtools/2.30.0
+[Tue May 12 17:44:17 2026]
+Finished job 0.
+1 of 1 steps (100%) done
