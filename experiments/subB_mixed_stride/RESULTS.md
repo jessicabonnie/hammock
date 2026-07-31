@@ -102,6 +102,38 @@ Three observations:
    MAE ≈ 0.02 at subB=0.01; the Maurano corpus (per-file size somewhere
    between synthetic 100k and 1M) stays at MAE ≈ 0.002.
 
+> **The 10k cliff is an estimator artifact, not a sampling failure**
+> (established 2026-07-31; these MAEs predate `jaccard_similarity_ie`).
+> Every MAE above is measured on `jaccard_similarity`, which is
+> register-equality and carries a chance-agreement floor `c` that is a step
+> function of the load factor λ = n/m. Subsampling lowers `n`, so at low
+> enough subB it drags λ through the knee at λ ≈ 5 and `c` — the estimator's
+> own offset — moves. The MAE then reports the yardstick shifting, not the
+> sample degrading.
+>
+> Measured directly on a 4×4 synthetic 10k corpus at p=18, reporting both
+> estimators from the same runs:
+>
+> | subB | λ = n/m | `c` (theory) | MAE `jaccard_similarity` | MAE `jaccard_similarity_ie` |
+> | ---- | ------- | ------------ | ------------------------ | --------------------------- |
+> | 1.0  | 173.8   | 0.1699       | — (reference)            | — (reference)               |
+> | 0.1  | 17.3    | 0.1699       | 0.0009                   | 0.0022                      |
+> | 0.01 | 1.73    | 0.1525       | **0.0199**               | **0.0018**                  |
+>
+> The register-equality column reproduces the published ≈0.02 cliff. The
+> inclusion-exclusion column does not move at all — it is *lower* at
+> subB=0.01 than at subB=0.1. The set-Jaccard estimate is fine; only the
+> offset moved. Mean `jaccard_similarity` falls 0.2690 → 0.2491 while mean
+> `jaccard_similarity_ie` holds at 0.1042 → 0.1060.
+>
+> The λ mechanism accounts for the bulk of the shift but not all of it: the
+> affine model predicts `(c(173.8) − c(1.73))·(1 − J̄) = 0.0156` against 0.0199
+> measured, the gap being the model's known ±0.025 curvature. It also explains
+> observation 3 without appealing to spatial structure — Maurano files cover
+> 63–139 Mbp, so at p=18 their λ is 240–531 and subB=0.01 only brings them to
+> 2.4–5.3, at or above the knee (`c` = 0.1644 at λ=2.4), a far smaller shift
+> than the synthetic corpus's drop to λ=1.73.
+
 The per-pair error box gives the distribution view, including the heavier
 real-data tails:
 
@@ -140,14 +172,20 @@ than ~1.5× faster than bedtools even at the most aggressive subB tested.
 evidence:
 
 - Synthetic: 3–4× faster than no-subsample hammock, MAE ≤ 10⁻³ except the
-  small-file (10k) cliff at very low subB.
+  small-file (10k) cliff at very low subB — which the box above shows is a
+  register-equality artifact; on `jaccard_similarity_ie` there is no cliff.
 - Maurano (real): 1.83× faster than no-subsample hammock and **2.13×
   faster than bedtools**, MAE ~10⁻³, max error ~3 × 10⁻³.
 
 Aggressive `subB=0.01` is worth considering only on large
 (≥1M-interval), high-Jaccard corpora where MAE stays at ~10⁻⁵. On real,
 moderate-sized data expect roughly a doubling of max-error per decade of
-subB drop below 0.1.
+subB drop below 0.1. **Caveat, same root cause:** that guidance is calibrated
+on `jaccard_similarity`, so part of what it is protecting against is the floor
+moving rather than the sample degrading. If you read
+`jaccard_similarity_ie`, the binding constraint at low subB is instead that λ
+must stay high enough for the sketch itself to be informative. Re-deriving the
+subB recommendation on the IE column is unfinished work.
 
 `hash-threshold` and `single-hash` are not competitive speed defaults on
 either corpus — at best ~1.3× speedup even at `subB=0.01`. Keep them for

@@ -20,7 +20,8 @@ not change bedtools' results (it's a hammock-only knob). With subB=0.1,
 hammock beats bedtools at **every N≥2** in the t=16 files sweep, with
 **52.77× speedup at N=512**. Per-pair Jaccard error is statistically
 indistinguishable across subB values — the definitional gap vs bedtools
-stays at ~0.164.
+stays at ~0.164. **Read that as a null result about the gap, not as evidence
+that subsampling is unbiased** — see the precision-sweep caveat below.
 
 ## Source files
 
@@ -140,9 +141,18 @@ slightly more wall-time variance.
 | 18 |  15.95 s |    7.61 s |   3.93 s | 0.1640 / 0.1641 / 0.1642        | 0.0000 / 0.0009 / 0.0010           |
 
 - **MAE vs bedtools** (the bp-set-Jaccard definitional gap) is identical
-  to within run noise across all 15 (p, subB) cells — confirming that
-  mixed-stride subsampling does not introduce systematic bias against
-  the true set-Jaccard.
+  to within run noise across all 15 (p, subB) cells. The table is right; the
+  original reading of it — "confirming that mixed-stride subsampling does not
+  introduce systematic bias" — is not. This column cannot detect that. It is
+  dominated by the register-equality chance floor `c`, which is a step
+  function of the load factor λ = n/m: flat at 0.1699 for λ ≳ 5 and
+  insensitive to everything else. Every file here has the same 10k intervals,
+  so λ is uniform across pairs and far above the knee at every p in the
+  table; the pairs are also low-J, and `MAE ≈ c·(1 − J̄)` lands just under `c`,
+  which is the ~0.164 observed. A subsampling bias of a few 10⁻³ would be
+  invisible underneath it. The column that *can* answer the bias question is
+  `jaccard_ie_mae_vs_bt`, added to `sweep.py` after these runs; this table
+  predates it. See `docs/jaccard-definitional-gap.md`.
 - **MAE vs hammock@p=18, subB=1.0** halves per +2 in p (textbook HLL),
   identically for subB=1.0 and within 5×10⁻⁴ for subB ∈ {0.25, 0.1}.
   The tiny residual ~10⁻³ at p=18 for subB<1.0 is the
@@ -153,7 +163,10 @@ slightly more wall-time variance.
 The pairs-scatter plot is faceted across the three subB values; all
 three panels are visually identical to the eye (same point cluster,
 same median gap of 0.164). Subsampling at subB ≥ 0.1 is statistically
-indistinguishable from the full-bp sketch at this number of pairs.
+indistinguishable from the full-bp sketch **as measured against the p=18
+hammock reference** (the `MAE vs hammock@p=18` column, which is a like-for-like
+comparison and does carry that information). The bedtools column does not
+support the same conclusion, for the reason above.
 
 ## Plotting
 

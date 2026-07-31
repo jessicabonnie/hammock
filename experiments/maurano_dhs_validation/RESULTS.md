@@ -20,11 +20,21 @@ in `figures/`.
 
 ![](figures/abc_pearson_vs_bedtools.png)
 
-**Mode B is essentially perfect against bedtools (r = 0.998 at every
-precision), and every Mode C variant inherits that.** Mode A is the only
-mode that breaks down (r ≈ 0.82) — the interval-only HLL throws away the
-length information that bedtools cares about. So when we later ask "does
-Mode D recapitulate bedtools," Mode B is a perfectly good stand-in.
+**Mode B tracks bedtools closely (r = 0.998 at every precision), and every
+Mode C variant inherits that.** Mode A is the only mode that breaks down
+(r ≈ 0.82) — the interval-only HLL throws away the length information that
+bedtools cares about. So when we later ask "does Mode D recapitulate
+bedtools," Mode B is a serviceable stand-in.
+
+> **Two caveats on both numbers, added 2026-07-31.** (i) These `r` values are
+> computed over the full square matrix, which includes 20 self-pairs pinned at
+> (1,1) — pure leverage. Off-diagonal, Mode B is r = 0.9972 and Mode A is
+> r = **0.069**, i.e. Mode A is not "degraded", it is uninformative here and
+> its results should not be quoted. (ii) `jaccard_similarity` is
+> register-equality and is not on bedtools' scale, so a high `r` means the two
+> track each other affinely, not that the values agree; Kendall τ for Mode B is
+> 0.951, so 2.45% of comparisons invert. "Essentially perfect" overstated both.
+> See `docs/jaccard-definitional-gap.md`.
 
 ---
 
@@ -90,10 +100,12 @@ signal that they aren't reliably ordering pairs.
 ![](figures/mode_d_bedtools_vs_modeB_scatter.png)
 
 **Points lie tightly on y = x: r(D, bedtools) ≈ r(D, Mode B) for every
-config.** That's expected — Mode B is r = 0.998 vs bedtools, so it's an
-interchangeable reference. This is more useful as a sanity check than a
-discovery: if you've validated Mode D against bedtools, you've effectively
-validated it against any reasonable interval-Jaccard estimator.
+config.** That's expected — Mode B correlates with bedtools at r = 0.998
+(0.9972 off-diagonal), so it is a good *correlation* reference. Note the
+weaker claim: it is interchangeable for questions about covariation, not for
+questions about magnitude, since Mode B's `jaccard_similarity` sits a floor
+`c·(1 − J)` above bedtools. This is more useful as a sanity check than a
+discovery.
 
 ---
 
@@ -200,6 +212,7 @@ the recovered Jaccards agree numerically.
 |---|---|---|---|
 | Do predictions covary with bedtools?   | Pearson r | k=20/25, w=100, p=24 | **0.9996** |
 | Do predictions rank-order the same?    | Spearman ρ | k=20/25, w=100, p=24 | **0.998** |
+| (interval mode's rank fidelity, for contrast) | Kendall τ | Mode B, p=21 | 0.951 (2.45% inverted) |
 | Are the absolute Jaccards close?       | MAE        | k=25, w=100, p=24 | **0.0061** |
 | Is the biology preserved?              | ARI        | k=10, w=30, p≥12 | **0.910** |
 | Is the biology preserved (info-theory)?| NMI        | k=10, w=30, p≥12 | **0.961** |
