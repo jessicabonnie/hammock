@@ -39,10 +39,10 @@ block, all in `[0, 1]`:
 
 | Column | Meaning |
 |--------|---------|
-| `jaccard_similarity` | **Register-equality** statistic: the fraction of active HLL registers holding equal values. This is *not* set Jaccard — it is biased upward, and the bias depends on how loaded the sketches are **and** on `|A|/|B|`. Kept for parity with the original `hammock`. |
-| `jaccard_similarity_ie` | **Set Jaccard** via inclusion-exclusion, `|A ∩ B| / |A ∪ B|` with `|A ∩ B| = |A| + |B| − |A ∪ B|`. Comparable to `bedtools jaccard`. Noisier than the column above at low precision *and* low similarity, and censored at 0 (an exact `0.0` means "estimated ≤ 0", not "measured zero"). |
-| `containment_AB` | `|A ∩ B| / |A|` — fraction of side A (file1/LIST1) covered by B |
-| `containment_BA` | `|A ∩ B| / |B|` — fraction of side B (file2/LIST2) covered by A |
+| `jaccard_similarity` | **Register-equality** statistic: the fraction of active HLL registers holding equal values. This is *not* set Jaccard — it is biased upward, and the bias depends on how loaded the sketches are **and** on `\|A\|/\|B\|`. Kept for parity with the original `hammock`. |
+| `jaccard_similarity_ie` | **Set Jaccard** via inclusion-exclusion, `\|A ∩ B\| / \|A ∪ B\|` with `\|A ∩ B\| = \|A\| + \|B\| − \|A ∪ B\|`. Comparable to `bedtools jaccard`. Noisier than the column above at low precision *and* low similarity, and censored at 0 (an exact `0.0` means "estimated ≤ 0", not "measured zero"). |
+| `containment_AB` | `\|A ∩ B\| / \|A\|` — fraction of side A (file1/LIST1) covered by B |
+| `containment_BA` | `\|A ∩ B\| / \|B\|` — fraction of side B (file2/LIST2) covered by A |
 | `cosketch_geom` / `cosketch_arith` / `cosketch_max` | geometric / arithmetic / max mean of the two containments |
 
 Which to use: `jaccard_similarity_ie` when you want a value comparable to an
@@ -281,8 +281,9 @@ The metric values are **bit-for-bit identical** to the Python CLI's on the same
 input (`tests/test_hammock_cpp_metrics.py` asserts exact equality). `--metrics`
 costs a union plus a cardinality estimate per pair, so leave it off for timing
 runs; it also tags the output filename, so the two shapes never collide. It is
-rejected with `--peak-height`, where the BagMinHash backend makes
-inclusion-exclusion meaningless.
+rejected with `--peak-height <n>` for n > 0, where the BagMinHash backend
+makes inclusion-exclusion meaningless (`--peak-height 0` still yields an HLL
+and is accepted).
 
 ## Testing
 

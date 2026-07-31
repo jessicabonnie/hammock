@@ -26,7 +26,7 @@ file. Overlapping intervals within a file are merged before counting.
 
 **hammock-cpp `--mode B`** — register-equality Jaccard on HyperLogLog
 sketches built from those same bp positions
-(`cpp/src/hll_sketch.cpp:32-53`):
+(`cpp/src/hll_sketch.cpp:63-75`):
 
 ```
 active   = { i : R_A[i] != 0  ∨  R_B[i] != 0 }
@@ -73,12 +73,14 @@ the probability a register lands on value `k`. At λ = 92 that sum is 0.169,
 matching the measured 0.17. Note this is well below the `Σ_k (2^−k)² = 1/3`
 figure quoted as the collision bound elsewhere — 1/3 is a different
 conditional (see above), not approached at any realistic λ. `c` is
-effectively a **step**: 0.1699 for λ ≳ 3, flat to four decimals (any
-log-periodic oscillation has amplitude ~1.2×10⁻⁴), collapsing only below
-λ ≈ 1 — 0.156 at λ=2, 0.102 at λ=1, 0.021 at λ=0.3, 0.003 at λ=0.1. The
-practical consequence is that heterogeneity only matters when an analysis
-*spans the λ ≈ 1–3 knee*; a corpus entirely on the flat is internally
-consistent.
+effectively a **step**: 0.1699 from λ ≈ 5 upward, flat to four decimals (any
+log-periodic oscillation has peak-to-peak amplitude ~1.2×10⁻⁵), and collapsing
+below that — 0.1681 at λ=3, 0.1588 at λ=2, 0.1178 at λ=1, 0.0456 at λ=0.3,
+0.0162 at λ=0.1. These are the *conditional* values `Σp_k²/(1−p_0²)`, matching
+what `matching/active` computes; the unconditional `Σp_k²` runs up to 5×
+smaller at low λ and is not the right quantity. The practical consequence is
+that heterogeneity only matters when an analysis *spans the λ ≈ 1–5 knee*; a
+corpus entirely on the flat is internally consistent.
 
 **`c` also depends on the cardinality ratio `|A|/|B|`, not just on λ.** For
 same-size files at λ ≫ 1 it is ~0.17; at a 100:1 size ratio the same
@@ -103,8 +105,10 @@ elements → more shared argmaxes → more matching registers), but it is not th
 identity — and it is a *different* mapping for each cardinality ratio. So
 ordering is preserved when comparing pairs of the same geometry and **not**
 in general: at p=16 a symmetric pair at J=0.100 and an asymmetric pair
-(|A|=2×10⁵ ⊂ |B|=10⁶) at J=0.200 both score `J_re = 0.2625`. See
-"Rank fidelity" below.
+(|A|=2×10⁵ ⊂ |B|=10⁶) at J=0.200 both score `J_re ≈ 0.263` despite the 2×
+difference in true similarity. (They are not exactly equal; the point is that
+the gap between them is smaller than sketch noise at this precision, so the
+ordering is unrecoverable.) See "Rank fidelity" below.
 
 ## Empirical evidence
 
@@ -135,8 +139,10 @@ chance-agreement term, so those columns estimate the true set quantities.
 On disjoint inputs at p=16, n=2×10⁵: `jaccard_similarity` = 0.168 while
 `containment_AB` = 0.000.
 
-Consequently a set-Jaccard estimate is recoverable from output you already
-have, with no rerun and no code change. From `C_AB = I/|A|` and
+Consequently a set-Jaccard estimate is recoverable, with no rerun and no code
+change, from any output that carries the containment block — but **not** from
+output written before 2026-05-14, which has the orig `containment` placeholder
+instead (see "Old CSVs cannot be back-filled" below). From `C_AB = I/|A|` and
 `C_BA = I/|B|`:
 
 ```
@@ -181,7 +187,7 @@ So in the **saturated** regime — `m ≪ n`, which is where genome-scale BED
 data actually sits — register-equality is the *more precise* discriminator at
 low J even though it is far more biased, and inclusion–exclusion only takes
 over once the sketch is over-provisioned relative to the data. Inclusion–
-exclusion is also **censored**: it is clamped at 0 (`hll_sketch.cpp:160`),
+exclusion is also **censored**: it is clamped at 0 (`hll_sketch.cpp:183`),
 which fires on 25/90 pairs at p=12, all at low J. Nothing distinguishes
 "clamped from a large negative" from "genuinely zero", so conditional on
 being non-zero it is biased *upward* near J=0 — a small positive floor of its
@@ -215,7 +221,7 @@ cardinality ratio is `r`:
 | ratio `r` | 1.0 | 1.5 | 2.0 | 2.2 | 3.0 | 5.0 | 10 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `c` | 0.1699 | 0.1635 | 0.1520 | 0.1472 | 0.1293 | 0.0969 | 0.0584 |
-| ΔJ below which rank is unreliable | 0 | 0.0078 | 0.0216 | 0.0274 | 0.0490 | 0.0880 | 0.1343 |
+| ΔJ below which rank is unreliable | 0 | 0.0077 | 0.0216 | 0.0274 | 0.0490 | 0.0880 | 0.1343 |
 
 Measured on the 20-sample Maurano fetal DHS corpus (bp coverage 63.4–139.4
 Mbp, so `r` up to 2.20), 190 off-diagonal pairs at p=21:
@@ -225,15 +231,18 @@ Mbp, so `r` up to 2.20), 190 off-diagonal pairs at p=21:
 | Pearson r | 0.9972 |
 | Spearman ρ | 0.9939 |
 | Kendall τ | 0.9511 |
-| discordant comparisons | 444 / 17,955 (2.47%) |
-| largest inverting gap | ΔJ_bedtools = 0.0303 |
+| discordant comparisons | 439 / 17,955 (2.45%) |
+| largest inverting gap | ΔJ_bedtools = 0.0250 |
 
-The discordance is **systematic, not sketch noise**:
-`corr(residual, log |A|/|B|) = −0.897` (p = 1.6e-68), and residual patterns
-from independent sketch sets at p=18/21/23 correlate at 0.994 — noise would
-decorrelate. Note also that a Pearson `r` computed over a full square matrix
-includes the self-pairs at (1,1), which are pure leverage; quote the
-off-diagonal value.
+The discordance is **systematic, not sketch noise**: the residual from the
+fitted affine model correlates at **−0.885** with `|log(|A|/|B|)|` — the
+further apart two files are in size, the further the pair sits below the
+single-`c` line. (Against the *signed* log ratio it is only −0.31; the effect
+is symmetric in which file is larger, so the absolute ratio is the right
+regressor.) The same statistics recur at p=18 and p=23 (τ = 0.9505, 0.9497)
+on independent sketches, which HLL noise would not do. Note also that a
+Pearson `r` over a full square matrix includes the self-pairs at (1,1), which
+are pure leverage; quote the off-diagonal value.
 
 ## The `jaccard_similarity_ie` column (shipped in v0.4.0)
 
@@ -245,7 +254,7 @@ the same `C_AB`/`C_BA` shown here, agreeing with the direct form to ~2 ulp.
 Two things to know:
 
 - **An exact `0.0` means "clamped or empty", never "measured zero."** The
-  clamp is in `HLLSketch::intersection_size` (`cpp/src/hll_sketch.cpp:160`),
+  clamp is in `HLLSketch::intersection_size` (`cpp/src/hll_sketch.cpp:183`),
   one level below the column.
 - **Old CSVs cannot be back-filled.** Output written before 2026-05-14 carries
   the orig `containment` placeholder (constant 1.0) rather than the
@@ -329,7 +338,7 @@ universe** — the comparison is not confounded by merge semantics.
 
 ## References
 
-- Implementation: `cpp/src/hll_sketch.cpp:32-53` (Jaccard formula)
+- Implementation: `cpp/src/hll_sketch.cpp:63-75` (Jaccard formula)
 - Algorithm parity note: `CLAUDE.md` ("register-equality Jaccard")
 - Original Python source: `hammock` (orig) `lib/hyperloglog.py:640`,
   `estimate_jaccard_registers`

@@ -27,8 +27,9 @@ _METRIC_COLS = [
 
 
 def _find_hammock_cpp() -> Path | None:
-    """The binary is built into build/<wheel-tag>/ and is NOT installed into
-    the wheel (CMakeLists: users run `cmake --install` separately).
+    """The binary is built into build/<wheel-tag>/. The wheel does install it
+    (to <site-packages>/bin/), but that directory is not on PATH, so tests use
+    the build tree copy.
 
     Pick the NEWEST, not the alphabetically first: with both cp310 and cp311
     build dirs present, sorted()[0] would pin a stale binary and "bit-for-bit"

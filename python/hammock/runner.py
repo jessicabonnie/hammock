@@ -62,17 +62,19 @@ def _jaccard_ie_from_containments(c_ab, c_ba):
 def _print_estimator_note(args) -> None:
     """Remind the user that the two Jaccard columns are different estimators.
 
-    Only the README explains this, and CSV has no comment mechanism, so stderr
-    is the one channel that reaches whoever actually reads the output.
+    Verbose-gated on purpose: stderr is shared with progress output, and a
+    default-on banner is the kind of thing that ends up captured into someone's
+    log parser. The README and docs/jaccard-definitional-gap.md are the
+    canonical explanation; this is a nudge for interactive runs.
     """
     if not args.verbose:
         return
-    print("note: jaccard_similarity* is register-equality -- biased high, and "
-          "the bias\n"
-          "      depends on both sketch load and |A|/|B|, so rank only within "
-          "comparable\n"
-          "      pairs. jaccard_similarity_ie* is set-Jaccard, comparable to "
-          "bedtools.",
+    print("note: jaccard_similarity (and _with_ends) is register-equality -- "
+          "biased high,\n"
+          "      and the bias depends on both sketch load and |A|/|B|, so rank "
+          "only within\n"
+          "      comparable pairs. The _ie columns are set-Jaccard, comparable "
+          "to bedtools.",
           file=sys.stderr)
 
 

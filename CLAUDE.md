@@ -36,14 +36,17 @@ CC=$CR/bin/x86_64-conda-linux-gnu-gcc CXX=$CR/bin/x86_64-conda-linux-gnu-g++ \
 
 See `memory/project_modeD_zero_rpath_digest.md`.
 
-**Never add `-Ofast` or `-ffast-math` to CMakeLists.** Measured: the Ertl
-estimator produces bit-identical output across `-O0/-O2/-O3` and every
-`-march=` we tried (x86-64, v2, haswell, skylake-avx512, native) — the τ/σ
-loops are loop-carried so nothing reassociates. `-Ofast` is the one flag that
-moves it (87/199 values differ), and it would silently shift every
-cardinality-derived column: `containment_*`, `cosketch_*`, and
-`jaccard_similarity_ie`. (`jaccard_similarity` itself is an exact ratio of two
-integer register counts and is immune.)
+**Re-validate before changing floating-point build flags.** The Ertl
+estimator feeds every cardinality-derived column (`containment_*`,
+`cosketch_*`, `jaccard_similarity_ie`), and its τ/σ series terminate on exact
+float equality, so a reassociating flag could in principle shift them.
+Reassuringly, a spot check found bit-identical output across `-O0/-O2/-O3`,
+every `-march=` tried (x86-64, v2, haswell, skylake-avx512, native), **and**
+`-Ofast`/`-ffast-math` — the τ/σ loops are loop-carried, so there is nothing
+to reassociate. Treat that as "no known hazard", not a guarantee: if you touch
+the flags, re-run the byte-identity gate (capture a Mode B + Mode D CSV before
+and after and diff the whole row). `jaccard_similarity` itself is an exact
+ratio of two integer register counts and is immune either way.
 
 The bed2fasta tests (`tests/test_bed2fasta*.py`) and their `--ref` end-to-end
 paths need `bedtools` (and `samtools` for indexing) on `PATH` — `ml bedtools
@@ -52,8 +55,10 @@ conda-orig env (see Parity environments).
 
 The wheel includes a standalone `hammock-cpp` binary built from the same
 `hammock_core` static lib (in `build/`); intended for max-speed Mode B
-benchmarking, no Python in the loop. It is **not** installed onto `$PATH` —
-run it from `build/<wheel-tag>/hammock-cpp` or `cmake --install` separately.
+benchmarking, no Python in the loop. The wheel does install it (to
+`<site-packages>/bin/hammock-cpp`), but that directory is **not** on `$PATH`,
+so invoke it by full path — `build/<wheel-tag>/hammock-cpp` after a local
+build, or the site-packages copy.
 
 By default it emits 3 columns (`query`, `reference`, `jaccard_similarity`);
 `--metrics` adds `jaccard_similarity_ie`, `containment_AB/BA` and `cosketch_*`,
@@ -126,10 +131,12 @@ These are deliberate; parity tests that touch them are skipped or projected.
    of set-Jaccard, while the containments estimate the true set quantities.
    Two qualifications, both measured, both load-bearing:
 
-   - **The affine model is only approximate.** Residuals reach ±0.025 (>10σ)
-     in the saturated regime, largest at J→0 and J→1 and *negative* there.
-     That curvature is why a fitted intercept (0.180) exceeds the true
-     disjoint floor (0.1699) — the two numbers are consistent, not a bug.
+   - **The affine model is only approximate.** Against a `c + (1−c)·J` fit
+     with c=0.180 the residual peaks at **+0.025 near J≈0.5**, is −0.010 at
+     J=0, and is identically 0 at J=1 (any slope-(1−c) line passes through
+     (1,1) by construction), so the error is largest in the *middle* of the
+     range, not at the ends. That curvature is why a fitted intercept (0.180)
+     exceeds the true disjoint floor (0.1699) — consistent, not a bug.
    - **`c` is set by the load factor λ = n/m *and* by the cardinality ratio
      |A|/|B|**, not by precision as such: 0.1699 as λ→∞ at equal cardinality,
      but 0.152 at ratio 2, 0.097 at ratio 5, 0.058 at ratio 10; and 0.045 at
@@ -228,8 +235,9 @@ These are deliberate; parity tests that touch them are skipped or projected.
    out-of-range results unreachable rather than merely unlikely. A zero
    containment scores `J_ie = 0.0`.
 
-   `tests/test_parity_against_original.py` projects the new name out of
-   `_PROJECTED_OUT` — it is a Jaccard column, which looks wrong at a glance,
+   `tests/test_parity_against_original.py` adds the new name to
+   `_PROJECTED_OUT` so it is dropped before comparison — projecting out a
+   *Jaccard* column looks wrong at a glance,
    but orig has no counterpart to be unfaithful to and `jaccard_similarity`
    is still compared byte-for-byte.
 
