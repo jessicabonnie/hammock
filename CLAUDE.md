@@ -52,7 +52,19 @@ conda-orig env (see Parity environments).
 
 The wheel includes a standalone `hammock-cpp` binary built from the same
 `hammock_core` static lib (in `build/`); intended for max-speed Mode B
-benchmarking, no Python in the loop.
+benchmarking, no Python in the loop. It is **not** installed onto `$PATH` —
+run it from `build/<wheel-tag>/hammock-cpp` or `cmake --install` separately.
+
+By default it emits 3 columns (`query`, `reference`, `jaccard_similarity`);
+`--metrics` adds `jaccard_similarity_ie`, `containment_AB/BA` and `cosketch_*`,
+matching the Python CLI **bit-for-bit** (the IE derivation is written the same
+way in both — see `jaccard_ie_from_containments` in `hammock_cli.cpp` and
+`runner._jaccard_ie_from_containments`; keep them in sync or
+`tests/test_hammock_cpp_metrics.py` fails on `==`). Off by default because it
+costs a union + cardinality per pair and would invalidate the timings in
+`experiments/bedtools_benchmark/RESULTS.md`. Needed before any interval-mode
+rerun: without it the binary cannot emit output from which set-Jaccard is
+recoverable.
 
 ## Architecture
 
