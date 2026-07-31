@@ -51,8 +51,14 @@ double HLLSketch::jaccard_similarity(const AbstractSketch& other) const {
     if (!o) {
         throw std::runtime_error("Cannot compute Jaccard between different sketch types");
     }
-    if (precision_ != o->precision_) {
-        throw std::runtime_error("HLLs must have same precision for Jaccard");
+    // hash_size must match as well as precision: equal precision alone gives
+    // equal register *counts* (so no overread) but the rho values are on
+    // different scales, which would silently return a meaningless J. merge_max
+    // and union_with both guard this; this one used to check precision only.
+    // Unreachable from Python -- the pybind ctor exposes only `precision`, so
+    // every sketch there is hash_size 64 -- so adding it moves no value.
+    if (precision_ != o->precision_ || hash_size_ != o->hash_size_) {
+        throw std::runtime_error("HLLs must have same precision and hash size for Jaccard");
     }
     // Python parity: estimate_jaccard_registers
     //   active = (R_a != 0) | (R_b != 0)
