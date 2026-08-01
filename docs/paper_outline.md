@@ -2,7 +2,7 @@
 
 **Working title (placeholder):** *hammock: HLL-sketch similarity for genomic intervals — faster than bedtools, with biological signal preserved*
 
-**Thesis (one sentence):** hammock — a Python+C++ HyperLogLog-backed interval-set sketcher — ranks pairwise interval-Jaccard in close agreement with bedtools (interval mode, off-diagonal Pearson r = 0.997, Kendall τ = 0.951; its register-equality estimator is *near*-affine in bedtools' set-Jaccard, order-preserving within a fixed cardinality ratio but inverting 2.5% of pairs across ratios, all at ΔJ_bedtools < 0.031) while also emitting a directly comparable set-Jaccard column (`jaccard_similarity_ie`, §3.3), and at high k/w its sequence mode additionally reproduces bedtools' values to four decimals (r ≈ 0.9996, MAE ≈ 0.006), while being substantially faster than bedtools at every scale tested; the same sketches independently recover tissue clustering (ARI = 0.91) and are robust to reference-genome choice — so the speed gain comes with, not at the cost of, biological fidelity; hammock extends beyond bedtools capabilities by enabling interval comparisons across references.
+**Thesis (one sentence):** hammock — a Python+C++ HyperLogLog-backed interval-set sketcher — ranks pairwise interval-Jaccard in close agreement with bedtools (interval mode, off-diagonal Pearson r = 0.997, Kendall τ = 0.951; its register-equality estimator is *near*-affine in bedtools' set-Jaccard, order-preserving within a fixed cardinality ratio but inverting 2.5% of pairs across ratios, all at ΔJ_bedtools < 0.031) while its inclusion–exclusion column `jaccard_similarity_ie` reproduces bedtools' values outright (MAE 4.3 × 10⁻⁴, r = 0.99999, τ = 0.9947 at p = 21; §3.3), and at high k/w its sequence mode additionally reproduces bedtools' values to four decimals (r ≈ 0.9996, MAE ≈ 0.006), while being substantially faster than bedtools at every scale tested; the same sketches independently recover tissue clustering (ARI = 0.91) and are robust to reference-genome choice — so the speed gain comes with, not at the cost of, biological fidelity; hammock extends beyond bedtools capabilities by enabling interval comparisons across references.
 
 ---
 
@@ -113,7 +113,8 @@ Across Maurano's 400 sample pairs:
 
 | mode | best r vs bedtools | best MAE | claim |
 |---|---|---|---|
-| **interval** | **0.9972** (off-diagonal) | 0.138 (`jaccard_similarity`); near-affine offset c·(1−J), §3.3 | rank-faithful to ΔJ ≈ 0.031; τ = 0.951 |
+| **interval**, `jaccard_similarity` | **0.9972** (off-diagonal) | 0.1378; near-affine offset c·(1−J), §3.3 | rank-faithful to ΔJ ≈ 0.031; τ = 0.951 |
+| **interval**, `jaccard_similarity_ie` | **0.99999** | **0.00043** | τ = 0.9947; 192/17,955 inverted (0.27%) |
 | **sequence** (k=20, w=100, p=24) | **0.9996** | **0.0061** | value-identical |
 
 Sequence mode's numerical agreement with bedtools peaks at r = 0.9996 / MAE = 0.0061 — four-decimal-place agreement, i.e. it closes the absolute gap that interval mode leaves open. The high-correlation ridge in the (k, w) Pearson heatmap runs along the high-k / high-w edge of the sweep, indicating that sequence mode's near-perfect agreement is unlocked at long minimizer windows where interior coverage is richest. (Caveat: agreement is not monotonic in w — at the very largest windows it falls back off saturation, e.g. at k = 15, p = 24 Pearson drops from ≈ 1.0 to 0.937 at w = 500 as interior minimizers grow too sparse — so the ridge peaks at high-k / moderate-w rather than at the extreme corner.)

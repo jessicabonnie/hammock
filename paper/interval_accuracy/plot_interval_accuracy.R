@@ -109,19 +109,37 @@ bedtools_pairs <- bedtools_raw %>%
   unordered_pairs(file1, file2) %>%
   transmute(.a, .b, is_self, bedtools_jaccard = jaccard)
 
+# The two estimators plotted side by side. `jaccard_similarity` is
+# register-equality: the fraction of active registers whose values agree. It is
+# not set Jaccard -- registers tie by chance, which puts a floor under it -- so
+# its offset from y = x is definitional, not error. `jaccard_similarity_ie`
+# (hammock >= 0.5.0) is the inclusion-exclusion estimate |A|+|B|-|A∪B| over the
+# union, which does estimate the same quantity BEDTools reports.
+EST_RE <- "Register-equality (jaccard_similarity)"
+EST_IE <- "Inclusion\u2013exclusion (jaccard_similarity_ie)"
+EST_LEVELS <- c(EST_RE, EST_IE)
+
 read_hammock <- function(path, precision) {
   raw <- read_csv(path, show_col_types = FALSE)
-  required_hammock <- c("file1", "file2", "jaccard_similarity")
+  required_hammock <- c("file1", "file2",
+                        "jaccard_similarity", "jaccard_similarity_ie")
   missing_hammock <- setdiff(required_hammock, names(raw))
   if (length(missing_hammock) > 0) {
     stop(
       basename(path), " lacks columns: ",
-      paste(missing_hammock, collapse = ", "), call. = FALSE
+      paste(missing_hammock, collapse = ", "),
+      "\n  CSVs written before 2026-05-14 carry the placeholder `containment` ",
+      "column instead of the metric block and cannot supply the IE estimator; ",
+      "regenerate them with hammock >= 0.5.0.", call. = FALSE
     )
   }
-  raw %>%
-    unordered_pairs(file1, file2) %>%
-    transmute(.a, .b, precision = precision, hammock_jaccard = jaccard_similarity)
+  base <- raw %>% unordered_pairs(file1, file2)
+  bind_rows(
+    base %>% transmute(.a, .b, precision = precision,
+                       estimator = EST_RE, hammock_jaccard = jaccard_similarity),
+    base %>% transmute(.a, .b, precision = precision,
+                       estimator = EST_IE, hammock_jaccard = jaccard_similarity_ie)
+  )
 }
 
 hammock_pairs <- bind_rows(
@@ -143,16 +161,17 @@ cross <- paired %>%
     precision_label = factor(
       sprintf("p = %d", precision),
       levels = sprintf("p = %d", PRECISIONS)
-    )
+    ),
+    estimator = factor(estimator, levels = EST_LEVELS)
   )
 
-n_pairs_per_precision <- cross %>% count(precision, name = "n")
+n_pairs_per_precision <- cross %>% count(precision, estimator, name = "n")
 if (length(unique(n_pairs_per_precision$n)) != 1) {
   stop("Precisions cover different pair sets; refusing to plot.", call. = FALSE)
 }
 
 stats <- cross %>%
-  group_by(precision) %>%
+  group_by(precision, estimator) %>%
   summarise(
     n = n(),
     pearson = cor(hammock_jaccard, bedtools_jaccard, method = "pearson"),
@@ -166,18 +185,24 @@ message("Per-precision agreement; self-comparisons excluded:")
 print(as.data.frame(stats), digits = 5)
 
 ref_stats <- stats %>% filter(precision == REFERENCE_PRECISION)
-if (nrow(ref_stats) != 1) {
+if (nrow(ref_stats) != length(EST_LEVELS)) {
   stop("No statistics for p = ", REFERENCE_PRECISION, call. = FALSE)
 }
 ref_points <- cross %>% filter(precision == REFERENCE_PRECISION)
 
-annotation_a <- sprintf(
-  "Spearman ρ = %.4f\nKendall τ = %.4f\nPearson r = %.4f\nn = %d",
-  ref_stats$spearman,
-  ref_stats$kendall,
-  ref_stats$pearson,
-  ref_stats$n
+fmt_stats <- function(row) {
+  sprintf(
+    "%s\n  Pearson r = %.5f   Kendall \u03c4 = %.4f\n  MAE = %.4f",
+    sub(" \\(.*", "", row$estimator), row$pearson, row$kendall, row$mae
+  )
+}
+annotation_a <- paste(
+  vapply(EST_LEVELS,
+         function(e) fmt_stats(ref_stats %>% filter(estimator == e)),
+         character(1)),
+  collapse = "\n"
 )
+annotation_a <- paste0(annotation_a, sprintf("\nn = %d pairs", ref_stats$n[1]))
 
 # Crop Panel A to the observed off-diagonal region, with equal axis limits so
 # the y = x line remains interpretable without allowing self-comparisons at
@@ -193,19 +218,20 @@ plot_limits <- c(
   min(1, combined_range[2] + pad)
 )
 
-panel_a <- ggplot(ref_points, aes(x = bedtools_jaccard, y = hammock_jaccard)) +
+EST_COLORS <- setNames(c(COL_HAMMOCK, COL_COMPARE), EST_LEVELS)
+
+panel_a <- ggplot(ref_points,
+                  aes(x = bedtools_jaccard, y = hammock_jaccard,
+                      color = estimator, fill = estimator)) +
   geom_abline(
     slope = 1, intercept = 0,
     linetype = "22", linewidth = 0.5, color = "#8A939C"
   ) +
+  geom_point(shape = 21, size = 2.15, stroke = 0.3, color = "white",
+             alpha = 0.62) +
   geom_smooth(
     method = "loess", formula = y ~ x, span = 0.95,
-    se = TRUE, level = 0.95,
-    color = COL_COMPARE, fill = alpha(COL_COMPARE, 0.17), linewidth = 0.85
-  ) +
-  geom_point(
-    shape = 21, size = 2.15, stroke = 0.3,
-    fill = alpha(COL_HAMMOCK, 0.58), color = "white"
+    se = FALSE, linewidth = 0.85
   ) +
   annotate(
     "label",
@@ -213,46 +239,63 @@ panel_a <- ggplot(ref_points, aes(x = bedtools_jaccard, y = hammock_jaccard)) +
     y = plot_limits[2] - 0.025 * diff(plot_limits),
     label = annotation_a,
     hjust = 0, vjust = 1,
-    size = 2.85, lineheight = 1.04,
+    size = 2.5, lineheight = 1.06,
     linewidth = 0, fill = alpha("white", 0.88), color = COL_TEXT
   ) +
+  scale_color_manual(values = EST_COLORS, drop = FALSE) +
+  scale_fill_manual(values = EST_COLORS, drop = FALSE) +
   coord_equal(xlim = plot_limits, ylim = plot_limits, expand = FALSE) +
   scale_x_continuous(labels = label_number(accuracy = 0.05)) +
   scale_y_continuous(labels = label_number(accuracy = 0.05)) +
   labs(
-    title = "A  Pairwise similarity is strongly preserved",
+    title = sprintf("A  Inclusion\u2013exclusion lands on y = x (p = %d)",
+                    REFERENCE_PRECISION),
     x = "BEDTools Jaccard",
-    y = "Hammock interval-mode Jaccard"
+    y = "Hammock interval-mode estimate"
   ) +
+  guides(color = guide_legend(nrow = 2, override.aes = list(alpha = 1, size = 2.6)),
+         fill = "none") +
   theme_paper() +
-  theme(legend.position = "none")
+  theme(legend.position = "top", legend.margin = margin(b = 2))
 
 # Precision is encoded by line type rather than color so that the panel does
 # not visually exaggerate the small differences among precision settings.
-panel_b <- ggplot(cross, aes(x = bedtools_jaccard, y = gap)) +
-  geom_hline(yintercept = 0, linewidth = 0.4, color = "#8A939C") +
-  geom_point(color = COL_BEDTOOLS, size = 1.35, alpha = 0.18) +
+# Absolute gap on a log axis. A signed linear axis cannot show this panel's
+# point: the register-equality gap (~0.14) and the IE gap (~2e-4) differ by
+# nearly three orders of magnitude, so on a linear scale the three IE
+# precision curves collapse onto zero and the panel silently fails to display
+# the convergence its title claims. No gap is exactly zero (min 1.6e-6 across
+# all three precisions), so the log transform drops nothing.
+cross_abs <- cross %>% mutate(abs_gap = abs(gap))
+
+panel_b <- ggplot(cross_abs, aes(x = bedtools_jaccard, y = abs_gap)) +
+  geom_point(aes(color = estimator), size = 1.2, alpha = 0.16) +
   geom_smooth(
-    aes(linetype = precision_label, group = precision_label),
+    aes(linetype = precision_label, group = interaction(precision_label, estimator),
+        color = estimator),
     method = "loess", formula = y ~ x, span = 0.95,
-    se = FALSE, color = COL_HAMMOCK, linewidth = 0.85
+    se = FALSE, linewidth = 0.85
   ) +
   scale_linetype_manual(values = c("solid", "22", "42")) +
+  scale_color_manual(values = EST_COLORS, drop = FALSE, guide = "none") +
   scale_x_continuous(labels = label_number(accuracy = 0.05)) +
-  scale_y_continuous(
-    labels = label_number(accuracy = 0.05),
-    limits = c(0, NA),
-    expand = expansion(mult = c(0.02, 0.10))
+  scale_y_log10(
+    labels = label_log(digits = 2),
+    breaks = 10^(-5:0),
+    expand = expansion(mult = c(0.05, 0.10))
   ) +
+  annotation_logticks(sides = "l", size = 0.3, color = "#8A939C",
+                      short = unit(0.04, "cm"), mid = unit(0.07, "cm"),
+                      long = unit(0.11, "cm")) +
   labs(
-    title = "B  The numerical gap decreases with overlap",
+    title = "B  The register-equality gap is a floor, not an error",
     x = "BEDTools Jaccard",
-    y = "Hammock − BEDTools"
+    y = "|Hammock − BEDTools|  (log scale)"
   ) +
   guides(
     linetype = guide_legend(
       nrow = 1, byrow = TRUE,
-      override.aes = list(color = COL_HAMMOCK, linewidth = 0.9)
+      override.aes = list(color = COL_TEXT, linewidth = 0.9)
     )
   ) +
   theme_paper() +
@@ -264,10 +307,11 @@ panel_b <- ggplot(cross, aes(x = bedtools_jaccard, y = gap)) +
 figure <- panel_a + panel_b +
   plot_layout(widths = c(1, 1.05)) +
   plot_annotation(
-    title = "Interval sketches preserve pairwise similarity structure",
+    title = paste("Inclusion\u2013exclusion reproduces BEDTools Jaccard;",
+                  "register-equality only its ordering"),
     theme = theme(
       plot.title = element_text(
-        family = base_family, face = "bold", size = 15,
+        family = base_family, face = "bold", size = 13.5,
         color = COL_TEXT, margin = margin(b = 10)
       ),
       plot.margin = margin(12, 16, 12, 12)
