@@ -281,15 +281,28 @@ int main(int argc, char** argv) {
     std::vector<std::unique_ptr<AbstractSketch>> qsk, rsk;
     qsk.reserve(queries.size());
     rsk.reserve(refs.size());
-    for (const auto& p : queries) {
-        auto s = make_sketch(args);
-        process_one(p, *s, args);
-        qsk.push_back(std::move(s));
-    }
-    for (const auto& p : refs) {
-        auto s = make_sketch(args);
-        process_one(p, *s, args);
-        rsk.push_back(std::move(s));
+    // process_one throws (e.g. "Cannot open file") and used to propagate out of
+    // main -> std::terminate -> SIGABRT with a core dump. That is not just ugly
+    // for a typo'd path: an open() can fail transiently under system-wide fd
+    // exhaustion, so a long batch could abort mid-run on a file that is
+    // perfectly readable a second later. Report and exit non-zero instead.
+    try {
+        for (const auto& p : queries) {
+            auto s = make_sketch(args);
+            process_one(p, *s, args);
+            qsk.push_back(std::move(s));
+        }
+        for (const auto& p : refs) {
+            auto s = make_sketch(args);
+            process_one(p, *s, args);
+            rsk.push_back(std::move(s));
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Error while sketching: " << e.what() << "\n";
+        return 3;
+    } catch (...) {
+        std::cerr << "Error while sketching: unknown exception\n";
+        return 3;
     }
 
     auto t1 = std::chrono::steady_clock::now();
