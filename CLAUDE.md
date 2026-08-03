@@ -114,10 +114,9 @@ These are deliberate; parity tests that touch them are skipped or projected.
    placeholder column were never load-bearing, and `expA` already changes
    what `A` *contains* (interval multiplicity) upstream of the intersection.
 
-   Mode D emits the same block twice: once on the minimizer HLL (paired
-   with `jaccard_similarity`) and once on the merged minimizer ∪ start-end
-   HLL (paired with `jaccard_similarity_with_ends`, columns suffixed
-   `_with_ends`).
+   Mode D emits this block once, on the minimizer HLL. (It used to emit a
+   second `_with_ends` copy on a merged minimizer ∪ start-end HLL; that whole
+   family was removed — see divergence #8.)
 
    Parity tests project these columns out before comparing.
 
@@ -220,8 +219,7 @@ These are deliberate; parity tests that touch them are skipped or projected.
 7. **Second Jaccard column: `jaccard_similarity_ie`** (v0.5.0). Orig emits one
    Jaccard column, computed by register equality. We emit that column
    unchanged — byte-equal, and parity tests still compare it — plus a second
-   inclusion-exclusion column immediately after it, and in Mode D a
-   `jaccard_similarity_ie_with_ends` twin. Rationale is divergence #2's
+   inclusion-exclusion column immediately after it. Rationale is divergence #2's
    estimator note: the register-equality column is not set Jaccard and is not
    rank-faithful across pairs of differing size, so a run had no
    bedtools-comparable Jaccard in it even though the underlying quantity was
@@ -240,6 +238,62 @@ These are deliberate; parity tests that touch them are skipped or projected.
    *Jaccard* column looks wrong at a glance,
    but orig has no counterpart to be unfaithful to and `jaccard_similarity`
    is still compared byte-for-byte.
+8. **The Mode D `_with_ends` column family is removed** (v0.6.0). Orig emits
+   `jaccard_similarity_with_ends`; we no longer do, and we also dropped the six
+   `_ie`/containment/cosketch twins we had added alongside it. Mode D now emits
+   exactly one similarity block, on the minimizer HLL. `MinimizerSketch` is a
+   single-HLL class: `startend_hll`, `merged()`, `canonicalize_kmer` and
+   `_add_kmers_to` are gone.
+
+   **Why.** The merged sketch was `minimizer_hll ∪ startend_hll`, where the
+   ends payload was `canonicalize_kmer(s[:k] + s[-k:])` per record with *every*
+   sliding k-mer of that 2k string inserted. Four measured problems:
+
+   - **It was an uncontrollable blend, not a distinct quantity.** Because the
+     two hash sets are disjoint, the merged Jaccard is exactly the size-weighted
+     mediant of the minimizer and flank Jaccards: `J = (I_M+I_E)/(U_M+U_E)`.
+     Verified against the shipped register-equality column to 2×10⁻⁴ at p=24
+     (k=10, w=100: predicted 0.4095, actual 0.4097); the identity degrades to
+     ±0.02 at p≤14 where the chance-agreement floor bends it. The mixing weight
+     φ = |E|/(|M|+|E|) is set by (k, w, record count, length) and **never by the
+     user** — on a Maurano file it is 0.55 at w=100 and 0.86 at w=500.
+   - **k−1 of the k+1 inserted elements are chimeric.** Only indices 0 and k of
+     the 2k payload are real sequence k-mers; the rest span the artificial
+     `start||end` splice and exist in no genome. Measured on real peak FASTAs
+     they are 77–79% of distinct end elements. Canonicalization was applied to
+     the whole 2k concatenation, so a record's start-k-mer orientation depended
+     on its *other* end.
+   - **The flank component measures exact boundary identity, as a cliff.** At
+     k=10, w=50, p=24, jittering record boundaries by **1 bp** takes the flank
+     Jaccard from 1.000 to 0.130 (minimizer Jaccard: 1.000 → 0.997). On real
+     data that bit is always off — two Maurano DHS BEDs share 15 exactly-matching
+     intervals out of 168,322 (0.01%).
+   - **The stated rationale was false.** The column was justified as rescuing
+     records too short to yield minimizers. But the no-minimizer fallback fed
+     the whole sequence into *both* HLLs and returned early, so on a
+     constant-length sub-threshold corpus the two columns were **bit-identical**
+     — it added nothing exactly where it was supposed to help. Dropout begins at
+     `L < k + w − 1`.
+
+   Empirically it also just lost: on the 235 existing Maurano Mode D configs,
+   scored by Spearman ρ against bedtools, `no_ends` wins 185/49 (exact
+   comparison). Filtering to cells that are unsaturated with <10% record
+   dropout — an outcome-independent filter — `no_ends` wins 93.2%, and every
+   exception is a cell where *both* columns have ρ < 0.39.
+
+   **Caveats worth keeping.** The one place `_with_ends` won on the
+   inclusion-exclusion family was 12 cells at w=500, ρ up to 0.9498 vs 0.8950 —
+   but those have 72.5–73.1% record dropout, i.e. the regime where the column
+   degenerates to record identity, and they sit well below the global optimum
+   (k=20, w=20, p=24 → ρ_no_ie = 0.9997 at 1.9% dropout). Also note the arena
+   is partly circular: Mode D FASTAs are `bedtools getfasta` extractions from
+   one reference, so minimizer Jaccard nearly restates coordinate overlap
+   (ρ = 0.9997). Full analysis and the adversarial review that produced it:
+   `docs/mode-d-ends-removal.md`.
+
+   Archived CSVs keep the columns; nothing on disk is invalidated. Analyses that
+   consumed `jaccard_similarity_with_ends` were re-pointed to
+   `jaccard_similarity` — see that doc for the list.
 
 ## Mode D BED→FASTA (bed2fasta) — SHIPPED
 

@@ -7,10 +7,9 @@ plan: phase 4 work).
 
 Instead we verify:
   1. the pipeline runs without errors and produces a valid CSV header,
-  2. self-comparison gives Jaccard = 1.0 on both columns,
+  2. self-comparison gives Jaccard = 1.0,
   3. repeated runs are byte-identical (determinism),
-  4. canonicalize_kmer matches its spec (lex-min of seq vs revcomp),
-  5. the empty-minimizer fallback path is taken when seq is shorter
+  4. the empty-minimizer fallback path is taken when seq is shorter
      than the digest window.
 """
 from __future__ import annotations
@@ -51,11 +50,9 @@ def test_mode_d_runs_and_self_jaccard_is_one(tmp_path: Path) -> None:
         "file1", "file2", "sketch_type", "mode",
         "precision", "num_hashes", "kmer_size", "window_size",
         "jaccard_similarity", "jaccard_similarity_ie", *cont_block,
-        "jaccard_similarity_with_ends", "jaccard_similarity_ie_with_ends",
-        *[c + "_with_ends" for c in cont_block],
         "ref1", "ref2",
     ]
-    # self-pair must be Jaccard = 1.0 (and containment = 1.0) on both halves.
+    # self-pair must be Jaccard = 1.0 (and containment = 1.0).
     header = csv[0].split(",")
     self_row = csv[1].split(",")
     assert self_row[0] == "tiny.fa" and self_row[1] == "tiny.fa"
@@ -65,11 +62,8 @@ def test_mode_d_runs_and_self_jaccard_is_one(tmp_path: Path) -> None:
     # Exact 1.0, not approx, for the inclusion-exclusion columns too: for
     # identical registers the union estimate equals both cardinalities
     # bitwise, so inter = 2c - c = c exactly and 1/(1 + 1 - 1) == 1.0.
-    for name in ("jaccard_similarity", "jaccard_similarity_with_ends",
-                 "jaccard_similarity_ie", "jaccard_similarity_ie_with_ends",
-                 "containment_AB", "containment_BA",
-                 "containment_AB_with_ends", "containment_BA_with_ends",
-                 "cosketch_geom", "cosketch_geom_with_ends"):
+    for name in ("jaccard_similarity", "jaccard_similarity_ie",
+                 "containment_AB", "containment_BA", "cosketch_geom"):
         assert float(self_row[header.index(name)]) == 1.0, name
 
 
@@ -108,28 +102,10 @@ def test_mode_d_distinct_files_have_nontrivial_jaccard(tmp_path: Path) -> None:
     header = lines[0].split(",")
     row = lines[1].split(",")
     jac = float(row[header.index("jaccard_similarity")])
-    jac_ends = float(row[header.index("jaccard_similarity_with_ends")])
     assert 0.0 <= jac < 1.0, f"expected non-self Jaccard in [0, 1), got {jac}"
-    assert 0.0 <= jac_ends < 1.0, f"expected non-self with-ends Jaccard in [0, 1), got {jac_ends}"
 
 
 # Direct unit tests on the Python helpers -----------------------------------
-
-
-def test_canonicalize_kmer_basic() -> None:
-    from hammock.modes.sequence import canonicalize_kmer
-    # Forward < revcomp → return forward (uppercased).
-    assert canonicalize_kmer("acgt") == "ACGT"  # ACGT vs ACGT (palindrome)
-    # Mixed case input gets uppercased.
-    assert canonicalize_kmer("AaTt") == "AATT"  # AATT vs AATT (palindrome)
-    # Non-palindrome: AAAA vs TTTT → AAAA.
-    assert canonicalize_kmer("AAAA") == "AAAA"
-    # TTTT vs AAAA → AAAA.
-    assert canonicalize_kmer("TTTT") == "AAAA"
-    # Empty and N-bearing kmers preserved (N has no complement, passes through).
-    assert canonicalize_kmer("") == ""
-    # NNNN → NNNN (N stays as N in revcomp; min == self).
-    assert canonicalize_kmer("NNNN") == "NNNN"
 
 
 def test_minimizer_sketch_empty_string_is_noop() -> None:
@@ -137,20 +113,17 @@ def test_minimizer_sketch_empty_string_is_noop() -> None:
     s = MinimizerSketch(kmer_size=8, window_size=40, precision=10)
     s.add_string("")
     assert s.minimizer_hll.estimate_cardinality() == 0.0
-    assert s.startend_hll.estimate_cardinality() == 0.0
 
 
 def test_minimizer_sketch_short_seq_uses_empty_fallback() -> None:
-    """A sequence shorter than the digest window should fall through to the
-    'no minimizers' branch and add the whole seq as one element to BOTH HLLs.
+    """A sequence shorter than k+w-1 yields no minimizers and falls through to
+    the 'no minimizers' branch, which adds the whole seq as one element.
+
+    That element is an *exact-match* indicator -- it only ever collides with a
+    byte-identical record -- so sub-threshold records contribute identity, not
+    graded similarity. See divergence #8 in CLAUDE.md.
     """
     from hammock.modes.sequence import MinimizerSketch
     s = MinimizerSketch(kmer_size=8, window_size=40, precision=10)
     s.add_string("ACGTACGT")  # len 8 < window 40 → digest returns []
-    # Both HLLs should now have exactly one element registered.
     assert 0.5 < s.minimizer_hll.estimate_cardinality() < 2.0
-    assert 0.5 < s.startend_hll.estimate_cardinality() < 2.0
-    # And the merged HLL is also ~1 (both HLLs hashed the same string with the
-    # same seed, so they share the register).
-    merged = s.minimizer_hll.merge_new(s.startend_hll)
-    assert 0.5 < merged.estimate_cardinality() < 2.0

@@ -118,6 +118,14 @@ def run_hammock(fa_A: Path, fa_B: Path) -> tuple[float, float, float]:
         with csv_path.open() as fh:
             for r in csv.DictReader(fh):
                 if r["file1"] == fa_A.name and r["file2"] == fa_B.name:
+                    if "jaccard_similarity_with_ends" not in r:
+                        raise SystemExit(
+                            "This demo requires hammock <= 0.5.0: it compares "
+                            "jaccard_similarity against "
+                            "jaccard_similarity_with_ends, and v0.6.0 removed "
+                            "the latter (CLAUDE.md divergence #8). See "
+                            "docs/mode-d-ends-removal.md."
+                        )
                     return (float(r["jaccard_similarity"]),
                             float(r["jaccard_similarity_with_ends"]),
                             wall)

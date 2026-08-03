@@ -1,5 +1,14 @@
 #!/usr/bin/env Rscript
 # =============================================================================
+# OBSOLETE as of hammock v0.6.0 -- DOES NOT RUN on current output.
+#
+# This compares the two Mode D Jaccard columns, but `jaccard_similarity_with_ends`
+# no longer exists (CLAUDE.md divergence #8, docs/mode-d-ends-removal.md), so
+# cluster_one() below will fail on any CSV written by v0.6.0+. It still works on
+# the archived CSVs under results/, which retain the old 20-column schema.
+# Kept as a record of the question; it was never run (no column_comparison.tsv
+# on disk). Delete once the archived comparison is no longer of interest.
+# =============================================================================
 # Recompute clustering ARI for both Mode D similarity columns
 # (jaccard_similarity vs jaccard_similarity_with_ends) across all (k, w) cells.
 #

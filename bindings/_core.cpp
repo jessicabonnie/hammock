@@ -247,19 +247,10 @@ PYBIND11_MODULE(_core, m) {
                  return self.intersection_size(other);
              },
              py::arg("other"))
-        .def("merge_new",
-             [](const HLLSketch& self, const HLLSketch& other) {
-                 auto u = self.union_with(other);
-                 // union_with returns unique_ptr<AbstractSketch>; we know the
-                 // dynamic type is HLLSketch when both inputs are.
-                 HLLSketch* hll_ptr = dynamic_cast<HLLSketch*>(u.get());
-                 if (!hll_ptr) {
-                     throw std::runtime_error("merge_new produced a non-HLL sketch");
-                 }
-                 return HLLSketch(*hll_ptr);
-             },
-             py::arg("other"),
-             "Return a new HLLSketch that is the union of self and other.")
+        // NOTE: a `merge_new` binding lived here until v0.6.0. Its only caller
+        // was MinimizerSketch.merged(), which built the removed `_with_ends`
+        // sketch (CLAUDE.md divergence #8). The underlying HLLSketch::union_with
+        // is still used by pairwise_metrics_hll and hammock_cli.
         .def("clear", &HLLSketch::clear)
         .def("precision", &HLLSketch::precision)
         .def("__repr__", [](const HLLSketch& self) {

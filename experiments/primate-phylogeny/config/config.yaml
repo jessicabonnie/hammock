@@ -30,10 +30,10 @@ peaks_cache: "/vast/blangme2/jbonnie/hammock/primate-phylogeny/peaks"
 # build (PATH-resolved "hammock" can fall back to a stale ~/.local/bin install).
 sketch_bin: "/home/jbonnie1/.conda/envs/claude-ref-comparison/bin/hammock"
 
-# Primary similarity column — Mode D outputs two:
-#   jaccard_similarity            — minimizers only
-#   jaccard_similarity_with_ends  — minimizers + boundary k-mers
-primary_sim_col: "jaccard_similarity_with_ends"
+# Primary similarity column. The `_with_ends` family was removed in hammock
+# v0.6.0 (CLAUDE.md divergence #8). NOTE: nothing in this experiment actually
+# reads this key — scripts/build_phylogeny.R picks columns directly.
+primary_sim_col: "jaccard_similarity"
 
 # (k, w) sweep — same as mus-homo / ref-comparison
 kmer_sizes:   [5, 8, 10, 15, 20]

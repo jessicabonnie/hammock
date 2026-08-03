@@ -4,8 +4,8 @@ One backend, one contract: default strand handling (no reverse-complement) and
 ``chrom:start-end`` headers, so both sides of a cross-reference comparison see
 comparable sequences. (``twoBitToFa -bed`` was rejected because it
 reverse-complements minus-strand intervals and headers by BED-name by default,
-which would silently diverge from ``getfasta`` and corrupt
-``jaccard_similarity_with_ends``.)
+which would silently diverge from ``getfasta``. Minimizer selection is not
+strand-canonical, so a reverse-complemented record yields a different sketch.)
 
 Every conversion is validated: an empty output FASTA or a "chromosome not
 found" warning from bedtools (the ``chr1`` vs ``1`` naming mismatch) is turned

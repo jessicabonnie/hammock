@@ -1,5 +1,28 @@
 # modeD_flanking — When (if ever) do boundary k-mers help Mode D?
 
+> **ARCHIVAL as of 2026-07-31. The question was resolved: the column was removed.**
+>
+> hammock v0.6.0 deletes the entire `_with_ends` column family
+> (`CLAUDE.md` divergence #8; evidence in `docs/mode-d-ends-removal.md`), so
+> **this experiment cannot be re-run** — `run_sweep_synthetic.py` and
+> `value_demo.py` now exit with an explanatory error against current hammock,
+> and the two `analyze_part*.R` scripts require the removed column. Everything
+> under `results/` was produced with the ≤ v0.5.0 schema and stands as the
+> historical record.
+>
+> Two corrections to what follows, both found during the removal review:
+> - **The φ formula below is wrong.** It uses `2(k−1)` elements per record; the
+>   code inserted `k+1`. Both the constant and the k-slope are off, and φ is the
+>   axis Part 2's conclusion is stratified on. `figures/synthetic_empirical_vs_analytical.png`
+>   (Fig 11) validates the wrong formula and should not be cited.
+> - **The stated motivation below — that short sequences yield no minimizers and
+>   so need boundary content — is false against the code.** The no-minimizer
+>   fallback fed *both* HLLs and returned early, so on a constant-length
+>   sub-threshold corpus the two columns were bit-identical.
+>
+> Also note Part 1 and Part 2 disagreed, and the Part 2 headline ("with_ends
+> wins 62.2% on Mash residual") is not reproducible from any committed script.
+
 Mode D emits two Jaccard estimates per pair:
 
 | column | what it counts |

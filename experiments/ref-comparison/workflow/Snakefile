@@ -170,7 +170,10 @@ rule exp_a_validate_and_plot:
         plot  = "{outdir}/exp_a/{peak_type}/k{k}_w{w}/cross_ref_validation.png",
         stats = "{outdir}/exp_a/{peak_type}/k{k}_w{w}/cross_ref_stats.tsv",
     params:
-        sim_col = "jaccard_similarity_with_ends",
+        # Was jaccard_similarity_with_ends; that column family was removed in
+        # hammock v0.6.0 (CLAUDE.md divergence #8). Prior Exp A results were
+        # computed on the old column and have NOT been regenerated.
+        sim_col = "jaccard_similarity",
     log:
         "{outdir}/logs/exp_a/{peak_type}/validate_plot_k{k}_w{w}.log"
     envmodules:

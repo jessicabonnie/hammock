@@ -52,6 +52,15 @@ def parse_mode_d_csv(path: Path) -> List[Tuple[str, str, float, float]]:
     with path.open() as fh:
         reader = csv.DictReader(fh)
         for r in reader:
+            if "jaccard_similarity_with_ends" not in r:
+                raise SystemExit(
+                    "This experiment requires hammock <= 0.5.0: it compares "
+                    "jaccard_similarity against jaccard_similarity_with_ends, "
+                    "and v0.6.0 removed the latter (CLAUDE.md divergence #8, "
+                    "docs/mode-d-ends-removal.md). The archived results under "
+                    "results/ were produced with the old schema and stand; this "
+                    "driver cannot be re-run against current hammock."
+                )
             rows.append((
                 r["file1"], r["file2"],
                 float(r["jaccard_similarity"]),

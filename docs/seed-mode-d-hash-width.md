@@ -86,6 +86,14 @@ resolving early — it points the rerun scope in opposite directions.
    `jaccard_similarity` all correctly refuse mismatched `hash_size`, which is
    what `*_with_ends` needs); or document it and leave the numbers alone.
 
+   > **Update 2026-07-31 — the second option is now unblocked.** v0.6.0 removed
+   > the `_with_ends` family (CLAUDE.md divergence #8), so there is no longer a
+   > start/end HLL to merge with and nothing requires the two sketches to share
+   > a `hash_size`. `hash_size=32` on the minimizer HLL is now a single-sketch
+   > change. Note the whole-sequence fallback in `sequence.py` still ingests an
+   > `xxh64` value, so a mixed-width sketch is still possible on corpora with
+   > sub-threshold records — that path would need re-hashing too.
+
 ## Constraints carried over from the current work
 
 - **`jaccard_similarity` is frozen.** Changing it forces a rerun of every

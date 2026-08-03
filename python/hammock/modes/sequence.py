@@ -1,17 +1,24 @@
 """Mode D: FASTA sequence sketching.
 
-Implements `MinimizerSketch` matching hammock/lib/minimizer.py's algorithm
-exactly. The minimizer hashes come from `digest.window_minimizer`; we then
-reproduce the original's hash → str → re-hash-as-kmers idiom (orig
-hyperloglog.py:160-181) so the sketch state is byte-identical.
+`MinimizerSketch` holds one HLL over a FASTA's (k, w) window minimizers.
+Selector hashes come from `digest.window_minimizer` and go straight into
+`_core.HLLSketch.add_hash64` as raw 64-bit values — *not* through orig's
+hash → str → re-hash-as-kmers idiom, which silently dropped most minimizers
+(see divergence #6 in CLAUDE.md). Mode D is therefore deliberately **not**
+byte-identical to orig.
 
-The original uses xxh64(seed=42) per-kmer; we route every per-kmer hash
-through `xxhash.xxh64` here and call `_core.HLLSketch.add_hash64`, so the
-HLL register state is exactly what `_process_kmer` would produce.
+`xxhash.xxh64(seed)` survives on exactly one path: the no-minimizer fallback
+for records shorter than `k + w - 1`, which hashes the whole record as a single
+element. That makes such records exact-match indicators rather than graded
+similarity — one substitution and they stop matching.
+
+Through v0.5.0 this class also carried a second HLL of per-record start/end
+k-mers, backing the `jaccard_similarity_with_ends` column family. That was
+removed in v0.6.0; see divergence #8 and `docs/mode-d-ends-removal.md`.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 
 import xxhash
 
@@ -33,21 +40,6 @@ except ImportError:
             return []
 
 
-_COMPLEMENT = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
-
-
-def canonicalize_kmer(kmer: str) -> str:
-    """Lex-min of (uppercase kmer, reverse complement). Non-ACGT bases pass through.
-
-    Matches hammock/lib/minimizer.py:21-43.
-    """
-    if not kmer:
-        return kmer
-    kmer = kmer.upper()
-    rc = ''.join(_COMPLEMENT.get(b, b) for b in kmer[::-1])
-    return min(kmer, rc)
-
-
 def _xxh64(s: str, seed: int) -> int:
     h = xxhash.xxh64(seed=seed)
     h.update(s.encode())
@@ -55,10 +47,11 @@ def _xxh64(s: str, seed: int) -> int:
 
 
 class MinimizerSketch:
-    """Two-HLL sequence sketch: minimizer-hashes + canonicalized start/end kmers.
+    """Single-HLL sequence sketch over a FASTA's (k, w) window minimizers.
 
-    Faithful port of hammock/lib/minimizer.py:45-220 (the FastHyperLogLog path,
-    hash_size=64, seed=42 by default).
+    Port of hammock/lib/minimizer.py:45-220 (the FastHyperLogLog path,
+    hash_size=64, seed=42 by default), minus the start/end ("ends") sketch —
+    see divergence #8 in CLAUDE.md for why that was dropped.
     """
 
     def __init__(
@@ -73,21 +66,6 @@ class MinimizerSketch:
         self.seed = int(seed)
         self.precision = int(precision)
         self.minimizer_hll = _core.HLLSketch(precision=self.precision)
-        self.startend_hll = _core.HLLSketch(precision=self.precision)
-
-    def _add_kmers_to(self, hll: "_core.HLLSketch", s: str) -> None:
-        """Replicates HyperLogLog.add_string: skip if shorter than k; else hash
-        every length-k substring via xxh64(seed) and add to `hll`. If kmer_size
-        is 0, hash the whole string as one element.
-        """
-        k = self.kmer_size
-        if k == 0:
-            hll.add_hash64(_xxh64(s, self.seed))
-            return
-        if len(s) < k:
-            return
-        for i in range(len(s) - k + 1):
-            hll.add_hash64(_xxh64(s[i:i + k], self.seed))
 
     def _process_kmer_to(self, hll: "_core.HLLSketch", kmer: str) -> None:
         """Replicates HyperLogLog._process_kmer: hash kmer once, no length check."""
@@ -106,10 +84,11 @@ class MinimizerSketch:
             minimizers = []
 
         if not minimizers:
-            # Empty fallback: feed whole sequence as a single kmer to BOTH HLLs
+            # Empty fallback: feed whole sequence as a single kmer
             # (orig minimizer.py:106-107 calls _process_kmer, bypassing length check).
+            # Note this makes a sub-threshold record (len < k+w-1) an exact-match
+            # indicator: it matches only a byte-identical record, so one SNP drops it.
             self._process_kmer_to(self.minimizer_hll, s)
-            self._process_kmer_to(self.startend_hll, s)
             return
 
         # Feed each minimizer's selector hash directly to the HLL. This matches
@@ -121,28 +100,6 @@ class MinimizerSketch:
         # [[project_modeD_no_ends_zero_bug]] for full repro.
         for _, hash_val in minimizers:
             self.minimizer_hll.add_hash64(hash_val)
-
-        # Canonicalized start+end (or whole seq if too short).
-        if len(s) >= 2 * self.kmer_size:
-            payload = canonicalize_kmer(s[:self.kmer_size] + s[-self.kmer_size:])
-        else:
-            payload = canonicalize_kmer(s)
-        self._add_kmers_to(self.startend_hll, payload)
-
-    def merged(self) -> "_core.HLLSketch":
-        """Return minimizer_hll ∪ startend_hll (used for jaccard_with_ends)."""
-        return self.minimizer_hll.merge_new(self.startend_hll)
-
-    def similarity_values(self, other: "MinimizerSketch") -> Dict[str, float]:
-        if (self.kmer_size != other.kmer_size
-                or self.window_size != other.window_size):
-            raise ValueError("Cannot compare sketches with different parameters")
-        jac = self.minimizer_hll.estimate_jaccard(other.minimizer_hll)
-        jac_ends = self.merged().estimate_jaccard(other.merged())
-        return {
-            'jaccard_similarity': jac,
-            'jaccard_similarity_with_ends': jac_ends,
-        }
 
 
 def sketch_fasta(path: str, args) -> MinimizerSketch:

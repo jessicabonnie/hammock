@@ -79,11 +79,11 @@ def _print_estimator_note(args) -> None:
     """
     if not args.verbose:
         return
-    print("note: jaccard_similarity (and _with_ends) is register-equality -- "
+    print("note: jaccard_similarity is register-equality -- "
           "biased high,\n"
           "      and the bias depends on both sketch load and |A|/|B|, so rank "
           "only within\n"
-          "      comparable pairs. The _ie columns are set-Jaccard, comparable "
+          "      comparable pairs. The _ie column is set-Jaccard, comparable "
           "to bedtools.",
           file=sys.stderr)
 
@@ -239,8 +239,7 @@ def _row_prefix(args, qlabel: str, rlabel: str) -> List:
 def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches,
                       query_labels=None, ref_labels=None,
                       ref1="NA", ref2="NA") -> int:
-    """Mode D output: Jaccard + containment + cosketch on both the minimizer
-    and merged (`_with_ends`) sketches.
+    """Mode D output: Jaccard + containment + cosketch on the minimizer sketch.
 
     `query_labels`/`ref_labels` override the CSV file1/file2 text (used by the
     bed2fasta path so rows are labelled by the original BED files, not the
@@ -255,16 +254,10 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches,
               file=sys.stderr)
     minimizer_query = [s.minimizer_hll for s in query_sketches]
     minimizer_ref = [s.minimizer_hll for s in ref_sketches]
-    merged_query = [s.merged() for s in query_sketches]
-    merged_ref = [s.merged() for s in ref_sketches]
 
     jac, c_ab, c_ba = _core.pairwise_metrics_hll(minimizer_query, minimizer_ref)
     cs_geom, cs_arith, cs_max = _cosketch_from_containments(c_ab, c_ba)
     jac_ie = _jaccard_ie_from_containments(c_ab, c_ba)
-
-    jac_e, c_ab_e, c_ba_e = _core.pairwise_metrics_hll(merged_query, merged_ref)
-    cs_geom_e, cs_arith_e, cs_max_e = _cosketch_from_containments(c_ab_e, c_ba_e)
-    jac_ie_e = _jaccard_ie_from_containments(c_ab_e, c_ba_e)
 
     out_path = get_new_prefix(
         outprefix=args.outprefix,
@@ -281,8 +274,6 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches,
 
     similarity_measures = (
         ["jaccard_similarity", "jaccard_similarity_ie"] + _CONTAINMENT_COLS
-        + ["jaccard_similarity_with_ends", "jaccard_similarity_ie_with_ends"]
-        + [c + "_with_ends" for c in _CONTAINMENT_COLS]
     )
     # ref1/ref2 are always emitted (trailing, "NA" outside bed2fasta mode) so
     # the Mode D header stays fixed and cross-reference provenance is recorded.
@@ -298,9 +289,6 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches,
                     float(jac[i, j]), float(jac_ie[i, j]),
                     float(c_ab[i, j]), float(c_ba[i, j]),
                     float(cs_geom[i, j]), float(cs_arith[i, j]), float(cs_max[i, j]),
-                    float(jac_e[i, j]), float(jac_ie_e[i, j]),
-                    float(c_ab_e[i, j]), float(c_ba_e[i, j]),
-                    float(cs_geom_e[i, j]), float(cs_arith_e[i, j]), float(cs_max_e[i, j]),
                     ref1, ref2,
                 ])
                 w.writerow(row)

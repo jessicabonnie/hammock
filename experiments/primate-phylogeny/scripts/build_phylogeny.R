@@ -3,23 +3,25 @@
 # primate-phylogeny/scripts/build_phylogeny.R
 # Neighbor-joining trees from hammock peak-FASTA similarity matrix.
 #
-# Mode D (since 2026-05-14) emits 12 similarity columns: 6 metrics
-# (jaccard, containment_AB, containment_BA, cosketch_geom, cosketch_arith,
-# cosketch_max) computed twice — once on the minimizer HLL and once on the
-# `_with_ends` HLL. Containment / cosketch isolate `|A ∩ B| / |A|` from
+# Mode D emits 7 similarity metrics on the minimizer HLL (jaccard,
+# jaccard_ie, containment_AB, containment_BA, cosketch_geom, cosketch_arith,
+# cosketch_max). Containment / cosketch isolate `|A ∩ B| / |A|` from
 # union-size penalty, so they typically widen the cross-species margin
 # between phylogenetically close pairs and long-branch artifact pairs.
 #
-# This script builds one NJ tree per (metric × sketch-variant) for a small
-# curated set: jaccard + cosketch_max + cosketch_geom × minimizer + with_ends
-# = 6 trees per (k, w) cell. Containment_AB/BA are asymmetric and not used
-# directly for NJ; their information lives in cosketch_max (the symmetric
-# upper bound).
+# This script builds one NJ tree per metric for a small curated set:
+# jaccard + cosketch_max + cosketch_geom = 3 trees per (k, w) cell.
+# Containment_AB/BA are asymmetric and not used directly for NJ; their
+# information lives in cosketch_max (the symmetric upper bound).
 #
-# Input:  hammock all-vs-all similarity CSV (Mode D output, 20 cols)
+# Until hammock v0.6.0 this also built three `_with_ends` twins; that column
+# family was removed (CLAUDE.md divergence #8), so `*_we.*` outputs on /vast
+# are stale artifacts of earlier runs.
+#
+# Input:  hammock all-vs-all similarity CSV (Mode D output, 17 cols)
 #         samples.tsv (with species_code, common_name, scientific_name, clade)
-# Output: nj_tree_{jacc,cosmax,cosgeom}_{mz,we}.{newick,png}
-#         dist_matrix_{jacc,cosmax,cosgeom}_{mz,we}.tsv
+# Output: nj_tree_{jacc,cosmax,cosgeom}_mz.{newick,png}
+#         dist_matrix_{jacc,cosmax,cosgeom}_mz.tsv
 #         metric_spreads.tsv  (per-column spreads + key-pair margins)
 # =============================================================================
 
@@ -45,21 +47,12 @@ out_spread     <- snakemake@output[["spread_tsv"]]
 out_newick_jmz <- snakemake@output[["newick_jacc_mz"]]
 out_newick_cmz <- snakemake@output[["newick_cosmax_mz"]]
 out_newick_gmz <- snakemake@output[["newick_cosgeom_mz"]]
-out_newick_jwe <- snakemake@output[["newick_jacc_we"]]
-out_newick_cwe <- snakemake@output[["newick_cosmax_we"]]
-out_newick_gwe <- snakemake@output[["newick_cosgeom_we"]]
 out_png_jmz    <- snakemake@output[["tree_png_jacc_mz"]]
 out_png_cmz    <- snakemake@output[["tree_png_cosmax_mz"]]
 out_png_gmz    <- snakemake@output[["tree_png_cosgeom_mz"]]
-out_png_jwe    <- snakemake@output[["tree_png_jacc_we"]]
-out_png_cwe    <- snakemake@output[["tree_png_cosmax_we"]]
-out_png_gwe    <- snakemake@output[["tree_png_cosgeom_we"]]
 out_dist_jmz   <- snakemake@output[["dist_jacc_mz"]]
 out_dist_cmz   <- snakemake@output[["dist_cosmax_mz"]]
 out_dist_gmz   <- snakemake@output[["dist_cosgeom_mz"]]
-out_dist_jwe   <- snakemake@output[["dist_jacc_we"]]
-out_dist_cwe   <- snakemake@output[["dist_cosmax_we"]]
-out_dist_gwe   <- snakemake@output[["dist_cosgeom_we"]]
 
 mat_long <- read_csv(mat_file, show_col_types = FALSE)
 meta     <- read_tsv(meta_file, show_col_types = FALSE) %>%
@@ -84,13 +77,11 @@ clade_colors <- c(
   marsupial      = "#9467bd"
 )
 
-# ── Metric-spread summary (all 12 hammock columns) ────────────────────────
+# ── Metric-spread summary (all hammock similarity columns) ────────────────
 all_metrics <- c(
-  "jaccard_similarity", "containment_AB", "containment_BA",
-  "cosketch_geom", "cosketch_arith", "cosketch_max",
-  "jaccard_similarity_with_ends", "containment_AB_with_ends",
-  "containment_BA_with_ends", "cosketch_geom_with_ends",
-  "cosketch_arith_with_ends", "cosketch_max_with_ends"
+  "jaccard_similarity", "jaccard_similarity_ie",
+  "containment_AB", "containment_BA",
+  "cosketch_geom", "cosketch_arith", "cosketch_max"
 )
 present <- intersect(all_metrics, names(mat_long))
 
@@ -165,12 +156,9 @@ build_and_plot <- function(sim_col, out_newick, out_png, out_dist, label_tag) {
   dev.off()
 }
 
-# ── Build the six chosen trees ────────────────────────────────────────────
+# ── Build the three chosen trees ──────────────────────────────────────────
 build_and_plot("jaccard_similarity",            out_newick_jmz, out_png_jmz, out_dist_jmz, "minimizer Jaccard")
 build_and_plot("cosketch_max",                  out_newick_cmz, out_png_cmz, out_dist_cmz, "minimizer cosketch_max")
 build_and_plot("cosketch_geom",                 out_newick_gmz, out_png_gmz, out_dist_gmz, "minimizer cosketch_geom")
-build_and_plot("jaccard_similarity_with_ends",  out_newick_jwe, out_png_jwe, out_dist_jwe, "with-ends Jaccard")
-build_and_plot("cosketch_max_with_ends",        out_newick_cwe, out_png_cwe, out_dist_cwe, "with-ends cosketch_max")
-build_and_plot("cosketch_geom_with_ends",       out_newick_gwe, out_png_gwe, out_dist_gwe, "with-ends cosketch_geom")
 
 message("Done. Spreads: ", out_spread)

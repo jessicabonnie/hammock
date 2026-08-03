@@ -10,7 +10,10 @@
 #   Rscript scripts/exp_a_dendrogram.R \
 #     <broad_csv> <narrow_csv> <metadata_tsv> <out_png> [kw_label]
 #
-# CSV is hammock Mode D long-form (file1,file2,...,jaccard_similarity_with_ends).
+# CSV is hammock Mode D long-form (file1,file2,...,jaccard_similarity,...).
+# NOTE: this used jaccard_similarity_with_ends until hammock v0.6.0 removed that
+# column (CLAUDE.md divergence #8). Figures on disk predate the switch — Fig 7 in
+# docs/paper_outline.md was rendered from the old column and needs re-rendering.
 # kw_label appears in the figure title (e.g. "k=15, w=15"); defaults to "k=10, w=10".
 # =============================================================================
 
@@ -45,7 +48,7 @@ build_dendro <- function(csv_file, peak_type) {
   n    <- length(keys)
   sim  <- matrix(NA_real_, n, n, dimnames = list(keys, keys))
   for (i in seq_len(nrow(mat))) {
-    sim[mat$key_a[i], mat$key_b[i]] <- mat$jaccard_similarity_with_ends[i]
+    sim[mat$key_a[i], mat$key_b[i]] <- mat$jaccard_similarity[i]
   }
   # Symmetrize defensively, then derive distance.
   sim[is.na(sim)] <- t(sim)[is.na(sim)]

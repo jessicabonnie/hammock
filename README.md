@@ -50,13 +50,16 @@ exact tool or to other corpora; `jaccard_similarity` only to rank pairs of
 similar size against each other. See
 [`docs/jaccard-definitional-gap.md`](docs/jaccard-definitional-gap.md).
 
-**Sequence mode (D)** appends a second copy of this block computed on the
-minimizers **plus** canonicalized start/end k-mers, led by
-`jaccard_similarity_with_ends` / `jaccard_similarity_ie_with_ends` and suffixed
-`_with_ends`. (Two suffix axes: `_ie` selects the estimator, `_with_ends` the
-sketch, and `_with_ends` always comes last.) Every Mode D row also
-ends with trailing **`ref1`,`ref2`** columns (the reference each list was
-extracted against; `NA` for plain-FASTA runs).
+**Sequence mode (D)** emits the same block, computed on the FASTA's window
+minimizers. Every Mode D row also ends with trailing **`ref1`,`ref2`** columns
+(the reference each list was extracted against; `NA` for plain-FASTA runs).
+
+Sequence mode used to emit a second `_with_ends` copy of the block, computed on
+the minimizers plus each record's start/end k-mers. Those seven columns were
+removed in v0.6.0: the merged sketch was a blend of minimizer similarity and
+*exact record-boundary identity* at a mixing weight the user could not set, and
+the boundary term is destroyed by 1 bp of coordinate jitter. See divergence #8
+in `CLAUDE.md` and [`docs/mode-d-ends-removal.md`](docs/mode-d-ends-removal.md).
 
 ### Modes
 
@@ -69,7 +72,7 @@ The top-level choice is **interval** mode (compare BED interval sets) vs
 | **`interval`** / `interval-points` | **B** | BED | Base-level points — every position in every interval. Compare `jaccard_similarity_ie` against `bedtools jaccard`, not `jaccard_similarity`. **Default for BED.** |
 | `interval-string` | A | BED | Intervals as exact `chr\tstart\tend` strings |
 | `interval-hybrid` | C | BED | Both, with subsampling (`--subA`, `--subB`, `--expA`) |
-| **`sequence`** | D | FASTA | Sliding-window minimizers + canonicalized start/end k-mers. **Default for FASTA / `--ref`.** |
+| **`sequence`** | D | FASTA | Sliding-window minimizers. **Default for FASTA / `--ref`.** |
 
 The `mode` **column in the CSV keeps the letter** (A/B/C/D) for compatibility;
 the names above are just the CLI/`--mode` spelling (letters still accepted).
@@ -304,7 +307,7 @@ The test suite covers:
   single-threaded for every mode.
 - **Functional regressions:** mode B `--subB` actually subsamples, and
   `--subB-method mixed-stride` (the default) is deterministic across runs.
-- **Mode D unit tests:** `canonicalize_kmer`, empty-minimizer fallback,
+- **Mode D unit tests:** exact CSV header, empty-minimizer fallback,
   determinism, self-Jaccard = 1.0.
 
 Parity tests skip automatically if their respective `hammock` binary isn't

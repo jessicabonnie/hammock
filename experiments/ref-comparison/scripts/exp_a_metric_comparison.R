@@ -10,11 +10,13 @@
 # and plot effect size + −log10(p), grouped by sketch flavor.
 #
 # Schema note: hammock < 0.5.0 emitted 12 such columns (6 minimizer-only +
-# 6 with-ends); 0.5.0 adds jaccard_similarity_ie and its _with_ends twin, for
-# 14. The table below lists all 14 and the script keeps only those actually
-# present, so it runs unchanged on CSVs of either vintage -- rather than
+# 6 with-ends); 0.5.0 added jaccard_similarity_ie and its _with_ends twin, for
+# 14; 0.6.0 REMOVED all 7 `_with_ends` columns (CLAUDE.md divergence #8),
+# leaving 7. The table below lists all 14 and the script keeps only those
+# actually present, so it runs unchanged on CSVs of any vintage -- rather than
 # hard-erroring inside pull(.data[[metric]]), which is what a missing column
-# used to do. It prints which ones it dropped.
+# used to do. It prints which ones it dropped. On a v0.6.0 CSV the
+# "minimizer+ends" flavor simply drops out of the figure.
 #
 # Usage:
 #   Rscript scripts/exp_a_metric_comparison.R <csv> <metadata_tsv> <out_png> <out_tsv> [peak_type_label]

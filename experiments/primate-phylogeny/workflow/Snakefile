@@ -80,9 +80,9 @@ rule all:
         [f"{OUTDIR}/{MARK}/k{k}_w{w}/nj_tree_jacc_mz.newick"         for k, w in KW_PAIRS],
         [f"{OUTDIR}/{MARK}/k{k}_w{w}/nj_tree_cosmax_mz.newick"       for k, w in KW_PAIRS],
         [f"{OUTDIR}/{MARK}/k{k}_w{w}/nj_tree_cosgeom_mz.newick"      for k, w in KW_PAIRS],
-        [f"{OUTDIR}/{MARK}/k{k}_w{w}/nj_tree_jacc_we.newick"         for k, w in KW_PAIRS],
-        [f"{OUTDIR}/{MARK}/k{k}_w{w}/nj_tree_cosmax_we.newick"       for k, w in KW_PAIRS],
-        [f"{OUTDIR}/{MARK}/k{k}_w{w}/nj_tree_cosgeom_we.newick"      for k, w in KW_PAIRS],
+        # The three `_we` trees are gone: hammock v0.6.0 removed the
+        # `_with_ends` columns they were built from (CLAUDE.md divergence #8).
+        # Existing *_we.* files on /vast are from earlier runs and are stale.
 
 # ── Stage 1: download Villar peak BED per (species, mark) ────────────────────
 
@@ -194,21 +194,12 @@ rule build_phylogeny:
         newick_jacc_mz     = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_jacc_mz.newick",
         newick_cosmax_mz   = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosmax_mz.newick",
         newick_cosgeom_mz  = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosgeom_mz.newick",
-        newick_jacc_we     = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_jacc_we.newick",
-        newick_cosmax_we   = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosmax_we.newick",
-        newick_cosgeom_we  = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosgeom_we.newick",
         tree_png_jacc_mz   = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_jacc_mz.png",
         tree_png_cosmax_mz = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosmax_mz.png",
         tree_png_cosgeom_mz= f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosgeom_mz.png",
-        tree_png_jacc_we   = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_jacc_we.png",
-        tree_png_cosmax_we = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosmax_we.png",
-        tree_png_cosgeom_we= f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/nj_tree_cosgeom_we.png",
         dist_jacc_mz       = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/dist_matrix_jacc_mz.tsv",
         dist_cosmax_mz     = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/dist_matrix_cosmax_mz.tsv",
         dist_cosgeom_mz    = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/dist_matrix_cosgeom_mz.tsv",
-        dist_jacc_we       = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/dist_matrix_jacc_we.tsv",
-        dist_cosmax_we     = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/dist_matrix_cosmax_we.tsv",
-        dist_cosgeom_we    = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/dist_matrix_cosgeom_we.tsv",
     log:
         f"{OUTDIR}/logs/phylo/{MARK}/k{{k}}_w{{w}}.log"
     envmodules:

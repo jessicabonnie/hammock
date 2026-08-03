@@ -11,9 +11,10 @@ Each hammock invocation writes one CSV
 records wall/cpu/RSS into an index CSV. analyze.R joins all of these against
 ``data/maurano_bedtools_ref.tsv`` for accuracy + clustering metrics.
 
-The headline finding to look for: ``jaccard_similarity_with_ends`` (column 2)
-at k=10, w=20..50, precision=24 should hit Pearson ~0.998 vs bedtools, with
-perfect dendrogram reproduction (ARI=NMI=1, RF=0).
+The headline finding to look for: ``jaccard_similarity`` at k=20, w=20,
+precision=24 hits Spearman 0.9997 vs bedtools on the ``_ie`` flavor.
+(This note used to point at ``jaccard_similarity_with_ends``; that column was
+removed in hammock v0.6.0 -- see CLAUDE.md divergence #8.)
 """
 
 from __future__ import annotations

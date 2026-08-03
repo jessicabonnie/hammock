@@ -152,11 +152,10 @@ modeB_ref <- if (file.exists(modeB_path)) {
 
 # ---------- helpers ----------
 read_hammock_csv <- function(path, jcol = NULL) {
-  # All hammock CSVs have file1, file2 + a similarity column. Mode D has
-  # two: `jaccard_similarity` (minimizers only) and `jaccard_similarity_with_ends`
-  # (minimizers + boundary k-mers). On the Maurano corpus the no-ends
-  # column tracks bedtools more cleanly, so it's preferred for Mode D
-  # too. Pass jcol="jaccard_similarity_with_ends" to override.
+  # All hammock CSVs have file1, file2 + a similarity column. Mode D used to
+  # emit a second `jaccard_similarity_with_ends`; that column was removed in
+  # hammock v0.6.0 (CLAUDE.md divergence #8) after it was shown to track
+  # bedtools less cleanly on this very corpus. Archived CSVs still have it.
   df <- read_csv(path, show_col_types = FALSE)
   if (is.null(jcol)) jcol <- "jaccard_similarity"
   if (!(jcol %in% names(df))) {
@@ -307,8 +306,17 @@ d_dir <- file.path(results_dir, "raw_d")
 cat("Scanning", d_dir, "...\n")
 d_refs <- list(bedtools = ref)
 if (!is.null(modeB_ref)) d_refs$mode_B <- modeB_ref
+# hammock v0.6.0 removed jaccard_similarity_with_ends (CLAUDE.md divergence #8).
+# Archived CSVs under raw_d/ still carry it, so request it only when it is
+# actually present -- that keeps this script working on both old and new output.
+d_jcols <- c("jaccard_similarity", "jaccard_similarity_with_ends")
+d_jcols <- Filter(function(cn) {
+  any(vapply(list.files(d_dir, pattern = "\\.csv$", full.names = TRUE),
+             function(p) cn %in% names(read_csv(p, n_max = 0, show_col_types = FALSE)),
+             logical(1)))
+}, d_jcols)
 d <- scan_dir(d_dir, parse_d_name,
-              jcols = c("jaccard_similarity", "jaccard_similarity_with_ends"),
+              jcols = d_jcols,
               refs = d_refs,
               do_clustering = TRUE)
 

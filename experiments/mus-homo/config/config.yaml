@@ -20,10 +20,10 @@ peaks_cache: "/vast/blangme2/jbonnie/hammock/mus-homo/peaks"
 # build (PATH-resolved "hammock" can fall back to a stale ~/.local/bin install).
 sketch_bin: "/home/jbonnie1/.conda/envs/claude-ref-comparison/bin/hammock"
 
-# Primary similarity column — Mode D outputs two:
-#   jaccard_similarity            — minimizers only
-#   jaccard_similarity_with_ends  — minimizers + boundary k-mers (primary)
-primary_sim_col: "jaccard_similarity_with_ends"
+# Primary similarity column. The `_with_ends` family was removed in hammock
+# v0.6.0 (CLAUDE.md divergence #8). Results under results/ predate this switch
+# and were computed on the old column; they have NOT been regenerated.
+primary_sim_col: "jaccard_similarity"
 
 # Minimizer parameter sweep (same as ref-comparison)
 kmer_sizes:   [5, 8, 10, 15, 20]
