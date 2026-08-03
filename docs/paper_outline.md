@@ -123,7 +123,7 @@ Sequence mode's numerical agreement with bedtools peaks at r = 0.9996 / MAE = 0.
 
 ![Fig 3 — sequence mode vs bedtools and vs interval mode agree per config](figures/mode_d_bedtools_vs_modeB_scatter.png)
 
-**Fig 4:** Two-panel line plot at p = 24, `no_ends` column. **Left panel:** Pearson r vs bedtools as a function of window size w, one colored line per k (k ∈ {8, 10, 15, 20, 25}); the high-k lines (15/20/25) sit at r ≈ 1.0 across most of the w range (dipping only at the largest window, w = 500, down to ≈ 0.94), while the low-k lines (8, 10) climb toward them as w grows — together tracing the high-k / high-w Pearson ridge. **Right panel:** ARI vs tissue labels on the same axes; the k = 10 line spikes to 0.91 at w = 30 and drops off either side, while the k ∈ {15, 20, 25} lines are flat near ARI ≈ 0.69 for every w (high-k clustering is invariant to w). The contrast — Pearson is a ridge, ARI is a single peak — is the headline that Fig 6's per-config (Pearson, ARI) scatter abstracts. The original Pearson heatmap grid moves to Fig S2.
+**Fig 4:** Two-panel line plot at p = 24, `no_ends` column (`jaccard_similarity`; the sweep emitted it. Reading `jaccard_similarity_ie` instead does *not* reproduce the surface pointwise — 48 of 235 cells shift, max |ΔARI| 0.30, concentrated at low p — but leaves every optimum and every claim drawn off this panel unchanged; see `docs/estimator-analysis-findings.md` §9.7). **Left panel:** Pearson r vs bedtools as a function of window size w, one colored line per k (k ∈ {8, 10, 15, 20, 25}); the high-k lines (15/20/25) sit at r ≈ 1.0 across most of the w range (dipping only at the largest window, w = 500, down to ≈ 0.94), while the low-k lines (8, 10) climb toward them as w grows — together tracing the high-k / high-w Pearson ridge. **Right panel:** ARI vs tissue labels on the same axes; the k = 10 line spikes to 0.91 at w = 30 and drops off either side, while the k ∈ {15, 20, 25} lines are flat near ARI ≈ 0.69 for every w (high-k clustering is invariant to w). The contrast — Pearson is a ridge, ARI is a single peak — is the headline that Fig 6's per-config (Pearson, ARI) scatter abstracts. The original Pearson heatmap grid moves to Fig S2.
 
 ![Fig 4 — sequence mode Pearson + ARI vs w, by k, at p=24](figures/mode_d_lines_p24.png)
 
@@ -141,7 +141,7 @@ At the ARI-best config, sequence mode's predicted Jaccards sit on the y = x diag
 ![Fig 5a — sequence mode best dendrogram](../experiments/maurano_dhs_validation/figures/mode_d_best_dendrogram.png)
 ![Fig 5b — bedtools reference dendrogram](../experiments/maurano_dhs_validation/figures/bedtools_dendrogram.png)
 
-**Fig 6:** The headline methodological point: **best-Pearson cell ≠ best-ARI cell**. Pearson-best (large-k, large-w) clusters at ARI ≈ 0.69; ARI-best (k=10, w=30) at Pearson ≈ 0.946. Numerical perfection and clustering quality are non-coincident knobs.
+**Fig 6:** The headline methodological point: **best-Pearson cell ≠ best-ARI cell**. Pearson-best (large-k, large-w) clusters at ARI ≈ 0.69; ARI-best (k=10, w=30) at Pearson ≈ 0.946. Numerical perfection and clustering quality are non-coincident knobs. Holds under both Jaccard columns: reading `_ie` moves the Pearson optimum to k=20, w=20, p=20 and leaves its ARI at 0.693 against the ARI optimum's 0.910.
 
 ![Fig 6 — sequence mode Pearson vs ARI tradeoff](figures/mode_d_metric_tradeoff.png)
 
