@@ -114,23 +114,24 @@ def run_hammock(a_paths, b_paths, precision, tmp_dir, threads, sketch_seed=None)
            "-o", prefix, "--threads", str(threads)]
     if sketch_seed is not None:
         cmd += ["--seed", str(sketch_seed)]
-    started = time.time()
     subprocess.run(cmd, capture_output=True, text=True, check=True)
 
-    # Resolve the CSV hammock actually wrote, and prove it belongs to *this*
-    # invocation: a reused --tmp-dir otherwise lets a stale file satisfy the
-    # match and be analyzed as if it were fresh.
-    base = os.path.basename(prefix)
-    cands = [f for f in os.listdir(tmp_dir)
-             if f.startswith(base) and f.endswith(".csv")]
-    if len(cands) != 1:
+    # Name the output outright rather than globbing the prefix. Seed tags are
+    # not prefix-free -- "hm_p12_s1" is a prefix of "hm_p12_s10", and the
+    # unseeded "hm_p12" is a prefix of every seeded tag -- so a startswith()
+    # match over a shared --tmp-dir is ambiguous exactly when a seed sweep is
+    # running. For sketch_type=hyperloglog, mode=B, default subA/subB and no
+    # expA, get_new_prefix (python/hammock/outprefix.py:17) appends exactly
+    # "_hll_p{precision}_jacc{mode}". Since hammock rewrites this path on every
+    # run, naming it also removes any staleness question.
+    path = f"{prefix}_hll_p{precision}_jaccB.csv"
+    if not os.path.exists(path):
         raise RuntimeError(
-            f"expected exactly 1 hammock CSV for prefix {base}, found {len(cands)}: "
-            f"{sorted(cands)}. Clear --tmp-dir between runs.")
-    path = os.path.join(tmp_dir, cands[0])
-    if os.path.getmtime(path) < started - 1.0:
-        raise RuntimeError(
-            f"{path} predates this invocation — stale output, refusing to use it.")
+            f"hammock did not write the expected output {path}. "
+            f"CSVs present in {tmp_dir}: "
+            f"{sorted(f for f in os.listdir(tmp_dir) if f.endswith('.csv'))}. "
+            "If hammock's output naming changed, update this construction to "
+            "match python/hammock/outprefix.py.")
     out = {}
     with open(path) as f:
         for row in csv.DictReader(f):
@@ -205,14 +206,24 @@ def main():
     #                 sketch noise -- this is the replication unit for CIs.
     # A sweep over the wrong one still produces non-zero variance and passes a
     # naive "seed variance > 0" guard, while answering a different question.
-    ap.add_argument("--data-seed", "--seed", type=int, default=7, dest="data_seed",
+    # No `--seed` alias: nothing in the repo passes one, and `--seed` is
+    # hammock's own spelling for the *sketch* seed, so silently mapping it to
+    # the data seed would preserve the exact trap this split removes.
+    ap.add_argument("--data-seed", type=int, default=7,
                     help="seed for BED generation (also changes the ground truth)")
     ap.add_argument("--sketch-seed", type=int, default=None,
                     help="hammock --seed: re-sketches the same inputs; "
                          "leaves the bedtools ground truth identical")
+    ap.add_argument("--seed", dest="_rejected_seed", default=None,
+                    help=argparse.SUPPRESS)
     ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--precisions", default="12,16,20,24")
     args = ap.parse_args()
+    if args._rejected_seed is not None:
+        ap.error("--seed is ambiguous in this script. Use --data-seed to "
+                 "regenerate the corpus (which also changes the bedtools "
+                 "ground truth), or --sketch-seed to re-sketch identical "
+                 "inputs (hammock's --seed; the replication unit for CIs).")
 
     precisions = [int(p) for p in args.precisions.split(",")]
     os.makedirs(args.tmp_dir, exist_ok=True)
@@ -241,6 +252,10 @@ def main():
             j_ie, clamped = ie_jaccard(c_ab, c_ba)
             rows.append({
                 "precision": p,
+                # Carry both seeds so per-seed CSVs concatenate into a sweep
+                # without re-deriving the replicate id from the filename.
+                "data_seed": args.data_seed,
+                "sketch_seed": "" if args.sketch_seed is None else args.sketch_seed,
                 "file1": key[0],
                 "file2": key[1],
                 "bedtools_jaccard": j_bt,
