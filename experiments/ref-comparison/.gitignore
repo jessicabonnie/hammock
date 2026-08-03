@@ -17,6 +17,7 @@ __pycache__/
 *.pyc
 .Rhistory
 .RData
+Rplots.pdf
 
 # Scratch
 scratch/
