@@ -154,6 +154,52 @@ leave-one-sample-out refit restores 1.0000 for `_with_ends` — and a
 **content-free** size statistic, `−|log(C_BA/C_AB)|`, scores AUC 0.9918/1.0000
 on the same task. Exp A cannot support a comparative claim about either column.
 
+## Performance effect
+
+Measured by building v0.5.0 (`e84be5c^`) and v0.6.0 as separate wheels in
+isolated venvs and timing both. All 17 surviving CSV columns are byte-identical
+between the two builds over a 64-row run, so the speedup is free.
+
+| cell | in-process sketch + parse (28 Mbp) | real CLI, 8 files, `--threads 1` | real CLI, 8 files, `--threads 8` |
+|---|---|---|---|
+| k=8, w=40 | 1.66× | 1.54× (p=20) | 2.07× (p=20) |
+| k=20, w=100 | 2.70× | 2.45× (p=24) | 4.54× (p=24) |
+
+Peak RSS at N=20, p=24: **3.45 GB → 2.14 GB**.
+
+Post-sketch saving (the removed `merged()` construction plus the second
+`pairwise_metrics_hll` pass) scales as 4^p: 0.02 s at p=18, 0.14 s at p=20,
+0.78 s at p=22, 2.86 s at p=24 — under 1% of a sweep cell at every precision.
+Sketching is ~99% of the work.
+
+**Mechanism.** The removed per-record cost is `canonicalize_kmer` over 2k chars
+plus k+1 Python-level `xxh64` calls: 10.3 µs/record at k=8, 22.6 µs/record at
+k=20, with 84% of it in the hashes. It is flat in `w` and **roughly linear in
+k**. The ratio therefore grows on both axes — numerator with k, denominator
+(minimizer work) shrinking with w — so the large k=20, w=100 figure is mostly a
+*k* effect, not a *w* effect.
+
+**Caveat: the speedup is a function of mean record length, and does not
+transfer to genome-scale FASTA.** Holding total bases at 28 Mbp and re-chunking
+the same sequence:
+
+| mean record length | k=8, w=40 | k=20, w=100 |
+|---|---|---|
+| 4,660 bp | 1.10× | 1.29× |
+| 466 bp (peak-shaped) | 1.81× | 3.29× |
+| 130 bp | 3.59× | 8.89× |
+
+So this is a peak-FASTA result. On contig, transcript, or whole-genome input the
+removal is worth ~1.1–1.3×. The table above also uses fBrain-DS14718 (mean 460 bp),
+the second-shortest of the 20 Maurano files; corpus-wide (mean 574 bp) the
+single-threaded figures are ~5–10% lower.
+
+**Read the `--threads 8` column with care.** It is larger only because Mode D
+threading is a GIL convoy that the removal partly relieves — not because the
+removal parallelizes. Mode D is *faster at `--threads 1` than at `--threads 8`*
+in both versions; see the Architecture note in CLAUDE.md. Fixing that is worth
+more than this removal was.
+
 ## What this does not settle
 
 Whether a *properly built* flank statistic would be useful on corpora whose

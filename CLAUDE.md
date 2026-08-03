@@ -75,8 +75,26 @@ recoverable.
 
 - `python/hammock/` — CLI (`cli.py`), orchestrator (`runner.py`), Mode D
   (`modes/sequence.py`). Threading via `concurrent.futures.ThreadPoolExecutor`;
-  default `--threads = min(8, cpu_count())`. The C++ extension and `digest`
-  both release the GIL, so threads are real parallelism.
+  default `--threads = min(8, cpu_count())`. The C++ extension releases the
+  GIL, so interval-mode threading is real parallelism.
+
+  **Mode D threading is not — it is a GIL convoy, and the default makes it
+  slower.** Measured 2026-08-03 on a 48-core node, 4 Maurano DHS FASTAs,
+  k=8 w=40 p=20: `--threads 1` = 31.9 s vs `--threads 8` = **68.3 s (2.1×
+  slower)**. In-process, per-task time degrades monotonically (T1 1.00×,
+  T2 0.61×, T4 0.86×, T8 0.40×) even with private per-thread sequence lists,
+  so it is not refcount contention on shared data. `digest.window_minimizer`
+  does *not* usefully release the GIL at this call pattern (~11 µs per call on
+  a ~466 bp record), and the surrounding per-record Python work holds it
+  outright. Eight concurrent *processes* on the same workload scale ~7.1×, so
+  the machine is fine — it is the threading model. Corroborated by the archived
+  sweep index (`maurano_dhs_validation/results/sweep_d_*.csv`), where every
+  8-thread Mode D cell records `cpu_s/wall_s ≈ 0.8`.
+
+  Consequence: **pass `--threads 1` for Mode D**, and treat every archived Mode D
+  wall time as inflated. Switching Mode D to processes (or dropping the pool) is
+  worth more than any sketching optimization so far — see divergence #8's note
+  that removing `_with_ends` bought 1.5–2.5× single-threaded.
 - `cpp/src/` — HLL sketch (parity-rewritten from scratch to match orig
   Python's algorithm exactly: low-bit register index, ctz rho, Ertl 2017
   improved estimator, register-equality Jaccard). Mode procs in
