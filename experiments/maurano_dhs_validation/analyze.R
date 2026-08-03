@@ -158,6 +158,17 @@ read_hammock_csv <- function(path, jcol = NULL) {
   # bedtools less cleanly on this very corpus. Archived CSVs still have it.
   df <- read_csv(path, show_col_types = FALSE)
   if (is.null(jcol)) jcol <- "jaccard_similarity"
+  # The CSVs under raw_d/ predate the jaccard_similarity_ie column (v0.4.0) but
+  # already carry the containments it is derived from, so recover it here rather
+  # than resweeping 235 configurations. Mirrors
+  # runner._jaccard_ie_from_containments, clamp included: containments can
+  # exceed 1 by an ulp, and clamping is what makes denom >= 1.
+  if (identical(jcol, "jaccard_similarity_ie") && !(jcol %in% names(df)) &&
+      all(c("containment_AB", "containment_BA") %in% names(df))) {
+    cab <- pmin(as.numeric(df$containment_AB), 1)
+    cba <- pmin(as.numeric(df$containment_BA), 1)
+    df[[jcol]] <- ifelse(cab <= 0 | cba <= 0, 0, 1 / (1 / cab + 1 / cba - 1))
+  }
   if (!(jcol %in% names(df))) {
     stop("column ", jcol, " not in ", path)
   }
@@ -315,6 +326,17 @@ d_jcols <- Filter(function(cn) {
              function(p) cn %in% names(read_csv(p, n_max = 0, show_col_types = FALSE)),
              logical(1)))
 }, d_jcols)
+# jaccard_similarity_ie is always available: present in modern CSVs, derived
+# from the containments in older ones (see read_hammock_csv). Kept out of the
+# Filter above for that reason. The published figures stay on
+# `jaccard_similarity` -- this arm exists so the choice of column is measured
+# rather than assumed; see docs/estimator-analysis-findings.md section 9.
+if (any(vapply(list.files(d_dir, pattern = "\\.csv$", full.names = TRUE),
+               function(p) all(c("containment_AB", "containment_BA") %in%
+                                 names(read_csv(p, n_max = 0, show_col_types = FALSE))),
+               logical(1)))) {
+  d_jcols <- c(d_jcols, "jaccard_similarity_ie")
+}
 d <- scan_dir(d_dir, parse_d_name,
               jcols = d_jcols,
               refs = d_refs,
@@ -327,14 +349,42 @@ if (nrow(d) > 0) {
   write_csv(d_out, file.path(results_dir, "mode_d_summary.csv"))
   cat("Wrote results/mode_d_summary.csv (", nrow(d_out), "rows)\n")
 
-  short_col <- function(x) ifelse(x == "jaccard_similarity",
-                                  "no_ends", "with_ends")
+  short_col <- function(x) dplyr::case_when(
+    x == "jaccard_similarity"           ~ "no_ends",
+    x == "jaccard_similarity_with_ends" ~ "with_ends",
+    x == "jaccard_similarity_ie"        ~ "ie",
+    TRUE                                ~ x)
   d_out$col_short <- factor(short_col(d_out$column),
-                            levels = c("no_ends", "with_ends"))
+                            levels = c("no_ends", "with_ends", "ie"))
 
-  d_bedtools <- d_out %>% filter(reference == "bedtools")
-  d_modeB    <- d_out %>% filter(reference == "mode_B")
-  n_p <- length(unique(d_out$precision))
+  # Published figures stay on the columns hammock actually emitted for this
+  # sweep; the derived `ie` arm is summarised numerically below instead, so
+  # adding it does not silently redraw every heatmap with an extra facet row.
+  d_plot     <- d_out %>% filter(col_short != "ie")
+  d_bedtools <- d_plot %>% filter(reference == "bedtools")
+  d_modeB    <- d_plot %>% filter(reference == "mode_B")
+  n_p <- length(unique(d_plot$precision))
+
+  # ── does the estimator choice change anything? (see
+  #    docs/estimator-analysis-findings.md section 9) ────────────────────────
+  ie_cmp <- d_out %>%
+    filter(reference == "bedtools", col_short %in% c("no_ends", "ie")) %>%
+    select(precision, k, w, col_short, pearson, mae, ari) %>%
+    tidyr::pivot_wider(names_from = col_short,
+                       values_from = c(pearson, mae, ari))
+  if (nrow(ie_cmp) > 0 && "ari_ie" %in% names(ie_cmp)) {
+    cat("\nEstimator arm comparison (Mode D, reference = bedtools):\n")
+    print(ie_cmp %>%
+            group_by(precision) %>%
+            summarise(n = n(),
+                      ari_differs = sum(!is.na(ari_no_ends) & !is.na(ari_ie) &
+                                          abs(ari_no_ends - ari_ie) > 1e-9),
+                      max_abs_ari_delta = max(abs(ari_no_ends - ari_ie), na.rm = TRUE),
+                      median_mae_no_ends = median(mae_no_ends, na.rm = TRUE),
+                      median_mae_ie = median(mae_ie, na.rm = TRUE),
+                      .groups = "drop"),
+          n = 50)
+  }
 
   # ── existing Pearson + MAE vs bedtools (filtered now) ────────────────────
   p4 <- ggplot(d_bedtools, aes(x = factor(w), y = factor(k), fill = pearson)) +
@@ -421,7 +471,7 @@ if (nrow(d) > 0) {
            p_tr, width = 8, height = 6)
 
   # ── ARI / NMI heatmaps (reference-independent) ──────────────────────────
-  d_cluster <- d_out %>% filter(reference == "bedtools")   # drop duplicate rows
+  d_cluster <- d_plot %>% filter(reference == "bedtools")  # drop duplicate rows
   p_ari <- ggplot(d_cluster, aes(x = factor(w), y = factor(k), fill = ari)) +
     geom_tile() +
     scale_fill_viridis_c(name = "ARI", option = "C",
