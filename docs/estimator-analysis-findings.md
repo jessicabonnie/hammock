@@ -106,13 +106,26 @@ leverage.
 Note there are two live outline files, `docs/paper_outline.md` and
 `paper/outline.md`, which disagree. Decide which is canonical before editing.
 
-### 1.7 Two residual definitions are silently mixed **[R]**
+### 1.7 Two residual definitions are silently mixed — resolved **[V]**
 
 The document's four-`c`-fit robustness list reports correlations of
-−0.885/−0.90/−0.83/−0.82. Reportedly the "−0.90 (OLS)" entry reproduces only
-under a **free-slope two-parameter** residual (−0.9025), while the other three
-are constrained-form (the constrained value is −0.8903 → −0.89). Until the
-definition is pinned per entry, "only the second digit moves" is untestable.
+−0.885/−0.90/−0.83/−0.82. All four now have a generator
+(`paper/interval_accuracy/plot_interval_accuracy.R`) and they turn out to be
+**four different residual definitions**, not four fits of `c` under one
+definition:
+
+| residual | p=18 | p=21 | p=23 | matches |
+|---|---|---|---|---|
+| free-slope `lm(j_re ~ j_bt)` | −0.897 | −0.903 | −0.906 | −0.90 |
+| `c` = OLS intercept (0.1783) | −0.888 | −0.890 | −0.894 | −0.885 |
+| `c` = constrained LS (0.1968) | −0.827 | −0.828 | −0.832 | −0.83 |
+| `c` = mean-pointwise (0.2004) | −0.815 | −0.815 | −0.820 | −0.82 |
+| raw gap `j_re − j_bt` | −0.157 | −0.160 | −0.169 | — |
+
+So "only the second digit moves" is **false**: across residual definitions the
+correlation moves 0.09, from −0.815 to −0.903, while across precisions it moves
+0.005. Quote one definition and name it. The raw gap is not a member of this
+family at all — it is dominated by the floor's dependence on J, not on size.
 
 ### 1.8 ΔJ_max is precision-dependent **[R]**
 
@@ -445,11 +458,15 @@ single argument in the document. The residual register-equality advantage is
 real (§9.1) but it is now located rather than general, and the user can spend
 one precision step to make it go away.
 
-### 9.3 Answer to Q3 — no
+### 9.3 Answer to Q3 — not independently, but now confirmed by construction
 
-The comparing session did not find `192` vs `48` independently; commit `99416e3`
-had already landed the fix by the time it looked. Recording that so the count of
-independent confirmations stays honest at one.
+The comparing session did not *find* the `192` vs `48` discrepancy; commit
+`99416e3` had already landed the fix by the time it looked. It has since
+confirmed the corrected value by direct count rather than by inverting τ —
+`rank_agreement()` in `plot_interval_accuracy.R` counts discordant comparison
+pairs outright and returns **48 of 17,955 at p=21**, along with 105 at p=18 and
+29 at p=23. So the correction is right, and the arithmetic route (`D = C(1−τ)/2`)
+and the direct count now agree.
 
 ### 9.4 Answer to Q4 — agreed, and it changed the design
 
@@ -545,3 +562,34 @@ So the published Mode D figures should stay on `jaccard_similarity` — not
 because the two columns agree everywhere, but because they agree exactly where
 the figures make their claims, and moving would move them onto a column that
 `docs/seed-mode-d-hash-width.md` flags as suspect at p ≥ 20.
+
+### 9.8 §3's "genuinely missing" list now has a generator
+
+`paper/interval_accuracy/plot_interval_accuracy.R` was extended rather than
+replaced, per §3. It now emits `interval_accuracy_stats.csv` next to itself and
+prints four tables: rank agreement (discordant count, rate, τ-a **and** τ-b,
+largest inverted gap, clamp count), the three `c` fits, the residual-vs-size-ratio
+correlations of §1.7, and the leave-one-file-out jackknife. Every previously
+uncommitted number in §3 and §4 reproduces:
+
+```
+p=18 RE  τ 0.95054  disc 444/17955 (2.47%)  ΔJmax 0.030278
+p=21 RE  τ 0.95110  disc 439/17955 (2.45%)  ΔJmax 0.025033
+p=23 RE  τ 0.94965  disc 452/17955 (2.52%)  ΔJmax 0.026721
+p=21 IE  τ 0.99465  disc  48/17955 (0.27%)  MAE 0.00042970
+c @p21   OLS 0.17831   constrained 0.19683   pointwise 0.20039
+jackknife p=21 RE  τ SE 0.01728 (0.9463…0.9628)   disc SE 0.864 pp (1.86…2.68%)
+jackknife p=21 IE  τ SE 0.00158 (0.9941…0.9955)   disc SE 0.079 pp (0.23…0.30%)
+```
+
+Two things fall out that §4 and §5 could only conjecture:
+
+- τ-a and τ-b are **equal to five decimals in all six cells**, because the tie
+  count is exactly zero — including for inclusion–exclusion. §5's concern that
+  clamping creates a tie mass at 0.0 is real in principle but **does not fire on
+  this corpus**: `clamped_at_zero` is 0 at every precision, since Maurano's
+  off-diagonal J never approaches the clamp. The concern belongs to the low-J
+  corpora of §9.6, not here.
+- The jackknife confirms §4's ~7.5× understatement, and adds the inclusion–
+  exclusion side: its τ SE is **11× smaller** than register-equality's, so the
+  gap between the two columns is many jackknife SEs wide and not a close call.
