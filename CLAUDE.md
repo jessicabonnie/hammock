@@ -95,6 +95,20 @@ recoverable.
   wall time as inflated. Switching Mode D to processes (or dropping the pool) is
   worth more than any sketching optimization so far — see divergence #8's note
   that removing `_with_ends` bought 1.5–2.5× single-threaded.
+  Full evidence, option space, and reproduction: `docs/seed-mode-d-threading.md`.
+
+## Open seeds (handoff notes for future work)
+
+Neither is a decision; each is evidence gathered plus what still needs
+establishing. Read the seed before re-litigating the question.
+
+- `docs/seed-mode-d-threading.md` — Mode D's thread pool is a GIL convoy and the
+  default makes it 2–4.5× slower. Blocked route (process pool) needs pickling
+  support on `HLLSketch`, which the bindings do not expose.
+- `docs/seed-mode-d-hash-width.md` — `digest` returns ≤32-bit minimizer hashes
+  while the HLL assumes 64, biasing Mode D cardinality −0.5% to −8.3%. The
+  `hash_size=32` option became viable once `_with_ends` was removed (divergence
+  #8), since there is no longer a second sketch to merge with.
 - `cpp/src/` — HLL sketch (parity-rewritten from scratch to match orig
   Python's algorithm exactly: low-bit register index, ctz rho, Ertl 2017
   improved estimator, register-equality Jaccard). Mode procs in
