@@ -171,68 +171,97 @@ In the low-J regime real BED comparisons occupy (J < 0.05, mean 0.0114),
 register-equality reports **0.181** and the reconstruction reports
 **0.0115**.
 
-### Neither estimator dominates — MAE is not the whole story
+### Where the two estimators change places
 
 The table above scores **calibration** (is the number right?). It does not
 score **resolution** (can the number tell two similar pairs apart?), and on
-resolution the ranking flips.
+resolution the ranking does flip — but only in one corner, and precision
+closes it.
 
-`J_re`'s error must be rescaled before its noise can be compared with `J_ie`'s.
-The table below divides by the fitted slope `1 − c`, in true-J units:
+Resolution is measured here by **Kendall τ against exact `bedtools jaccard`**,
+not by a rescaled error sd. The reason is specific: an sd-based comparison has
+to divide `sd(err_re)` by something to put the two columns on one axis, and any
+binned form of it mixes within-bin true-J variance into the register-equality
+column alone (see "the superseded table" below). Kendall τ is invariant under
+*any* strictly monotone transform of the estimator, so `f` drops out of it
+identically and there is nothing to contaminate.
 
-| p | fitted c | J < 0.01 | 0.01–0.05 | 0.05–0.15 | winner at low J |
-| --- | --- | --- | --- | --- | --- |
-| 12 | 0.1800 | 0.00802 / 0.01023 | 0.00577 / 0.00924 | 0.00647 / 0.01335 | **register-equality** |
-| 16 | 0.1803 | 0.00147 / 0.00242 | 0.00142 / 0.00235 | 0.00240 / 0.00491 | **register-equality** |
-| 20 | 0.1803 | 0.00037 / 0.00061 | 0.00060 / 0.00059 | 0.00208 / 0.00060 | tie → I-E |
-| 24 | 0.0454 | 0.00024 / 0.00012 | 0.00052 / 0.00012 | 0.00118 / 0.00009 | **inclusion–exclusion** |
+| J < 0.05 | p=12 | p=16 | p=20 | p=24 |
+| --- | --- | --- | --- | --- |
+| τ, `jaccard_similarity` | 0.335 | **0.658** | **0.905** | 0.907 |
+| τ, `jaccard_similarity_ie` | 0.289 | 0.562 | 0.794 | **0.967** |
+| MAE, `jaccard_similarity` | 0.1696 | 0.1696 | 0.1694 | 0.0447 |
+| MAE, `jaccard_similarity_ie` | 0.0081 | 0.0019 | 0.0005 | 0.0001 |
 
-(cells are `sd(err_re)/(1−c)` / `sd(err_ie)`)
+Above J = 0.05 both estimators reach τ = 1.0000 by p = 16 on this corpus, so
+those strata carry no resolving power and no winner should be read out of them.
+The whole disagreement lives below J ≈ 0.05.
 
-So in the **saturated** regime — `m ≪ n`, which is where genome-scale BED
-data actually sits — register-equality is the *more precise* discriminator at
-low J even though it is far more biased, and inclusion–exclusion only takes
-over once the sketch is over-provisioned relative to the data. Inclusion–
-exclusion is also **censored**: it is clamped at 0 (`hll_sketch.cpp:183`),
+Generators: `experiments/bedtools_benchmark/estimator_rank_by_precision.py`
+(table, plus a leave-one-replicate-out stability check — the ordering holds in
+all three subsamples at p = 16, 20, 24 and flips at p = 12, where both columns
+are near-useless at τ ≈ 0.3) and
+`paper/estimator_crossover/plot_estimator_crossover.R` (figure).
+
+Inclusion–exclusion is **censored**: it is clamped at 0 (`hll_sketch.cpp:183`),
 which fires on 25/90 pairs at p=12, all at low J. Nothing distinguishes
-"clamped from a large negative" from "genuinely zero", so conditional on
-being non-zero it is biased *upward* near J=0 — a small positive floor of its
-own (~0.002–0.014 on truly disjoint pairs, falling with p).
+"clamped from a large negative" from "genuinely zero", so conditional on being
+non-zero it is biased *upward* near J=0 — a small positive floor of its own
+(~0.002–0.014 on truly disjoint pairs, falling with p). Those clamped rows also
+tie with one another, which is part of why τ_ie is lowest at p=12. On the
+Maurano corpus nothing is clamped at any precision, so the concern belongs to
+low-J data specifically.
 
 Rule of thumb: its absolute error is ≈ `0.6/√m` roughly flat in J, so its
 *relative* error is ≈ `0.6/(J√m)` and it becomes uninformative below
 J ≈ a few/√m (p=14 → J ≲ 0.02; p=20 → J ≲ 0.002).
 
-**The honest summary:** `jaccard_similarity` is a low-variance but biased
-transform of set Jaccard, monotone only at fixed cardinality ratio; the
-inclusion-exclusion estimate is near-unbiased but noisier and censored at 0.
-Use inclusion-exclusion when you need *magnitude* (comparison against bedtools
-or another tool's absolute values) **or when the comparison spans different set
-sizes**; use `jaccard_similarity` for *discrimination* within a set of pairs of
-comparable geometry. Report both; neither is strictly better.
+**The honest summary.** `jaccard_similarity` is a low-variance but biased
+transform of set Jaccard, monotone only at fixed cardinality ratio;
+`jaccard_similarity_ie` is near-unbiased but noisier and censored at 0. The
+earlier framing "neither dominates, report both" overstated the symmetry:
+inclusion–exclusion wins on magnitude everywhere by 20–1700×, and the
+register-equality advantage is confined to *ranking*, below J ≈ 0.05, at
+p ≤ 20, among pairs of comparable size. Since precision is a knob the user sets
+and true J is not knowable in advance, state it as a reading rule:
 
-> **The resolution table above is under revision — do not cite it.** Two
-> defects are known:
->
-> 1. **The estimand is contaminated.** Writing `J_re = f(J) + ε_re` and
->    `J_ie = J + ε_ie`, the binned statistic is
->    `sd_bin(err_re) = sqrt(Var_bin(f(J) − J) + σ_re²)` against
->    `sd_bin(err_ie) = σ_ie`. The first term is real *signal* variation inside
->    the bin, is seed-invariant, and inflates the register-equality column
->    only. Because that floor is λ-independent while `σ_ie ∝ 1/√m`, it grows
->    with precision — which is the shape of the "crossover at p=20" the table
->    reports. Dividing by `1 − c` also assumes exact affinity, which the
->    concavity documented below rules out; the correct divisor is the local
->    slope `f′(J)`, running 0.962 → 0.740 across the range.
-> 2. **The size ratio was pinned near 1**, and
->    `experiments/bedtools_benchmark/estimator_compare.py` only generates
->    equal-size files, so the ratio axis is untested.
->
-> Note that re-deriving the table against an OLS-residualized statistic flips
-> none of its twelve winner cells, so the defects are in the *method and its
-> interpretation*, not necessarily in the reported ordering. A dedicated
-> experiment evaluating both estimators is in progress; this section should be
-> rewritten from its output rather than patched.
+> **Read `jaccard_similarity_ie`. If your corpus is low-J and you need to rank
+> rather than measure, raise `-p` to 24 rather than switching columns.**
+
+Downstream checks on the repo's own low-J corpora are in
+`docs/estimator-analysis-findings.md` §9.6–9.7: no published Mode D or
+cross-species headline changes under either column, though at k=20 on the
+primate H3K4me3 corpus inclusion–exclusion recovers one additional true clade.
+
+<details>
+<summary>The superseded resolution table, and why</summary>
+
+The section previously reported `sd(err_re)/(1−c)` against `sd(err_ie)` in
+binned true-J units, concluding that register-equality was the more precise
+discriminator throughout the saturated regime with inclusion–exclusion taking
+over only at p=24. Two defects:
+
+1. **The estimand was contaminated.** Writing `J_re = f(J) + ε_re` and
+   `J_ie = J + ε_ie`, the binned statistic is
+   `sd_bin(err_re) = sqrt(Var_bin(f(J) − J) + σ_re²)` against
+   `sd_bin(err_ie) = σ_ie`. The first term is real *signal* variation inside
+   the bin, is seed-invariant, and inflates the register-equality column only.
+   Because that floor is λ-independent while `σ_ie ∝ 1/√m`, it grows with
+   precision — which is the shape of the crossover the table reported.
+   Dividing by `1 − c` also assumes exact affinity, which the concavity
+   documented below rules out; the correct divisor is the local slope `f′(J)`,
+   running 0.962 → 0.740 across the range.
+2. **The size ratio was pinned near 1**, and
+   `experiments/bedtools_benchmark/estimator_compare.py` only generates
+   equal-size files, so the ratio axis was untested.
+
+Re-deriving that table against an OLS-residualized statistic flipped none of
+its twelve winner cells, so the defects were in the method and its
+interpretation rather than necessarily in the ordering. The τ table above
+reaches a compatible conclusion by a route that has neither defect, which is
+why the section is rewritten rather than merely retracted.
+
+</details>
 
 ## Rank fidelity is not free — measure it per corpus
 

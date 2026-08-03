@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import csv
 import os
+import re
 import statistics as st
 from collections import defaultdict
 
@@ -69,6 +70,11 @@ def kendall_tau_b(xs, ys):
     return ((conc - disc) / total if total else float("nan")), disc, total
 
 
+def _replicate(name):
+    m = re.search(r"rep(\d+)", name)
+    return m.group(1) if m else ""
+
+
 def load(path):
     by_precision = defaultdict(list)
     skipped = 0
@@ -80,6 +86,11 @@ def load(path):
                     float(row["j_register_equality"]),
                     float(row["j_incl_excl"]),
                     str(row.get("ie_clamped", "")).strip().lower() in ("1", "true", "yes"),
+                    # Resampling unit: the corpus is a 3 x 30 cross product of
+                    # A-file replicates against B-file overlap fractions, so the
+                    # replicate is the only independent axis. Fractions cannot be
+                    # resampled -- dropping one removes a J level outright.
+                    _replicate(row.get("file1", "")),
                 ))
             except (ValueError, TypeError, KeyError):
                 skipped += 1
@@ -129,8 +140,35 @@ def main() -> int:
 
     print("Reading: MAE favours inclusion-exclusion in every stratum at every")
     print("precision. Rank fidelity does not -- below J = 0.05 register-equality")
-    print("ranks better up to p = 20 and loses at p = 24. Above J = 0.05 the two")
-    print("are tied or IE wins, so the advantage is confined to low J.")
+    print("ranks better up to p = 20 and loses at p = 24.")
+    print()
+    print("Only the J < 0.05 stratum resolves anything. Above it both estimators")
+    print("reach tau = 1.0000 by p = 16 on this corpus, and the one cell that")
+    print("does separate (p=12, J >= 0.2) turns on 1 discordant comparison against")
+    print("3 out of 102. Do not read a winner out of those rows; read that the")
+    print("question is only live at low J. Note also the 25 clamped rows in the")
+    print("p=12 low-J cell -- they tie with each other and depress tau_IE there,")
+    print("which is a real property of the estimator, not a measurement artifact.")
+    print()
+    label, lo, hi = STRATA[0]
+    print(f"Stability of the {label} ordering, leave-one-replicate-out:")
+    print(f"{'p':>4}{'tau_RE range':>22}{'tau_IE range':>22}{'holds':>8}")
+    for p in sorted(by_precision):
+        sub = [t for t in by_precision[p] if lo <= t[0] < hi]
+        reps = sorted({t[4] for t in sub})
+        if len(reps) < 2:
+            continue
+        loo = []
+        for drop in reps:
+            keep = [t for t in sub if t[4] != drop]
+            loo.append((kendall_tau_b([t[0] for t in keep], [t[1] for t in keep])[0],
+                        kendall_tau_b([t[0] for t in keep], [t[2] for t in keep])[0]))
+        holds = len({a > b for a, b in loo}) == 1
+        print(f"{p:>4}"
+              f"{f'[{min(a for a, _ in loo):.3f}, {max(a for a, _ in loo):.3f}]':>22}"
+              f"{f'[{min(b for _, b in loo):.3f}, {max(b for _, b in loo):.3f}]':>22}"
+              f"{('yes' if holds else 'FLIPS'):>8}")
+    print("Three replicates is a coarse check, not a confidence interval.")
     return 0
 
 

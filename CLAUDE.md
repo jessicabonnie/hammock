@@ -195,11 +195,28 @@ These are deliberate; parity tests that touch them are skipped or projected.
    zero") and is uninformative below J ≈ a few/√m.
 
    **The counter-claim that `jaccard_similarity` wins on *resolution* is
-   under revision — don't rely on it.** The measurement behind it (error sd
-   0.0014 vs 0.0024 at p=16, J<0.05) used a binned statistic that mixes
-   within-bin true-J variance into the register-equality column only, and it
-   was taken with the size ratio pinned near 1. See the boxed note in
-   `docs/jaccard-definitional-gap.md`; a dedicated experiment is in progress.
+   retracted as stated.** The measurement behind it (error sd 0.0014 vs
+   0.0024 at p=16, J<0.05) used a binned statistic that mixes within-bin
+   true-J variance into the register-equality column only, and it was taken
+   with the size ratio pinned near 1. It was replaced by a rank statistic,
+   which is immune to that contamination because Kendall τ is invariant under
+   any monotone transform of the estimator. What survives is narrower and
+   precision-indexed:
+
+   | J < 0.05, τ vs bedtools | p=12 | p=16 | p=20 | p=24 |
+   |---|---|---|---|---|
+   | `jaccard_similarity` | 0.335 | **0.658** | **0.905** | 0.907 |
+   | `jaccard_similarity_ie` | 0.289 | 0.562 | 0.794 | **0.967** |
+
+   Above J = 0.05 both reach τ = 1 by p=16 and there is nothing to choose.
+   So the register-equality advantage exists, but only for *ranking*, only
+   below J ≈ 0.05, only at p ≤ 20, and only among pairs of comparable size —
+   and one step of `-p` removes it. **The operative rule is: read
+   `jaccard_similarity_ie`; if your corpus is low-J and you need ranking,
+   raise `-p` to 24 rather than switching columns.** Generators:
+   `experiments/bedtools_benchmark/estimator_rank_by_precision.py`,
+   `paper/estimator_crossover/plot_estimator_crossover.R`. Caveats and the
+   cross-species checks are in `docs/estimator-analysis-findings.md` §9.
 3. **Default `--subB-method=mixed-stride`** — deterministic chr-keyed
    stride sampling. Orig's pipx-installed 0.4.0 didn't accept the flag
    at all (it lived only in WIP changes). We made mixed-stride the
