@@ -19,6 +19,7 @@ import os
 import random
 import subprocess
 import sys
+import time
 
 BEDTOOLS = "/data/apps/extern/BEDTools/2.30.0/bin/bedtools"
 HAMMOCK = "/home/jbonnie1/.conda/envs/claude-ref-comparison/bin/hammock"
@@ -85,25 +86,54 @@ def run_bedtools_all(a_paths, b_paths, workers):
     return truth
 
 
-def run_hammock(a_paths, b_paths, precision, tmp_dir, threads):
+def run_hammock(a_paths, b_paths, precision, tmp_dir, threads, sketch_seed=None):
+    """Run Mode B and return {(file1, file2): row}.
+
+    `sketch_seed` is hammock's `--seed`, which seeds the xxh64 HLL ingestion
+    hash — a fresh value re-sketches every file independently while leaving the
+    inputs, and therefore the bedtools ground truth, untouched. It is NOT the
+    same thing as this script's data seed; see main().
+
+    The seed has to go in the `-o` prefix by hand: `get_new_prefix`
+    (python/hammock/outprefix.py) keys the generated filename on sketch_type,
+    mode, precision, subA/subB/expA and k/w — but *not* on the seed. So a seed
+    sweep that relies on hammock's own naming writes every replicate to one
+    path, and the failure is silent: each run reads back whatever the last one
+    wrote, giving zero seed-to-seed variance, i.e. confidence intervals of
+    width zero that look like an unusually clean result.
+    """
     l1 = os.path.join(tmp_dir, "list1.txt")
     l2 = os.path.join(tmp_dir, "list2.txt")
     with open(l1, "w") as f:
         f.write("\n".join(a_paths) + "\n")
     with open(l2, "w") as f:
         f.write("\n".join(b_paths) + "\n")
-    prefix = os.path.join(tmp_dir, f"hm_p{precision}")
+    tag = f"hm_p{precision}" if sketch_seed is None else f"hm_p{precision}_s{sketch_seed}"
+    prefix = os.path.join(tmp_dir, tag)
     cmd = [HAMMOCK, l1, l2, "--mode", "B", "--precision", str(precision),
            "-o", prefix, "--threads", str(threads)]
+    if sketch_seed is not None:
+        cmd += ["--seed", str(sketch_seed)]
     subprocess.run(cmd, capture_output=True, text=True, check=True)
-    # hammock decorates the prefix; find the CSV it actually wrote
-    base = os.path.basename(prefix)
-    cands = [f for f in os.listdir(tmp_dir)
-             if f.startswith(base) and f.endswith(".csv")]
-    if not cands:
-        raise RuntimeError(f"no hammock CSV for p={precision} (prefix {base})")
+
+    # Name the output outright rather than globbing the prefix. Seed tags are
+    # not prefix-free -- "hm_p12_s1" is a prefix of "hm_p12_s10", and the
+    # unseeded "hm_p12" is a prefix of every seeded tag -- so a startswith()
+    # match over a shared --tmp-dir is ambiguous exactly when a seed sweep is
+    # running. For sketch_type=hyperloglog, mode=B, default subA/subB and no
+    # expA, get_new_prefix (python/hammock/outprefix.py:17) appends exactly
+    # "_hll_p{precision}_jacc{mode}". Since hammock rewrites this path on every
+    # run, naming it also removes any staleness question.
+    path = f"{prefix}_hll_p{precision}_jaccB.csv"
+    if not os.path.exists(path):
+        raise RuntimeError(
+            f"hammock did not write the expected output {path}. "
+            f"CSVs present in {tmp_dir}: "
+            f"{sorted(f for f in os.listdir(tmp_dir) if f.endswith('.csv'))}. "
+            "If hammock's output naming changed, update this construction to "
+            "match python/hammock/outprefix.py.")
     out = {}
-    with open(os.path.join(tmp_dir, sorted(cands)[0])) as f:
+    with open(path) as f:
         for row in csv.DictReader(f):
             out[(row["file1"], row["file2"])] = row
     return out
@@ -166,16 +196,41 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--intervals", type=int, default=1000)
-    ap.add_argument("--seed", type=int, default=7)
+    # Two distinct seeds. Conflating them is the easiest way to get a
+    # confident-looking wrong answer out of this script:
+    #   --data-seed   regenerates the BED files, and therefore the bedtools
+    #                 ground truth. Varying it measures corpus-to-corpus
+    #                 variation.
+    #   --sketch-seed re-seeds hammock's HLL ingestion hash only. Inputs and
+    #                 ground truth are untouched, so varying it isolates
+    #                 sketch noise -- this is the replication unit for CIs.
+    # A sweep over the wrong one still produces non-zero variance and passes a
+    # naive "seed variance > 0" guard, while answering a different question.
+    # No `--seed` alias: nothing in the repo passes one, and `--seed` is
+    # hammock's own spelling for the *sketch* seed, so silently mapping it to
+    # the data seed would preserve the exact trap this split removes.
+    ap.add_argument("--data-seed", type=int, default=7,
+                    help="seed for BED generation (also changes the ground truth)")
+    ap.add_argument("--sketch-seed", type=int, default=None,
+                    help="hammock --seed: re-sketches the same inputs; "
+                         "leaves the bedtools ground truth identical")
+    ap.add_argument("--seed", dest="_rejected_seed", default=None,
+                    help=argparse.SUPPRESS)
     ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--precisions", default="12,16,20,24")
     args = ap.parse_args()
+    if args._rejected_seed is not None:
+        ap.error("--seed is ambiguous in this script. Use --data-seed to "
+                 "regenerate the corpus (which also changes the bedtools "
+                 "ground truth), or --sketch-seed to re-sketch identical "
+                 "inputs (hammock's --seed; the replication unit for CIs).")
 
     precisions = [int(p) for p in args.precisions.split(",")]
     os.makedirs(args.tmp_dir, exist_ok=True)
 
     print("generating data...", file=sys.stderr)
-    a_paths, b_paths = make_data(args.tmp_dir, args.reps, args.intervals, args.seed)
+    a_paths, b_paths = make_data(args.tmp_dir, args.reps, args.intervals,
+                                 args.data_seed)
     print(f"  {len(a_paths)} A files x {len(b_paths)} B files "
           f"= {len(a_paths) * len(b_paths)} pairs", file=sys.stderr)
 
@@ -185,7 +240,8 @@ def main():
     rows = []
     for p in precisions:
         print(f"hammock p={p}...", file=sys.stderr)
-        hm = run_hammock(a_paths, b_paths, p, args.tmp_dir, args.threads)
+        hm = run_hammock(a_paths, b_paths, p, args.tmp_dir, args.threads,
+                         sketch_seed=args.sketch_seed)
         for key, j_bt in truth.items():
             r = hm.get(key)
             if r is None:
@@ -196,6 +252,10 @@ def main():
             j_ie, clamped = ie_jaccard(c_ab, c_ba)
             rows.append({
                 "precision": p,
+                # Carry both seeds so per-seed CSVs concatenate into a sweep
+                # without re-deriving the replicate id from the filename.
+                "data_seed": args.data_seed,
+                "sketch_seed": "" if args.sketch_seed is None else args.sketch_seed,
                 "file1": key[0],
                 "file2": key[1],
                 "bedtools_jaccard": j_bt,
