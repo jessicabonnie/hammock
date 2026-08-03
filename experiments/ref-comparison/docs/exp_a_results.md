@@ -8,7 +8,10 @@ similarly *across references* than across tissues on any one reference.
 2 peak callers (MACS3 broad + narrow). (k, w) sweep: 20 cells with w ≥ k.
 
 Hammock Mode D with minimizer HLL, `--precision 24`. Similarity metric:
-`jaccard_similarity_with_ends` (minimizer ∪ start-end HLL).
+`jaccard_similarity_with_ends` (minimizer ∪ start-end HLL) for the stats
+tables below; **the dendrogram was re-rendered on `jaccard_similarity` in
+v0.6.0** (see that section). The `_with_ends` column no longer exists —
+CLAUDE.md divergence #8, `docs/mode-d-ends-removal.md`.
 
 > **Rerun 2026-05-14**: all hammock CSVs, stats, and figures below were
 > regenerated after the Mode D minimizer-ingest bug fix (orig's slow-path
@@ -45,11 +48,18 @@ similarity.
 
 ### Dendrogram — direct visual proof
 
-UPGMA clustering on `1 − jaccard_similarity_with_ends`. Each tissue's
+UPGMA clustering on `1 − jaccard_similarity`. Each tissue's
 three references form a tight monophyletic clade in both peak types.
 At k=15, w=15 the clades are deeply separated; at k=10, w=10 they
 still partition cleanly but with smaller margin. Source:
 `scripts/exp_a_dendrogram.R`.
+
+> **Re-rendered 2026-08-03** on `jaccard_similarity`, after v0.6.0 removed
+> `jaccard_similarity_with_ends` (CLAUDE.md divergence #8). The topology is
+> **unchanged**: cutting either dendrogram at k=3 recovers the 3×3
+> tissue partition exactly, under both columns and both peak types. Only the
+> figure's provenance changed, not its claim. The stats tables further down
+> this file were computed on the old column and have not been regenerated.
 
 ![Cross-reference dendrogram (broad + narrow, k=15, w=15)](../figures/cross_ref_dendrogram_k15_w15.png)
 

@@ -86,7 +86,7 @@ build_dendro <- function(csv_file, peak_type) {
                     expand = c(0, 0)) +
     scale_y_continuous(expand = expansion(mult = 0.08)) +
     labs(title = sprintf("%s peaks", peak_type),
-         x = "1 − Jaccard (minimizer + ends)", y = NULL) +
+         x = "1 − Jaccard (minimizer)", y = NULL) +
     theme_cowplot(11) +
     theme(axis.text.y  = element_blank(),
           axis.ticks.y = element_blank(),
