@@ -153,18 +153,21 @@ These are deliberate; parity tests that touch them are skipped or projected.
    is recoverable from them** — that includes all the archived interval-mode
    A/B/C output.
 
-   **Neither estimator dominates — pick by what you need.** The
-   reconstruction wins on *calibration* (MAE vs bedtools 5×10⁻⁴ at p=20 vs
-   0.15 for `jaccard_similarity`), but `jaccard_similarity` wins on
-   *resolution* at low J in the saturated regime: rescaled into J units by
-   its slope, its error sd at p=16, J<0.05 is 0.0014 against the
-   reconstruction's 0.0024. The reconstruction is also censored at 0 by the
-   `>= 0` clamp (25/90 pairs at p=12, all low-J) and is uninformative below
-   J ≈ a few/√m. Use `jaccard_similarity_ie` for magnitude and for any
-   comparison spanning different set sizes; `jaccard_similarity` only to rank
-   pairs of comparable size. Note the resolution comparison above was measured
-   with the size ratio pinned near 1 and has not been re-tested across a ratio
-   axis. Full tables and caveats: `docs/jaccard-definitional-gap.md`.
+   **Pick by what you need.** `jaccard_similarity_ie` wins on *calibration*
+   (MAE vs bedtools 5×10⁻⁴ at p=20 vs 0.15 for `jaccard_similarity`), and it
+   is the only one of the two that is comparable across pairs of differing set
+   size. Use it for magnitude and for any comparison spanning different set
+   sizes; use `jaccard_similarity` only to rank pairs of comparable size.
+   Caveat on `_ie`: it is censored at 0 by the `>= 0` clamp (25/90 pairs at
+   p=12, all low-J — an exact 0.0 means "clamped or empty", never "measured
+   zero") and is uninformative below J ≈ a few/√m.
+
+   **The counter-claim that `jaccard_similarity` wins on *resolution* is
+   under revision — don't rely on it.** The measurement behind it (error sd
+   0.0014 vs 0.0024 at p=16, J<0.05) used a binned statistic that mixes
+   within-bin true-J variance into the register-equality column only, and it
+   was taken with the size ratio pinned near 1. See the boxed note in
+   `docs/jaccard-definitional-gap.md`; a dedicated experiment is in progress.
 3. **Default `--subB-method=mixed-stride`** — deterministic chr-keyed
    stride sampling. Orig's pipx-installed 0.4.0 didn't accept the flag
    at all (it lived only in WIP changes). We made mixed-stride the
@@ -216,7 +219,7 @@ These are deliberate; parity tests that touch them are skipped or projected.
    silent-zero-from-broken-`digest` failure mode (RPATH shadowing
    libstdc++), see `memory/project_modeD_zero_rpath_digest.md`;
    `sketch_fasta` now raises loudly instead of falling back silently.
-7. **Second Jaccard column: `jaccard_similarity_ie`** (v0.5.0). Orig emits one
+7. **Second Jaccard column: `jaccard_similarity_ie`** (v0.4.0). Orig emits one
    Jaccard column, computed by register equality. We emit that column
    unchanged — byte-equal, and parity tests still compare it — plus a second
    inclusion-exclusion column immediately after it. Rationale is divergence #2's

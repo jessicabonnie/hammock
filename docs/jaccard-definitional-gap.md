@@ -177,9 +177,8 @@ The table above scores **calibration** (is the number right?). It does not
 score **resolution** (can the number tell two similar pairs apart?), and on
 resolution the ranking flips.
 
-Because `J_re` is a near-perfectly affine function of true J, its error must
-be rescaled by the fitted slope `1 − c` before its noise can be compared with
-`J_ie`'s. Doing that, in true-J units:
+`J_re`'s error must be rescaled before its noise can be compared with `J_ie`'s.
+The table below divides by the fitted slope `1 − c`, in true-J units:
 
 | p | fitted c | J < 0.01 | 0.01–0.05 | 0.05–0.15 | winner at low J |
 | --- | --- | --- | --- | --- | --- |
@@ -212,10 +211,28 @@ or another tool's absolute values) **or when the comparison spans different set
 sizes**; use `jaccard_similarity` for *discrimination* within a set of pairs of
 comparable geometry. Report both; neither is strictly better.
 
-Caveat on the resolution comparison above: it was measured with the size ratio
-pinned near 1. It has **not** been re-tested across a ratio axis, and
-`experiments/bedtools_benchmark/estimator_compare.py` only generates
-equal-size files, so that is a genuine gap rather than a settled result.
+> **The resolution table above is under revision — do not cite it.** Two
+> defects are known:
+>
+> 1. **The estimand is contaminated.** Writing `J_re = f(J) + ε_re` and
+>    `J_ie = J + ε_ie`, the binned statistic is
+>    `sd_bin(err_re) = sqrt(Var_bin(f(J) − J) + σ_re²)` against
+>    `sd_bin(err_ie) = σ_ie`. The first term is real *signal* variation inside
+>    the bin, is seed-invariant, and inflates the register-equality column
+>    only. Because that floor is λ-independent while `σ_ie ∝ 1/√m`, it grows
+>    with precision — which is the shape of the "crossover at p=20" the table
+>    reports. Dividing by `1 − c` also assumes exact affinity, which the
+>    concavity documented below rules out; the correct divisor is the local
+>    slope `f′(J)`, running 0.962 → 0.740 across the range.
+> 2. **The size ratio was pinned near 1**, and
+>    `experiments/bedtools_benchmark/estimator_compare.py` only generates
+>    equal-size files, so the ratio axis is untested.
+>
+> Note that re-deriving the table against an OLS-residualized statistic flips
+> none of its twelve winner cells, so the defects are in the *method and its
+> interpretation*, not necessarily in the reported ordering. A dedicated
+> experiment evaluating both estimators is in progress; this section should be
+> rewritten from its output rather than patched.
 
 ## Rank fidelity is not free — measure it per corpus
 
@@ -234,8 +251,9 @@ root of `J_re(r, J) = c₁`, `c₁ = 0.1699`:
 
 Both rows are stable in λ (identical to 4 dp from λ=10 to λ=300). The affine
 approximation — which earlier revisions of this file printed as *the* answer —
-runs 12–15% high, because `J_re` is convex in `J` rather than a straight line
-from `c_r` to 1. At `r = 10` there is no root: a ratio-10 pair cannot exceed
+runs 12–15% high, because `J_re` is concave in `J` rather than a straight line
+from `c_r` to 1 — it lies *above* the chord everywhere, peaking at +0.0297 at
+J ≈ 0.5, with the local slope falling monotonically 0.962 → 0.740. At `r = 10` there is no root: a ratio-10 pair cannot exceed
 `J = 1/r = 0.1`, and even at full containment it scores `J_re = 0.1375 < c₁`,
 so **every** 10:1 pair ranks below **every** disjoint symmetric pair regardless
 of true similarity. Quoting a ΔJ there would name a gap wider than the entire
@@ -270,9 +288,17 @@ are pure leverage; quote the off-diagonal value.
 ## The `jaccard_similarity_ie` column (shipped in v0.4.0)
 
 As of v0.4.0 the inclusion-exclusion estimate is emitted directly as
-`jaccard_similarity_ie` (and `jaccard_similarity_ie_with_ends` in Mode D), so
-the reconstruction below is no longer needed for new runs. It is computed from
-the same `C_AB`/`C_BA` shown here, agreeing with the direct form to ~2 ulp.
+`jaccard_similarity_ie`, so the reconstruction below is no longer needed for
+new runs. It is computed from the same `C_AB`/`C_BA` shown here and agrees with
+the direct form to within ~1e-12. (Mode D briefly emitted a
+`jaccard_similarity_ie_with_ends` counterpart; that whole `_with_ends` family
+was removed in v0.6.0 — see CLAUDE.md divergence #8.)
+
+Note the agreement is *not* a cross-implementation check: both sides derive
+from the same two containment arrays in the same process, so it tests the CSV
+float round-trip. `runner` also clamps containments to 1.0 before deriving
+`jac_ie` but emits them unclamped, so compare with a tolerance rather than
+expecting bit-equality.
 
 Two things to know:
 
