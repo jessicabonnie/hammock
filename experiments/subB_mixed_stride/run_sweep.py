@@ -31,6 +31,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(SCRIPT_DIR.parent / "bedtools_benchmark"))
 from benchmark_cpp_vs_bedtools import (  # noqa: E402
+    check_binary_version,
     find_hammock_cpp,
     get_system_info,
     run_with_time,
@@ -142,6 +143,11 @@ def run_one(
             "-t", str(threads),
             "-o", out_prefix,
             "--verbose",
+            # Explicit: since 0.7.0 the binary emits the metrics block by
+            # default, and these wall times feed a published figure, so the
+            # timed pass must not silently start paying for a union plus two
+            # cardinality estimates per pair.
+            "--no-metrics",
         ]
         if verbose:
             print("  +", " ".join(cmd), file=sys.stderr)
@@ -239,6 +245,7 @@ def main() -> None:
         args.reps = 1
 
     binary = args.binary or find_hammock_cpp()
+    check_binary_version(binary)
     groups = groups_for_corpus(args.corpus, args.size_classes)
     print(f"hammock-cpp: {binary}")
     print(f"corpus:       {args.corpus}")

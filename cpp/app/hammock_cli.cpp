@@ -28,7 +28,7 @@ namespace {
 struct Args {
     std::string filepaths_file;
     std::string primary_file;
-    std::string mode = "A";
+    std::string mode = "B";
     std::string outprefix = "hammock";
     std::string separator = "\t";   // Python parity default
     size_t precision = 18;
@@ -40,7 +40,7 @@ struct Args {
     uint32_t gate_seed = 31337;
     int threads = 0;
     bool verbose = false;
-    bool metrics = false;
+    bool metrics = true;
 };
 
 // Mirror of runner.py's _jaccard_ie_from_containments. Kept expression-for-
@@ -82,7 +82,8 @@ void print_help(const char* prog) {
     std::cerr <<
         "Usage: " << prog << " <filepaths_file> <primary_file> [options]\n\n"
         "Options:\n"
-        "  --mode <A|B|C>          Comparison mode (default: A)\n"
+        "  --mode <A|B|C>          Comparison mode (default: B, matching the Python CLI's\n"
+        "                          autodetect for BED input)\n"
         "  --subA <float>          Subsampling rate for intervals (Mode C, 0..1, default: 1.0)\n"
         "  --subB <float>          Subsampling rate for points (0..1, default: 1.0)\n"
         "  --subB-method <name>    Point-sampling method (default: mixed-stride)\n"
@@ -94,15 +95,17 @@ void print_help(const char* prog) {
         "  --expA <float>          Interval expansion exponent (default: 0)\n"
         "  --precision, -p <int>   HyperLogLog precision 4..24 (default: 18)\n"
         "  --separator, -s <str>   Separator for hashed strings (default: tab)\n"
-        "  --metrics               Also emit jaccard_similarity_ie, containment_AB/BA\n"
-        "                          and cosketch_* (matches the Python CLI's block).\n"
-        "                          Costs a union + cardinality per pair, so the\n"
-        "                          pairwise phase is markedly slower; off by default\n"
-        "                          to keep benchmark timings comparable.\n"
+        "  --metrics               Accepted for compatibility; this is now the default.\n"
+        "  --no-metrics            Emit only query/reference/jaccard_similarity, and\n"
+        "                          tag the output filename '_j3'. Skips a union plus\n"
+        "                          two cardinality estimates per pair -- use it for\n"
+        "                          timing runs that must stay comparable with results\n"
+        "                          published before 0.7.0.\n"
         "  --output, -o <prefix>   Output filename prefix (default: hammock)\n"
         "  --threads, -t <int>     Thread count (default: OpenMP auto)\n"
         "  --verbose, -v           Print progress to stderr\n"
-        "  --help, -h              Show this help\n";
+        "  --help, -h              Show this help\n"
+        "  --version               Print the version and exit\n";
 }
 
 bool parse_args(int argc, char** argv, Args& out) {
@@ -111,6 +114,11 @@ bool parse_args(int argc, char** argv, Args& out) {
         std::string a = argv[i];
         if (a == "--help" || a == "-h") {
             print_help(argv[0]);
+            std::exit(0);
+        } else if (a == "--version") {
+            // stdout, unlike --help: a harness probes this to refuse a stale
+            // binary, and parsing stderr would also catch warnings.
+            std::cout << "hammock-cpp " << HAMMOCK_VERSION << "\n";
             std::exit(0);
         } else if (a == "--verbose" || a == "-v") {
             out.verbose = true;
@@ -146,6 +154,8 @@ bool parse_args(int argc, char** argv, Args& out) {
             if (!parse_num("--threads", argv[++i], out.threads)) return false;
         } else if (a == "--metrics") {
             out.metrics = true;
+        } else if (a == "--no-metrics") {
+            out.metrics = false;
         } else if (!a.empty() && a[0] != '-') {
             positional.push_back(a);
         } else {
@@ -199,22 +209,33 @@ std::string outprefix_with_suffix(const Args& a) {
     std::string out = a.outprefix;
     out += "_hll_p" + std::to_string(a.precision) + "_jacc";
     out += a.mode;
+    // Mirrors outprefix.py::get_new_prefix, including its elif: expA wins over
+    // subA. Until 0.7.0 the subA branch was missing here entirely, so two Mode C
+    // runs differing only in --subA wrote to the same path and the second
+    // silently overwrote the first.
+    char buf[32];
     if (a.expA > 0) {
-        char buf[32];
         std::snprintf(buf, sizeof(buf), "%.2f", a.expA);
         out += "_expA";
         out += buf;
+    } else if (a.subA != 1.0) {
+        std::snprintf(buf, sizeof(buf), "%.2f", a.subA);
+        out += "_A";
+        out += buf;
     }
     if (a.subB != 1.0) {
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "%.2f", a.subB);
+        // Four decimals strictly below 0.01, matching outprefix.py: under %.2f
+        // every subB in (0, 0.005) renders as "0.00" and collides. The boundary
+        // is strict so subB == 0.01 keeps its historical "_B0.01".
+        std::snprintf(buf, sizeof(buf), a.subB < 0.01 ? "%.4f" : "%.2f", a.subB);
         out += "_B";
         out += buf;
     }
-    // Distinguish the two output shapes: without this a 3-column and a
-    // 9-column file collide on one path, and the positional readers in
-    // experiments/ would silently mis-parse whichever was left behind.
-    if (a.metrics) out += "_metrics";
+    // Tag the *reduced* shape, so filename <-> column count stays one-to-one
+    // while the default output keeps the path it has always had. Every reader
+    // of this file parses by header name, so the tag is provenance for humans,
+    // not a parsing hook.
+    if (!a.metrics) out += "_j3";
     return out + ".csv";
 }
 

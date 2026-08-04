@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 
+from hammock import __version__
 from hammock.runner import run
 
 
@@ -79,6 +80,10 @@ def parse_args(argv=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
+    # Same string the standalone binary reports, from the same source, so a
+    # harness can tell which pair of front-ends it is holding.
+    p.add_argument('--version', action='version',
+                   version=f'hammock {__version__}')
     p.add_argument('filepaths_file', metavar='LIST1',
                    help='Text file listing one input path per line (NOT an input '
                         'file itself). This is the query side (side "A": the file1 '

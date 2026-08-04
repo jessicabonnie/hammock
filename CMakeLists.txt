@@ -67,6 +67,18 @@ if(HAMMOCK_BUILD_CLI)
     add_executable(hammock-cpp cpp/app/hammock_cli.cpp)
     target_link_libraries(hammock-cpp PRIVATE hammock_core OpenMP::OpenMP_CXX)
     target_compile_options(hammock-cpp PRIVATE -O3 -march=native)
+    # --version's string. scikit-build-core injects SKBUILD_PROJECT_VERSION from
+    # pyproject.toml on every configure, so a version bump propagates without a
+    # second literal to keep in sync. A plain `cmake` CLI-only build (see the
+    # HAMMOCK_BUILD_CLI standalone path above) does not define it, hence the
+    # fallback. The quotes matter: unquoted this expands to -DHAMMOCK_VERSION=0.7.0,
+    # which is not a valid preprocessor token.
+    if(DEFINED SKBUILD_PROJECT_VERSION)
+        set(HAMMOCK_VERSION_STR "${SKBUILD_PROJECT_VERSION}")
+    else()
+        set(HAMMOCK_VERSION_STR "0.0.0+local")
+    endif()
+    target_compile_definitions(hammock-cpp PRIVATE HAMMOCK_VERSION="${HAMMOCK_VERSION_STR}")
     # Installed into the wheel's bin/ (OPTIONAL: absent from wheels built
     # without HAMMOCK_BUILD_CLI). Also left in build/<tag>/ for benchmarks.
     install(TARGETS hammock-cpp RUNTIME DESTINATION bin OPTIONAL)

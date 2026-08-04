@@ -48,6 +48,35 @@ RESULTS_DIR = os.path.join(SCRIPT_DIR, "results")
 FIGURES_DIR = os.path.join(SCRIPT_DIR, "figures")
 
 
+MIN_BINARY_VERSION = (0, 7, 0)
+
+
+def check_binary_version(binary: str) -> str:
+    """Refuse a binary older than the flags and timers this harness assumes.
+
+    Call this on the *resolved* path, whatever produced it. The stale-binary
+    case that actually bites is `pip install -e .` skipped after a rebuild: the
+    build tree updates and the site-packages copy that HAMMOCK_CPP_BIN points at
+    does not, so a probe that only covered the build-tree glob would check the
+    one path where nothing can go wrong.
+    """
+    proc = subprocess.run([binary, "--version"], capture_output=True, text=True)
+    text = (proc.stdout or "").strip()
+    if proc.returncode != 0 or not text.startswith("hammock-cpp "):
+        raise RuntimeError(
+            f"{binary} does not understand --version, so it predates 0.7.0. "
+            "This harness passes --no-metrics and parses microsecond timings, "
+            "neither of which that binary has. Rebuild AND reinstall: "
+            "pip install -e . --no-build-isolation")
+    got = text.split()[1]
+    parts = tuple(int(x) for x in got.split(".")[:3])
+    if parts < MIN_BINARY_VERSION:
+        raise RuntimeError(
+            f"{binary} is hammock-cpp {got}; this harness needs "
+            f">= {'.'.join(map(str, MIN_BINARY_VERSION))}.")
+    return got
+
+
 def find_hammock_cpp() -> str:
     """Locate the hammock-cpp binary built under build/<plat>/hammock-cpp."""
     env = os.environ.get("HAMMOCK_CPP_BIN")
@@ -172,10 +201,13 @@ def run_hammock(
     mixed-stride, matching the post-9778ef8 binary default). At sub_b == 1.0
     we omit the flags to keep the cmd line byte-identical to pre-subB runs.
 
-    metrics=True adds --metrics, which emits jaccard_similarity_ie and the
-    containment/cosketch block. It costs a union + cardinality per pair, so a
-    run with it on is NOT timing-comparable to the published numbers in
-    RESULTS.md -- use it only on untimed accuracy passes.
+    metrics selects the output shape explicitly: True passes --metrics (the
+    binary's default since 0.7.0), False passes --no-metrics. The metrics block
+    costs a union + cardinality per pair, so a run with it on is NOT
+    timing-comparable to the published numbers in RESULTS.md.
+
+    Requires hammock-cpp >= 0.7.0; an older binary rejects --no-metrics with
+    exit 2 rather than silently mistiming, which is the intended failure.
     """
     with tempfile.NamedTemporaryFile(mode="w", delete=False) as tmp:
         out_prefix = tmp.name
@@ -192,8 +224,11 @@ def run_hammock(
         ]
         if sub_b < 1.0:
             cmd += ["--subB", f"{sub_b:g}", "--subB-method", sub_b_method]
-        if metrics:
-            cmd += ["--metrics"]
+        # Explicit in both directions. Since 0.7.0 the binary emits the metrics
+        # block by default, so omitting the flag no longer means "cheap run" --
+        # a timed pass that silently gained a union plus two cardinality
+        # estimates per pair would not be comparable to RESULTS.md.
+        cmd += ["--metrics"] if metrics else ["--no-metrics"]
         r = run_with_time(cmd)
 
         sketch_s: Optional[float] = None
@@ -536,6 +571,14 @@ def main() -> int:
     binary = args.binary or find_hammock_cpp()
     if not os.path.exists(binary):
         print(f"hammock-cpp not found at {binary}", file=sys.stderr)
+        return 1
+    # Probe the resolved path, not just the glob: --binary and HAMMOCK_CPP_BIN
+    # both bypass find_hammock_cpp()'s search, and the env var is what the
+    # sbatch scripts set.
+    try:
+        print(f"hammock-cpp version: {check_binary_version(binary)}")
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
         return 1
     if not os.path.exists(BEDTOOLS_SCRIPT):
         print(f"bedtools.sh not found at {BEDTOOLS_SCRIPT}", file=sys.stderr)

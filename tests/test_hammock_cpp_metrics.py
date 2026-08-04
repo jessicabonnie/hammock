@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+import hammock
+
 _REPO = Path(__file__).resolve().parent.parent
 _METRIC_COLS = [
     "jaccard_similarity", "jaccard_similarity_ie",
@@ -103,12 +105,26 @@ def _run_python(q: Path, r: Path, out: Path) -> dict:
         return {(row["file1"], row["file2"]): row for row in csv.DictReader(f)}
 
 
+def _run_cpp_path(q: Path, r: Path, out: Path, metrics: bool,
+                  mode: str = "B", extra: list[str] | None = None) -> Path:
+    """Run the binary and return the path it actually wrote.
+
+    Reads that path off the `--verbose` "Wrote <path>" line rather than globbing
+    the prefix. Globbing returns an arbitrary match once two shapes share a
+    prefix, and reconstructing the name in Python would duplicate the suffix
+    rules in outprefix_with_suffix -- which this release changes three ways.
+    """
+    cmd = [str(_BIN), str(q), str(r), "--mode", mode, "-p", "20", "-o", str(out),
+           "--verbose", "--metrics" if metrics else "--no-metrics", *(extra or [])]
+    proc = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=600)
+    for line in proc.stderr.splitlines():
+        if line.startswith("Wrote "):
+            return Path(line[len("Wrote "):].strip())
+    raise AssertionError(f"no 'Wrote <path>' line in stderr:\n{proc.stderr}")
+
+
 def _run_cpp(q: Path, r: Path, out: Path, metrics: bool) -> dict:
-    cmd = [str(_BIN), str(q), str(r), "--mode", "B", "-p", "20", "-o", str(out)]
-    if metrics:
-        cmd.append("--metrics")
-    subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=600)
-    csv_path = next(out.parent.glob(f"{out.name}*.csv"))
+    csv_path = _run_cpp_path(q, r, out, metrics)
     with csv_path.open() as f:
         return {(row["query"], row["reference"]): row
                 for row in csv.DictReader(f, delimiter="\t")}
@@ -128,24 +144,98 @@ def test_metrics_block_matches_python_bit_for_bit(corpus, tmp_path: Path):
             assert float(py[key][col]) == float(cpp[key][col]), (key, col)
 
 
-def test_default_output_shape_is_unchanged(corpus, tmp_path: Path):
-    """Without --metrics the binary must still emit exactly three columns, so
-    published benchmark timings and their parsers stay valid."""
+# _METRIC_COLS already leads with jaccard_similarity, so the full header is
+# just the two key columns plus the block.
+_FULL_HEADER = ["query", "reference"] + _METRIC_COLS
+_SLIM_HEADER = ["query", "reference", "jaccard_similarity"]
+
+
+def test_default_output_carries_the_metrics_block(corpus, tmp_path: Path):
+    """The default is the full block, on the untagged path.
+
+    Since 0.7.0 the binary emits what the Python CLI emits. The untagged
+    filename is deliberate: it is the path every pre-0.7.0 default run already
+    used, so the *reduced* shape is the one that gets a tag.
+    """
     q, r = corpus
-    out = tmp_path / "plain"
-    _run_cpp(q, r, out, metrics=False)
-    header = next(out.parent.glob(f"{out.name}*.csv")).read_text().splitlines()[0]
-    assert header.split("\t") == ["query", "reference", "jaccard_similarity"]
+    path = _run_cpp_path(q, r, tmp_path / "plain", metrics=True)
+    assert path.read_text().splitlines()[0].split("\t") == _FULL_HEADER
+    assert path.name == "plain_hll_p20_jaccB.csv"
 
 
-def test_metrics_changes_the_output_filename(corpus, tmp_path: Path):
+def test_no_metrics_gives_three_columns(corpus, tmp_path: Path):
+    """--no-metrics is the opt-out for timing runs, and it tags its output."""
+    q, r = corpus
+    path = _run_cpp_path(q, r, tmp_path / "slim", metrics=False)
+    assert path.read_text().splitlines()[0].split("\t") == _SLIM_HEADER
+    assert path.name == "slim_hll_p20_jaccB_j3.csv"
+
+
+def test_no_metrics_changes_the_output_filename(corpus, tmp_path: Path):
     """A 3-column and a 9-column file must not collide on one path."""
     q, r = corpus
-    _run_cpp(q, r, tmp_path / "same", metrics=False)
     _run_cpp(q, r, tmp_path / "same", metrics=True)
+    _run_cpp(q, r, tmp_path / "same", metrics=False)
     names = sorted(p.name for p in tmp_path.glob("same*.csv"))
     assert len(names) == 2, names
-    assert any(n.endswith("_metrics.csv") for n in names), names
+    assert any(n.endswith("_j3.csv") for n in names), names
+
+
+def test_jaccard_similarity_is_identical_across_shapes(corpus, tmp_path: Path):
+    """The frozen column must not depend on which shape you asked for.
+
+    `jaccard_similarity` is register-equality and every archived analysis is
+    calibrated against it, so flipping the default must not perturb it. The
+    metrics block adds columns to its right; it must not touch column 3.
+    """
+    q, r = corpus
+    full = _run_cpp(q, r, tmp_path / "full", metrics=True)
+    slim = _run_cpp(q, r, tmp_path / "slim", metrics=False)
+    assert set(full) == set(slim)
+    for key in full:
+        assert full[key]["jaccard_similarity"] == slim[key]["jaccard_similarity"], key
+
+
+def test_mode_defaults_to_b(corpus, tmp_path: Path):
+    """No --mode means B, matching cli.py's autodetect for BED input.
+
+    Until 0.7.0 the binary defaulted to A while the Python CLI chose B, so the
+    same two lists through the two front-ends produced a column of the same name
+    holding numbers from different algorithms.
+    """
+    q, r = corpus
+    proc = subprocess.run(
+        [str(_BIN), str(q), str(r), "-p", "20", "-o", str(tmp_path / "d"), "--verbose"],
+        check=True, capture_output=True, text=True, timeout=600)
+    assert "(mode B)" in proc.stderr, proc.stderr
+    assert (tmp_path / "d_hll_p20_jaccB.csv").exists()
+
+
+def test_suba_and_subb_reach_the_filename(corpus, tmp_path: Path):
+    """Two runs differing only in --subA must not overwrite each other.
+
+    The C++ filename builder had no subA branch before 0.7.0, and formatted subB
+    with an unconditional %.2f, so `--subB 0.001` and `--subB 0.005` also landed
+    on one path. Both are silent data loss: the second run wins.
+    """
+    q, r = corpus
+    a = _run_cpp_path(q, r, tmp_path / "s", False, mode="C", extra=["--subA", "0.5"])
+    b = _run_cpp_path(q, r, tmp_path / "s", False, mode="C", extra=["--subA", "0.25"])
+    assert a != b, (a, b)
+
+    lo = _run_cpp_path(q, r, tmp_path / "t", False, extra=["--subB", "0.001"])
+    hi = _run_cpp_path(q, r, tmp_path / "t", False, extra=["--subB", "0.005"])
+    assert lo != hi, (lo, hi)
+    # The .4f rule is strict below 0.01, so the historical name is preserved.
+    keep = _run_cpp_path(q, r, tmp_path / "u", False, extra=["--subB", "0.01"])
+    assert keep.name == "u_hll_p20_jaccB_B0.01_j3.csv", keep.name
+
+
+def test_version_is_on_stdout_and_matches_the_package():
+    """A harness probes this to refuse a stale binary, so it must be stdout."""
+    proc = subprocess.run([str(_BIN), "--version"],
+                          check=True, capture_output=True, text=True, timeout=60)
+    assert proc.stdout.strip() == f"hammock-cpp {hammock.__version__}"
 
 
 def test_peak_height_is_gone(corpus, tmp_path: Path):
