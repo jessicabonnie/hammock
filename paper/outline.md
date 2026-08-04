@@ -105,7 +105,25 @@ Define `subB`, the sampled base-pair universe, and the mixed-stride algorithm. F
 
 ### 4.4 Similarity estimators and computational complexity
 
-Include the cost of mixed-stride sketch construction as a function of covered length and stride, alongside full interval ingestion and pairwise sketch comparison.
+*Draft outline. Key sentences are given; connecting prose is not written.*
+
+- **Framing.** Both estimators are computed from the same pair of sketches. *"Hammock's two similarity columns differ in what they estimate and in what they cost, not in the data they see."*
+- **Register-equality (`jaccard_similarity`).** Define as the fraction of active registers whose values agree.
+  - *"This is not set Jaccard: two registers agree whenever the largest ρ observed in that bucket happens to coincide, which occurs at some rate even for disjoint inputs, so the statistic carries a chance-agreement floor c."*
+  - c is set by the sketch load factor λ = n/m **and** by the cardinality ratio |A|/|B| — not by precision as such. Report 0.1699 at equal cardinality as λ→∞, 0.058 at ratio 10, 0.045 at p = 24 once m > n.
+  - *"Because c differs between pairs of differing size, register-equality is order-preserving within a cardinality ratio but not across ratios."* Ties to the 2.45% Maurano inversions in §2.3.
+- **Inclusion–exclusion (`jaccard_similarity_ie`).** Define |A ∩ B| = |A| + |B| − |A ∪ B| with each term an Ertl (2017) estimate, union by register-wise maximum, intersection clamped to ≥ 0; J = |A∩B|/|A∪B|, equivalently 1/(1/C_AB + 1/C_BA − 1).
+  - *"An exact 0.0 in this column means the intersection estimate hit the non-negativity clamp or the inputs are genuinely disjoint; it never means a measured zero."*
+  - Relative error ≈ 0.6/(J√m), hence uninformative below J ≈ a few/√m — state as the column's domain of validity.
+- **Cost, and why the two columns are not interchangeable operationally.**
+  - *"Register-equality is a ratio of two register counts and costs a single pass over the register arrays; inclusion–exclusion additionally requires a union sketch and cardinality estimates per pair, so its cost scales as O(N²·2^p) against O(N·M) for sketch construction."*
+  - Measured overhead, same binary, 16 threads, p = 14: not measurable at N = 20 (p = 18), +2.4% at N = 100, **+10.4% at N = 512** — the largest collection in Figure 3A.
+  - *"The overhead is therefore negligible for small collections and material at the catalog scale the method targets."*
+  - State explicitly which configuration Figure 3 benchmarks, so the speed claim and the reporting recommendation refer to the same thing.
+- **Why not the joint maximum-likelihood estimator.** *"Ertl's joint MLE is the lower-variance choice for HyperLogLog Jaccard, but it requires the joint register histogram of the pair, which hammock's sketch interface does not expose; the inclusion–exclusion form is recoverable from the containment estimates already computed and needs no additional interface."* Pre-empts the obvious reviewer question.
+- **Which column to report.** *"We report `jaccard_similarity_ie` for any comparison of magnitude, and for any comparison spanning different set sizes; `jaccard_similarity` is retained as the low-cost default and for compatibility with earlier hammock releases."*
+  - One clause on the exception (register-equality ranks better below J ≈ 0.05 at p ≤ 20 among comparably-sized pairs, and one step of precision removes the advantage), with the quantification deferred to a supplementary note rather than carried in Methods.
+- **Complexity.** Retain the original stub: cost of mixed-stride sketch construction as a function of covered length and stride, alongside full interval ingestion and pairwise sketch comparison.
 
 ### 4.5 Datasets
 
