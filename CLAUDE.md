@@ -74,14 +74,20 @@ tags the output `_j3`. The block costs a union plus two cardinality estimates
 per pair, so a timed run with it on is not comparable to the numbers in
 `experiments/bedtools_benchmark/RESULTS.md`, which are all `--no-metrics`. The
 benchmark harnesses pass the flag explicitly in both directions, so the shape
-of a timed run no longer depends on a default. Measured cost, `--threads 16`,
-10k intervals/file: the pairwise phase goes from ≈1.4 µs/pair to ≈4.9 at p=14,
-15–16 → ~42 at p=18, and ~1.1 ms → ~2.8 ms at p=24. The multiplier is *largest
-at low precision* (≈3.4× at p=14 vs ≈2.3× at p=24) because six extra `%.17g`
-fields per row are precision-independent and dominate when the register work is
-cheap — which is why `--verbose` reports `Pairwise:` and `Write:` separately.
-In wall-time terms this is small either way: the pairwise phase is 0.61% of a
-p=14 N=512 run.
+of a timed run no longer depends on a default.
+
+Measured cost (`--threads 16`, N=64/side, 10k intervals/file, 5 runs, medians;
+`docs/data/pairwise_cost_by_precision_20260804_164807.csv`): **the estimator
+multiplier is flat at ≈2.5×** — 2.22–2.62 over p=12…24 — and `pair_time` scales
+as Θ(2^p) to within 0.3% (p=14→24 measures 1021× against 1024× predicted). The
+write phase adds a **constant ≈8 ms** regardless of p, six extra `%.17g` fields
+over 4,096 rows. So the *wall-visible* `comparison_time` multiplier is largest at
+low precision (4.4× at p=12, 3.4× at p=14, settling to ≈2.5× from p=16 up) purely
+because that fixed `fprintf` cost dominates a cheap register pass — which is why
+`--verbose` reports `Pairwise:` and `Write:` separately. Do not read the low-p
+multiplier as an estimator effect. In wall-time terms this is small either way:
+the pairwise phase is 0.61% of a p=14 N=512 run. Full table:
+`docs/metrics-by-default.md`.
 
 ## Architecture
 

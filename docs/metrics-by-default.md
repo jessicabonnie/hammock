@@ -61,28 +61,61 @@ comma-separated Python-CLI output keyed `file1`/`file2`, and are unaffected.
 
 ## Measured cost of the block
 
-`--mode B`, subB=1.0, 10k intervals/file, `--threads 16`. µs/pair is the
-pairwise phase divided by n·m, so it is a throughput figure at that thread
-count, not a serial per-pair cost, and it does not transfer across thread counts.
+`--mode B`, subB=1.0, N=64 files per side (4,096 pairs), 10k intervals/file,
+`--threads 16`, 5 runs per cell with the two arms rotated by run index; medians
+below. Generator `experiments/bedtools_benchmark/pairwise_cost_by_precision.py`,
+data `docs/data/pairwise_cost_by_precision_20260804_164807.csv`.
 
-| p | base µs/pair | with the block | multiplier |
+µs/pair is a phase time divided by n·m, so it is a throughput figure **at that
+thread count**, not a serial per-pair cost, and it does not transfer across
+thread counts.
+
+The two phases behave completely differently, which is the whole reason
+`--verbose` splits them:
+
+| p | `pair_time` µs/pair | | ×  | `write_time` (ms, whole run) | | Δ |
+|---|---|---|---|---|---|---|
+| | base | +block | | base | +block | |
+| 12 | 0.28 | 0.72 | 2.54 | 1.7 | 9.9 | +8.2 |
+| 14 | 1.05 | 2.66 | 2.53 | 1.8 | 10.0 | +8.2 |
+| 16 | 4.85 | 10.77 | 2.22 | 1.8 | 10.1 | +8.3 |
+| 18 | 16.74 | 40.88 | 2.44 | 1.9 | 10.1 | +8.3 |
+| 20 | 64.20 | 164.50 | 2.56 | 1.9 | 10.1 | +8.2 |
+| 22 | 264.16 | 676.31 | 2.56 | 1.9 | 16.2 | +14.3 |
+| 24 | 1073.15 | 2806.33 | 2.62 | 4.4 | 10.0 | +5.7 |
+
+- **The estimator multiplier is flat at ≈2.5×** (2.22–2.62 across twelve
+  doublings of the register array), and `pair_time` scales as Θ(2^p) almost
+  exactly: p=14→24 is **1021×** against the 1024× the register count predicts.
+  A union plus two cardinality estimates is a constant factor on top of the
+  register-equality pass; nothing about it is precision-sensitive.
+- **The write cost is a constant ≈ +8 ms**, independent of p — six extra `%.17g`
+  fields per row over 4,096 rows. (The p=22 and p=24 deltas are the same
+  quantity plus filesystem noise on a ~10 ms median.)
+
+Those two facts together give the wall-visible behaviour:
+
+| p | `comparison_time` = pair + write, µs/pair | | multiplier |
 |---|---|---|---|
-| 14 | 1.40–1.46 | 4.88–5.00 | **3.3–3.6×** |
-| 18 | 15.1–16.3 | 41.6–43.5 | 2.6–2.7× |
-| 24 | 1050–1295 | 2829 | 2.2–2.5× |
+| | base | +block | |
+| 12 | 0.71 | 3.14 | **4.43×** |
+| 14 | 1.49 | 5.10 | **3.43×** |
+| 16 | 5.30 | 13.23 | 2.50× |
+| 18 | 17.20 | 43.35 | 2.52× |
+| 20 | 64.65 | 166.96 | 2.58× |
+| 22 | 264.63 | 680.28 | 2.57× |
+| 24 | 1073.62 | 2810.97 | 2.62× |
 
-Two things worth stating plainly, because both are the opposite of what you would
-guess:
-
-- **The multiplier is largest at *low* precision.** Six extra `%.17g` fields per
-  row are precision-independent, so they dominate when the register work is
-  cheap. This is why `--verbose` now reports `Pairwise:` and `Write:`
-  separately — without the split, a figure would attribute serial `fprintf` to
-  the estimator arithmetic.
+- **The multiplier is largest at *low* precision** — and it is entirely an
+  output-formatting effect, not an estimator effect. At p=12 the +8 ms of
+  `fprintf` is 2.9× the whole base comparison phase; by p=16 it is under 8% of
+  it and the ratio has settled onto the flat 2.5×. Without the `Pairwise:` /
+  `Write:` split a figure would charge that serial `fprintf` to the estimator
+  arithmetic and report a spurious precision dependence.
 - **It is small in wall-time terms everywhere the paper runs.** The pairwise
   phase is 0.61% of wall at N=512, p=14 (0.330 s of 53.721 s), so the block costs
-  about **+1.5%** there. At N=64, p=24 the phase is 4–5% of wall base and ~10%
-  with the block, against 98.5 s of sketching. Pairwise does not overtake
+  about **+1.5%** there. At N=64, p=24 it is 4–5% of wall base (4.4 s against
+  98.5 s of sketching) and ~11% with the block. Pairwise does not overtake
   sketching until roughly N≈550 with the block on.
 
 ## Two silent-overwrite bugs fixed alongside
