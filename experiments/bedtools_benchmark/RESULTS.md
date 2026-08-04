@@ -3,6 +3,15 @@
 Four runs against `hammock-cpp`, on Rockfish `shared` partition (sr-class
 nodes), 16 cpus, 32 GB:
 
+> **Every timing on this page is a 3-column run** — no `jaccard_similarity_ie`,
+> no containment/cosketch block. These predate v0.7.0, when the binary emitted
+> 3 columns unless `--metrics` was passed; since 0.7.0 the block is the default
+> and the harnesses pass `--no-metrics` explicitly to keep new timings on this
+> same footing. The block costs a union plus two cardinality estimates per pair,
+> which lands entirely in the pairwise phase — 0.61% of wall at N=512, p=14, so
+> the effect on these numbers would be about +1.5%. Timings from a run *with*
+> the block are not comparable to the tables below.
+
 - **2026-05-10 (morning)** — pre-optimization hammock-cpp, sequential pre-sort.
 - **2026-05-10 (evening)** — same sweeps with **parallel** pre-sort and the
   first round of inner-loop optimizations (~3.1× speedup).

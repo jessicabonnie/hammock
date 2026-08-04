@@ -60,16 +60,28 @@ benchmarking, no Python in the loop. The wheel does install it (to
 so invoke it by full path — `build/<wheel-tag>/hammock-cpp` after a local
 build, or the site-packages copy.
 
-By default it emits 3 columns (`query`, `reference`, `jaccard_similarity`);
-`--metrics` adds `jaccard_similarity_ie`, `containment_AB/BA` and `cosketch_*`,
-matching the Python CLI **bit-for-bit** (the IE derivation is written the same
-way in both — see `jaccard_ie_from_containments` in `hammock_cli.cpp` and
+**Since v0.7.0 it emits the full 9-column block by default** — `query`,
+`reference`, `jaccard_similarity`, `jaccard_similarity_ie`,
+`containment_AB/BA`, `cosketch_*` — matching the Python CLI **bit-for-bit** (the
+IE derivation is written the same way in both — see
+`jaccard_ie_from_containments` in `hammock_cli.cpp` and
 `runner._jaccard_ie_from_containments`; keep them in sync or
-`tests/test_hammock_cpp_metrics.py` fails on `==`). Off by default because it
-costs a union + cardinality per pair and would invalidate the timings in
-`experiments/bedtools_benchmark/RESULTS.md`. Needed before any interval-mode
-rerun: without it the binary cannot emit output from which set-Jaccard is
-recoverable.
+`tests/test_hammock_cpp_metrics.py` fails on `==`). `--metrics` is still
+accepted and is now a no-op.
+
+**Pass `--no-metrics` for timing runs.** It drops back to the 3 columns and
+tags the output `_j3`. The block costs a union plus two cardinality estimates
+per pair, so a timed run with it on is not comparable to the numbers in
+`experiments/bedtools_benchmark/RESULTS.md`, which are all `--no-metrics`. The
+benchmark harnesses pass the flag explicitly in both directions, so the shape
+of a timed run no longer depends on a default. Measured cost, `--threads 16`,
+10k intervals/file: the pairwise phase goes from ≈1.4 µs/pair to ≈4.9 at p=14,
+15–16 → ~42 at p=18, and ~1.1 ms → ~2.8 ms at p=24. The multiplier is *largest
+at low precision* (≈3.4× at p=14 vs ≈2.3× at p=24) because six extra `%.17g`
+fields per row are precision-independent and dominate when the register work is
+cheap — which is why `--verbose` reports `Pairwise:` and `Write:` separately.
+In wall-time terms this is small either way: the pairwise phase is 0.61% of a
+p=14 N=512 run.
 
 ## Architecture
 
@@ -364,6 +376,38 @@ These are deliberate; parity tests that touch them are skipped or projected.
    Archived CSVs keep the columns; nothing on disk is invalidated. Analyses that
    consumed `jaccard_similarity_with_ends` were re-pointed to
    `jaccard_similarity` — see that doc for the list.
+9. **`hammock-cpp`'s defaults now match the Python CLI's** (v0.7.0), and
+   BagMinHash is gone. Three user-visible changes, best read as one sentence
+   about the bare invocation: `hammock-cpp a.txt b.txt -o out` used to write
+   `out_hll_p18_jaccA.csv` with 3 columns and now writes
+   `out_hll_p18_jaccB.csv` with 9.
+   - **Mode defaults to B**, not A, matching `_autodetect_mode` for BED input.
+     Previously the two front-ends produced a column of the same name from
+     different algorithms with no warning. Every in-repo caller passes `--mode`
+     explicitly, so nothing archived is affected.
+   - **The metrics block is on by default**; `--no-metrics` is the opt-out and
+     tags its 3-column output `_j3`. The tag is on the *reduced* shape
+     deliberately: that keeps filename ↔ column count one-to-one while leaving
+     the default path where every pre-0.7.0 default run already wrote. Note the
+     C++ suffix grammar therefore has a `_j3` component with **no Python
+     counterpart** — do not "restore parity" by deleting it.
+   - **`--peak-height` and `BagMinHashSketch` are deleted**, including
+     `hammock.BagMinHashSketch`, `_core.BagMinHashSketch` and
+     `_core.sketch_bed_file_bmh`. The flag selected the BagMinHash backend on
+     the column index alone regardless of mode, so under the new mode default it
+     would have silently discarded its own count weights and run serial — see
+     the commit for the trace. Nothing in the repo used it.
+
+   Two silent-overwrite bugs in `outprefix_with_suffix` were fixed at the same
+   time: `--subA` never reached the filename (two Mode C runs differing only in
+   `--subA` overwrote each other), and `subB` used an unconditional `%.2f` so
+   `0.001` and `0.005` collided on `_B0.00`. Both now mirror `outprefix.py`,
+   including its strict `< 0.01` boundary for the `.4f` form.
+
+   `--version` exists on both front-ends now, sourced from `pyproject.toml` via
+   `SKBUILD_PROJECT_VERSION`. The benchmark harnesses probe it on the resolved
+   binary path and refuse anything older than 0.7.0 — they pass `--no-metrics`
+   and parse microsecond timings, neither of which an older binary has.
 
 ## Mode D BED→FASTA (bed2fasta) — SHIPPED
 

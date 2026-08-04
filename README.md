@@ -270,20 +270,32 @@ A standalone `hammock-cpp` binary is built alongside the wheel for max-speed
 benchmarking — same algorithms as `hammock`, no Python in the loop. Useful
 when measuring Mode B throughput. It writes a **tab**-separated file.
 
-By default it emits only `query`, `reference`, `jaccard_similarity`, which
-keeps the timed pairwise phase as cheap as possible. Pass **`--metrics`** to
-emit the same block as the Python CLI — `jaccard_similarity_ie`,
-`containment_AB`/`containment_BA`, and the three `cosketch_*` columns — which
-is what you want when the output is going to be analyzed rather than timed:
+Since **0.7.0** its defaults match the Python CLI's: mode **B** for BED input,
+and the full similarity block — `jaccard_similarity`, `jaccard_similarity_ie`,
+`containment_AB`/`containment_BA`, and the three `cosketch_*` columns.
 
 ```bash
-hammock-cpp queries.txt refs.txt --mode B -p 20 --metrics -o out
+hammock-cpp queries.txt refs.txt -p 20 -o out      # -> out_hll_p20_jaccB.csv
 ```
 
-The metric values are **bit-for-bit identical** to the Python CLI's on the same
-input (`tests/test_hammock_cpp_metrics.py` asserts exact equality). `--metrics`
-costs a union plus a cardinality estimate per pair, so leave it off for timing
-runs; it also tags the output filename, so the two shapes never collide.
+Those values are **bit-for-bit identical** to the Python CLI's on the same input
+(`tests/test_hammock_cpp_metrics.py` asserts exact equality).
+
+Pass **`--no-metrics`** for timing runs. It emits only `query`, `reference`,
+`jaccard_similarity` and tags the file `_j3`, so the two shapes never collide.
+The block costs a union plus two cardinality estimates per pair — worth skipping
+when you are measuring throughput, not similarity:
+
+```bash
+hammock-cpp queries.txt refs.txt -p 20 --no-metrics -o out   # -> out_hll_p20_jaccB_j3.csv
+```
+
+`--metrics` is still accepted, and is now a no-op. `--version` prints the
+version to stdout.
+
+Upgrading from ≤ 0.6.x: a bare invocation used to mean mode A with 3 columns.
+Pass `--mode A` if you relied on that, and note that `--peak-height` and its
+BagMinHash backend were removed — they were never wired into either CLI.
 
 ## Testing
 
