@@ -69,8 +69,15 @@ NUM_RUNS = 3
 
 TIME_CMD = "/usr/bin/time"
 
-SKETCH_RE = re.compile(r"^Sketching:\s+(\d+)\s+ms")
-PAIR_RE = re.compile(r"^Pairwise\+write:\s+(\d+)\s+ms")
+# hammock-cpp >= 0.7.0 reports microseconds and decomposes the pairwise phase.
+# PAIR_RE keeps matching "Pairwise+write", whose meaning is unchanged, so
+# comparison_time stays comparable with every archived sweep. The colon in
+# PAIRONLY_RE/WRITE_RE is load-bearing: "^Write" alone also matches the
+# "Wrote <path>" line that follows.
+SKETCH_RE = re.compile(r"^Sketching:\s+(\d+)\s+us")
+PAIR_RE = re.compile(r"^Pairwise\+write:\s+(\d+)\s+us")
+PAIRONLY_RE = re.compile(r"^Pairwise:\s+(\d+)\s+us")
+WRITE_RE = re.compile(r"^Write:\s+(\d+)\s+us")
 MAXRSS_RE = re.compile(r"Maximum resident set size \(kbytes\):\s+(\d+)")
 
 
@@ -191,16 +198,36 @@ def run_hammock(
 
         sketch_s: Optional[float] = None
         pair_s: Optional[float] = None
+        pair_only_s: Optional[float] = None
+        write_s: Optional[float] = None
         for line in r["stderr"].splitlines():
             m = SKETCH_RE.match(line)
             if m:
-                sketch_s = int(m.group(1)) / 1000.0
+                sketch_s = int(m.group(1)) / 1e6
                 continue
             m = PAIR_RE.match(line)
             if m:
-                pair_s = int(m.group(1)) / 1000.0
+                pair_s = int(m.group(1)) / 1e6
+                continue
+            m = PAIRONLY_RE.match(line)
+            if m:
+                pair_only_s = int(m.group(1)) / 1e6
+                continue
+            m = WRITE_RE.match(line)
+            if m:
+                write_s = int(m.group(1)) / 1e6
+        # Fail loudly. A silent None here becomes a blank cell in the CSV via
+        # aggregate(), which reads downstream as "this run had no timing" rather
+        # than "the harness could not parse the binary's output" -- most likely
+        # cause being a pre-0.7.0 binary still emitting milliseconds.
+        if sketch_s is None or pair_s is None:
+            raise RuntimeError(
+                "could not parse hammock-cpp timing lines (need >= 0.7.0, which "
+                f"reports microseconds). stderr was:\n{r['stderr']}")
         r["sketch_creation_time"] = sketch_s
         r["comparison_time"] = pair_s
+        r["pair_time"] = pair_only_s
+        r["write_time"] = write_s
 
         if keep_output:
             csvs = [f for f in glob.glob(out_prefix + "*") if f.endswith(".csv")]
@@ -265,7 +292,10 @@ def run_benchmark(
     print(f"  system:             {get_system_info()}")
 
     metric_keys = ["wall_time", "cpu_time", "max_rss_mb", "sort_time"]
-    hammock_keys = metric_keys + ["sketch_creation_time", "comparison_time"]
+    # pair_time/write_time decompose comparison_time and are hammock-only, so
+    # bedtools rows legitimately leave those cells blank.
+    hammock_keys = metric_keys + ["sketch_creation_time", "comparison_time",
+                                  "pair_time", "write_time"]
 
     for num_files in num_files_list:
         print(f"\n{'=' * 60}\n{num_files} files × {num_intervals} intervals\n{'=' * 60}")
@@ -392,6 +422,8 @@ def write_csv(results: List[Dict[str, Any]], path: str) -> None:
         "mean_sort_time", "std_sort_time", "min_sort_time", "max_sort_time",
         "mean_sketch_creation_time", "std_sketch_creation_time",
         "mean_comparison_time", "std_comparison_time",
+        "mean_pair_time", "std_pair_time",
+        "mean_write_time", "std_write_time",
     ]
     with open(path, "w", newline="") as f:
         w = csv.writer(f)

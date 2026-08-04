@@ -37,7 +37,8 @@ from benchmark_cpp_vs_bedtools import (
 
 
 METRIC_KEYS = ["wall_time", "cpu_time", "max_rss_mb"]
-HAMMOCK_KEYS = METRIC_KEYS + ["sketch_creation_time", "comparison_time"]
+HAMMOCK_KEYS = METRIC_KEYS + ["sketch_creation_time", "comparison_time",
+                              "pair_time", "write_time"]
 ACCURACY_KEYS = [
     "jaccard_n_pairs",
     "jaccard_mae_vs_bt", "jaccard_max_err_vs_bt",
@@ -57,7 +58,9 @@ ACCURACY_KEYS = [
 ROW_COLS = [
     "axis", "tool", "sub_b", "precision", "threads", "num_files", "num_intervals", "run_id",
     "wall_time", "cpu_time", "max_rss_mb", "sort_time",
-    "sketch_creation_time", "comparison_time",
+    # comparison_time keeps its historical meaning (pair loop + serial write);
+    # pair_time/write_time decompose it and are blank on bedtools rows.
+    "sketch_creation_time", "comparison_time", "pair_time", "write_time",
 ] + ACCURACY_KEYS
 
 

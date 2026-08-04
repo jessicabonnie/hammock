@@ -397,6 +397,12 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // Split the pairwise phase from the serial write. The write loop below is
+    // single-threaded fprintf whose cost scales with the *column count*, so
+    // folding it into one number would charge --metrics' six extra %.17g fields
+    // to the estimator arithmetic. At low precision that formatting dominates.
+    auto t_w0 = std::chrono::steady_clock::now();
+
     for (size_t i = 0; i < n; i++) {
         const std::string ql = basename_of(queries[i]);
         for (size_t j = 0; j < m; j++) {
@@ -412,10 +418,22 @@ int main(int argc, char** argv) {
     auto t2 = std::chrono::steady_clock::now();
 
     if (args.verbose) {
-        const auto sketch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-        const auto pair_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
-        std::cerr << "Sketching: " << sketch_ms << " ms\n"
-                  << "Pairwise+write: " << pair_ms << " ms\n"
+        // Microseconds, not milliseconds: at p=14 the whole pairwise phase is
+        // ~1 ms per 1024 pairs, so the old integer-ms timer reported a flat 0
+        // for every small collection and the harnesses had to floor it.
+        // "Pairwise+write" keeps its historical meaning (pair loop + write) so
+        // archived comparison_time values stay comparable; the two new lines
+        // decompose it.
+        using std::chrono::duration_cast;
+        using std::chrono::microseconds;
+        const auto sketch_us = duration_cast<microseconds>(t1 - t0).count();
+        const auto pair_only_us = duration_cast<microseconds>(t_w0 - t1).count();
+        const auto write_us = duration_cast<microseconds>(t2 - t_w0).count();
+        const auto pair_us = duration_cast<microseconds>(t2 - t1).count();
+        std::cerr << "Sketching: " << sketch_us << " us\n"
+                  << "Pairwise: " << pair_only_us << " us\n"
+                  << "Write: " << write_us << " us\n"
+                  << "Pairwise+write: " << pair_us << " us\n"
                   << "Wrote " << out_path << "\n";
     }
     return 0;
