@@ -306,6 +306,56 @@ def tool_name_for_subb(sub_b: float) -> str:
     return f"hammock_cpp_B_subB{sub_b:g}"
 
 
+# Deliberately NOT "hammock_cpp_B_metrics". Three R consumers filter
+# grepl("^hammock_cpp_B", tool) and then key on sub_b rather than tool
+# (plot_pairwise_scaling.R, docs/scripts/synthetic_nscaling.R, make_graphs.R), so
+# a second arm sharing subB=1.0 under that prefix would silently double rows
+# through their joins. A label that fails the prefix makes all three immune with
+# no R changes at all.
+IE_ARM_TOOL = "hammock_ie_B"
+
+
+def arms_for(sub_b_list: List[float], metrics_arm: bool):
+    """(tool_label, sub_b, use_metrics) per hammock arm in a run.
+
+    Replaces sub_b_list as the anchor for "which hammock runs happened": the
+    metrics arm shares subB=1.0 with the baseline arm, so keying downstream
+    consumers on sub_b alone can no longer distinguish them.
+    """
+    arms = [(tool_name_for_subb(s), s, False) for s in sub_b_list]
+    if metrics_arm:
+        arms.append((IE_ARM_TOOL, 1.0, True))
+    return arms
+
+
+def arms_of(entry: Dict[str, Any]):
+    """(tool_label, sub_b) pairs for one result entry, for report/plot/CSV.
+
+    Falls back to reconstructing from sub_b_list so entries produced before the
+    metrics arm existed still render.
+    """
+    got = entry.get("hammock_arms")
+    if got:
+        return [(label, sub_b) for label, sub_b in got]
+    return [(tool_name_for_subb(s), s) for s in entry.get("sub_b_list", [1.0])]
+
+
+def arm_legend(label: str, sub_b: float) -> str:
+    if label == IE_ARM_TOOL:
+        return f"hammock-cpp subB={sub_b:g} +IE"
+    return f"hammock-cpp subB={sub_b:g}"
+
+
+def _rotate(seq, k: int):
+    """Rotate arm order by run index so arm identity is not confounded with
+    position: the last arm in a run has just followed every other arm's cache
+    and thermal state."""
+    if not seq:
+        return seq
+    k %= len(seq)
+    return seq[k:] + seq[:k]
+
+
 def run_benchmark(
     binary: str,
     num_files_list: List[int],
@@ -314,6 +364,7 @@ def run_benchmark(
     num_threads: int,
     precision: int,
     sub_b_list: List[float],
+    metrics_arm: bool = False,
 ) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
     print("\nBenchmark configuration:")
@@ -324,6 +375,7 @@ def run_benchmark(
     print(f"  threads:            {num_threads}")
     print(f"  HLL precision:      {precision}")
     print(f"  subB values:        {sub_b_list}")
+    print(f"  metrics arm:        {metrics_arm}")
     print(f"  system:             {get_system_info()}")
 
     metric_keys = ["wall_time", "cpu_time", "max_rss_mb", "sort_time"]
@@ -335,7 +387,8 @@ def run_benchmark(
     for num_files in num_files_list:
         print(f"\n{'=' * 60}\n{num_files} files × {num_intervals} intervals\n{'=' * 60}")
         bedtools_runs: List[Dict[str, Any]] = []
-        hammock_runs_by_subb: Dict[float, List[Dict[str, Any]]] = {s: [] for s in sub_b_list}
+        arms = arms_for(sub_b_list, metrics_arm)
+        runs_by_tool: Dict[str, List[Dict[str, Any]]] = {label: [] for label, _, _ in arms}
 
         for run_i in range(num_runs):
             print(f"\nRun {run_i + 1}/{num_runs}: generating {2 * num_files} BED files...")
@@ -378,13 +431,14 @@ def run_benchmark(
                 rss_str = f"{rss:.1f} MB" if rss is not None else "n/a"
                 print(f"{bt['wall_time']:.2f}s wall, {rss_str} max RSS")
 
-                for sub_b in sub_b_list:
-                    label = f"subB={sub_b:g}" if sub_b < 1.0 else "subB=1.0"
-                    print(f"  hammock-cpp Mode B {label}...", end=" ", flush=True)
+                for tool, sub_b, use_metrics in _rotate(arms, run_i):
+                    shown = f"subB={sub_b:g}" + (" +IE" if use_metrics else "")
+                    print(f"  hammock-cpp Mode B {shown}...", end=" ", flush=True)
                     hm = run_hammock(binary, file1_list_path, file2_list_path,
-                                     precision, num_threads, sub_b=sub_b)
+                                     precision, num_threads, sub_b=sub_b,
+                                     metrics=use_metrics)
                     hm["sort_time"] = sort_time
-                    hammock_runs_by_subb[sub_b].append(hm)
+                    runs_by_tool[tool].append(hm)
                     rss = hm["max_rss_mb"]
                     rss_str = f"{rss:.1f} MB" if rss is not None else "n/a"
                     print(f"{hm['wall_time']:.2f}s wall, {rss_str} max RSS")
@@ -395,10 +449,13 @@ def run_benchmark(
             "num_threads": num_threads,
             "precision": precision,
             "sub_b_list": sub_b_list,
+            # Anchor for every downstream consumer. sub_b alone no longer
+            # identifies an arm: the IE arm shares subB=1.0 with the baseline.
+            "hammock_arms": [(label, sub_b) for label, sub_b, _ in arms],
             "bedtools": aggregate(bedtools_runs, metric_keys),
         }
-        for sub_b, runs_for in hammock_runs_by_subb.items():
-            entry[tool_name_for_subb(sub_b)] = aggregate(runs_for, hammock_keys)
+        for tool, runs_for in runs_by_tool.items():
+            entry[tool] = aggregate(runs_for, hammock_keys)
         results.append(entry)
 
     return results
@@ -416,7 +473,6 @@ def write_text_report(results: List[Dict[str, Any]], path: str) -> None:
             f.write(f"system:         {get_system_info()}\n\n")
         for r in results:
             bt = r["bedtools"]
-            sub_b_list = r.get("sub_b_list", [1.0])
             f.write(f"num_files={r['num_files']}\n")
             f.write("-" * 80 + "\n")
             f.write("bedtools:\n")
@@ -429,10 +485,10 @@ def write_text_report(results: List[Dict[str, Any]], path: str) -> None:
             if bt.get("mean_sort_time") is not None:
                 f.write(f"  sort:    {bt['mean_sort_time']:.3f} ± {bt['std_sort_time']:.3f} s "
                         f"(pre-sort, not in wall above; bedtools-workflow wall = wall + sort)\n")
-            for sub_b in sub_b_list:
-                tool = tool_name_for_subb(sub_b)
+            for tool, sub_b in arms_of(r):
                 hm = r[tool]
-                f.write(f"hammock-cpp Mode B [subB={sub_b:g}, mixed-stride]:\n")
+                ie = ", +IE columns" if tool == IE_ARM_TOOL else ""
+                f.write(f"hammock-cpp Mode B [subB={sub_b:g}, mixed-stride{ie}]:\n")
                 f.write(f"  wall:    {hm['mean_wall_time']:.3f} ± {hm['std_wall_time']:.3f} s\n")
                 f.write(f"  cpu:     {hm['mean_cpu_time']:.3f} ± {hm['std_cpu_time']:.3f} s\n")
                 if hm["mean_max_rss_mb"] is not None:
@@ -464,10 +520,9 @@ def write_csv(results: List[Dict[str, Any]], path: str) -> None:
         w = csv.writer(f)
         w.writerow(cols)
         for r in results:
-            sub_b_list = r.get("sub_b_list", [1.0])
             tools = [("bedtools", "bedtools", "")]
-            for sub_b in sub_b_list:
-                tools.append((tool_name_for_subb(sub_b), tool_name_for_subb(sub_b), f"{sub_b:g}"))
+            for tool, sub_b in arms_of(r):
+                tools.append((tool, tool, f"{sub_b:g}"))
             for tool, key, sub_b_str in tools:
                 d = r[key]
                 row = [r["num_files"], r["num_threads"], r["precision"], sub_b_str, tool]
@@ -491,17 +546,16 @@ def plot(results: List[Dict[str, Any]], png_path: str) -> None:
     bt_cpu = [r["bedtools"]["mean_cpu_time"] for r in results]
     bt_rss = [r["bedtools"]["mean_max_rss_mb"] for r in results]
     threads = results[0]["num_threads"] if results else 1
-    sub_b_list = results[0].get("sub_b_list", [1.0]) if results else [1.0]
+    arms = arms_of(results[0]) if results else []
 
     hm_colors = ["#ff7f0e", "#1f77b4", "#2ca02c", "#d62728"]
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     axes[0].plot(nfiles, bt_wall, "ko-", label=f"bedtools (t={threads})", linewidth=2)
-    for i, sub_b in enumerate(sub_b_list):
-        tool = tool_name_for_subb(sub_b)
+    for i, (tool, sub_b) in enumerate(arms):
         ys = [r[tool]["mean_wall_time"] for r in results]
         axes[0].plot(nfiles, ys, "s--", color=hm_colors[i % len(hm_colors)],
-                     label=f"hammock-cpp subB={sub_b:g}", linewidth=2)
+                     label=arm_legend(tool, sub_b), linewidth=2)
     axes[0].set_xlabel("Number of files")
     axes[0].set_ylabel("Wall time (s)")
     axes[0].set_title("Wall time")
@@ -511,11 +565,10 @@ def plot(results: List[Dict[str, Any]], png_path: str) -> None:
     axes[0].legend()
 
     axes[1].plot(nfiles, bt_cpu, "ko-", label="bedtools", linewidth=2)
-    for i, sub_b in enumerate(sub_b_list):
-        tool = tool_name_for_subb(sub_b)
+    for i, (tool, sub_b) in enumerate(arms):
         ys = [r[tool]["mean_cpu_time"] for r in results]
         axes[1].plot(nfiles, ys, "s--", color=hm_colors[i % len(hm_colors)],
-                     label=f"hammock-cpp subB={sub_b:g}", linewidth=2)
+                     label=arm_legend(tool, sub_b), linewidth=2)
     axes[1].set_xlabel("Number of files")
     axes[1].set_ylabel("CPU time (s)")
     axes[1].set_title("CPU time")
@@ -524,15 +577,14 @@ def plot(results: List[Dict[str, Any]], png_path: str) -> None:
     axes[1].grid(True, alpha=0.3)
     axes[1].legend()
 
-    hm_rss_any = any(r[tool_name_for_subb(s)]["mean_max_rss_mb"] is not None
-                     for r in results for s in sub_b_list)
+    hm_rss_any = any(r[tool]["mean_max_rss_mb"] is not None
+                     for r in results for tool, _ in arms)
     if any(v is not None for v in bt_rss) or hm_rss_any:
         axes[2].plot(nfiles, bt_rss, "ko-", label="bedtools", linewidth=2)
-        for i, sub_b in enumerate(sub_b_list):
-            tool = tool_name_for_subb(sub_b)
+        for i, (tool, sub_b) in enumerate(arms):
             ys = [r[tool]["mean_max_rss_mb"] for r in results]
             axes[2].plot(nfiles, ys, "s--", color=hm_colors[i % len(hm_colors)],
-                         label=f"hammock-cpp subB={sub_b:g}", linewidth=2)
+                         label=arm_legend(tool, sub_b), linewidth=2)
         axes[2].set_xlabel("Number of files")
         axes[2].set_ylabel("Max RSS (MB)")
         axes[2].set_title("Peak memory")
@@ -560,6 +612,12 @@ def main() -> int:
                              "adds a hammock variant invoked with --subB <val> --subB-method "
                              "mixed-stride. subB=1.0 emits 'hammock_cpp_B' for backwards compat; "
                              "other values emit 'hammock_cpp_B_subB<val>'.")
+    parser.add_argument("--metrics-arm", action="store_true",
+                        help="Add a fourth hammock arm at subB=1.0 run WITHOUT --no-metrics, "
+                             "i.e. emitting jaccard_similarity_ie and the containment/cosketch "
+                             f"block. Labelled '{IE_ARM_TOOL}' so it fails the "
+                             "'^hammock_cpp_B' filter the R consumers use, and cannot double "
+                             "rows in their joins.")
     parser.add_argument("--test", action="store_true", help="Quick test (small files, few runs)")
     parser.add_argument("--binary", type=str, default=None, help="Path to hammock-cpp")
     parser.add_argument("--output-dir", type=str, default=RESULTS_DIR,
@@ -618,6 +676,7 @@ def main() -> int:
         num_threads=args.threads,
         precision=args.precision,
         sub_b_list=sub_b_list,
+        metrics_arm=args.metrics_arm,
     )
 
     write_text_report(results, txt_path)
