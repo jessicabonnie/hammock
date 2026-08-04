@@ -24,7 +24,7 @@ uint32_t hash_for_subsample(const std::string& s, uint32_t gate_seed = 31337);
 size_t process_bed_file_mode_a(const std::string& filepath, AbstractSketch& sketch,
                                uint64_t hll_seed = 42,
                                const std::string& separator = "\t",
-                               int peak_height_column = -1, bool verbose = false);
+                               bool verbose = false);
 
 size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sketch,
                                uint64_t hll_seed = 42,
@@ -32,7 +32,6 @@ size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sket
                                double subB = 1.0,
                                SubBMethod method = SubBMethod::MixedStride,
                                uint32_t gate_seed = 31337,
-                               int peak_height_column = -1,
                                bool verbose = false);
 
 size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sketch,
@@ -43,9 +42,6 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
                                double expA = 0.0,
                                SubBMethod method = SubBMethod::MixedStride,
                                uint32_t gate_seed = 31337,
-                               int peak_height_column = -1,
                                bool verbose = false);
-
-double calculate_jaccard(const AbstractSketch& sketch1, const AbstractSketch& sketch2);
 
 #endif

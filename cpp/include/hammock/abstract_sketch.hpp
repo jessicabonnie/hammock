@@ -13,7 +13,6 @@ public:
     virtual double cardinality() const = 0;
     virtual double intersection_size(const AbstractSketch& other) const = 0;
     virtual std::unique_ptr<AbstractSketch> union_with(const AbstractSketch& other) const = 0;
-    virtual std::string get_sketch_type() const = 0;
     virtual void clear() = 0;
 };
 

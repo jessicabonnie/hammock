@@ -28,7 +28,6 @@ endif()
 add_subdirectory(extern/hll)
 
 set(HAMMOCK_CORE_SOURCES
-    cpp/src/bagminhash_sketch.cpp
     cpp/src/bed_parser.cpp
     cpp/src/hll_sketch.cpp
     cpp/src/processing_modes.cpp

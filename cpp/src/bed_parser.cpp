@@ -23,8 +23,7 @@ bool is_header_or_blank(const std::string& line) {
     return false;
 }
 
-bool parse_bed_line(const std::string& line, std::string& chr, int64_t& start, int64_t& end,
-                    int64_t& count, int peak_height_column) {
+bool parse_bed_line(const std::string& line, std::string& chr, int64_t& start, int64_t& end) {
     if (is_header_or_blank(line)) {
         return false;
     }
@@ -45,29 +44,6 @@ bool parse_bed_line(const std::string& line, std::string& chr, int64_t& start, i
     // Hashing is sensitive to byte content so any normalization changes the
     // resulting HLL register state.
     chr = chr_raw;
-
-    if (peak_height_column > 0) {
-        count = 1;
-        std::string token;
-        int current_column = 3;
-
-        while (iss >> token && current_column < peak_height_column) {
-            current_column++;
-        }
-
-        if (current_column == peak_height_column) {
-            try {
-                count = std::stoll(token);
-                if (count < 0) {
-                    count = 0;
-                }
-            } catch (const std::exception&) {
-                count = 1;
-            }
-        }
-    } else {
-        count = 1;
-    }
 
     return true;
 }

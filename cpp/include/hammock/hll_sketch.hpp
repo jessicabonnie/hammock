@@ -49,7 +49,6 @@ public:
     double cardinality() const override;
     double intersection_size(const AbstractSketch& other) const override;
     std::unique_ptr<AbstractSketch> union_with(const AbstractSketch& other) const override;
-    std::string get_sketch_type() const override;
     void clear() override;
 
     size_t precision() const { return precision_; }

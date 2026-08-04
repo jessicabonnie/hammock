@@ -148,13 +148,18 @@ def test_metrics_changes_the_output_filename(corpus, tmp_path: Path):
     assert any(n.endswith("_metrics.csv") for n in names), names
 
 
-def test_metrics_rejected_with_peak_height(corpus, tmp_path: Path):
-    """BagMinHash cardinality and intersection are on different scales, so
-    inclusion-exclusion over them would silently return a constant 0."""
+def test_peak_height_is_gone(corpus, tmp_path: Path):
+    """--peak-height and its BagMinHash backend were removed in 0.7.0.
+
+    It named a count-weighted sketch that was never wired into either CLI, and
+    it is now rejected by the generic unknown-argument path rather than by a
+    special case -- so this asserts the flag name appears in the error, which
+    only the unknown-argument branch produces.
+    """
     q, r = corpus
     proc = subprocess.run(
         [str(_BIN), str(q), str(r), "--mode", "A", "-o", str(tmp_path / "x"),
-         "--metrics", "--peak-height", "5"],
+         "--peak-height", "5"],
         capture_output=True, text=True, timeout=600)
     assert proc.returncode != 0
-    assert "peak-height" in proc.stderr
+    assert "unknown argument '--peak-height'" in proc.stderr

@@ -1,5 +1,4 @@
 #include "hammock/processing_modes.hpp"
-#include "hammock/bagminhash_sketch.hpp"
 #include "hammock/bed_parser.hpp"
 #include "hammock/hll_sketch.hpp"
 #include "hammock/stride.hpp"
@@ -32,44 +31,28 @@ uint32_t hash_for_subsample(const std::string& s, uint32_t gate_seed) {
     return xxhash::hash32(s, gate_seed);
 }
 
-double calculate_jaccard(const AbstractSketch& sketch1, const AbstractSketch& sketch2) {
-    return sketch1.jaccard_similarity(sketch2);
-}
-
 size_t process_bed_file_mode_a(const std::string& filepath, AbstractSketch& sketch,
                                uint64_t hll_seed,
-                               const std::string& separator, int peak_height_column,
+                               const std::string& separator,
                                bool verbose) {
     std::ifstream file(filepath);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + filepath);
     }
 
-    BagMinHashSketch* bmh = (peak_height_column > 0)
-                                ? dynamic_cast<BagMinHashSketch*>(&sketch)
-                                : nullptr;
-
     size_t interval_count = 0;
     std::string line;
     std::string chr;
-    int64_t start, end, count;
+    int64_t start, end;
 
     while (std::getline(file, line)) {
         line.erase(line.find_last_not_of(" \t\n\r\f\v") + 1);
 
-        if (parse_bed_line(line, chr, start, end, count, peak_height_column)) {
+        if (parse_bed_line(line, chr, start, end)) {
             const std::string interval_str = create_interval_string(chr, start, end, separator);
             const uint64_t hash_val = xxhash::hash64(interval_str, hll_seed);
 
-            if (bmh) {
-                bmh->add_with_normalized_count(hash_val, count);
-            } else if (peak_height_column > 0) {
-                for (int64_t i = 0; i < count; i++) {
-                    sketch.add(hash_val);
-                }
-            } else {
-                sketch.add(hash_val);
-            }
+            sketch.add(hash_val);
             interval_count++;
 
             if (verbose && interval_count % 10000 == 0) {
@@ -90,10 +73,9 @@ struct Interval {
     std::string chr;
     int64_t start;
     int64_t end;
-    int64_t count;
 };
 
-std::vector<Interval> read_intervals(const std::string& filepath, int peak_height_column) {
+std::vector<Interval> read_intervals(const std::string& filepath) {
     std::ifstream file(filepath);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + filepath);
@@ -102,12 +84,12 @@ std::vector<Interval> read_intervals(const std::string& filepath, int peak_heigh
     std::vector<Interval> intervals;
     std::string line;
     std::string chr;
-    int64_t start, end, count;
+    int64_t start, end;
 
     while (std::getline(file, line)) {
         line.erase(line.find_last_not_of(" \t\n\r\f\v") + 1);
-        if (parse_bed_line(line, chr, start, end, count, peak_height_column)) {
-            intervals.push_back({chr, start, end, count});
+        if (parse_bed_line(line, chr, start, end)) {
+            intervals.push_back({chr, start, end});
         }
     }
     return intervals;
@@ -131,9 +113,8 @@ size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sket
                                double subB,
                                SubBMethod method,
                                uint32_t gate_seed,
-                               int peak_height_column,
                                bool verbose) {
-    const std::vector<Interval> intervals = read_intervals(filepath, peak_height_column);
+    const std::vector<Interval> intervals = read_intervals(filepath);
 
     size_t total_points = 0;
     size_t sampled_points = 0;
@@ -142,9 +123,9 @@ size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sket
     // The previous design parallelized straight into the shared sketch with
     // a non-atomic check-then-store on uint8_t registers, which was a real
     // data race that could lose max-updates. Thread-locals also avoid false
-    // sharing on the registers vector. Non-HLL sketches (e.g. BagMinHash on
-    // Mode A) don't go through this path; if one is ever passed here we fall
-    // back to serial.
+    // sharing on the registers vector. HLLSketch is currently the only
+    // AbstractSketch implementation, so the dynamic_cast always succeeds; the
+    // serial fallback below is kept for any future non-HLL backend.
     HLLSketch* main_hll = dynamic_cast<HLLSketch*>(&sketch);
     if (main_hll) {
         const size_t precision = main_hll->precision();
@@ -202,7 +183,6 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
                                double expA,
                                SubBMethod method,
                                uint32_t gate_seed,
-                               int peak_height_column,
                                bool verbose) {
     const size_t mult = (expA > 0)
                             ? std::max<size_t>(1, static_cast<size_t>(std::pow(10.0, expA)))
@@ -210,7 +190,7 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
     const bool do_subA = (subA < 1.0);
     const uint32_t subA_threshold = static_cast<uint32_t>(subA * 4294967295.0);
 
-    const std::vector<Interval> intervals = read_intervals(filepath, peak_height_column);
+    const std::vector<Interval> intervals = read_intervals(filepath);
 
     size_t total_interval_elements = 0;
     size_t kept_intervals = 0;

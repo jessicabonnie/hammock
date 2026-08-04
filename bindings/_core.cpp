@@ -1,5 +1,4 @@
 #include "hammock/abstract_sketch.hpp"
-#include "hammock/bagminhash_sketch.hpp"
 #include "hammock/bed_parser.hpp"
 #include "hammock/hll_sketch.hpp"
 #include "hammock/processing_modes.hpp"
@@ -42,53 +41,23 @@ HLLSketch sketch_bed_file_hll(const std::string& path,
                               const std::string& subB_method,
                               uint64_t seed,
                               uint32_t gate_seed,
-                              int peak_height_column,
                               bool verbose) {
     const SubBMethod method = parse_subB_method(subB_method);
     HLLSketch sketch(precision);
     if (mode == "A") {
-        process_bed_file_mode_a(path, sketch, seed, separator, peak_height_column, verbose);
+        process_bed_file_mode_a(path, sketch, seed, separator, verbose);
     } else if (mode == "B") {
         process_bed_file_mode_b(path, sketch, seed, separator, sub_b, method,
-                                gate_seed, peak_height_column, verbose);
+                                gate_seed, verbose);
     } else if (mode == "C") {
         process_bed_file_mode_c(path, sketch, seed, separator, sub_a, sub_b, exp_a,
-                                method, gate_seed, peak_height_column, verbose);
+                                method, gate_seed, verbose);
     } else {
         throw std::invalid_argument("Mode must be one of A, B, C (got '" + mode + "')");
     }
     return sketch;
 }
 
-// Same, for a BagMinHash backing sketch.
-BagMinHashSketch sketch_bed_file_bmh(const std::string& path,
-                                     const std::string& mode,
-                                     size_t num_hashes,
-                                     uint64_t bmh_seed,
-                                     const std::string& separator,
-                                     double sub_a,
-                                     double sub_b,
-                                     double exp_a,
-                                     const std::string& subB_method,
-                                     uint64_t seed,
-                                     uint32_t gate_seed,
-                                     int peak_height_column,
-                                     bool verbose) {
-    const SubBMethod method = parse_subB_method(subB_method);
-    BagMinHashSketch sketch(num_hashes, bmh_seed);
-    if (mode == "A") {
-        process_bed_file_mode_a(path, sketch, seed, separator, peak_height_column, verbose);
-    } else if (mode == "B") {
-        process_bed_file_mode_b(path, sketch, seed, separator, sub_b, method,
-                                gate_seed, peak_height_column, verbose);
-    } else if (mode == "C") {
-        process_bed_file_mode_c(path, sketch, seed, separator, sub_a, sub_b, exp_a,
-                                method, gate_seed, peak_height_column, verbose);
-    } else {
-        throw std::invalid_argument("Mode must be one of A, B, C (got '" + mode + "')");
-    }
-    return sketch;
-}
 
 // An exception may not propagate out of an OpenMP structured block: escaping a
 // `#pragma omp parallel for` calls std::terminate rather than unwinding, so a
@@ -216,7 +185,7 @@ pairwise_metrics_hll(const std::vector<HLLSketch>& a,
 }  // namespace
 
 PYBIND11_MODULE(_core, m) {
-    m.doc() = "hammock C++ core: HLL/BagMinHash sketches and BED-mode processors.";
+    m.doc() = "hammock C++ core: HLL sketches and BED-mode processors.";
 
     py::class_<HLLSketch>(m, "HLLSketch")
         .def(py::init<size_t>(), py::arg("precision") = 18,
@@ -257,23 +226,6 @@ PYBIND11_MODULE(_core, m) {
             return "<HLLSketch precision=" + std::to_string(self.precision()) + ">";
         });
 
-    py::class_<BagMinHashSketch>(m, "BagMinHashSketch")
-        .def(py::init<size_t, uint64_t>(),
-             py::arg("num_hashes"), py::arg("seed") = 0)
-        .def("add_hash64",
-             [](BagMinHashSketch& self, uint64_t h) { self.add(h); },
-             py::arg("hash_val"))
-        .def("add_with_normalized_count",
-             &BagMinHashSketch::add_with_normalized_count,
-             py::arg("hash_val"), py::arg("raw_count"), py::arg("scale_factor") = 100.0)
-        .def("estimate_cardinality", &BagMinHashSketch::cardinality)
-        .def("estimate_jaccard",
-             [](const BagMinHashSketch& self, const BagMinHashSketch& other) {
-                 return self.jaccard_similarity(other);
-             },
-             py::arg("other"))
-        .def("clear", &BagMinHashSketch::clear);
-
     m.def("sketch_bed_file_hll", &sketch_bed_file_hll,
           py::arg("path"),
           py::arg("mode"),
@@ -285,27 +237,9 @@ PYBIND11_MODULE(_core, m) {
           py::arg("subB_method") = std::string("mixed-stride"),
           py::arg("seed") = 42,
           py::arg("gate_seed") = 31337,
-          py::arg("peak_height_column") = -1,
           py::arg("verbose") = false,
           py::call_guard<py::gil_scoped_release>(),
           "Build an HLL sketch from one BED file in mode A, B, or C.");
-
-    m.def("sketch_bed_file_bmh", &sketch_bed_file_bmh,
-          py::arg("path"),
-          py::arg("mode"),
-          py::arg("num_hashes") = 128,
-          py::arg("bmh_seed") = 0,
-          py::arg("separator") = "\t",
-          py::arg("sub_a") = 1.0,
-          py::arg("sub_b") = 1.0,
-          py::arg("exp_a") = 0.0,
-          py::arg("subB_method") = std::string("mixed-stride"),
-          py::arg("seed") = 42,
-          py::arg("gate_seed") = 31337,
-          py::arg("peak_height_column") = -1,
-          py::arg("verbose") = false,
-          py::call_guard<py::gil_scoped_release>(),
-          "Build a BagMinHash sketch from one BED file (use this when --count <col> is set).");
 
     m.def("pairwise_jaccard_hll", &pairwise_jaccard_hll,
           py::arg("a"), py::arg("b"),

@@ -436,8 +436,13 @@ unaffected; `tests/test_autodetect.py` asserts the new default.
 ## Not implemented (would need work to add)
 
 - Sketch types: `--minhash`, `--exact`, `--minimizer` for A/B/C. Phase 1
-  shipped HLL only. The `BagMinHashSketch` C++ class exists; the CLI/runner
-  glue doesn't.
+  shipped HLL only, and as of v0.7.0 there is no dormant C++ class behind any of
+  them — `BagMinHashSketch` and its `--peak-height` flag were deleted (see
+  divergence #9). HLL is the only `AbstractSketch` implementation now, so that
+  interface is a single-implementation abstraction; re-deriving it when a second
+  backend actually lands will be cheaper than carrying the current one, whose
+  `jaccard_similarity(const AbstractSketch&)` + `dynamic_cast` shape is exactly
+  what made BagMinHash awkward.
 - File-level multiprocessing fallback (we use threads only).
 
 ## Parity environments

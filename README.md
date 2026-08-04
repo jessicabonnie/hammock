@@ -283,10 +283,7 @@ hammock-cpp queries.txt refs.txt --mode B -p 20 --metrics -o out
 The metric values are **bit-for-bit identical** to the Python CLI's on the same
 input (`tests/test_hammock_cpp_metrics.py` asserts exact equality). `--metrics`
 costs a union plus a cardinality estimate per pair, so leave it off for timing
-runs; it also tags the output filename, so the two shapes never collide. It is
-rejected with `--peak-height <n>` for n > 0, where the BagMinHash backend
-makes inclusion-exclusion meaningless (`--peak-height 0` still yields an HLL
-and is accepted).
+runs; it also tags the output filename, so the two shapes never collide.
 
 ## Testing
 

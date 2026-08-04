@@ -1,7 +1,6 @@
 // hammock-cpp: standalone benchmark binary. Same algorithm as the Python
 // `hammock`, no Python in the loop. Modes A/B/C only — Mode D requires the
 // digest library and lives on the Python side.
-#include "hammock/bagminhash_sketch.hpp"
 #include "hammock/bed_parser.hpp"
 #include "hammock/hll_sketch.hpp"
 #include "hammock/processing_modes.hpp"
@@ -39,7 +38,6 @@ struct Args {
     SubBMethod subB_method = SubBMethod::MixedStride;
     uint64_t seed = 42;
     uint32_t gate_seed = 31337;
-    int peak_height_column = -1;
     int threads = 0;
     bool verbose = false;
     bool metrics = false;
@@ -101,12 +99,8 @@ void print_help(const char* prog) {
         "                          Costs a union + cardinality per pair, so the\n"
         "                          pairwise phase is markedly slower; off by default\n"
         "                          to keep benchmark timings comparable.\n"
-        "                          Not available with --peak-height <n> for n > 0\n"
-        "                          (BagMinHash cardinality/intersection are on\n"
-        "                          different scales, so I-E would read 0).\n"
         "  --output, -o <prefix>   Output filename prefix (default: hammock)\n"
         "  --threads, -t <int>     Thread count (default: OpenMP auto)\n"
-        "  --peak-height <int>     1-based column index for count weights (Mode A → BagMinHash)\n"
         "  --verbose, -v           Print progress to stderr\n"
         "  --help, -h              Show this help\n";
 }
@@ -150,8 +144,6 @@ bool parse_args(int argc, char** argv, Args& out) {
             out.outprefix = argv[++i];
         } else if ((a == "--threads" || a == "-t") && i + 1 < argc) {
             if (!parse_num("--threads", argv[++i], out.threads)) return false;
-        } else if (a == "--peak-height" && i + 1 < argc) {
-            if (!parse_num("--peak-height", argv[++i], out.peak_height_column)) return false;
         } else if (a == "--metrics") {
             out.metrics = true;
         } else if (!a.empty() && a[0] != '-') {
@@ -184,44 +176,28 @@ bool parse_args(int argc, char** argv, Args& out) {
         std::cerr << "Error: --precision must be in [4, 24]\n";
         return false;
     }
-    // BagMinHash's cardinality() (sum/num_hashes) and intersection_size()
-    // (un-normalized sum-of-mins) are on different scales, so inclusion-
-    // exclusion over them silently yields a constant 0. Reject rather than
-    // emit garbage. Test the resolved column, not flag presence: --peak-height 0
-    // still produces an HLL.
-    if (out.metrics && out.peak_height_column > 0) {
-        std::cerr << "Error: --metrics is not available with --peak-height "
-                     "(BagMinHash cardinality and intersection are on different "
-                     "scales, so inclusion-exclusion is meaningless there)\n";
-        return false;
-    }
     return true;
 }
 
 std::unique_ptr<AbstractSketch> make_sketch(const Args& a) {
-    if (a.peak_height_column > 0) {
-        // BagMinHash for count-weighted similarity. Default 128 hashes
-        // matches the Python CLI's --num_hashes default.
-        return std::make_unique<BagMinHashSketch>(128, a.seed);
-    }
     return std::make_unique<HLLSketch>(a.precision);
 }
 
 void process_one(const std::string& path, AbstractSketch& sketch, const Args& a) {
     if (a.mode == "A") {
-        process_bed_file_mode_a(path, sketch, a.seed, a.separator, a.peak_height_column, a.verbose);
+        process_bed_file_mode_a(path, sketch, a.seed, a.separator, a.verbose);
     } else if (a.mode == "B") {
         process_bed_file_mode_b(path, sketch, a.seed, a.separator, a.subB, a.subB_method,
-                                a.gate_seed, a.peak_height_column, a.verbose);
+                                a.gate_seed, a.verbose);
     } else {  // "C"
         process_bed_file_mode_c(path, sketch, a.seed, a.separator, a.subA, a.subB, a.expA,
-                                a.subB_method, a.gate_seed, a.peak_height_column, a.verbose);
+                                a.subB_method, a.gate_seed, a.verbose);
     }
 }
 
 std::string outprefix_with_suffix(const Args& a) {
     std::string out = a.outprefix;
-    out += (a.peak_height_column > 0) ? "_bmh_jacc" : "_hll_p" + std::to_string(a.precision) + "_jacc";
+    out += "_hll_p" + std::to_string(a.precision) + "_jacc";
     out += a.mode;
     if (a.expA > 0) {
         char buf[32];

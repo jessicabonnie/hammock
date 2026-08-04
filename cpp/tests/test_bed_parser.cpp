@@ -20,28 +20,23 @@ TEST_CASE("is_header_or_blank flags empties, comments, track/browser lines") {
 
 TEST_CASE("parse_bed_line: minimal 3-column line") {
     std::string chr;
-    int64_t start = 0, end = 0, count = 0;
-    REQUIRE(parse_bed_line("chr1\t100\t200", chr, start, end, count));
-    CHECK(chr == "1");
+    int64_t start = 0, end = 0;
+    REQUIRE(parse_bed_line("chr1\t100\t200", chr, start, end));
+    // The raw name is kept, prefix and all -- bed_parser.cpp documents why:
+    // hashing is byte-sensitive, so normalizing here would change the HLL
+    // register state relative to the reference Python. (This assertion read
+    // `== "1"` until 0.7.0, which is what normalize_chromosome does, not what
+    // parse_bed_line does; the C++ suite is off by default so it never ran.)
+    CHECK(chr == "chr1");
     CHECK(start == 100);
     CHECK(end == 200);
-    CHECK(count == 1);
 }
 
 TEST_CASE("parse_bed_line: rejects malformed coordinates") {
     std::string chr;
-    int64_t start = 0, end = 0, count = 0;
-    CHECK_FALSE(parse_bed_line("chr1\t-1\t100", chr, start, end, count));   // negative start
-    CHECK_FALSE(parse_bed_line("chr1\t100\t100", chr, start, end, count));  // empty interval
-    CHECK_FALSE(parse_bed_line("chr1\t200\t100", chr, start, end, count));  // inverted
-    CHECK_FALSE(parse_bed_line("not_a_bed_line", chr, start, end, count));
-}
-
-TEST_CASE("parse_bed_line: reads count column") {
-    std::string chr;
-    int64_t start = 0, end = 0, count = 0;
-    REQUIRE(parse_bed_line("chr2\t10\t20\tname\t42", chr, start, end, count, 5));
-    CHECK(count == 42);
-    REQUIRE(parse_bed_line("chr2\t10\t20\tname\t-3", chr, start, end, count, 5));
-    CHECK(count == 0);   // negative clamped to 0
+    int64_t start = 0, end = 0;
+    CHECK_FALSE(parse_bed_line("chr1\t-1\t100", chr, start, end));   // negative start
+    CHECK_FALSE(parse_bed_line("chr1\t100\t100", chr, start, end));  // empty interval
+    CHECK_FALSE(parse_bed_line("chr1\t200\t100", chr, start, end));  // inverted
+    CHECK_FALSE(parse_bed_line("not_a_bed_line", chr, start, end));
 }
