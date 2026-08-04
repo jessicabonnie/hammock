@@ -55,6 +55,18 @@ were cancelled by a scheduler event at 15:29:19 about 25 minutes in
 **Previous run (May 11, subB=1.0 only):** see git history for the table
 of job IDs (`sweep_*_20260511_181918` / `cpp_vs_bedtools_*_20260511_181919`).
 
+**Aug 4 files_t16 rerun (job 29552415, `cpp_vs_bedtools_t16_20260804_172242`,
+archived to `docs/data/`).** Same protocol as the May 12 run plus a fourth
+hammock arm, `hammock_ie_B` — subB=1.0 run *without* `--no-metrics`, i.e.
+emitting `jaccard_similarity_ie` and the containment/cosketch block. It is the
+only run on disk that measures the configuration `CLAUDE.md` recommends; the
+block costs **1.45% of wall at N=512** (54.15 s vs 53.38 s) and 34.8 MB peak RSS
+vs 22.7 MB. Everything else reproduces May 12 to within the drift documented
+below: N=512 gives 12.68× / 26.05× / **52.35×** for subB 1.0 / 0.25 / 0.1
+against 13.14× / 26.69× / 52.77×. **The tables in this file have not been
+restated onto it** — the May 12 run is still canonical here. Whether it stays
+canonical is pending the Figure 3 decision in `docs/figure3-candidate-v2.md`.
+
 The precision sweep also dumps `*_pairs.csv` — per-pair bedtools and
 hammock jaccards across all 4096 pairs × 5 precisions × 3 subB × 3 runs
 = 184,320 rows — for the faceted scatter plot in `figures/`.
