@@ -75,11 +75,12 @@ recoverable.
 
 - `python/hammock/` — CLI (`cli.py`), orchestrator (`runner.py`), Mode D
   (`modes/sequence.py`). Threading via `concurrent.futures.ThreadPoolExecutor`;
-  default `--threads = min(8, cpu_count())`. The C++ extension releases the
-  GIL, so interval-mode threading is real parallelism.
+  default `--threads = min(8, cpu_count())` for interval modes, **1 for Mode D**
+  (`cli._default_threads`). The C++ extension releases the GIL, so
+  interval-mode threading is real parallelism.
 
-  **Mode D threading is not — it is a GIL convoy, and the default makes it
-  slower.** Measured 2026-08-03 on a 48-core node, 4 Maurano DHS FASTAs,
+  **Mode D threading is not — it is a GIL convoy.** Measured 2026-08-03 on a
+  48-core node, 4 Maurano DHS FASTAs,
   k=8 w=40 p=20: `--threads 1` = 31.9 s vs `--threads 8` = **68.3 s (2.1×
   slower)**. In-process, per-task time degrades monotonically (T1 1.00×,
   T2 0.61×, T4 0.86×, T8 0.40×) even with private per-thread sequence lists,
@@ -91,10 +92,24 @@ recoverable.
   sweep index (`maurano_dhs_validation/results/sweep_d_*.csv`), where every
   8-thread Mode D cell records `cpu_s/wall_s ≈ 0.8`.
 
-  Consequence: **pass `--threads 1` for Mode D**, and treat every archived Mode D
-  wall time as inflated. Switching Mode D to processes (or dropping the pool) is
-  worth more than any sketching optimization so far — see divergence #8's note
-  that removing `_with_ends` bought 1.5–2.5× single-threaded.
+  **Fixed in v0.6.1 by defaulting Mode D to `--threads 1`** (interval modes
+  keep `min(8, cpu_count())`). An explicit `--threads > 1` is still honored, with
+  a one-line stderr note. Re-verified 2026-08-04 on the same 4-FASTA workload:
+  31.9 s default vs 63.1 s at `--threads 8`, CSVs byte-identical.
+
+  Two consequences that outlive the default change:
+
+  - **Every archived Mode D wall time is inflated** (they were all run at
+    `--threads 8`). Re-baseline; don't compare new timings against them.
+  - **Mode D still uses one core.** Making it *actually* parallel — a process
+    pool — is worth more than any sketching optimization so far (cf. divergence
+    #8: removing `_with_ends` bought 1.5–2.5× single-threaded, and processes
+    scale ~7.1× here). That remains open; see the seed.
+
+  bed2fasta extraction is exempt from the clamp: it shells out to `bedtools
+  getfasta`, which parallelizes for real, so `runner._run_bed2fasta` reads a
+  separate `args.io_threads` budget. Keep that split if you rework threading.
+
   Full evidence, option space, and reproduction: `docs/seed-mode-d-threading.md`.
 
 ## Open seeds (handoff notes for future work)
@@ -102,9 +117,12 @@ recoverable.
 Neither is a decision; each is evidence gathered plus what still needs
 establishing. Read the seed before re-litigating the question.
 
-- `docs/seed-mode-d-threading.md` — Mode D's thread pool is a GIL convoy and the
-  default makes it 2–4.5× slower. Blocked route (process pool) needs pickling
-  support on `HLLSketch`, which the bindings do not expose.
+- `docs/seed-mode-d-threading.md` — the *default* is fixed (Mode D → 1 thread,
+  v0.6.1), but Mode D still runs on one core. Still open: making it genuinely
+  parallel via a process pool, which needs pickling on `HLLSketch` — a
+  binding-only addition, since `hll_sketch.hpp` already exposes `registers()`
+  publicly. Also still open: whether interval-mode threading benefits *on the
+  Python path* (`runner._parallel_map`), which has never been measured.
 - `docs/seed-mode-d-hash-width.md` — `digest` returns ≤32-bit minimizer hashes
   while the HLL assumes 64, biasing Mode D cardinality −0.5% to −8.3%. The
   `hash_size=32` option became viable once `_with_ends` was removed (divergence

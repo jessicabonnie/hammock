@@ -6,6 +6,7 @@ so they're safe to run while a rebuild is pending.
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import pytest
@@ -117,3 +118,17 @@ def test_normalize_mode_aliases(value: str, expected: str) -> None:
 def test_normalize_mode_rejects_unknown() -> None:
     with pytest.raises(argparse.ArgumentTypeError):
         cli._normalize_mode("nonsense")
+
+
+# ---- default --threads is mode-aware ---------------------------------------
+
+def test_default_threads_mode_d_is_one() -> None:
+    # Mode D sketching is a GIL convoy: the pool costs 2-4.5x. See
+    # docs/seed-mode-d-threading.md.
+    assert cli._default_threads("D") == 1
+
+
+@pytest.mark.parametrize("mode", ["A", "B", "C"])
+def test_default_threads_interval_modes_use_pool(mode: str) -> None:
+    # A/B/C sketch inside the C++ extension, which releases the GIL.
+    assert cli._default_threads(mode) == min(8, os.cpu_count() or 1)

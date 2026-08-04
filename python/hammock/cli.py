@@ -135,7 +135,8 @@ def parse_args(argv=None):
     p.add_argument("--expA", type=float, default=0,
                    help="Power-of-10 exponent to multiply contribution of A-type intervals")
     p.add_argument("--threads", type=int, default=None,
-                   help="Number of threads. Default: min(8, cpu_count()).")
+                   help="Number of threads. Default: 1 for sequence mode (D), "
+                        "min(8, cpu_count()) otherwise.")
     p.add_argument("--kmer_size", '-k', type=int, default=8, help="Size of k-mers for sequence sketching")
     p.add_argument("--window_size", '-w', '--window', type=int, default=40,
                    help="Size of sliding window for sequence sketching")
@@ -287,6 +288,19 @@ def _resolve_sketch_type(args) -> str:
     return "minimizer" if args.mode == "D" else "hyperloglog"
 
 
+def _default_threads(mode: str) -> int:
+    """Default --threads, by mode.
+
+    Mode D's sketch loop is pure Python (`MinimizerSketch.add_string`) wrapped
+    around a `digest.window_minimizer` call that does not usefully release the
+    GIL, so a thread pool is a convoy: measured 2.1x slower on 4 Maurano FASTAs
+    and 2.8-4.5x on 8 full-size ones. A/B/C sketch inside the C++ extension,
+    which does release the GIL, so they get the pool. See
+    docs/seed-mode-d-threading.md for the evidence.
+    """
+    return 1 if mode == "D" else min(8, os.cpu_count() or 1)
+
+
 def _apply_memory_limit(gb: float) -> None:
     if gb <= 0:
         return
@@ -342,8 +356,18 @@ def main(argv=None) -> int:
 
     args.mode = _autodetect_mode(args)
     args.sketch_type = _resolve_sketch_type(args)
+    # Two budgets. `threads` drives sketching, where Mode D is GIL-bound;
+    # `io_threads` drives the bed2fasta extraction phase, which shells out to
+    # `bedtools getfasta` and genuinely parallelizes regardless of mode.
+    args.io_threads = (args.threads if args.threads is not None
+                       else min(8, os.cpu_count() or 1))
     if args.threads is None:
-        args.threads = min(8, os.cpu_count() or 1)
+        args.threads = _default_threads(args.mode)
+    elif args.mode == "D" and args.threads > 1:
+        print(f"hammock: --threads {args.threads} in sequence mode (D) is "
+              f"usually SLOWER than --threads 1 (GIL convoy; see "
+              f"docs/seed-mode-d-threading.md). Proceeding as asked.",
+              file=sys.stderr)
     _apply_memory_limit(args.memory_limit_gb)
     return run(args)
 

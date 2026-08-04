@@ -355,7 +355,11 @@ def _run_bed2fasta(args, queries: List[str], refs: List[str]) -> int:
     print(f"[hammock] bed2fasta: bedtools getfasta ({b2f.bedtools_version()}); "
           f"ref1={args.ref1}, ref2={args.ref2}", file=sys.stderr)
 
-    n_threads = args.threads or 1
+    # Extraction shells out to `bedtools getfasta`, so it parallelizes for real
+    # even though this is Mode D — it is exempt from the Mode D thread clamp and
+    # uses the I/O budget (`cli._default_threads` / `args.io_threads`). getattr
+    # keeps hand-built Namespaces (tests, library callers) working.
+    n_threads = getattr(args, "io_threads", None) or args.threads or 1
     with contextlib.ExitStack() as stack:
         if args.fasta_outdir:
             os.makedirs(args.fasta_outdir, exist_ok=True)
