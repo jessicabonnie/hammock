@@ -1,16 +1,23 @@
 # Figure 3 candidate (v2) — for side-by-side review
 
-Nothing here is adopted. `paper/pairwise_scaling/plot_pairwise_scaling.R`,
-`paper/figures/pairwise_scaling.png` and `paper/outline.md` are untouched;
-this is a parallel copy so the published figure and the candidate can be opened
+Nothing in **Panel A** is adopted. `plot_pairwise_scaling.R`'s Panel A code, the
+CSV it reads, and the Panel A text in `paper/outline.md` are untouched; the
+candidate is a parallel copy so the published figure and it can be opened
 together.
+
+Panel B is a separate matter and *was* changed in place, in both scripts: its
+bar labels now read `mean |ΔJ|` and the `paper/outline.md:42` caption defines
+the quantity. That is a labelling correction to the published figure, unrelated
+to the Panel A question, and deliberately applied to v1 as well so the caption
+never describes a label only the candidate carries.
 
 | | script | figure | data |
 |---|---|---|---|
 | published | `paper/pairwise_scaling/plot_pairwise_scaling.R` | `paper/figures/pairwise_scaling.png` | `docs/data/cpp_vs_bedtools_t16_20260512_160412.csv` |
 | candidate | `paper/pairwise_scaling/plot_pairwise_scaling_v2.R` | `paper/figures/pairwise_scaling_v2.png` | `docs/data/cpp_vs_bedtools_t16_20260804_172242.csv` |
 
-Panel B is byte-identical between them. Every difference is in Panel A.
+Panel B is identical between them — its bar labels were relabelled to `mean |ΔJ|` in
+**both** scripts at the same time, so the figure decision stays purely about Panel A.
 
 ## What changed, and why
 

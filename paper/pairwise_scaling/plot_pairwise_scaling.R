@@ -286,14 +286,18 @@ bars <- bind_rows(
     condition = factor(condition, levels = condition),
     tool = factor(tool, levels = c("BEDTools", "hammock")),
     speedup = bt_wall / wall,
-    label = if_else(
-      tool == "BEDTools",
-      sprintf("%.1f s\nreference", wall),
-      sprintf(
-        "%.1f s\n%.2f× faster\nΔJ = %s",
-        wall,
-        speedup,
-        if_else(mae == 0, "0", formatC(mae, format = "e", digits = 1))
+    # "mean |ΔJ|", not "ΔJ": mae is mean(abs(j - j_truth)) over the 950
+    # pair-by-replicate comparisons, so it carries magnitude but no direction.
+    # And subB = 1.0 IS the baseline it is measured against, so its zero is true
+    # by construction -- printing a bare "0" beside "1.16x faster" reads as
+    # "agrees exactly with BEDTools", which is false by ~0.16 here (the
+    # register-equality chance floor, see CLAUDE.md divergence #2).
+    label = case_when(
+      tool == "BEDTools" ~ sprintf("%.1f s\nspeed reference", wall),
+      mae == 0 ~ sprintf("%.1f s\n%.2f× faster\nΔJ baseline", wall, speedup),
+      TRUE ~ sprintf(
+        "%.1f s\n%.2f× faster\nmean |ΔJ| = %s",
+        wall, speedup, formatC(mae, format = "e", digits = 1)
       )
     )
   )
