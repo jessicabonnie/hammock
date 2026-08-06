@@ -94,6 +94,16 @@ Discuss both layers of the computational contribution: reusable sketches reduce 
 ## IV. Methods
 
 ### 4.1 Software implementation
+\program{hammock} is a command-line tool supported by an importable Python package library with a C++17 extension with OpenMP support for parallelism. It takes two positional inputs -- each a plain-text list of files between which pairwise comparison will be performed. \program{hammock} will default to `interval` or `sequence` mode depending on the extensions of the files in the lists. In all modes, \program{hammock} constructs one reusable sketch per listed file and emits a comma-separated table of pairwise comparisons between the two collections. There are 4 implemented modes which can be directly invoked using `--mode`.
+
+| CLI mode | Input | Representation |
+|---|---|---|
+| `interval-string` | BED | Exact chromosome-start-end interval strings |
+| `interval` / `interval-points` | BED | Base-level genomic positions covered by intervals |
+| `interval-hybrid` | BED | Combined interval-string and position representation |
+| `sequence` | FASTA or BED + Reference | Sliding-window minimizers derived from sequence |
+
+
 
 ### 4.2 Interval-mode sketch construction
 
