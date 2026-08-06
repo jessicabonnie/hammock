@@ -1,5 +1,21 @@
 # Mode B perf — what we shipped and what's left
 
+**Question:** after seven rounds of optimization on Mode B and its subB gate,
+where does the time actually go, and which of the remaining ideas are worth
+doing?
+
+**Measured:** callgrind + gprof on 16 files × ~50 Mbp (May 2026). Plain Mode B
+is 4.8× faster than the original baseline single-threaded; the inner loop is now
+~60% `hash64_short`, ~17% stride bookkeeping, ~15% `HLL::add`. BED parsing is
+0% — under 1% of total.
+
+**Answer:** the hash work is the floor for the parity-required xxh64 algorithm,
+so nothing parity-safe on the menu is worth more than a few percent. Mixed-stride
+is already at its floor at low subB.
+
+**Open / unbuilt:** Ideas B, C and D below (est. ~4–8%, ~1–5%, and 20–30%
+respectively, each with a cost). Idea A **shipped** — see its dated note.
+
 ## Context
 
 Mode B and the Mode B/C subsampling gate got several rounds of optimization.
@@ -76,6 +92,36 @@ of two, eliminating the worst-case-at-subB=0.5 double-cost.
 similar), a stderr asterisk when used, and an entry in `CLAUDE.md`'s
 "Intentional divergences" section. No way to keep byte-equal CSV parity
 with the orig Python while doing this.
+
+> **Superseded 2026-08-06 — Idea A shipped, and the estimate above did not
+> hold.** It landed as `--subB-method=single-hash` (CLAUDE.md divergence #4,
+> `python/hammock/cli.py:237`), with exactly the design sketched here: one
+> `xxh64(point, seed=hll_seed)` whose high 32 bits drive the gate and whose full
+> 64 bits drive HLL ingestion, plus the stderr note and the divergence entry.
+>
+> The predicted −35–40% did **not** materialize. Measured on the Maurano DHS
+> corpus, 5 reps (`docs/data/maurano_subB_summary.csv`, `wall_median`),
+> single-hash is *slower* than hash-threshold at the low subB values the idea
+> was aimed at, and wins only in the middle of the range:
+>
+> | subB | hash-threshold | single-hash | |
+> |---|---|---|---|
+> | 0.01 | 7.26 s | 7.97 s | 9.9% slower |
+> | 0.05 | 8.10 s | 8.53 s | 5.3% slower |
+> | 0.10 | 8.95 s | 9.21 s | 3.0% slower |
+> | 0.25 | 11.18 s | 11.06 s | 1.1% faster |
+> | 0.50 | 14.67 s | 13.62 s | 7.2% faster |
+> | 1.00 | 9.55 s | 9.55 s | identical (gate not entered) |
+>
+> The best case is subB=0.5, and then by 7%, not 35% — and note that at both
+> 0.25 and 0.50 *neither* method beats not subsampling at all (`wall_nosub`
+> 9.54 s), so the win sits inside a regime that is already a net loss. The
+> reasoning error was treating "one hash instead of
+> two" as a saving: it trades a cheap `xxh32` for a more expensive `xxh64` on
+> *every* position, so at low subB (where almost everything is rejected and the
+> second hash was never computed anyway) it is a pure cost. Keep it as a
+> research/comparison flag, not a speed lever. The numbers in the parent section
+> above are the pre-ship estimates and are left as written.
 
 ### Idea B — `switch` over trailing-bytes count in `hash64_short`
 

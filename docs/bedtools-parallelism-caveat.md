@@ -93,6 +93,31 @@ Hammock-cpp at the same N=64, p=14:
 Near-linear scaling all the way out — OpenMP thread parallelism on
 shared memory pays off cleanly here.
 
+> **Superseded 2026-08-06 — the hammock table above is from a
+> pre-optimization build and has no surviving CSV.** No archived
+> `sweep_threads_*.csv` contains a 637 s t=1 point; the earliest one on disk
+> (`sweep_threads_20260510_172628.csv`) already reads 198.9 s. The bedtools
+> table above matches the May 11/12 sweeps to within run-to-run noise, so the
+> two tables in this section are from *different builds* and their ratios should
+> not be compared to each other.
+>
+> Canonical current numbers, `sweep_threads_20260512_150458.csv` (the run
+> `experiments/bedtools_benchmark/RESULTS.md` tabulates), N=64, p=14, subB=1.0:
+>
+> | threads | bedtools | hammock-cpp |
+> | --- | --- | --- |
+> | 1 | 58.11 s | 72.52 s |
+> | 2 | 38.20 s | 42.41 s |
+> | 4 | 19.63 s | 24.01 s |
+> | 8 | 10.26 s | 12.45 s |
+> | 16 | 9.90 s | 6.63 s |
+>
+> Hammock's OpenMP scaling is **10.9×** at t=16, not 14.9× — still clean, and
+> still the point being made, but the optimized binary starts from a much lower
+> t=1 so there is less headroom. The qualitative contrast survives unchanged:
+> hammock keeps scaling from t=8 to t=16 (12.45 → 6.63 s) while
+> GNU-parallel-wrapped bedtools flattens (10.26 → 9.90 s).
+
 ## How to read summary plots
 
 Wall-time-vs-N plots in this codebase should show three reference
@@ -122,8 +147,12 @@ does on its own."
   crossover would land at much smaller N.
 
 - **t=16 N-up-to-512 follow-up** (job 23901950) — re-runs the orig
-  protocol at our hardware. Numbers will be filled in here when it
-  completes.
+  protocol on our hardware. **Completed**; results are in "Empirical
+  follow-up: t=16 replication of the orig benchmark" below. That protocol
+  has since been re-run again on Aug 4 2026 (job 29552415,
+  `docs/data/cpp_vs_bedtools_t16_20260804_172242.csv`); see
+  `docs/figure3-panel-a-rebuild.md`. The crossover conclusion is unchanged
+  across all three runs.
 
 ## Where this *doesn't* matter
 

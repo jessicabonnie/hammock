@@ -37,8 +37,23 @@ if [[ ! -s "$CSV" ]]; then
     exit 1
 fi
 
-echo "[$(date)] off-diagonal jaccard distribution (column 9 = jaccard_similarity):"
-awk -F, 'NR>1 && $1!=$2 {print $9}' "$CSV" | sort -n | uniq -c | head
+# Look the column up by NAME, never by position -- the Mode D schema has
+# changed more than once (v0.5.0 inserted jaccard_similarity_ie; v0.6.0 removed
+# the seven _with_ends columns), and a stale positional index silently reads a
+# different metric instead of failing. Abort if the header lookup misses.
+# `|| true` is required: this runs under `set -euo pipefail`, and grep exits 1
+# when the column is absent, which would kill the script before the check below
+# could report why. `tr -d '\r'` because hammock writes CRLF CSVs, so the last
+# header field carries a trailing \r that `grep -nx` would never match. `head
+# -1` so a duplicated header name yields one number rather than two.
+JCOL=$(head -1 "$CSV" | tr -d '\r' | tr ',' '\n' \
+       | grep -nx 'jaccard_similarity' | cut -d: -f1 | head -1) || true
+if [ -z "$JCOL" ]; then
+    echo "ERROR: no 'jaccard_similarity' column in $CSV header" >&2
+    exit 1
+fi
+echo "[$(date)] off-diagonal jaccard distribution (column $JCOL = jaccard_similarity):"
+awk -F, -v c="$JCOL" 'NR>1 && $1!=$2 {print $c}' "$CSV" | sort -n | uniq -c | head
 
 echo "[$(date)] rendering dendrogram"
 ml gcc/9.3.0 r/4.3.0 libjpeg/9c

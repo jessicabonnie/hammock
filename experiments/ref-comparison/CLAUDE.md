@@ -18,6 +18,7 @@ this directory's existence.
 
 ## Key files
 
+- `docs/exp_a_results.md` — **the results record; read before touching anything here**
 - `docs/experiment_design.md` — full design rationale, accession tables, success criteria
 - `docs/paper_outline.md` — current paper outline (Exp A only)
 - `config/config.yaml` — sample metadata, nf-core output paths, sketch parameters
@@ -25,6 +26,25 @@ this directory's existence.
 - `workflow/Snakefile` — downstream pipeline (peaks → FASTA → hammock → plots)
 - `workflow/slurm_profile/config.yaml` — SLURM cluster profile for Snakemake
 - `scripts/run_nfcore.sh` — launches nf-core/chipseq for GRCh38, GRCh37, CHM13
+- `scripts/exp_a_{validate_plot,sweep_summary,dendrogram,metric_comparison}.R` — the four analysis passes
+
+## Working here — standing caveats
+
+- **Lead cell is k=15, w=15** (post-2026-05-14 bug fix). Pre-fix notes calling
+  k=15/20 a "saturated low" regime are wrong; the fix inverted that reading.
+- **Archived CSVs carry `jaccard_similarity_with_ends`; hammock no longer
+  emits it** (v0.6.0, `CLAUDE.md` divergence #8). The stats tables in
+  `docs/exp_a_results.md` were computed on it. A re-run will not reproduce
+  them column-for-column — see the 2026-08-06 recomputation in that file.
+  `config/config.yaml`'s `primary_sim_col` is already on `jaccard_similarity`,
+  but note `workflow/Snakefile` hardcodes the column rather than reading it.
+- **Parse these CSVs by column name, never by field index.** The schema
+  differs between the archived and current versions.
+- **`jaccard_similarity` is register-equality, not set Jaccard** — it has a
+  chance-agreement floor and is not rank-faithful across pairs of differing
+  set size. The calibrated `jaccard_similarity_ie` is exactly recoverable
+  from the archived `containment_AB`/`containment_BA` columns via
+  `J = 1/(1/C_AB + 1/C_BA − 1)`.
 
 ## Running
 

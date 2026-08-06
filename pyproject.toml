@@ -16,7 +16,7 @@ dependencies = [
 hammock = "hammock.cli:main"
 
 [project.optional-dependencies]
-mode_d = ["digest"]
+mode_d = ["digest", "xxhash"]
 plotting = ["matplotlib", "pandas"]
 test = ["pytest", "pytest-xdist"]
 

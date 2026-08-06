@@ -17,7 +17,13 @@ and against `bedtools jaccard` on the real-data corpus.
   5 replicates per corpus class. Synthetic adds a 3-way size_class facet, so
   it's 3 × 6 × 5 × 3 = 270 runs; Maurano is one class, so 3 × 6 × 5 = 90 runs.
 - **Tool:** standalone `hammock-cpp` (Mode B, precision 18, 8 threads). No
-  Python in the timing loop.
+  Python in the timing loop. `run_sweep.py` requires the binary to be ≥ 0.7.0
+  and passes `--no-metrics`, so timed runs are 3-column
+  (`query`/`reference`/`jaccard_similarity`). The archived sweeps in
+  `RESULTS.md` were taken with a pre-0.7.0 binary, where that shape was the
+  default and the flag did not exist.
+- **Accuracy column:** `jaccard_similarity` (register-equality), not
+  `jaccard_similarity_ie`. See the caveat box at the top of `RESULTS.md`.
 - **Ground truth for accuracy:** `subB=1.0`, averaged across methods (every
   method should produce the same Jaccard at subB=1 since all points pass the
   gate). Self-consistent; isolates subsample-induced drift from HLL error.
@@ -42,6 +48,10 @@ and against `bedtools jaccard` on the real-data corpus.
 - `headline_figures.R` — produces the three TL;DR plots
   (`figures/headline_*.png`) referenced from `RESULTS.md`. Run after the
   sweeps and `analyze.R`.
+- `pareto_variants.R` — four renderings of the headline Maurano Pareto plot
+  (path in subB order / path re-sorted by MAE / points only / points + IQR)
+  into a single `figures/pareto_variants.pdf`. Diagnostic for the zigzag
+  discussed in `RESULTS.md`.
 - `sbatch_sweep.sh` — single-job workflow wrapper.
 
 `data/`, `results/`, and `logs/` are symlinks into `/vast/blangme2/...`.
@@ -61,4 +71,10 @@ python run_bedtools_maurano.py        # bedtools baseline for the speedup plot
 # analysis (picks up the latest CSV per corpus + bedtools if present)
 ml r/4.3.0 && Rscript analyze.R
 ml r/4.3.0 && Rscript headline_figures.R    # publication-style headline PNGs
+ml r/4.3.0 && Rscript pareto_variants.R     # figures/pareto_variants.pdf (4 pages)
 ```
+
+`run_sweep.py` also takes `--size-classes`, `--methods`, `--subB-values`,
+`--reps`, `--precision/-p`, `--threads/-t`, `--binary`, `--output`,
+`--verbose` and `--smoke` (a one-cell dry run). The three R scripts take no
+arguments — each picks the newest matching CSV out of `results/`.

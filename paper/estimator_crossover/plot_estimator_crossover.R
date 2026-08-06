@@ -210,7 +210,7 @@ figure <- ggplot(cells, aes(x = precision, y = tau,
     y = "Kendall τ vs BEDTools",
     caption = paste0(
       mae_note, " Rank fidelity is the only axis on which they disagree.\n",
-      "Above J = 0.05 both reach τ = 1 by p = 16 on this corpus (n = 9 and 15 pairs), ",
+      "Above J = 0.05 both reach τ = 1 by p = 20 on this corpus (n = 9 and 15 pairs), ",
       "so those facets carry no resolving power.")
   ) +
   guides(fill = "none",

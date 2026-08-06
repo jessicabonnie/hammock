@@ -109,11 +109,66 @@ separated* (broad: min cross-ref 0.753 > max diff-tissue 0.443). k=10
 cells are still useful when overlap (rather than clean separation) is
 the story being told.
 
+> **Recomputed on the surviving column, 2026-08-06.** Every number in the
+> table above is on `jaccard_similarity_with_ends`, which v0.6.0 deleted.
+> Recomputing the same statistic on `jaccard_similarity` from the same
+> archived CSVs (18 same-tissue cross-ref pairs, 54 different-tissue,
+> counting both orderings as the original did):
+>
+> | cell | peak | median(cross-ref) | median(diff-tissue) | Δ | min(xref) | max(diff) |
+> |---|---|---:|---:|---:|---:|---:|
+> | k15_w15 | broad  | 0.926 | 0.443 | 0.483 | 0.913 | 0.506 |
+> | k15_w15 | narrow | 0.953 | 0.417 | 0.536 | 0.898 | 0.468 |
+> | k10_w10 | broad  | 0.991 | 0.920 | 0.071 | 0.988 | 0.935 |
+> | k10_w10 | narrow | 0.993 | 0.910 | 0.084 | 0.985 | 0.927 |
+>
+> **The headline survives the column change and gets stronger**: k=15, w=15
+> remains the lead cell and Δ grows (0.398 → 0.483 broad). The k=10 cells
+> shift into the saturated-high regime on this column (medians ≈ 0.99 vs
+> 0.92), so the "interpretable mid-range" characterisation above is specific
+> to `_with_ends`.
+>
+> **But full separation is no longer what distinguishes the lead cell.** On
+> `jaccard_similarity` *all four* cells separate completely — k10_w10 broad
+> manages 0.988 > 0.935 and narrow 0.985 > 0.927. On the deleted `_with_ends`
+> column k=10 did **not** separate (0.579 < 0.610), so the column change
+> quietly turned "k=10 fails the criterion" into "k=10 passes it with a thin
+> margin". Rank the cells on Δ, not on whether they separate; separation is
+> satisfied everywhere here and no longer carries information.
+>
+> Wilcoxon p-values were not recomputed. Two reasons to treat the archived
+> p = 1.35e-10 as indicative only: the group ordering is unchanged, so it can
+> only be at or below the same test floor — but the n=18/54 counts are
+> **ordered** pairs, so every unordered comparison is entered twice. The
+> independent units are 9 cross-reference and 27 different-tissue
+> comparisons over 9 files, and even those share files. The medians in the
+> table above are unaffected by the duplication; the significance test is not.
+>
+> Two standing caveats on all of these. `jaccard_similarity` is
+> register-equality, not set Jaccard — it carries a chance-agreement floor
+> and is not rank-faithful across pairs of differing set size
+> (`CLAUDE.md` divergence #2). And every CSV here predates 2026-05-14 in
+> schema terms only in that it lacks `jaccard_similarity_ie`; the calibrated
+> value is exactly recoverable from the `containment_AB`/`containment_BA`
+> columns these files do carry, via `J = 1/(1/C_AB + 1/C_BA − 1)`.
+
 ## New Mode D columns — at k=10, w=10
 
 `scripts/exp_a_metric_comparison.R` runs the same Wilcoxon test on each
 of the 12 metric columns the new hammock emits (6 minimizer + 6
 minimizer+ends). Outputs: `figures/metric_comparison_{broad,narrow}_k10_w10.{png,tsv}`.
+
+> **Stale as a recommendation, 2026-08-06.** Half of this section — every
+> "(minimizer+ends)" / "with ends" row, and finding 5's "`jaccard_similarity_with_ends`
+> remains the right default" — is about a column family v0.6.0 deleted
+> (`CLAUDE.md` divergence #8). Mode D emits one similarity block now, so the
+> live rows are the five minimizer-only ones plus `jaccard_similarity_ie`,
+> which did not exist when this ran. The measurements are kept as the record
+> of what the two families did on this corpus; do not read finding 5 as
+> current guidance. Findings 1, 3 and 6 still apply to the minimizer-only
+> family. Redoing this comparison at k=15, w=15 (the lead cell) on the
+> post-v0.6.0 schema is the outstanding item, not just the k-shift noted
+> under "To extend".
 
 ![Metric comparison, broad, k=10, w=10](../figures/metric_comparison_broad_k10_w10.png)
 
@@ -153,10 +208,28 @@ Notes (both peak types):
 - `scripts/exp_a_sweep_summary.R` — (k × w) effect-size heatmap
 - `scripts/exp_a_dendrogram.R` — UPGMA dendrogram (broad + narrow)
 - `scripts/exp_a_metric_comparison.R` — metric Wilcoxon comparison at one (k, w).
-  The committed figure and TSV cover 12 metrics; hammock 0.5.0 emits 14 (adding
-  `jaccard_similarity_ie` and its `_with_ends` twin), and the script picks those
-  up automatically once the input CSVs are regenerated. Not yet re-run
+  The committed figure and TSV cover 12 metrics. ~~hammock 0.5.0 emits 14 (adding
+  `jaccard_similarity_ie` and its `_with_ends` twin)~~ — **superseded 2026-08-06**:
+  v0.6.0 dropped the whole `_with_ends` family, so current hammock emits **7**
+  Mode D similarity columns (`jaccard_similarity`, `jaccard_similarity_ie`,
+  `containment_AB/BA`, `cosketch_{geom,arith,max}`). The script picks up
+  whatever columns are present once the input CSVs are regenerated. Not yet re-run
 - `workflow/Snakefile` — orchestrates peaks → FASTA (bedtools getfasta) → hammock Mode D → R plots
+
+Two of the four are Snakemake-only (they read `snakemake@input`/`@params` and
+cannot be invoked standalone): `exp_a_validate_plot.R` and
+`exp_a_sweep_summary.R`. The other two take positional argv (verified
+2026-08-06 against their `commandArgs` blocks):
+
+```bash
+ml r/4.3.0
+Rscript scripts/exp_a_dendrogram.R <broad_csv> <narrow_csv> <metadata_tsv> <out_png> [kw_label]
+Rscript scripts/exp_a_metric_comparison.R <csv> <metadata_tsv> <out_png> <out_tsv> [peak_type_label]
+```
+
+`<metadata_tsv>` is `config/exp_a_metadata.tsv`. `exp_a_metric_comparison.R`
+already tolerates post-v0.6.0 CSVs — it drops the missing `_with_ends`
+columns from the figure and prints which ones it dropped.
 
 ## Reproducing
 

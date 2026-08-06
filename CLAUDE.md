@@ -244,7 +244,11 @@ These are deliberate; parity tests that touch them are skipped or projected.
    | `jaccard_similarity` | 0.335 | **0.658** | **0.905** | 0.907 |
    | `jaccard_similarity_ie` | 0.289 | 0.562 | 0.794 | **0.967** |
 
-   Above J = 0.05 both reach τ = 1 by p=16 and there is nothing to choose.
+   Above J = 0.05 both reach τ = 1 by p=20 and there is nothing to choose.
+   (Corrected 2026-08-06: this said "by p=16". In the J ≥ 0.2 stratum
+   register-equality is τ = 0.9804 at p=16 — one discordant pair out of 102 —
+   and only ties at p=20. It does not change the conclusion, since the cell
+   turns on a single comparison, but p=16 was not where they converge.)
    So the register-equality advantage exists, but only for *ranking*, only
    below J ≈ 0.05, only at p ≤ 20, and only among pairs of comparable size —
    and one step of `-p` removes it. **The operative rule is: read
@@ -272,8 +276,30 @@ These are deliberate; parity tests that touch them are skipped or projected.
    orig hash-threshold. Prints a one-line stderr note when used.
    Note: single-hash is **not** automatically faster than hash-threshold —
    it trades one xxh32 (cheap) for one xxh64 (more work) per position.
-   At low subB it's slightly slower than hash-threshold; only at subB
-   near 1.0 is it marginally faster. Kept as a research/comparison flag.
+   At low subB it's slightly slower than hash-threshold; its only real win
+   is the **middle** of the range. Measured on Maurano
+   (`docs/data/maurano_subB_summary.csv`, wall median, s):
+
+   | subB | hash-threshold | single-hash | |
+   |---|---|---|---|
+   | 0.01 | 7.26 | 7.97 | slower |
+   | 0.10 | 8.95 | 9.21 | slower |
+   | 0.25 | 11.18 | 11.06 | 1.1% faster |
+   | 0.50 | 14.67 | 13.62 | **7% faster** |
+   | 1.00 | 9.555 | 9.546 | identical |
+
+   At subB=1.0 the two are identical because the gate short-circuits and is
+   never entered (`stride.cpp:31` — `do_subsample = subsample < 1.0` gates
+   both methods), so there is no hash to trade.
+
+   **Do not read the 0.50 row as a reason to use single-hash.** At subB 0.25
+   and 0.50 *both* methods are slower than not subsampling at all (11.18 and
+   14.67 s against `wall_nosub` 9.54 s — 0.65× and 0.70×). The 7% win is a
+   win inside a regime that is already a net loss, so it never makes
+   single-hash the right choice; it only shows the trade is not monotone.
+   (Corrected 2026-08-06: this entry previously read "only at subB near 1.0
+   is it marginally faster", which has the direction backwards.) Kept as a
+   research/comparison flag.
 5. **`--gate-seed N`** (default 31337) seeds the xxh32 gate hash and
    mixed-stride chr->stride hash. Default 31337 preserves orig contract
    in hash-threshold mode. Lets users sweep gate randomness

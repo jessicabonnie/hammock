@@ -22,6 +22,12 @@
 >
 > Also note Part 1 and Part 2 disagreed, and the Part 2 headline ("with_ends
 > wins 62.2% on Mash residual") is not reproducible from any committed script.
+>
+> The wrong `2(k−1)` figure is restated twice further down (in the Hypothesis
+> section's φ definition, and in the Part 2 discussion); both are marked
+> inline. Any CSV in `results/` must be parsed by column *name* — the schema
+> changed under v0.6.0 and positional field indices no longer line up with
+> what these scripts were written against.
 
 Mode D emits two Jaccard estimates per pair:
 
@@ -72,6 +78,10 @@ k-mers per FASTA" to "minimizers per FASTA" — call this the **flanking
 fraction** φ:
 
 > φ ≈ ( 2 · (k−1) · n_intervals ) / ( total_length / w )
+
+**[WRONG — see the archival banner.** The code inserted `k+1` elements per
+record, not `2(k−1)`. Both the constant and the k-slope of this formula are
+off, and φ is the axis Part 2 stratifies on.**]**
 
 When φ is small, the two columns should agree. When φ is large,
 `_with_ends` inflates and decouples from interior content.
@@ -158,6 +168,13 @@ Nothing in this experiment overwrites or modifies anything in
 - `figures/synthetic_delta_vs_phi.png`    — Part 2 headline
 - `figures/synthetic_phase_diagram.png`   — sign(Δerror) over (φ, mutation)
 
+Also on disk under `results/`, not listed when this was written:
+`part1_summary.csv`, `part2_pairs.csv`, `part2_sweep_failures.log`,
+`value_demo.csv`, and `buggy_pre_fix/` (the pre-2026-05-14 outputs).
+`figures/` additionally holds `maurano_delta_mae_vs_phi.png` and
+`synthetic_empirical_vs_analytical.png` (Fig 11 — do not cite, it validates
+the wrong φ formula).
+
 ---
 
 ## Layout
@@ -171,8 +188,12 @@ experiments/modeD_flanking/
 ├── run_sweep_synthetic.py     [Part 2] Mode D sweep driver on synthetic corpora
 ├── analyze_part1_maurano.R    [Part 1] re-analyse existing Maurano CSVs
 ├── analyze_part2_synthetic.R  [Part 2] flanking gain/loss on synthetic
+├── value_demo.py              [undocumented above] one-off with_ends value demo
+│                              → results/value_demo.csv, data/value_demo/
 ├── workflow/
-│   ├── Snakefile              optional — wires Part 2 + analyses together
+│   ├── run_sweep.sh           [Part 2] sbatch driver for run_sweep_synthetic.py
+│   ├── run_exact_truth.sh     [Part 2] sbatch driver for exact_kmer_jaccard.py
+│   ├── watcher.sh             polls the sweep jobs
 │   └── slurm_profile/
 ├── data/   → /vast/.../modeD_flanking/data
 │   ├── maurano_link/          symlink back to maurano_dhs_validation results/data
@@ -236,7 +257,8 @@ On synthetic pairs with substitution-only mutation, **`with_ends` wins
 ![](figures/synthetic_phase_diagram.png)
 
 `with_ends` advantage shrinks at high k — exactly where the boundary
-contribution (`2(k-1)·n_intervals` k-mers per record) becomes a smaller
+contribution (`2(k-1)·n_intervals` k-mers per record — **wrong count, the
+code inserted `k+1` per record; see banner**) becomes a smaller
 fraction of the interior k-mer pool. The phase diagram remains uniformly
 positive (with_ends wins everywhere), so the *direction* of the
 advantage is robust on uniform-random synthetic — but the *magnitude*

@@ -14,6 +14,34 @@ in `figures/`.
 > from 0.966 to **0.9996** at the post-fix optimum. All Mode D numbers
 > below are post-fix. Pre-fix CSVs are kept at `results/raw_d_buggy_pre_fix/`.
 
+> **Audit note, 2026-08-06 — the summary CSV has grown since this was
+> written; the headline numbers have not moved.** `mode_d_summary.csv` now
+> holds **235** Mode D configs (not 209) × **3** columns (`jaccard_similarity`,
+> `jaccard_similarity_with_ends`, and `jaccard_similarity_ie`, added in
+> v0.5.0) × 2 references, and `abc_summary.csv` holds **29** A/B/C configs
+> (not 24 — the Mode C sweep was extended to expA = 4.0 and down to
+> subB = 1e-4). Re-counting the two census claims below against the current
+> file: `r > 0.99` is still **47** configs, and `MAE < 0.05` is now **29**
+> (was 21), the increase coming from the high-k × large-w fill-in run
+> (`sbatch_fill_highk_w.sh`), not from any change to the numbers. Every
+> named optimum below (Pearson 0.9996 at k=20/25 w=100 p=24 — w=50 ties;
+> MAE 0.0061 at k=25 w=100 p=24; ARI 0.9102 / NMI 0.9610 at k=10 w=30 for
+> every p ≥ 12; with_ends topping out at r = 0.9740 at k=20 w=20 p=20)
+> re-verifies exactly against the current CSV.
+>
+> **Not analysed below: `jaccard_similarity_ie` is the stronger column.** On
+> the same corpus it reaches Pearson r = 1.0000 and MAE = 0.0019 (k=20,
+> w=20–30, p=24) against bedtools, versus 0.9996 / 0.0061 for the
+> register-equality column this document reports. That is the expected
+> direction — `jaccard_similarity` is register-equality and is not on
+> bedtools' scale (`CLAUDE.md` divergence #2) — but the prose below was
+> written before the column existed and has not been re-derived on it.
+>
+> **`jaccard_similarity_with_ends` no longer exists.** It was removed in
+> v0.6.0 (`CLAUDE.md` divergence #8). The `with_ends` results below are
+> retained as the record of why; they cannot be regenerated from a current
+> build, and the archived `results/raw_d/` CSVs are the only source.
+
 ---
 
 ## Modes A, B, C vs bedtools

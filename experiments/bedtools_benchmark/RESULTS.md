@@ -1,5 +1,8 @@
 # bedtools_benchmark — subB comparison
 
+Script inventory, flags, and the SLURM wrappers are in
+[README.md](README.md); this file is results only.
+
 **Mixed provenance.** The precision, threads, intervals and t=8 sweeps are
 from May 12 2026; the t=16 files sweep was re-run on Aug 4 2026 and its
 section is the only one restated onto that run. Each section says which.
@@ -215,9 +218,16 @@ support the same conclusion, for the reason above.
 ```bash
 ml r/4.3.0
 Rscript experiments/bedtools_benchmark/make_graphs.R \
-  --files-csv results/cpp_vs_bedtools_t16_20260512_160412.csv \
+  --files-csv results/cpp_vs_bedtools_t16_20260804_172242.csv \
   --pairs-csv results/sweep_precision_20260512_150459_pairs.csv
+# (optional) --out-dir <dir>; default is figures/
 ```
+
+The files CSV above is the Aug 4 run, i.e. the one the files t=16 section is
+restated onto. Swap in `cpp_vs_bedtools_t16_20260512_160412.csv` to regenerate
+the superseded May 12 panels. `hammock_ie_B` is filtered out of the files
+plots by `make_graphs.R`'s `^hammock_cpp_B` tool match, so adding that arm did
+not change the figures' content — only the numbers behind them.
 
 Produces (multi-subB-aware):
 

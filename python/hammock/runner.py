@@ -133,6 +133,72 @@ def _guard_is_list_file(list_file: str, arg_name: str) -> str | None:
     return None
 
 
+# Interval modes hand the path straight to a bare `std::ifstream` in C++
+# (cpp/src/processing_modes.cpp), which neither decompresses nor decodes
+# anything. A gzipped or BigBed input therefore parses to zero intervals and
+# scores 0.0 against everything -- including itself -- while exiting 0. Reject
+# it up front rather than emit a plausible-looking all-zero CSV.
+# (magic bytes, description, how to convert). bgzip/BAM/.tbi are gzip-framed
+# and so are caught by the gzip entry. This list is not exhaustive -- see the
+# note in _guard_plain_text_bed about what it deliberately does not catch.
+_BINARY_MAGIC = (
+    (b"\x1f\x8b", "gzip-compressed", "gunzip -c {p} > {out}"),
+    (b"\x28\xb5\x2f\xfd", "zstd-compressed", "zstd -dc {p} > {out}"),
+    (b"BZh", "bzip2-compressed", "bzip2 -dc {p} > {out}"),
+    (b"\xfd7zXZ", "xz-compressed", "xz -dc {p} > {out}"),
+    (b"\xeb\xf2\x89\x87", "a binary BigBed", "bigBedToBed {p} {out}"),
+    (b"\x87\x89\xf2\xeb", "a binary BigBed", "bigBedToBed {p} {out}"),
+    (b"\x26\xfc\x8f\x88", "a binary BigWig", "bigWigToBedGraph {p} {out}"),
+    (b"\x88\x8f\xfc\x26", "a binary BigWig", "bigWigToBedGraph {p} {out}"),
+)
+
+
+def _guard_plain_text_bed(paths: List[str], which: str) -> str | None:
+    """Return an error message if any interval-mode input is compressed or
+    binary rather than plain text; else None.
+
+    Magic-byte matching only, and deliberately conservative: it catches the
+    formats people actually hand us by accident, not every possible one. A
+    binary format not listed here still reaches the C++ parser and still
+    sketches to nothing -- the general fix is a post-sketch "parsed 0
+    intervals" check, which this does not replace.
+    """
+    for p in paths:
+        # Only stat/read regular files. Reading 4 bytes from a FIFO consumes
+        # them and lets the writer finish, after which the C++ reopen blocks
+        # forever -- and a FIFO fed by `zcat foo.bed.gz > pipe` is exactly the
+        # workaround this error message invites.
+        try:
+            if not os.path.isfile(p):
+                continue
+            with open(p, 'rb') as fh:
+                head = fh.read(8)
+        except OSError:
+            continue  # let the normal open error surface downstream
+        for magic, what, fix in _BINARY_MAGIC:
+            if head.startswith(magic):
+                return (
+                    f"{which} input {p} is {what}. Interval modes (A/B/C) read "
+                    f"plain-text BED only -- nothing is decompressed or decoded "
+                    f"first, so this file would sketch to nothing and score 0.0 "
+                    f"against every file including itself. Convert it first, "
+                    f"e.g.  " + fix.format(p=p, out=_decompressed_name(p)))
+    return None
+
+
+def _decompressed_name(path: str) -> str:
+    """A conversion target that cannot collide with an existing file -- the
+    obvious `foo.bed.gz` -> `foo.bed` would overwrite a real `foo.bed`."""
+    base = path[:-3] if path.lower().endswith('.gz') else path
+    base = os.path.splitext(base)[0] or base
+    cand = base + '.plain.bed'
+    n = 2
+    while os.path.exists(cand):
+        cand = f"{base}.plain{n}.bed"
+        n += 1
+    return cand
+
+
 def _label(path: str, full_paths: bool) -> str:
     return os.path.normpath(path) if full_paths else os.path.basename(path)
 
@@ -408,6 +474,13 @@ def run(args) -> int:
 
     if getattr(args, "bed2fasta", False):
         return _run_bed2fasta(args, queries, refs)
+
+    if args.mode in ("A", "B", "C"):
+        for paths, which in ((queries, "Query"), (refs, "Primary")):
+            msg = _guard_plain_text_bed(paths, which)
+            if msg:
+                print(f"Error: {msg}", file=sys.stderr)
+                return 2
 
     n_threads = args.threads or 1
     if args.subB_method == 'single-hash' and args.subB < 1.0:

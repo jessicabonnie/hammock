@@ -157,8 +157,10 @@ Full rerun table:
   restating it from the wrong column would turn ~50× into ~13× and read as a
   regression. The arm is now labelled in the header.
 - `docs/scripts/synthetic_nscaling.R` and `docs/figures/synthetic_nscaling.png`
-  — repointed and regenerated, since that figure is embedded at
-  `docs/paper_outline.md:102` and would otherwise show May data beside an index
+  — repointed and regenerated, since that figure is embedded in
+  `docs/paper_outline.md` as "Fig 2 — synthetic N-scaling" (line 107 at time of
+  writing; the file is edited often, so search the name) and would otherwise
+  show May data beside an index
   row citing the August CSV.
 
 Not done, and still open: `paper/outline.md` §4.4 still carries hand-measured

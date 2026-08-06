@@ -20,8 +20,10 @@ dependencies:
   - numpy
   - biopython
 
-  # Mode D (FASTA): bioconda-only.
+  # Mode D (FASTA): bioconda-only. `xxhash` is imported unconditionally by
+  # modes/sequence.py, so a Mode D run dies on import without it.
   - digest
+  - python-xxhash
 
   # Optional plotting / analysis helpers.
   - matplotlib

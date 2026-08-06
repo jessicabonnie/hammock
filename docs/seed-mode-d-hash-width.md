@@ -1,7 +1,30 @@
 # Seed: Mode D minimizer hash width / distribution vs the HLL estimator
 
-Handoff note for a fresh chat. Written 2026-07-31. Nothing here is a decision;
-it is the evidence gathered so far plus what still needs establishing.
+Handoff note for a fresh chat. Written 2026-07-31; status block added
+2026-08-06. **Nothing here is decided.** Everything below is evidence gathered
+plus what still needs establishing.
+
+- **Question.** `digest` returns ≤32-bit minimizer hashes while `HLLSketch`
+  assumes 64. Does that bias Mode D's cardinality-derived columns, and if so by
+  how much and in which direction?
+- **Measured, and settled:** the ≤32-bit premise is true (§"What I confirmed"),
+  and the spike into the top rho bucket is real at ~3–6% of minimizers.
+- **Measured, and it overturns the original report's explanation:** the
+  mechanism is **minimizer small-value bias** (a minimizer is a *minimum* over a
+  w-window, so its hash distribution is heavily skewed small), **not** "only 8
+  bits left for rho". The correction flips the precision dependence: the spike
+  is a **p=24 phenomenon** (≤0.04% at p ≤ 18), not "worst at low precision".
+- **Open.** Sign and size of the resulting cardinality bias — the reported
+  −0.5% to −8.3% has never been reproduced and its sign disagrees with the
+  mechanism. Also open: whether to fix it, and how (§"What still needs
+  establishing").
+
+**Dated note, 2026-08-06.** This file was written before v0.6.0 removed the
+`_with_ends` family (CLAUDE.md divergence #8). Passages below that speak of "the
+two HLLs Mode D merges" describe the pre-v0.6.0 code and are kept as written;
+Mode D now builds a single minimizer HLL. The practical consequence is recorded
+in the update block under item 4: `hash_size=32` is now a single-sketch change
+with nothing to merge against.
 
 ## The original report (from another chat, unverified when made)
 
@@ -19,8 +42,10 @@ reporting**, so the numbers above were never independently checked.
 **The premise is correct.** `digest.window_minimizer(..., include_hash=True)`
 returns hashes strictly below 2³² (max observed bit length 32, zero values
 ≥ 2³² across ~110k minimizers at three (k,w) settings). The start/end path in
-the same sketch uses full-width `xxhash.xxh64`. So the two HLLs that Mode D
-merges for `*_with_ends` are fed hashes on **different scales**.
+the same sketch used full-width `xxhash.xxh64`. So the two HLLs that Mode D
+merged for `*_with_ends` were fed hashes on **different scales**. (That merge is
+gone as of v0.6.0; the ≤32-bit minimizer hashes are not — they are still what
+the surviving minimizer HLL ingests, which is why this seed is still live.)
 
 **The ~4% figure reproduces**, but the reported *mechanism* is wrong, and the
 correction matters because it changes which precisions are affected.

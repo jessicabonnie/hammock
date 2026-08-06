@@ -50,6 +50,9 @@ exact tool or to other corpora; `jaccard_similarity` only to rank pairs of
 similar size against each other. See
 [`docs/jaccard-definitional-gap.md`](docs/jaccard-definitional-gap.md).
 
+**Interval-hybrid (C)** inserts three parameter columns — `subA`,`subB`,`expA` —
+between `window_size` and `jaccard_similarity`; modes A and B do not.
+
 **Sequence mode (D)** emits the same block, computed on the FASTA's window
 minimizers. Every Mode D row also ends with trailing **`ref1`,`ref2`** columns
 (the reference each list was extracted against; `NA` for plain-FASTA runs).
@@ -81,6 +84,14 @@ Modes are auto-detected: `.fa/.fasta/.fna/.ffn/.faa/.frn` (plus `.gz`) or any
 `--ref*` flag → **sequence** mode; otherwise → **interval** mode (B), except that
 `--subA`/`--expA` (interval-string knobs) select **interval-hybrid** (C).
 
+Interval modes read **plain-text** BED only: the parser does not decompress
+`.gz` or decode binary BigBed. hammock detects the common compressed and
+binary formats by magic bytes and **refuses to run** (exit 2) with a message
+naming the conversion command — decompress or convert first. The check is
+deliberately conservative, so an unrecognized binary format can still slip
+through and sketch to nothing, scoring `0.0` against every file including
+itself. (Sequence mode does handle `.gz` FASTA.)
+
 **BED→FASTA (Mode D from BED input):** pass `--ref`/`--ref1`/`--ref2` and the
 two lists are treated as BED files, converted to FASTA with `bedtools getfasta`
 against the given reference(s), then compared as sequences. This enables
@@ -98,18 +109,28 @@ pip install -e . --no-build-isolation
 
 This builds the C++ extension (HLL sketching + BED parser) via
 `scikit-build-core` + CMake + pybind11 and installs the `hammock` entry point.
-Requires CMake ≥ 3.18 and a C++17 compiler. The build uses a vendored copy of
-[mindis/hll](https://github.com/mindis/hll); no submodule init needed.
+Requires Python ≥ 3.8, CMake ≥ 3.18, and a C++17 compiler with OpenMP. The build
+uses a vendored copy of [mindis/hll](https://github.com/mindis/hll); no submodule
+init needed.
 
-For mode D you also need `digest`:
+Build with the compiler that belongs to the environment you will run in. If a
+module system or a stale toolchain puts a different `CC`/`CXX` in front, the
+extension can bake in an RPATH to an older `libstdc++`, which surfaces later as
+`GLIBCXX_… not found` on `import digest` (see [Troubleshooting](#troubleshooting)).
+Wipe `build/` when you change compilers — CMake caches the old one.
+
+For mode D you also need `digest` and `xxhash`:
 
 ```bash
 # Easiest path: bioconda (Python ≥ 3.9)
 conda install -c bioconda digest
+pip install xxhash
 ```
 
-`digest` is in `[project.optional-dependencies]` as `mode_d`, but bioconda is
-the recommended source — the PyPI `digest` is a different package.
+Both are in `[project.optional-dependencies]` as `mode_d`, so
+`pip install -e '.[mode_d]'` covers them — but bioconda is the recommended
+source for `digest`, because the PyPI package of that name is a different
+project. `environment.yml` lists both (`digest`, `python-xxhash`).
 
 ### BED→FASTA mode (`--ref`) requirements
 
@@ -120,7 +141,7 @@ packages are needed:
 | Tool | Needed for | Required? |
 |------|------------|-----------|
 | **bedtools** (`getfasta`) | extracting sequences from a reference | **required** |
-| **samtools** (`faidx`)    | indexing references (`.fai`)          | recommended — falls back to `bedtools` building the index if the reference dir is writable |
+| **samtools** (`faidx`)    | indexing references (`.fai`)          | recommended — falls back to `bedtools` building the index if the reference dir is writable; **required** for `fetch-ref`, for a gzipped local reference, and when the reference lives in a read-only directory |
 
 Make sure both are on `PATH` before running. On an HPC cluster with environment
 modules:
@@ -167,11 +188,15 @@ hammock <queries.txt> <refs.txt> [--mode MODE] [options]
   --gate-seed N             Seed for the subB sampling-decision hash (xxh32) and the
                             mixed-stride stride assignment (default 31337 = orig
                             hammock; independent of --seed)
-  --threads N               Default min(8, cpu_count())
-  --full-paths              Use full paths in CSV file1/file2 columns instead of basenames
+  --threads N               Default: min(8, cpu_count()) for interval modes, 1 for
+                            sequence mode (D), whose sketch loop is GIL-bound — an
+                            explicit --threads > 1 there is honored but usually slower
+  --full-paths              Write normalized input paths in the CSV file1/file2 columns
+                            instead of basenames
   -o, --outprefix PREFIX    Output prefix (default "hammock")
-  --memory-limit-gb F       Soft memory cap (default 0 = disabled)
+  --memory-limit-gb F       Soft memory cap in GiB (default 0 = disabled)
   --verbose                 Per-file sketching progress on stderr
+  --version                 Print the version and exit
 
   BED→FASTA (Mode D) — treat the two lists as BED files, convert via bedtools:
   --ref REF                 Reference for BOTH lists (keyword | local FASTA | URL)
@@ -189,15 +214,17 @@ hammock fetch-ref <keyword|url> [--ref-cache-dir DIR] [--force]
 Any `--ref*` flag reinterprets the two positional lists as BED files, forces
 Mode D, and adds trailing `ref1`/`ref2` columns to the CSV (they are `"NA"` for
 plain FASTA runs). Both list references must be given (`--ref`, or both `--ref1`
-and `--ref2`). Requires `bedtools` — see [Installation](#installation).
+and `--ref2`); combining a reference flag with an interval `--mode` is an error.
+Requires `bedtools` — see [Installation](#installation).
 
 The output filename embeds the parameters so runs with different settings don't
 collide — e.g. `-o out` gives `out_hll_p18_jaccB.csv` (interval), or
 `out_hll_p18_jaccC_expA0.50_B0.30.csv` with hybrid subsampling. Sequence-mode
 outputs also embed `_k<k>_w<w>` (`out_mnmzr_p18_jaccD_k8_w40.csv`), and BED→FASTA
-runs prepend `_<ref1>-vs-<ref2>` so cross-reference runs to the same `-o` don't
-overwrite each other (`out_hg38-vs-mm10_mnmzr_p18_jaccD_k8_w40.csv`). Run with
-`--verbose` to print the exact path.
+runs insert `_<ref1>-vs-<ref2>` right after your prefix, so cross-reference runs
+to the same `-o` don't overwrite each other
+(`out_hg38-vs-mm10_mnmzr_p18_jaccD_k8_w40.csv`). Run with `--verbose` to print
+the exact path.
 
 ## Examples
 
@@ -241,17 +268,22 @@ their fixes:
   BED chromosome names don't match the reference (`chr1` vs `1`). This is caught
   as a hard error, **not** a silent Jaccard≈0. Use a reference whose naming
   matches your BEDs (or re-name the BED chromosomes).
-- **"reference keyword 'hg38' is not cached"** — keywords/URLs are never
-  downloaded mid-run. The message prints the exact `hammock fetch-ref hg38
-  --ref-cache-dir <dir>` command; run it once on a networked node.
-- **"--ref-cache-dir/--fasta-outdir only apply with a reference"** or
-  **"--ref … mutually exclusive with --ref1/--ref2"** or **"give both --ref1
-  and --ref2"** — reference-flag validation; supply exactly `--ref` (both lists)
-  or both of `--ref1`/`--ref2`.
+- **"Query input … is gzip-compressed"** (or zstd/bzip2/xz/BigBed/BigWig) —
+  interval modes read plain-text BED only, so hammock rejects the file instead
+  of sketching it to nothing. The message names a conversion command; run it
+  and point the list at the converted file.
+- **"Reference keyword 'hg38' (→ hg38) is not cached in <dir>"** — keywords/URLs
+  are never downloaded mid-run. The message prints the exact `hammock fetch-ref
+  hg38 --ref-cache-dir <dir>` command; run it once on a networked node.
+- **"--ref-cache-dir/--fasta-outdir only apply with a reference flag"** or
+  **"--ref is mutually exclusive with --ref1/--ref2"** or **"BED→FASTA mode needs
+  a reference for both lists"** — reference-flag validation; supply exactly
+  `--ref` (both lists) or both of `--ref1`/`--ref2`.
 - **Sequence mode raises "requires the `digest` module"** — `digest` isn't
   importable. Verify `python -c "import digest"`; if it fails with `GLIBCXX_…
   not found`, your `_core` extension has a stale RPATH pulling in an old
-  libstdc++ — rebuild with the environment's own compiler (see the build notes).
+  libstdc++ — remove `build/` and rebuild with the environment's own compiler
+  (see [Installation](#installation)).
 
 ## Layout
 
@@ -267,8 +299,13 @@ tests/                 # pytest: unit + parity tests
 ```
 
 A standalone `hammock-cpp` binary is built alongside the wheel for max-speed
-benchmarking — same algorithms as `hammock`, no Python in the loop. Useful
-when measuring Mode B throughput. It writes a **tab**-separated file.
+benchmarking — same algorithms as `hammock` for modes A/B/C, no Python in the
+loop (mode D needs `digest` and stays on the Python side). Useful when measuring
+Mode B throughput. It writes a **tab**-separated file.
+
+**It is not on `PATH`.** Invoke it by full path: `build/<wheel-tag>/hammock-cpp`
+after a local build, or `<site-packages>/bin/hammock-cpp` from an installed
+wheel.
 
 Since **0.7.0** its defaults match the Python CLI's: mode **B** for BED input,
 and the full similarity block — `jaccard_similarity`, `jaccard_similarity_ie`,
@@ -306,7 +343,7 @@ pytest tests/
 The test suite covers:
 
 - **Parity vs orig (modes A/B/C):** byte-equal Jaccard column against
-  `hammock-orig` (orig 0.4.0 installed via pipx).
+  `hammock-orig` (the upstream `hammock`, installed via pipx under that name).
 - **Structural parity vs orig (mode D):** matching structural columns and
   well-formed similarity values against the conda-env `hammock` (Python 3.12 +
   bioconda `digest`). Mode D is **not** byte-equal by design — it ingests each

@@ -193,9 +193,13 @@ identically and there is nothing to contaminate.
 | MAE, `jaccard_similarity` | 0.1696 | 0.1696 | 0.1694 | 0.0447 |
 | MAE, `jaccard_similarity_ie` | 0.0081 | 0.0019 | 0.0005 | 0.0001 |
 
-Above J = 0.05 both estimators reach τ = 1.0000 by p = 16 on this corpus, so
-those strata carry no resolving power and no winner should be read out of them.
-The whole disagreement lives below J ≈ 0.05.
+Above J = 0.05 both estimators are at or within one discordant comparison of
+τ = 1.0000 from p = 16 up, so those strata carry no resolving power and no
+winner should be read out of them. (Precisely: in 0.05 ≤ J < 0.2 both reach
+1.0000 at p = 16; in J ≥ 0.2 inclusion–exclusion reaches it at p = 16 and
+register-equality sits at 0.9804 — 1 discordant comparison out of 102 — until
+p = 20. Verified against the generator 2026-08-06.) The whole disagreement lives
+below J ≈ 0.05.
 
 Generators: `experiments/bedtools_benchmark/estimator_rank_by_precision.py`
 (table, plus a leave-one-replicate-out stability check — the ordering holds in

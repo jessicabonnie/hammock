@@ -1,8 +1,12 @@
 # Experiment Design: Minimizer-Based Sketching on ENCODE Epigenomic Data
 
 **Project:** Validation of minimizer-based sequence sketching across reference genomes and biological contexts  
-**Status:** Workflow built; pending accession confirmation and parameter selection  
-**Last Updated:** 2026-04 (Exp A scoping); 2026-05 (Exp B split out — see note below)
+**Status:** Exp A is **run and closed (positive)** — see `docs/exp_a_results.md`
+for the numbers, figures and caveats. The status line below is the original
+scoping-era text and was never updated; corrected 2026-08-06.  
+~~Workflow built; pending accession confirmation and parameter selection~~  
+**Last Updated:** 2026-04 (Exp A scoping); 2026-05 (Exp B split out — see note below);
+2026-08-06 (status corrected)
 
 > **Note (2026-05-12):** This document still contains the original Experiment B
 > (tissue-over-species clustering) sections for historical reference, but

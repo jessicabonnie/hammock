@@ -1,5 +1,28 @@
 # Plot generation: Mode D Pearson vs ARI sweep summaries
 
+> **Status: executed. This is the archived spec, not an outstanding task**
+> (noted 2026-08-06). All three figures are on disk
+> (`figures/mode_d_lines_p24.png`, `figures/mode_d_max_lines_p24.png`,
+> `figures/mode_d_violins_by_k.png`) and the generating script is
+> `scripts/make_metric_plots.R`. It is kept because it documents the filters
+> and the sanity checks; run `Rscript scripts/make_metric_plots.R` to
+> regenerate.
+>
+> Two things drifted since it was written, both affecting a re-run rather than
+> the committed figures:
+> - **The sweep grid grew.** `mode_d_summary.csv` now has k ∈ {5, 8, 10, 15,
+>   20, 25} and w ∈ {5, 8, 10, 20, 30, 50, 100, 200, 300, 500} — 235 configs.
+>   The k=5 and w=5 cells come from the two one-off `sbatch_k5_*` scripts and
+>   are saturated/degenerate (k=5 has only two distinct ARI values). Decide
+>   deliberately whether to include them; the committed figures do not.
+> - **A third `column` value exists.** `jaccard_similarity_ie` (v0.5.0) is now
+>   in the CSV alongside `jaccard_similarity` and
+>   `jaccard_similarity_with_ends`, so the `column == "jaccard_similarity"`
+>   filter below is still correct but is now selecting one of three, not one
+>   of two. `jaccard_similarity_with_ends` itself was removed from hammock in
+>   v0.6.0 (`CLAUDE.md` divergence #8) — it survives only in the archived
+>   summary.
+
 You're being handed a self-contained plotting task. The paper outline
 (`docs/paper_outline.md`) has placeholder captions for **Fig 4** and
 **Fig 7** that need to be filled with three candidate figures (one is
@@ -41,10 +64,11 @@ For every plot below:
   Spearman / MAE in the CSV are against either `bedtools` or `Mode B`;
   use bedtools)
 
-After filtering, expect roughly one row per `(precision, k, w)` cell.
+After filtering, expect exactly one row per `(precision, k, w)` cell.
 There are 9 precisions (10, 12, 14, 16, 18, 20, 22, 23, 24) and
 varying k (8, 10, 15, 20, 25) × w (8, 10, 20, 30, 50, 100, 200,
-300, 500) cells.
+300, 500) cells — 235 rows as of 2026-08-06, including the k=5 / w=5
+one-offs noted at the top.
 
 ## Environment
 

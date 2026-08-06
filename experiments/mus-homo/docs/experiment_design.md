@@ -1,8 +1,16 @@
 # mus-homo: Tissue-over-Species Clustering, Human + Mouse
 
-**Status:** ✅ Run completed 2026-05-13. **Result: partial improvement over
+**Status:** Run completed 2026-05-13. **Result: partial improvement over
 H3K27ac but still not a clean tissue-over-species recovery.** See "Results
 (2026-05-13)" section below.
+
+> **Superseded, note added 2026-08-06.** The "Results (2026-05-13)" section
+> and its **marginal** verdict predate the Mode D minimizer-ingest bug fix
+> (`CLAUDE.md` divergence #6). The whole sweep was re-run on 2026-05-14 and
+> the verdict moved from **marginal** to **null** — 0 cells tissue-dominant,
+> not 3. `README.md` "Results (2026-05-14)" is the current record; the
+> section below is kept as the pre-fix reading. The 2026-05-13 addendum at
+> the end (column choice) is likewise pre-fix.
 
 **Created:** 2026-05-12 (split from `claude-ref-comparison/exp_b`).
 **Locked:** 2026-05-12 — DNase-seq, 5 tissues (testis dropped), 10 samples.
@@ -125,6 +133,13 @@ The experiment can land in one of three places:
 | 1–4 cells tissue-dominant, near-noise margins | **Marginal** — mark choice matters but H3K4me3 alone doesn't close the gap. Frame as a divergence-ceiling result. |
 | 0 cells tissue-dominant | **Null** (parallel to H3K27ac result) — strong evidence that *no* peak-FASTA sketching recovers cross-species tissue identity at ~80 Mya, regardless of mark. Useful negative result. |
 
+> **Leftovers from the H3K4me3 draft (note added 2026-08-06).** This table and
+> the Hypothesis / Motivation sections above still say "H3K4me3" and "40 (k, w
+> × peak_type) cells". The design was locked on **DNase-seq**, which is a
+> single assay with no broad/narrow split, so the sweep is **20 cells**, not
+> 40 — as the `README.md` criteria table correctly states. Read "H3K4me3" as
+> "DNase-seq" throughout; the thresholds themselves are unchanged.
+
 ## Results (2026-05-13)
 
 Full (k, w) sweep over 10 samples completed. 62/62 snakemake jobs done; 20
@@ -179,8 +194,11 @@ mark/data-type — and the only path forward is either:
 
 ### Output paths
 
-- ARI summary table (regenerable): `python3 -c "..."` snippet from this session
+- ARI summary table: regenerable with `scripts/compute_column_comparison.py`
+  (the original note here pointed at an inline `python3 -c "..."` snippet from
+  the session, which was not preserved — corrected 2026-08-06)
 - Per-cell figures: `results/k{k}_w{w}/{dendrogram.png, pca.png, cluster_assignments.tsv}`
+  plus the input `mus_homo_mnmzr_p24_jaccD_k{k}_w{w}.csv`
   (where `results/` symlinks to `/vast/blangme2/jbonnie/hammock/mus-homo/results/`)
 
 ### Addendum (2026-05-13): column choice does not change the verdict
@@ -192,7 +210,13 @@ under either column, and the tissue-dominant count only nudges 3 → 4 (a
 k=5,w=5 cell squeaks in at ARI_t = +0.040, still noise). The only material
 difference is that `_with_ends` carries slightly more species signal at high
 k (species ARI 0.374 vs 0.308 at k=15, w≥15). Per-cell comparison TSV at
-`results/column_comparison.tsv`.
+`results/column_comparison.tsv` — **not on disk as of 2026-08-06**. Regenerate
+with `python scripts/compute_column_comparison.py` (it shells out to
+`scripts/compute_column_comparison.R` via a hardcoded Rscript path and writes
+the TSV back to `results/`). Note the R script hardcodes *both*
+`jaccard_similarity` and `jaccard_similarity_with_ends`, so it only runs
+against the archived CSVs; on post-v0.6.0 hammock output the `_with_ends`
+lookup has nothing to bind to.
 
 ---
 

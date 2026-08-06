@@ -1,7 +1,26 @@
 # Why the Mode D `_with_ends` columns were removed
 
-Removed in v0.6.0. This is the evidence, the counter-evidence, and the honest
-limits of both. Short version in `CLAUDE.md` divergence #8.
+**Status: done, not proposed.** The seven `*_with_ends` columns were deleted in
+v0.6.0 and Mode D has emitted a single similarity block since. This file is the
+record of why, including the counter-evidence and the honest limits of both.
+Short version in `CLAUDE.md` divergence #8.
+
+- **Question.** `jaccard_similarity_with_ends` merged the minimizer HLL with a
+  per-record start/end-k-mer HLL. Was it measuring anything the minimizer column
+  did not?
+- **Measured.** Four structural properties of the construction (an uncontrolled
+  size-weighted blend; 77–79% of the added elements chimeric; a 1 bp boundary
+  cliff; a fallback that made the two columns bit-identical exactly where the
+  column was supposed to help), plus a win-rate scoring of all 235 archived
+  Maurano Mode D configs against `bedtools jaccard`, plus a v0.5.0-vs-v0.6.0
+  wheel-to-wheel timing.
+- **Answer.** Remove it. `no_ends` wins 185/235 outright and 93.2% under an
+  outcome-independent filter, and removing the column bought 1.5–2.5×
+  single-threaded on peak-shaped FASTA at byte-identical output on every
+  surviving column.
+- **Open.** Whether a *properly built* flank statistic would be useful on
+  corpora with genuinely shared exact termini — see "What this does not settle".
+  No corpus in this repo can test it.
 
 ## What the column was
 
@@ -146,7 +165,8 @@ bedtools does not measure can only lose ρ. This is why the removal rests on the
 structural findings above rather than on the win rate.
 
 **The ref-comparison Exp A result that originally justified the column does not
-survive scrutiny — in either direction.** `docs/paper_outline.md:171` ranked
+survive scrutiny — in either direction.** The "Metric choice at k=10, w=10"
+block in `docs/paper_outline.md` §4.4 (Robustness to reference genome) ranked
 metrics by Δmedian, which rewards de-saturation; on scale-free AUC,
 `jaccard_similarity` gets 1.0000 (broad and narrow) vs 0.9012/0.8889 for
 `_with_ends`. But that AUC is one biological sample deep — every
@@ -213,14 +233,17 @@ just a coordinate-equality detector. No such corpus exists in this repo.
 
 Archived CSVs keep the columns; nothing on disk is invalidated. Re-pointed to
 `jaccard_similarity`: `experiments/ref-comparison/workflow/Snakefile`,
-`scripts/exp_a_dendrogram.R`, all three `config.yaml` `primary_sim_col` keys
+`experiments/ref-comparison/scripts/exp_a_dendrogram.R`, all three
+`config.yaml` `primary_sim_col` keys
 (two of which were dead — ref-comparison hardcodes it, primate reads it
 nowhere), and `experiments/primate-phylogeny/` (which dropped its three `_we`
 trees; the `_mz` equivalents already exist on `/vast`).
 
 **Not regenerated.** Figures and quoted numbers computed on the old column are
 stale, including Fig 7 in `docs/paper_outline.md` (rendered by
-`exp_a_dendrogram.R`), the §6.2 metric-choice claim at line 171, and
+`experiments/ref-comparison/scripts/exp_a_dendrogram.R`) and the §4.4
+metric-choice claim, which `docs/paper_outline.md` has since marked WITHDRAWN
+(2026-07-31) rather than regenerated. Also stale:
 `experiments/mus-homo/` results. `experiments/mus-homo/scripts/compute_column_comparison.R`
 compares the two columns and is now moot — it was never run (no
 `column_comparison.tsv` on disk).

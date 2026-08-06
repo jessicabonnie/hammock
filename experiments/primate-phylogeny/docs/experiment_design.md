@@ -1,10 +1,30 @@
 # primate-phylogeny: Sketch-Distance Recovery of Mammalian Phylogeny
 
-**Status:** Planning. No code yet. Question: does pairwise minimizer-sketch
-similarity over H3K4me3 (or H3K27ac) peak FASTAs in a single tissue recover
-the known mammalian phylogeny?
+**Status:** Run and closed as **partial** (accepted 2026-05-14, H3K27ac
+refreshed 2026-05-16) on 7 of the planned 20 species. Primate clade recovered;
+deep topology fails. See "Verdict: partial" below. The header below is the
+original planning framing, kept as written.
 
-**Created:** 2026-05-12.
+**Question:** does pairwise minimizer-sketch similarity over H3K4me3 (or
+H3K27ac) peak FASTAs in a single tissue recover the known mammalian phylogeny?
+
+**Created:** 2026-05-12. **Status line corrected 2026-08-06** — it still said
+"Planning. No code yet." long after the pipeline ran.
+
+> **Schema note added 2026-08-06.** Everything below was measured before
+> hammock v0.6.0, which removed the `jaccard_similarity_with_ends` column
+> family (`CLAUDE.md` divergence #8). Passages that quote `_with_ends`
+> values, and the `_we` trees / distance matrices in the output paths, refer
+> to a column that no longer exists and cannot be regenerated. The archived
+> files are unaffected; only re-runs are. Parse them by column *name* —
+> positional field indices differ between the pre- and post-v0.6.0 schemas.
+> Separately, `jaccard_similarity` is register-equality and is **not** set
+> Jaccard: it has a chance-agreement floor and is not rank-faithful across
+> pairs of differing FASTA size (divergence #2), which is directly relevant
+> here because the per-species peak FASTAs differ in size by 2× and that
+> asymmetry is already implicated below in the `cosketch_max` failure.
+> `estimator_ie_topology.py` in the parent directory re-scores the topology
+> on the calibrated `jaccard_similarity_ie` instead.
 
 ---
 
@@ -76,6 +96,24 @@ Peaks are deposited as per-species BED files in the ArrayExpress submission.
 Some species' peaks are called against an older assembly than what's listed
 here; we'll need to either liftOver or download the matching assembly.
 
+> **What was actually run (note added 2026-08-06).** The assemblies in the
+> table above are the *planning* choices and were not used. Phase 1 ran 7
+> species against Ensembl release-73 (Sept 2013) assemblies, matching
+> Villar's peak-call coordinates so no liftOver was needed:
+> hg19, mm10, rheMac2, calJac3, canFam3, bosTau7, monDom5. The authoritative
+> list is `config/config.yaml`'s `references:` block — the Snakefile only runs
+> species whose `ucsc_assembly` key appears there. The remaining 13 species in
+> `config/samples.tsv` were never staged.
+
+> **Cross-species caveat (note added 2026-08-06).** At mammalian divergence,
+> Mode D similarity between peak FASTAs measures **shared k-mer content** —
+> repeat elements, low-complexity sequence, conserved promoter motifs — not
+> homology (`CLAUDE.md`, "Cross-reference caveat"). This is the same
+> mechanism the "Verdict: partial" section below diagnoses as the bottleneck,
+> stated as a property of the method rather than of this dataset. hammock's
+> default `k=8` is unsuitable for cross-species work; the sweep here runs k
+> up to 20 for that reason, and the k=5 cells are saturated.
+
 ## Pipeline shape (proposed)
 
 ```
@@ -130,6 +168,19 @@ information and the pipeline now emits a tree per column.
 | k=5 (any w) | sketch saturated, topology near-random | no |
 | **k=8–10, w=10–20** | **stable topology, primate clade recovered** | **yes** |
 | k≥15 | cross-species Jaccard saturates at 0.000 → polytomy collapse | no |
+
+> **The k≥15 row is a pre-fix artifact — checked 2026-08-06.** It was
+> measured before the Mode D minimizer-ingest fix (`CLAUDE.md` divergence #6),
+> which is exactly the bug that silently dropped most minimizers at k ≥ 12.
+> In the post-fix `metric_spreads.tsv` files on disk, H3K4me3
+> `jaccard_similarity` across species is **0.074–0.236 at k=15/w=15** and
+> **0.025–0.146 at k=20/w=20** — not zero, and with *wider* spread (0.163 and
+> 0.121) than the k=10/w=10 cell's 0.055. So "saturates at 0.000" is false
+> post-fix. What was **not** re-derived is whether the usable-window verdict
+> changes: the "Containment / cosketch addendum" below re-ran the full sweep
+> post-fix and reports the Jaccard tree topology unchanged, but the
+> usable-window table was never rewritten against those numbers. Treat the
+> k=8–10 window as the pre-fix recommendation, not a re-confirmed one.
 
 At the usable (k, w) cells, **the primate sub-tree ((hsa, rheMac),
 calJac) is recovered cleanly** at every cell — hsa-rheMac sister

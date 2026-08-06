@@ -145,11 +145,11 @@ call that releases the GIL, so leave that path alone.
    and the *binding* exposes no register access — the full bound API is
    `add_hash64`, `add_string`, `clear`, `estimate_cardinality`,
    `estimate_intersection`, `estimate_jaccard`, `precision`
-   (`bindings/_core.cpp:221-258`). So a worker process cannot return a sketch
-   today.
+   (`bindings/_core.cpp:190-227`, the `py::class_<HLLSketch>` block). So a
+   worker process cannot return a sketch today.
 
    **False, and this was the load-bearing error:** that the C++ class lacks
-   register access. `cpp/include/hammock/hll_sketch.hpp:55-59` already declares
+   register access. `cpp/include/hammock/hll_sketch.hpp:54-58` already declares
    `precision()`, `hash_size_bits()`, `num_registers()`, and **both const and
    non-const `registers()`, all public**. So pickling is a **binding-only,
    strictly additive** change — one `py::pickle(...)` in `bindings/_core.cpp`,

@@ -16,6 +16,27 @@ resolution table. **§2's guidance rewrite and all of §6 are deliberately NOT
 applied** — a separate experiment evaluating the two estimators is in progress
 and should settle them.
 
+> **Status update 2026-08-06.** The paragraph above is the state as of §1's
+> writing and is left as written. Three things have moved since:
+>
+> - **The experiment it defers to has closed, at Phase 0.** §9 is its report.
+>   Phase 1 (the register-level simulator of §6.1) was gated on Phase 0 not
+>   producing a clean crossover; it did, so Phase 1 was never built and is not
+>   scheduled. Treat §6.1 as an unexecuted design, not as pending work.
+> - **§2's guidance rewrite has since been applied**, in the form §9.2 recommends
+>   rather than the form §2 proposed. `CLAUDE.md` divergence #2 and
+>   `docs/jaccard-definitional-gap.md` both now carry the reading rule ("read
+>   `jaccard_similarity_ie`; if your corpus is low-J and you need ranking, raise
+>   `-p` to 24") together with the τ table of §9.1.
+> - **The "do not cite, under revision" notes are gone from both files**,
+>   because the resolution table they guarded has been properly superseded
+>   rather than merely flagged: `docs/jaccard-definitional-gap.md` now carries it
+>   in a collapsed "The superseded resolution table, and why" section, and
+>   `CLAUDE.md` states the retraction directly.
+>
+> §9.1's τ table was re-verified against the shipped generator on 2026-08-06 and
+> reproduces exactly (see §9's script list).
+
 **Scope of the underlying question:** hammock's interval mode emits two Jaccard
 columns — `jaccard_similarity` (register-equality) and `jaccard_similarity_ie`
 (inclusion–exclusion) — plus the containment/cosketch block. The governing
@@ -327,6 +348,13 @@ spot-check a few cells through the real BED→hammock path.
 
 ### 6.3 `estimator_compare.py` maintenance
 
+> **Partly done, 2026-08-06.** Clamp fractions **are** now reported (the
+> `ie_clamped` per-row flag and the `clamp` summary column). Still outstanding:
+> the script still reconstructs `jaccard_similarity_ie` from the containments
+> instead of reading the shipped column, still uses a fitted line rather than the
+> analytic `f` as reference, still discards the bedtools `union` field, and
+> `card_A`/`card_B` still read the nonexistent `sketch_size_A`/`sketch_size_B`.
+
 Read `jaccard_similarity_ie` directly instead of reconstructing; use the
 analytic `f` as reference; take pair-level λ from the bedtools `union` field
 already parsed and discarded (`bedtools_jaccard` keeps only `fields[2]`;
@@ -338,6 +366,14 @@ in **no** hammock output and are all-`nan` across the 360 on-disk rows. **[V]**
 ---
 
 ## 7. Hazards to avoid (verified silent-failure modes)
+
+> **Hazards 1 and 2 are fixed in the tree, 2026-08-06.**
+> `experiments/bedtools_benchmark/estimator_compare.py` now takes **`--data-seed`**
+> and **`--sketch-seed`** as separate flags and *rejects* a bare `--seed`
+> (`argparse.SUPPRESS`ed into `_rejected_seed`), and it puts the sketch seed into
+> the `-o` prefix by hand, with the `get_new_prefix` limitation documented at the
+> call site. Hazards 3–6 are still live; 4 in particular (`bedtools` unpinned in
+> `bedtools.sh` vs hardcoded 2.30.0 in `estimator_compare.py`) is unchanged.
 
 1. **Two different "seed"s.** `estimator_compare.py --seed` is the *data* seed
    consumed by `make_data`; it is never passed to hammock, whose `--seed` is

@@ -75,6 +75,16 @@ Compare Mode A and Mode B Jaccards at gen=100 across the two configs:
 | Saturated (g1M) | ~0.01    | ~1.0     | Mode B is blind to Indel — saturation hides the signal |
 | Sparse (g100M)  | ~0.01    | ~0.08    | Mode B sees Indel almost as well as Mode A             |
 
+> **Checked 2026-08-06** against `results/hammock_g{TAG}/synth_r0.05_A_hll_p18_jacc{A,B}.csv`
+> at generation 100. Exact values: saturated A 0.0141 / B 0.9947; sparse
+> A 0.0139 / B **0.1109** — the "~0.08" above reads low, the rest hold.
+> Two caveats on the sparse Mode B figure, both material at this magnitude:
+> `jaccard_similarity` is register-equality, not set Jaccard, and carries a
+> chance-agreement floor (`CLAUDE.md` divergence #2); the inclusion-exclusion
+> value recovered from the same row's containments is 0.049. So Mode B's true
+> sensitivity to Indel in the sparse regime is *better* than either number
+> above suggests, which strengthens rather than weakens the conclusion.
+
 The saturated number for Mode B is misleading: each interval contributes
 ~2380 unique positions, but in a 5 Mbp genome most positions are also
 covered by neighboring intervals, so deleting one interval barely

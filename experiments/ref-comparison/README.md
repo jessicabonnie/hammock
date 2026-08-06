@@ -5,6 +5,20 @@ ChIP-seq by asking whether **the same biological sample aligned to different
 human reference genomes** (GRCh37, GRCh38, CHM13) sketches more similarly across
 references than across tissues on any one reference.
 
+**Outcome: positive.** The hypothesis holds across the whole usable
+parameter range, and at k ∈ {15, 20} the two groups are fully separated.
+The lead cell is **k=15, w=15** (broad: Δmedian 0.398, Wilcoxon p 1.35e-10).
+Numbers, figures and caveats: `docs/exp_a_results.md`.
+
+> Two things a reader must carry. (1) The headline stats were computed on
+> `jaccard_similarity_with_ends`, a column **hammock v0.6.0 removed**;
+> `docs/exp_a_results.md` carries a 2026-08-06 recomputation on the surviving
+> `jaccard_similarity` showing the result holds and strengthens (Δ 0.483,
+> still fully separated). (2) A Mode D ingest bug was fixed on 2026-05-14 and
+> everything was re-run; the pre-fix reading in which k=15/20 looked like a
+> "saturated low" regime is wrong — post-fix they are the *strongest*
+> discriminators. Any pre-2026-05-14 note claiming otherwise is stale.
+
 This experiment was originally part of `claude-ref-comparison` together with a
 tissue-over-species experiment ("Exp B"). The tissue-over-species work has been
 split into separate experiments (`mus-homo`, `primate-phylogeny`, `man-monkey`)
@@ -19,8 +33,10 @@ justifies this directory's existence.
 ref-comparison/
 ├── docs/
 │   ├── experiment_design.md   ← design rationale, accessions, success criteria
-│   ├── exp_a_results.md       ← results summary + figure index
+│   ├── exp_a_results.md       ← results summary + figure index (start here)
 │   ├── paper_outline.md       ← paper outline (Exp A only)
+│   ├── data_selection_slides_prompt.md  ← slide-deck prompt for the sample-choice story
+│   ├── workflow_diagram_prompt.md       ← diagram prompt for the pipeline figure
 │   └── references.bib         ← BibTeX bibliography
 ├── workflow/
 │   ├── Snakefile              ← downstream pipeline (peaks → FASTA → hammock → plots)
@@ -32,10 +48,15 @@ ref-comparison/
 │   ├── confirmed_accessions.tsv
 │   └── nfcore_samplesheet_human.csv
 ├── scripts/
-│   ├── fetch_accessions.py    ← resolve GEO/SRA accession numbers
-│   ├── run_nfcore.sh          ← launches nf-core/chipseq per reference
-│   ├── exp_a_validate_plot.R  ← Wilcoxon + 2-panel boxplot + heatmap
-│   └── exp_a_sweep_summary.R  ← (k × w) effect-size heatmap across the sweep
+│   ├── fetch_accessions.py       ← resolve GEO/SRA accession numbers
+│   ├── run_nfcore.sh             ← launches nf-core/chipseq per reference
+│   ├── exp_a_validate_plot.R     ← Wilcoxon + 2-panel boxplot + heatmap
+│   ├── exp_a_sweep_summary.R     ← (k × w) effect-size heatmap across the sweep
+│   ├── exp_a_dendrogram.R        ← UPGMA dendrogram (broad + narrow)
+│   └── exp_a_metric_comparison.R ← per-metric Wilcoxon comparison at one (k, w)
+├── setup_experiment.sh        ← one-time scaffolding (dirs + symlinks into /vast)
+├── environment.yaml           ← conda env spec for `claude-ref-comparison`
+├── nextflow.config            ← cluster profile consumed by scripts/run_nfcore.sh
 ├── results/                   ← fine-grained symlinks into legacy storage (Exp A subset)
 │   ├── exp_a/ → .../claude-ref-comparison/results/exp_a
 │   ├── fastas/ → .../claude-ref-comparison/results/fastas
@@ -43,6 +64,10 @@ ref-comparison/
 ├── figures/                   ← local mirror of headline + representative cell figures (gitignored)
 └── README.md
 ```
+
+Under `results/exp_a/{broad,narrow}/` there are 20 `k{k}_w{w}/` cells (the
+full `w ≥ k` sweep), each holding the all-vs-all CSV, `cross_ref_stats.tsv`,
+and `cross_ref_validation.png`, plus a per-peak-type `sweep_effect_size.png`.
 
 Hammock + nf-core outputs live at `/vast/blangme2/jbonnie/hammock/claude-ref-comparison/`
 (kept on the legacy path so existing CSVs / plots remain valid without
@@ -95,3 +120,10 @@ snakemake --profile workflow/slurm_profile/      # submit to SLURM
 | nf-core download + alignment (per sample × ref) | 16 | 32 GB | ~4 h |
 | hammock per (k, w) | 8 | 16 GB | 10 min – 12 h |
 | R plotting (per cell, sweep summary) | 1 | 8 GB | <2 min |
+
+> **Mode D timing note, 2026-08-06.** The hammock row was measured at
+> `--threads 8`. Mode D threading is a GIL convoy, not parallelism — v0.6.1
+> changed the Mode D default to `--threads 1` after measuring the 8-thread
+> pool at **2× slower** than single-threaded (`CLAUDE.md`, Architecture).
+> So the walltime above is *inflated*, not a floor; re-baseline before
+> sizing a new run off it.
