@@ -12,7 +12,7 @@ The numbers of files in these interval databases continue to grow every year. Ch
 
 Scalability is not the only obstacle to systematic interval comparison. BED coordinates are meaningful only with respect to the reference genome on which they were defined, and large public collections remain distributed across multiple genome assemblies. Standard overlap measures therefore cannot directly compare two interval files when one is defined on hg19 and the other on hg38, even when the files describe the same assay or biological feature. Figure 1 illustrates this limitation for histone-mark ChIP-seq peak files from Roadmap Epigenomics and BLUEPRINT. For histone marks represented in both collections, within-Roadmap and within-BLUEPRINT comparisons can be performed in their respective coordinate systems, whereas every Roadmap–BLUEPRINT pairing is blocked by the hg19–hg38 mismatch. Coordinate conversion can sometimes recover such comparisons, but it introduces additional preprocessing, may not map all intervals unambiguously, and continues to define similarity in terms of a selected coordinate system. An alternative is to extract the reference sequence underlying each interval and compare the resulting sequence collections directly, allowing related genomic annotations to be evaluated across references without requiring their coordinates to coincide.
 
-![Figure 1](figures/roadmap_blueprint_top5_marker_pairwise_comparisons.png)
+Figure 1
 
 **Figure 1. Reference-genome fragmentation prevents direct comparison across public histone-mark collections.** Numbers of possible pairwise comparisons among processed histone-mark ChIP-seq peak BED files are shown for the five most represented marks shared by Roadmap Epigenomics and BLUEPRINT. Within-resource comparisons can be performed directly because Roadmap files share hg19 coordinates and BLUEPRINT files share hg38 coordinates. In contrast, every Roadmap–BLUEPRINT pairing is blocked for direct coordinate-overlap analysis by the hg19–hg38 reference mismatch. File counts are deduplicated at the download-URL level; included outputs are BED-, narrowPeak-, broadPeak-, or gappedPeak-like peak files. Repository counting and inclusion criteria are described in Supplementary Methods S1.
 
@@ -22,9 +22,11 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 
 ## II. Results
 
+
+
 ### 2.1 Hammock represents interval sets in complementary coordinate and sequence spaces
 
-![Figure 2](figures/hammock_workflow.png)
+Figure 2
 
 **Figure 2. Hammock provides complementary coordinate- and sequence-based representations of genomic interval sets.** (A) Public interval collections are large, comparisons scale quadratically with the number of files, and BED coordinates are tied to specific reference genomes. (B) In interval mode, each BED file is summarized as a reusable sketch of covered genomic positions, enabling fast all-pairs similarity comparisons within a shared reference. (C) In sequence mode, interval sequences are extracted from each file's native reference FASTA, representative k-mers are selected using minimizers, and the resulting sequence sketches are compared across references without requiring direct coordinate overlap. The two modes therefore answer complementary questions: whether interval sets occupy similar genomic locations and whether they contain similar underlying sequence.
 
@@ -37,47 +39,49 @@ This section should distinguish two sources of the interval-mode speedup:
 
 Mixed-stride should be presented as a methodological contribution within the interval-mode scaling result, not as an unrelated implementation optimization. The main text should briefly contrast it with hash-threshold subsampling; the full comparison among mixed-stride, hash-threshold, and single-hash strategies can remain supplementary.
 
-![Figure 3](figures/pairwise_scaling.png)
+Figure 3
 
-**Figure 3. Hammock expands feasible all-pairs comparison as interval collections grow.** (A) Wall time for hammock and BEDTools across synthetic collections containing 10,000 intervals per BED file, using HyperLogLog precision \(p=14\), 16 threads, and three runs per configuration. Hammock constructs one reusable sketch per file and separates sketch-construction time from fixed-size sketch comparison, whereas the BEDTools workflow repeatedly performs exact comparisons over the underlying interval files. Each configuration comprises two disjoint collections of \(N\) files compared as a full cross product, so the number of compared pairs grows as \(N^{2}\) — reaching 262,144 at \(N=512\) — causing the performance advantage of sketch reuse to increase with collection size. The lower pair of curves separates the two output shapes hammock can emit: the sketch-comparison phase with the three-column output used for timing, and the same phase emitting `jaccard_similarity_ie` together with the containment and co-sketch columns (`+IE`), which is the configuration recommended for analysis. The additional columns cost a factor of 3.4–3.8 in that phase at \(N\ge64\) (less at smaller \(N\), where fixed per-run overhead dominates a sub-millisecond phase) but only 1.45% of total wall time at \(N=512\) (54.15 s against 53.38 s), because sketch construction dominates throughout; the two total-time curves are consequently indistinguishable and only the three-column one is drawn. (B) Wall time on 20 Maurano fetal-tissue DNase hypersensitivity BED files, corresponding to 190 unique pairs, using interval mode with \(p=18\) and eight threads. Hammock is faster than the parallelized BEDTools workflow without subsampling, while the novel mixed-stride implementation of `subB` at `0.1` and `0.01` further reduces runtime with little change relative to hammock's own unsubsampled similarity estimates. Mixed-stride deterministically advances through genomic positions at chromosome-specific strides and offsets, avoiding a hash-based inclusion test at every covered position. Bar labels report wall time, speedup relative to BEDTools, and mean \(|\Delta J|\). \(\Delta J\) is defined per pair as the difference between a subsampled run's `jaccard_similarity` and the mean `jaccard_similarity` of hammock's own unsubsampled (\(\mathrm{subB}=1.0\)) runs on that same pair; mean \(|\Delta J|\) is the mean of its absolute value over all 950 pair-by-replicate comparisons (190 pairs \(\times\) 5 replicates). Two consequences are worth stating explicitly. First, the baseline is hammock unsubsampled and **not** BEDTools, so this quantity measures the perturbation subsampling introduces into hammock's own estimate rather than agreement with an exact method; the unsubsampled bar is that baseline and is labelled accordingly rather than carrying a zero, which would be true by construction and easily misread as exact agreement with BEDTools (register-equality sits \(\approx0.16\) above BEDTools Jaccard on this corpus, as Figure 4 shows). Second, because the absolute value is taken before averaging, mean \(|\Delta J|\) reports magnitude and not direction, and cannot reveal a systematic bias in either sense. Together, the synthetic and real-data benchmarks show that hammock improves the feasibility of exhaustive pairwise analysis through both reusable sketches and efficient optional subsampling during sketch construction.
+**Figure 3. Hammock expands feasible all-pairs comparison as interval collections grow.** (A) Wall time for hammock and BEDTools across synthetic collections containing 10,000 intervals per BED file, using HyperLogLog precision p=14, 16 threads, and three runs per configuration. Hammock constructs one reusable sketch per file and separates sketch-construction time from fixed-size sketch comparison, whereas the BEDTools workflow repeatedly performs exact comparisons over the underlying interval files. Each configuration comprises two disjoint collections of N files compared as a full cross product, so the number of compared pairs grows as N^{2} — reaching 262,144 at N=512 — causing the performance advantage of sketch reuse to increase with collection size. The lower pair of curves separates the two output shapes hammock can emit: the sketch-comparison phase with the three-column output used for timing, and the same phase emitting `jaccard_similarity_ie` together with the containment and co-sketch columns (`+IE`), which is the configuration recommended for analysis. The additional columns cost a factor of 3.4–3.8 in that phase at N\ge64 (less at smaller N, where fixed per-run overhead dominates a sub-millisecond phase) but only 1.45% of total wall time at N=512 (54.15 s against 53.38 s), because sketch construction dominates throughout; the two total-time curves are consequently indistinguishable and only the three-column one is drawn. (B) Wall time on 20 Maurano fetal-tissue DNase hypersensitivity BED files, corresponding to 190 unique pairs, using interval mode with p=18 and eight threads. Hammock is faster than the parallelized BEDTools workflow without subsampling, while the novel mixed-stride implementation of `subB` at `0.1` and `0.01` further reduces runtime with little change relative to hammock's own unsubsampled similarity estimates. Mixed-stride deterministically advances through genomic positions at chromosome-specific strides and offsets, avoiding a hash-based inclusion test at every covered position. Bar labels report wall time, speedup relative to BEDTools, and mean |\Delta J|. \Delta J is defined per pair as the difference between a subsampled run's `jaccard_similarity` and the mean `jaccard_similarity` of hammock's own unsubsampled (\mathrm{subB}=1.0) runs on that same pair; mean |\Delta J| is the mean of its absolute value over all 950 pair-by-replicate comparisons (190 pairs \times 5 replicates). Two consequences are worth stating explicitly. First, the baseline is hammock unsubsampled and **not** BEDTools, so this quantity measures the perturbation subsampling introduces into hammock's own estimate rather than agreement with an exact method; the unsubsampled bar is that baseline and is labelled accordingly rather than carrying a zero, which would be true by construction and easily misread as exact agreement with BEDTools (register-equality sits \approx0.16 above BEDTools Jaccard on this corpus, as Figure 4 shows). Second, because the absolute value is taken before averaging, mean |\Delta J| reports magnitude and not direction, and cannot reveal a systematic bias in either sense. Together, the synthetic and real-data benchmarks show that hammock improves the feasibility of exhaustive pairwise analysis through both reusable sketches and efficient optional subsampling during sketch construction.
 
-**Figure 3 generation.** The combined figure is generated by `paper/pairwise_scaling/plot_pairwise_scaling.R` and written to `paper/figures/pairwise_scaling.png`. Panel A uses `docs/data/cpp_vs_bedtools_t16_20260804_172242.csv` (job 29552415); Panel B uses `docs/data/maurano_subB_summary.csv` and `docs/data/maurano_bedtools.csv`. The script rebuilds both panels with harmonized typography, panel labels, tool colors, wall-time units, and the pair count \(N^{2}\).
+**Figure 3 generation.** The combined figure is generated by `paper/pairwise_scaling/plot_pairwise_scaling.R` and written to `paper/figures/pairwise_scaling.png`. Panel A uses `docs/data/cpp_vs_bedtools_t16_20260804_172242.csv` (job 29552415); Panel B uses `docs/data/maurano_subB_summary.csv` and `docs/data/maurano_bedtools.csv`. The script rebuilds both panels with harmonized typography, panel labels, tool colors, wall-time units, and the pair count N^{2}.
 
-Panel A was rebuilt in August 2026 and the sketch-comparison curve should not be compared point-for-point with earlier versions of this figure. Before hammock 0.7.0 the binary reported phase timings as integer milliseconds, so that phase measured 0.000000 s at \(N\le16\) and was previously drawn against a plotting floor of \(10^{-4}\) s — four of its nine points were a constant rather than a measurement. Timings are now reported in microseconds and the floor has been removed. The underlying benchmark was re-run at the same time so that all four series come from one job; totals reproduce the earlier run to within the 1.5–7% between-day variation recorded in `experiments/bedtools_benchmark/RESULTS.md` (at \(N=512\), 12.68× against 13.14× without subsampling). Full account: `docs/figure3-panel-a-rebuild.md`.
+Panel A was rebuilt in August 2026 and the sketch-comparison curve should not be compared point-for-point with earlier versions of this figure. Before hammock 0.7.0 the binary reported phase timings as integer milliseconds, so that phase measured 0.000000 s at N\le16 and was previously drawn against a plotting floor of 10^{-4} s — four of its nine points were a constant rather than a measurement. Timings are now reported in microseconds and the floor has been removed. The underlying benchmark was re-run at the same time so that all four series come from one job; totals reproduce the earlier run to within the 1.5–7% between-day variation recorded in `experiments/bedtools_benchmark/RESULTS.md` (at N=512, 12.68× against 13.14× without subsampling). Full account: `docs/figure3-panel-a-rebuild.md`.
 
 ### 2.3 Interval sketches recover exact-overlap similarity structure and values
 
-![Figure 4](figures/interval_accuracy.png)
+Figure 4
 
-**Figure 4. Inclusion–exclusion reproduces BEDTools Jaccard; register-equality reproduces only its ordering.** Pairwise comparisons were performed on 20 Maurano fetal-tissue DNase hypersensitivity BED files, yielding 190 unique off-diagonal pairs; self-comparisons were excluded from all statistics and plots. Hammock interval mode emits two similarity columns, and the distinction is the subject of this figure. `jaccard_similarity` is a *register-equality* statistic — the fraction of active HyperLogLog registers whose values agree — which is not set Jaccard: registers tie by chance, placing a floor under the statistic. `jaccard_similarity_ie` is the inclusion–exclusion estimate \(\left(|A|+|B|-|A\cup B|\right)/|A\cup B|\), which estimates the same quantity BEDTools computes exactly. (A) Both estimates at HyperLogLog precision \(p=21\) are plotted against BEDTools Jaccard over the observed off-diagonal range, with LOESS fits; the dashed line marks numerical identity. The inclusion–exclusion cloud lies on that line (MAE \(=4.3\times10^{-4}\), Pearson \(r=0.99999\), Kendall \(\tau=0.9947\)), whereas register-equality lies in a band roughly \(0.14\) above it (MAE \(=0.1378\), \(r=0.99720\), \(\tau=0.9511\)). (B) Absolute deviation from BEDTools, on a logarithmic axis, for precisions \(p=18\), \(p=21\) and \(p=23\), distinguished by line type. The logarithmic axis is necessary rather than cosmetic: the two estimators differ by nearly three orders of magnitude, so on a linear axis all three inclusion–exclusion curves collapse onto zero. The register-equality deviation is \(\approx0.14\) and does not move with precision — the three curves superimpose — because it is a property of the estimator, not sampling error; it is a chance-agreement floor whose size is set by the sketch load factor and by the cardinality ratio \(|A|/|B|\). The inclusion–exclusion deviation falls from \(\approx1\times10^{-3}\) to \(\approx2\times10^{-4}\) across the same precisions, scaling as \(1/\sqrt{m}\) as HyperLogLog error should. Together the panels separate two claims that a single-column figure conflates. Interval sketching preserves similarity *structure* under either column, but only inclusion–exclusion reproduces BEDTools *values*. Ordering under register-equality is high but not exact: \(\tau=0.951\) corresponds to 439 of 17,955 comparisons (2.45%) in which the two tools disagree on ordering, all involving BEDTools Jaccard differences below 0.025 (the largest inverting gap is precision-dependent: 0.0303, 0.0250 and 0.0267 at \(p=18\), \(21\) and \(23\)). Those inversions are systematic rather than stochastic — the chance floor decreases with \(|A|/|B|\), so pairs of unequal size are transformed differently — and the same residual pattern recurs across independent sketch sets at \(p=18\) and \(p=21\) (\(r=0.994\)). Under inclusion–exclusion at \(p=21\) the same corpus inverts 48 comparisons (0.27%).
+**Figure 4. Inclusion–exclusion reproduces BEDTools Jaccard; register-equality reproduces only its ordering.** Pairwise comparisons were performed on 20 Maurano fetal-tissue DNase hypersensitivity BED files, yielding 190 unique off-diagonal pairs; self-comparisons were excluded from all statistics and plots. Hammock interval mode emits two similarity columns, and the distinction is the subject of this figure. `jaccard_similarity` is a *register-equality* statistic — the fraction of active HyperLogLog registers whose values agree — which is not set Jaccard: registers tie by chance, placing a floor under the statistic. `jaccard_similarity_ie` is the inclusion–exclusion estimate \left(|A|+|B|-|A\cup B|\right)/|A\cup B|, which estimates the same quantity BEDTools computes exactly. (A) Both estimates at HyperLogLog precision p=21 are plotted against BEDTools Jaccard over the observed off-diagonal range, with LOESS fits; the dashed line marks numerical identity. The inclusion–exclusion cloud lies on that line (MAE =4.3\times10^{-4}, Pearson r=0.99999, Kendall \tau=0.9947), whereas register-equality lies in a band roughly 0.14 above it (MAE =0.1378, r=0.99720, \tau=0.9511). (B) Absolute deviation from BEDTools, on a logarithmic axis, for precisions p=18, p=21 and p=23, distinguished by line type. The logarithmic axis is necessary rather than cosmetic: the two estimators differ by nearly three orders of magnitude, so on a linear axis all three inclusion–exclusion curves collapse onto zero. The register-equality deviation is \approx0.14 and does not move with precision — the three curves superimpose — because it is a property of the estimator, not sampling error; it is a chance-agreement floor whose size is set by the sketch load factor and by the cardinality ratio |A|/|B|. The inclusion–exclusion deviation falls from \approx1\times10^{-3} to \approx2\times10^{-4} across the same precisions, scaling as 1/\sqrt{m} as HyperLogLog error should. Together the panels separate two claims that a single-column figure conflates. Interval sketching preserves similarity *structure* under either column, but only inclusion–exclusion reproduces BEDTools *values*. Ordering under register-equality is high but not exact: \tau=0.951 corresponds to 439 of 17,955 comparisons (2.45%) in which the two tools disagree on ordering, all involving BEDTools Jaccard differences below 0.025 (the largest inverting gap is precision-dependent: 0.0303, 0.0250 and 0.0267 at p=18, 21 and 23). Those inversions are systematic rather than stochastic — the chance floor decreases with |A|/|B|, so pairs of unequal size are transformed differently — and the same residual pattern recurs across independent sketch sets at p=18 and p=21 (r=0.994). Under inclusion–exclusion at p=21 the same corpus inverts 48 comparisons (0.27%).
 
 **Figure 4 generation.** The figure is generated by `paper/interval_accuracy/plot_interval_accuracy.R` and written to `paper/figures/interval_accuracy.png`. Inputs are `docs/data/maurano_bedtools_ref.tsv` and `docs/data/hammock_hll_p{18,21,23}_jaccB.csv`. Those three CSVs were regenerated with hammock 0.5.0 on 2026-07-31 to obtain the `jaccard_similarity_ie` column; earlier copies carried the placeholder `containment` column and could not supply it. The regeneration reproduces the archived `jaccard_similarity` values **exactly** (0 of 400 pairs differ at any precision), so panel A's register-equality series is unchanged from the previously published figure.
 
 ### 2.4 Biological identity is preserved across references
 
-![Figure 5](figures/cross_reference_identity.png)
+Figure 5
 
-**Figure 5. Sequence sketches group samples by tissue across genome references.** Three ENCODE H3K27ac ChIP-seq samples—heart ENCSR175ABH, liver ENCSR864OOO, and lung ENCSR954JMZ—were independently aligned and peak-called against GRCh37, GRCh38, and CHM13, yielding nine peak sets. Each peak set was converted to sequence against its native reference and sketched in sequence mode using broad peaks, \(k=10\), \(w=10\), HyperLogLog precision \(p=24\), and the minimizer-only Jaccard metric. UPGMA clustering on \(1-J\) groups the nine peak sets by tissue rather than by reference genome: heart, liver, and lung each form a distinct clade containing the GRCh37-, GRCh38-, and CHM13-derived representation of that tissue. In this proof-of-concept panel, reference choice therefore behaves as a within-tissue perturbation rather than as the dominant axis of separation, showing that sequence sketches can retain biological identity across genome references without requiring direct coordinate overlap.
+**Figure 5. Sequence sketches group samples by tissue across genome references.** Three ENCODE H3K27ac ChIP-seq samples—heart ENCSR175ABH, liver ENCSR864OOO, and lung ENCSR954JMZ—were independently aligned and peak-called against GRCh37, GRCh38, and CHM13, yielding nine peak sets. Each peak set was converted to sequence against its native reference and sketched in sequence mode using broad peaks, k=10, w=10, HyperLogLog precision p=24, and the minimizer-only Jaccard metric. UPGMA clustering on 1-J groups the nine peak sets by tissue rather than by reference genome: heart, liver, and lung each form a distinct clade containing the GRCh37-, GRCh38-, and CHM13-derived representation of that tissue. In this proof-of-concept panel, reference choice therefore behaves as a within-tissue perturbation rather than as the dominant axis of separation, showing that sequence sketches can retain biological identity across genome references without requiring direct coordinate overlap.
 
-**Figure 5 generation.** The figure is generated by `paper/cross_reference_identity/plot_cross_reference_identity.R` and written to `paper/figures/cross_reference_identity.png`. Inputs are `docs/data/exp_a_broad_k10_w10.csv` (staged from `experiments/ref-comparison/results/exp_a/broad/k10_w10/exp_a_mnmzr_p24_jaccD_k10_w10.csv`) and `docs/data/exp_a_metadata.tsv` (staged from the experiment configuration). The script constructs the nine-sample similarity matrix, converts similarity to \(1-J\), performs average-linkage hierarchical clustering, and renders the tissue-colored dendrogram.
+**Figure 5 generation.** The figure is generated by `paper/cross_reference_identity/plot_cross_reference_identity.R` and written to `paper/figures/cross_reference_identity.png`. Inputs are `docs/data/exp_a_broad_k10_w10.csv` (staged from `experiments/ref-comparison/results/exp_a/broad/k10_w10/exp_a_mnmzr_p24_jaccD_k10_w10.csv`) and `docs/data/exp_a_metadata.tsv` (staged from the experiment configuration). The script constructs the nine-sample similarity matrix, converts similarity to 1-J, performs average-linkage hierarchical clustering, and renders the tissue-colored dendrogram.
 
 ### 2.5 Sequence sketches recover tissue organization
 
-![Figure 6](figures/sequence_tissue_clustering.png)
+Figure 6
 
-**Figure 6. Sequence sketches recover fetal-tissue organization in the Maurano DNase hypersensitivity collection.** Twenty fetal-tissue DNase-seq interval sets spanning ten annotated tissue labels were converted to interval-derived sequence and compared using the minimizer-only `jaccard_similarity` score at \(k=10\), \(w=30\), and HyperLogLog precision \(p=24\). Section 6.1 recommends `jaccard_similarity_ie` for magnitude; the choice is immaterial here, because the two columns induce the same partition on this corpus and yield adjusted Rand and normalized mutual information values that agree to sixteen digits. We report the register-equality column because it is the one the sequence-mode sweep emitted. This parameter combination lies on the ARI-optimal \(k,w\) plateau identified in the sequence-mode sweep; \(p=24\) is used for the manuscript dendrogram. Average-linkage hierarchical clustering was performed on \(1-J\). Leaf labels show dataset accessions and are colored by annotated tissue; the legend maps colors to tissue labels. Blue rectangles outline contiguous organ-level groups up to their most recent common-ancestor height, with the three muscle subtypes treated as one organ group for the boxes. Cutting the dendrogram into the ten annotated tissue classes yielded an adjusted Rand index of \(0.910\) and normalized mutual information of \(0.961\). The figure therefore shows that sequence-derived similarity recovers the known tissue organization while retaining finer distinctions among closely related muscle samples.
+**Figure 6. Sequence sketches recover fetal-tissue organization in the Maurano DNase hypersensitivity collection.** Twenty fetal-tissue DNase-seq interval sets spanning ten annotated tissue labels were converted to interval-derived sequence and compared using the minimizer-only `jaccard_similarity` score at k=10, w=30, and HyperLogLog precision p=24. Section 6.1 recommends `jaccard_similarity_ie` for magnitude; the choice is immaterial here, because the two columns induce the same partition on this corpus and yield adjusted Rand and normalized mutual information values that agree to sixteen digits. We report the register-equality column because it is the one the sequence-mode sweep emitted. This parameter combination lies on the ARI-optimal k,w plateau identified in the sequence-mode sweep; p=24 is used for the manuscript dendrogram. Average-linkage hierarchical clustering was performed on 1-J. Leaf labels show dataset accessions and are colored by annotated tissue; the legend maps colors to tissue labels. Blue rectangles outline contiguous organ-level groups up to their most recent common-ancestor height, with the three muscle subtypes treated as one organ group for the boxes. Cutting the dendrogram into the ten annotated tissue classes yielded an adjusted Rand index of 0.910 and normalized mutual information of 0.961. The figure therefore shows that sequence-derived similarity recovers the known tissue organization while retaining finer distinctions among closely related muscle samples.
 
 **Figure 6 generation.** The figure is generated by `paper/sequence_tissue_clustering/plot_sequence_tissue_clustering.R` and written to `paper/figures/sequence_tissue_clustering.png`. By default, the script reads `experiments/maurano_dhs_validation/results/raw_d/hammock_mnmzr_p24_jaccD_k10_w30.csv`, uses the `jaccard_similarity` column, and obtains tissue annotations from `experiments/maurano_dhs_validation/data/maurano_filenames_key.tsv`. Optional command-line arguments can substitute another similarity CSV, tissue key, output path, or similarity column.
 
 ### 2.6 Parameterization separates numerical agreement from biological resolution
 
-![Figure 7](figures/parameter_response.png)
+Figure 7
 
-**Figure 7. Numerical agreement and biological resolution favor different sequence-mode parameter settings.** Sequence-mode configurations were evaluated on the 20 Maurano fetal-tissue DNase hypersensitivity interval sets at HyperLogLog precision \(p=24\) using the minimizer-only `jaccard_similarity` estimator; the panels are qualitatively unchanged under `jaccard_similarity_ie`, which relocates the Pearson optimum to \(k=20\), \(w=20\), \(p=20\) while leaving its tissue-clustering performance at the same adjusted Rand index of \(0.693\), against \(0.910\) at the ARI optimum. Both panels use the same ordered minimizer-window axis and the same color, line type, and point shape for each \(k\); a light dashed guide marks \(w=30\). (A) Pearson correlation with exact BEDTools Jaccard approaches a broad optimum across larger \(k\)-mer and minimizer-window settings. The configuration with the highest Pearson correlation is marked with an open symbol and annotated with both its numerical agreement and tissue-clustering performance. (B) Agreement between average-linkage clusters and the annotated tissue labels, measured by adjusted Rand index, instead reaches its maximum at \(k=10\) and \(w=30\), the setting used for Figure 6. The \(k=15\), \(k=20\), and \(k=25\) ARI curves overlap across the sweep and remain below the Figure 6 setting. Together, the panels show that parameter settings that most closely reproduce exact interval-similarity values are not the same settings that best preserve tissue organization.
+**Figure 7. Numerical agreement and biological resolution favor different sequence-mode parameter settings.** Sequence-mode configurations were evaluated on the 20 Maurano fetal-tissue DNase hypersensitivity interval sets at HyperLogLog precision p=24 using the minimizer-only `jaccard_similarity` estimator; the panels are qualitatively unchanged under `jaccard_similarity_ie`, which relocates the Pearson optimum to k=20, w=20, p=20 while leaving its tissue-clustering performance at the same adjusted Rand index of 0.693, against 0.910 at the ARI optimum. Both panels use the same ordered minimizer-window axis and the same color, line type, and point shape for each k; a light dashed guide marks w=30. (A) Pearson correlation with exact BEDTools Jaccard approaches a broad optimum across larger k-mer and minimizer-window settings. The configuration with the highest Pearson correlation is marked with an open symbol and annotated with both its numerical agreement and tissue-clustering performance. (B) Agreement between average-linkage clusters and the annotated tissue labels, measured by adjusted Rand index, instead reaches its maximum at k=10 and w=30, the setting used for Figure 6. The k=15, k=20, and k=25 ARI curves overlap across the sweep and remain below the Figure 6 setting. Together, the panels show that parameter settings that most closely reproduce exact interval-similarity values are not the same settings that best preserve tissue organization.
 
-**Figure 7 generation.** The figure is generated by `paper/parameter_response/plot_parameter_response.R` and written to `paper/figures/parameter_response.png`. The input is `docs/data/mode_d_summary.csv` (staged from `experiments/maurano_dhs_validation/results/mode_d_summary.csv`), filtered to `precision == 24`, `column == "jaccard_similarity"`, and `reference == "bedtools"`; configurations with \(k<8\) are excluded because too few usable window settings were available to form a response curve. The script computes the best-Pearson and Figure 6 annotations directly from the input and reports the lowest-MAE setting to stderr. The earlier Pearson-versus-ARI scatter (`docs/scripts/mode_d_metric_tradeoff.R`) is retained as a compact supplementary summary of the same sweep.
+**Figure 7 generation.** The figure is generated by `paper/parameter_response/plot_parameter_response.R` and written to `paper/figures/parameter_response.png`. The input is `docs/data/mode_d_summary.csv` (staged from `experiments/maurano_dhs_validation/results/mode_d_summary.csv`), filtered to `precision == 24`, `column == "jaccard_similarity"`, and `reference == "bedtools"`; configurations with k<8 are excluded because too few usable window settings were available to form a response curve. The script computes the best-Pearson and Figure 6 annotations directly from the input and reports the lowest-MAE setting to stderr. The earlier Pearson-versus-ARI scatter (`docs/scripts/mode_d_metric_tradeoff.R`) is retained as a compact supplementary summary of the same sweep.
 
 ## III. Discussion
+
+
 
 ### 3.1 Scaling comparison within references
 
@@ -85,20 +89,34 @@ Discuss both layers of the computational contribution: reusable sketches reduce 
 
 ### 3.2 Comparing interval-derived sequence across references
 
+
+
 ### 3.3 Coordinate similarity and sequence similarity are complementary
+
+
 
 ### 3.4 Practical recommendations
 
+
+
 ### 3.5 Limitations and future work
+
+
 
 ## IV. Methods
 
+
+
 ### 4.1 Software implementation
+
+
+
 ### 4.1 Software implementation
 
 \program{hammock} is a command-line tool and importable Python package with a C++17 extension that uses OpenMP for parallel execution. It accepts two positional inputs, each a plain-text file containing paths to a collection of genomic datasets to be compared. Hammock selects interval or sequence mode based on the input dataset formats and supplied reference arguments unless a mode is explicitly requested. In all modes, one reusable sketch is constructed for each listed dataset, and pairwise comparisons between the two collections are written to a comma-separated table.
 
 Hammock implements four representations that can be selected with `--mode`.
+
 
 | CLI mode                       | Input                                | Representation                                       |
 | ------------------------------ | ------------------------------------ | ---------------------------------------------------- |
@@ -107,26 +125,58 @@ Hammock implements four representations that can be selected with `--mode`.
 | `interval-hybrid`              | BED                                  | Combined interval-string and position representation |
 | `sequence`                     | FASTA or BED with a reference genome | Sliding-window minimizers derived from sequence      |
 
+
 This study evaluates the base-level `interval` representation for within-reference comparisons and the `sequence` representation for comparisons of interval-derived sequence. The interval-string and interval-hybrid representations remain available in the software but are not evaluated as primary methods here.
+
+For sequence comparisons beginning from BED files, hammock extracts the nucleotide sequence underlying each interval using the reference genome associated with that collection. `hammock fetch-ref` can be used to facilitate the download of references. Sequence extraction produces one FASTA file per BED file, which is then processed using the same sequence-mode workflow as directly supplied FASTA input.
+
+For each pair of input datasets, hammock reports the following similarity summaries:
+
+
+| Output field            | Interpretation                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| `jaccard_similarity_ie` | Set Jaccard estimated from HyperLogLog cardinalities using inclusion–exclusion |
+| `jaccard_similarity`    | Fraction of active HyperLogLog registers with equal values                     |
+| `containment_AB`        | Estimated fraction of dataset A contained in dataset B                         |
+| `containment_BA`        | Estimated fraction of dataset B contained in dataset A                         |
+| `cosketch_geom`         | Geometric mean of the two directional containment estimates                    |
+| `cosketch_arith`        | Arithmetic mean of the two directional containment estimates                   |
+| `cosketch_max`          | Maximum of the two directional containment estimates                           |
+
+
+ The analyses in this study use the register-equality Jaccard estimate or the inclusion–exclusion Jaccard estimate when comparison with exact set Jaccard is required. Sketch construction and interval subsampling are reproducible for fixed parameter values and seeds.
 
 ### 4.2 Interval-mode sketch construction
 
-#### 4.2.1 Mixed-stride subsampling
+#### 4.2.1 Hyperloglog Sketching
 
-Define `subB`, the sampled base-pair universe, and the mixed-stride algorithm. For sampling fraction `subB`, set the approximate stride to \(s=\mathrm{round}(1/\mathrm{subB})\), use a deterministic chromosome-keyed offset to select the sampling phase, and advance directly between accepted positions rather than evaluating every covered position. Explain determinism, seed handling, expected sampling density, computational cost, and the rationale for chromosome-specific offsets. Contrast the algorithm with hash-threshold subsampling, whose inclusion test requires a hash computation for every covered position regardless of the requested sampling fraction.
+
+#### 4.2.2 Mixed-stride subsampling
+
+Interval mode passes the points of a base-pair expansion of each interval to a HLL sketch. There is a certain computational excess involved in adding every point in an interval, so \program{hammock} includes a \texttt{--subB} command that allows for a subsampling of the points to be added to the sketch, where the value of \texttt{subB} is a proportion between $0$ and $1$. In order to maintain reproducible randomness of point selection, mixed-stride subsampling is used.
+
+In mixed-stride subsampling, a deterministic chromosome-keyed offset is used to select the sampling phase, interpolating between two strides to exactly match a target probability $p$, with deterministic reproducibility.
+
+ADD MATH HERE
+
+Define `subB`, the sampled base-pair universe, and the mixed-stride algorithm. For sampling fraction `subB`, set the approximate stride to s=\mathrm{round}(1/\mathrm{subB}), use a deterministic chromosome-keyed offset to select the sampling phase, and advance directly between accepted positions rather than evaluating every covered position. 
+
+Explain determinism, seed handling, expected sampling density, computational cost, and the rationale for chromosome-specific offsets. Contrast the algorithm with hash-threshold subsampling, whose inclusion test requires a hash computation for every covered position regardless of the requested sampling fraction.
 
 ### 4.3 Sequence-mode sketch construction
+
+#### 4.3.1 Minimizers
 
 ### 4.4 Similarity estimators and computational complexity
 
 *Draft outline. Key sentences are given; connecting prose is not written.*
 
 - **Framing.** Both estimators are computed from the same pair of sketches. *"Hammock's two similarity columns differ in what they estimate and in what they cost, not in the data they see."*
-- **Register-equality (`jaccard_similarity`).** Define as the fraction of active registers whose values agree.
+- **Register-equality (**`jaccard_similarity`**).** Define as the fraction of active registers whose values agree.
   - *"This is not set Jaccard: two registers agree whenever the largest ρ observed in that bucket happens to coincide, which occurs at some rate even for disjoint inputs, so the statistic carries a chance-agreement floor c."*
   - c is set by the sketch load factor λ = n/m **and** by the cardinality ratio |A|/|B| — not by precision as such. Report 0.1699 at equal cardinality as λ→∞, 0.058 at ratio 10, 0.045 at p = 24 once m > n.
   - *"Because c differs between pairs of differing size, register-equality is order-preserving within a cardinality ratio but not across ratios."* Ties to the 2.45% Maurano inversions in §2.3.
-- **Inclusion–exclusion (`jaccard_similarity_ie`).** Define |A ∩ B| = |A| + |B| − |A ∪ B| with each term an Ertl (2017) estimate, union by register-wise maximum, intersection clamped to ≥ 0; J = |A∩B|/|A∪B|, equivalently 1/(1/C_AB + 1/C_BA − 1).
+- **Inclusion–exclusion (**`jaccard_similarity_ie`**).** Define |A ∩ B| = |A| + |B| − |A ∪ B| with each term an Ertl (2017) estimate, union by register-wise maximum, intersection clamped to ≥ 0; J = |A∩B|/|A∪B|, equivalently 1/(1/C_AB + 1/C_BA − 1).
   - *"An exact 0.0 in this column means the intersection estimate hit the non-negativity clamp or the inputs are genuinely disjoint; it never means a measured zero."*
   - Relative error ≈ 0.6/(J√m), hence uninformative below J ≈ a few/√m — state as the column's domain of validity.
 - **Cost, and why the two columns are not interchangeable operationally.**
@@ -135,11 +185,15 @@ Define `subB`, the sampled base-pair universe, and the mixed-stride algorithm. F
   - *"The overhead is therefore negligible for small collections and material at the catalog scale the method targets."*
   - State explicitly which configuration Figure 3 benchmarks, so the speed claim and the reporting recommendation refer to the same thing.
 - **Why not the joint maximum-likelihood estimator.** *"Ertl's joint MLE is the lower-variance choice for HyperLogLog Jaccard, but it requires the joint register histogram of the pair, which hammock's sketch interface does not expose; the inclusion–exclusion form is recoverable from the containment estimates already computed and needs no additional interface."* Pre-empts the obvious reviewer question.
-- **Which column to report.** *"We report `jaccard_similarity_ie` for any comparison of magnitude, and for any comparison spanning different set sizes; `jaccard_similarity` is retained as the low-cost default and for compatibility with earlier hammock releases."*
+- **Which column to report.** *"We report* `jaccard_similarity_ie` *for any comparison of magnitude, and for any comparison spanning different set sizes;* `jaccard_similarity` *is retained as the low-cost default."*
   - One clause on the exception (register-equality ranks better below J ≈ 0.05 at p ≤ 20 among comparably-sized pairs, and one step of precision removes the advantage), with the quantification deferred to a supplementary note rather than carried in Methods.
 - **Complexity.** Retain the original stub: cost of mixed-stride sketch construction as a function of covered length and stride, alongside full interval ingestion and pairwise sketch comparison.
 
+
+
 ### 4.5 Datasets
+
+
 
 ### 4.6 Performance benchmarking
 
@@ -147,19 +201,35 @@ Include the direct comparison of no subsampling and mixed-stride `subB = 0.1` an
 
 ### 4.7 Interval-mode accuracy evaluation
 
+
+
 ### 4.8 Sequence-mode biological evaluation
+
+
 
 ## Data and code availability
 
+
+
 ## Author contributions
+
+
 
 ## Acknowledgments
 
+
+
 ## References
+
+
 
 ## Supplementary Methods
 
+
+
 ### S1. Quantification of public interval collections
+
+
 
 ### S2. Alternative `subB` sampling strategies and implementation details
 
@@ -167,8 +237,11 @@ Document hash-threshold and single-hash alternatives, the full mixed-stride deri
 
 ## Supplementary Results
 
+
+
 ### S3. Comparison of mixed-stride, hash-threshold, and single-hash subsampling
 
 Report runtime, similarity deviation, and scaling across sampling fractions and file sizes. This supports the mixed-stride contribution without requiring an additional main-text figure unless its comparative advantage becomes a headline result.
 
 ## Supplementary Figures and Tables
+
