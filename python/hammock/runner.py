@@ -37,19 +37,27 @@ def _jaccard_ie_from_containments(c_ab, c_ba):
     Both are |A n B| / |.| over the same inclusion-exclusion intersection, so
         1 / (1/C_AB + 1/C_BA - 1) == |A n B| / (|A| + |B| - |A n B|).
 
-    Containments are clamped to 1.0 first. They can exceed it by a few ulp:
+    Containments are clamped to 1.0 first. They can exceed it by rounding:
     `inter = cA + cB - cUnion` is a difference of three Ertl estimates, and
     while the union estimate is monotone (union registers are element-wise max)
-    so `inter <= min(cA, cB)` holds mathematically, rounding can push the ratio
-    just past 1 -- measured 0.2% of random pairs across p=4..20, max excess one
-    ulp. Clamping guarantees `denom >= 1`, so neither a division by zero nor an
-    out-of-range result is reachable. A zero containment means the intersection
-    estimate was zero -- genuinely empty, or clamped from a negative in
-    HLLSketch::intersection_size -- and is scored 0.0.
+    so `inter <= min(cA, cB)` holds mathematically, cancellation can push the
+    ratio just past 1. The excess is small but **not** bounded by one ulp, as
+    this said before 2026-08-06: measured max excess is ~8 ulp on nested
+    subset pairs at p<=20, and ~3.4e4 ulp (1 + 7.5e-12) in the extreme
+    size-ratio regime (|A| ~ 1e3 against |B| ~ 1e7, A subset of B), because
+    `inter` inherits `ulp(cB)` and that dwarfs a tiny `cA`. Only the noise is
+    absorbed -- the true containment cannot exceed 1 -- so the clamp is a
+    correct projection, and it guarantees `denom >= 1`, making both a division
+    by zero and an out-of-range result unreachable. A zero containment means
+    the intersection estimate was zero -- genuinely empty, or clamped from a
+    negative in HLLSketch::intersection_size -- and is scored 0.0.
 
     Note the emitted `containment_AB`/`containment_BA` columns are NOT clamped,
     so reconstructing J_ie from them can differ from this column in the last
-    couple of digits. Matches
+    couple of digits -- and, in the extreme size-ratio regime above, by more
+    than that. Values just over 1.0 do reach the CSV (`cosketch_max` inherits
+    them, since the cosketches are also computed from the unclamped pair);
+    a consumer asserting `<= 1.0` will trip. Matches
     experiments/bedtools_benchmark/estimator_compare.py, except for the clamp.
 
     Unlike `jaccard_similarity` (register equality), this carries no

@@ -92,6 +92,14 @@ def _projected_rows(csv_text: str) -> list[tuple]:
 #     must explicitly pass --subB-method=hash-threshold.
 #   - --subB-method=single-hash: opt-in parity divergence (one xxh64 for
 #     gate+ingestion). Not tested against orig.
+#
+# And one scope limit that is orig's fault, not ours: orig is inconsistent
+# with *itself* on Mode B across list shapes (same pair, p=12 -> 0.5478468...
+# for a 2x2 run, 0.5455607... for 1x1/1x2/2x1). Ours is shape-invariant and
+# is the value an independent reimplementation confirms. `_files_list` hands
+# the same two-file list to both positionals, which happens to be the shape
+# where orig agrees -- so widening this to differing query/ref lists will
+# "fail" on orig's bug. See CLAUDE.md "Parity environments".
 @pytest.mark.parametrize("mode,extra", [
     ("A", []),
     ("B", []),

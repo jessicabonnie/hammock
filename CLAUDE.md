@@ -188,6 +188,22 @@ These are deliberate; parity tests that touch them are skipped or projected.
 
    Parity tests project these columns out before comparing.
 
+   **The containment columns are emitted unclamped, so values just over 1.0
+   reach the CSV** (`1.0000000000000007` occurs in ordinary runs), and
+   `cosketch_max` inherits them. Only `jaccard_similarity_ie` clamps before
+   use. Don't assert `<= 1.0` downstream. Magnitudes and mechanism:
+   `runner._jaccard_ie_from_containments`'s docstring.
+
+   **Read these CSVs back with `float_precision="round_trip"`.** Python writes
+   `repr(float)` and `hammock-cpp` writes `%.17g` — the same double, different
+   text, both exact. `pandas.read_csv`'s *default* float parser is not
+   round-trip exact and will manufacture spurious ~1e-16 disagreements when you
+   recompute `cosketch_geom`/`cosketch_arith` from a row's own containment
+   columns, or diff the two front ends. `csv` + `float()` is also fine (what
+   `tests/test_parity_against_original.py` uses). `cosketch_max` is immune,
+   being a selection rather than arithmetic — if it is the only column that
+   matches, you have hit this.
+
    **The two estimator families in a row are on different scales — do not
    mix them.** `jaccard_similarity` is register-equality, which carries a
    chance-agreement floor `c` (two registers tie when different elements
@@ -533,6 +549,24 @@ while the orig pipx venv is on 3.8:
 
 If a parity test is added for a new mode, prefer the conda env (modern
 Python; has `digest`).
+
+**Scope caveat: the Mode B byte-equality claim holds only for the list shape
+the test happens to use.** `hammock-orig` is inconsistent *with itself* on
+Mode B — for the same file pair at p=12 it emits `0.5478468899521531` when
+both positional lists are `[tiny_a, tiny_b]`, but `0.5455607476635514` for
+1×1, 1×2, and 2×1 shapes. Ours is shape-invariant and returns the first value
+in every shape; an independent pure-Python reimplementation of the register
+model (xxh64 seed 42 over the `chr\tpos` point strings) confirms ours is the
+correct one, so **orig is the one that's wrong**. It matters because
+`test_jaccard_byte_equal` passes the *same* two-file list for both positionals
+(`_files_list`), which is exactly the one configuration where orig agrees.
+So: do not "fix" a parity failure that appears after widening the test to
+genuinely different query/ref lists — that is orig's bug surfacing, not a
+drift in this repo. The mechanism was not pinned; orig's alternate value is in
+the neighborhood of k-merizing the point strings at the default `kmer_size=8`
+(closest probe 0.5453368), i.e. plausibly the same class of dual-path bug as
+divergence #6. Established 2026-08-06 by end-to-end verification of every
+emitted metric.
 
 ## CLI surface
 
