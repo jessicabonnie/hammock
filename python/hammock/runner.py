@@ -138,18 +138,24 @@ def _guard_is_list_file(list_file: str, arg_name: str) -> str | None:
 # anything. A gzipped or BigBed input therefore parses to zero intervals and
 # scores 0.0 against everything -- including itself -- while exiting 0. Reject
 # it up front rather than emit a plausible-looking all-zero CSV.
-# (magic bytes, description, how to convert). bgzip/BAM/.tbi are gzip-framed
-# and so are caught by the gzip entry. This list is not exhaustive -- see the
-# note in _guard_plain_text_bed about what it deliberately does not catch.
+#
+# Entries are (magic bytes, description, conversion template). bgzip/BAM/.tbi
+# are gzip-framed and so are caught by the gzip entry. Prefer a LONGER magic
+# over a shorter one: these are matched against the head of a file that is
+# usually legitimate text, so a short magic risks rejecting real data. bzip2 is
+# spelled out per compression level ("BZh1".."BZh9") for exactly that reason --
+# a bare b"BZh" also matches a BED whose first chromosome is named "BZh...".
 _BINARY_MAGIC = (
     (b"\x1f\x8b", "gzip-compressed", "gunzip -c {p} > {out}"),
     (b"\x28\xb5\x2f\xfd", "zstd-compressed", "zstd -dc {p} > {out}"),
-    (b"BZh", "bzip2-compressed", "bzip2 -dc {p} > {out}"),
     (b"\xfd7zXZ", "xz-compressed", "xz -dc {p} > {out}"),
     (b"\xeb\xf2\x89\x87", "a binary BigBed", "bigBedToBed {p} {out}"),
     (b"\x87\x89\xf2\xeb", "a binary BigBed", "bigBedToBed {p} {out}"),
     (b"\x26\xfc\x8f\x88", "a binary BigWig", "bigWigToBedGraph {p} {out}"),
     (b"\x88\x8f\xfc\x26", "a binary BigWig", "bigWigToBedGraph {p} {out}"),
+) + tuple(
+    (b"BZh" + bytes([level]), "bzip2-compressed", "bzip2 -dc {p} > {out}")
+    for level in b"123456789"
 )
 
 

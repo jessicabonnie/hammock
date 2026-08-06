@@ -21,6 +21,7 @@ BINARY_CASES = [
     ("a.bed.gz", b"\x1f\x8b\x08\x00rest", "gzip-compressed"),
     ("a.bed.zst", b"\x28\xb5\x2f\xfdrest", "zstd-compressed"),
     ("a.bed.bz2", b"BZh9rest", "bzip2-compressed"),
+    ("a.bed.bz1", b"BZh1rest", "bzip2-compressed"),
     ("a.bed.xz", b"\xfd7zXZ\x00rest", "xz-compressed"),
     ("a.bb", b"\xeb\xf2\x89\x87rest", "BigBed"),
     ("a.bigbed", b"\x87\x89\xf2\xebrest", "BigBed"),
@@ -47,6 +48,10 @@ def test_binary_inputs_are_rejected(tmp_path, name, head, expected):
     b"\xef\xbb\xbfchr1\t1\t2\n",   # UTF-8 BOM
     b"chr1\t100\t200\r\n",     # CRLF
     b"track name=x\nchr1\t1\t2\n",
+    # A chromosome name that collides with the head of a magic. bzip2 is
+    # b"BZh" + a level digit, so a bare 3-byte test would reject this.
+    b"BZhaplotype1\t100\t200\n",
+    b"BZh\t100\t200\n",
 ])
 def test_plain_text_passes(tmp_path, content):
     p = tmp_path / "a.bed"
