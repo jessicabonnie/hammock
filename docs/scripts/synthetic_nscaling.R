@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # Paper Fig 2 — synthetic N-scaling: hammock vs bedtools wall time.
-# Source CSV: docs/data/cpp_vs_bedtools_t16_20260512_160412.csv
+# Source CSV: docs/data/cpp_vs_bedtools_t16_20260804_172242.csv
 # Output:     docs/figures/synthetic_nscaling.png
 #
 # Usage (from any cwd):
@@ -31,7 +31,7 @@ argv <- commandArgs(trailingOnly = TRUE)
 files_csv <- if (length(argv) >= 1) {
   argv[1]
 } else {
-  file.path(DOCS_DIR, "data", "cpp_vs_bedtools_t16_20260512_160412.csv")
+  file.path(DOCS_DIR, "data", "cpp_vs_bedtools_t16_20260804_172242.csv")
 }
 out_png <- if (length(argv) >= 2) {
   argv[2]
@@ -74,7 +74,15 @@ sort_rows <- bt %>% transmute(num_files, y = sort_wall, yerr = NA_real_,
                               series = sort_series)
 sketch_rows  <- hm %>% transmute(num_files, y = hm_sketch, yerr = hm_wall_err,
                                  series = sketch_series)
-compare_rows <- hm %>% transmute(num_files, y = pmax(hm_compare, 1e-4),
+# No pmax() floor: hammock-cpp reported integer milliseconds before v0.7.0, so
+# this phase read 0.000000 at small N and a floor turned four points into a
+# constant. A zero here now means the CSV predates the microsecond timers.
+if (any(hm$hm_compare <= 0, na.rm = TRUE)) {
+  stop("mean_comparison_time <= 0: CSV predates the microsecond timers in ",
+       "hammock-cpp 0.7.0. Re-run the benchmark rather than restoring a floor.",
+       call. = FALSE)
+}
+compare_rows <- hm %>% transmute(num_files, y = hm_compare,
                                  yerr = NA_real_, series = compare_series)
 series_df <- bind_rows(bt_rows, sketch_rows, compare_rows, sort_rows)
 

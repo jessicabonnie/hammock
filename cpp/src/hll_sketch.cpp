@@ -202,9 +202,6 @@ std::unique_ptr<AbstractSketch> HLLSketch::union_with(const AbstractSketch& othe
     return result;
 }
 
-std::string HLLSketch::get_sketch_type() const {
-    return "hyperloglog";
-}
 
 void HLLSketch::clear() {
     std::fill(registers_.begin(), registers_.end(), static_cast<uint8_t>(0));

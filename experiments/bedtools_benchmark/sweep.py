@@ -30,6 +30,7 @@ from benchmark_cpp_vs_bedtools import (
     find_hammock_cpp,
     generate_bed_file,
     get_system_info,
+    check_binary_version,
     run_bedtools,
     run_hammock,
     tool_name_for_subb,
@@ -37,7 +38,8 @@ from benchmark_cpp_vs_bedtools import (
 
 
 METRIC_KEYS = ["wall_time", "cpu_time", "max_rss_mb"]
-HAMMOCK_KEYS = METRIC_KEYS + ["sketch_creation_time", "comparison_time"]
+HAMMOCK_KEYS = METRIC_KEYS + ["sketch_creation_time", "comparison_time",
+                              "pair_time", "write_time"]
 ACCURACY_KEYS = [
     "jaccard_n_pairs",
     "jaccard_mae_vs_bt", "jaccard_max_err_vs_bt",
@@ -57,7 +59,9 @@ ACCURACY_KEYS = [
 ROW_COLS = [
     "axis", "tool", "sub_b", "precision", "threads", "num_files", "num_intervals", "run_id",
     "wall_time", "cpu_time", "max_rss_mb", "sort_time",
-    "sketch_creation_time", "comparison_time",
+    # comparison_time keeps its historical meaning (pair loop + serial write);
+    # pair_time/write_time decompose it and are blank on bedtools rows.
+    "sketch_creation_time", "comparison_time", "pair_time", "write_time",
 ] + ACCURACY_KEYS
 
 
@@ -83,11 +87,11 @@ def parse_hammock_csv(path: str, column: str = "jaccard_similarity"):
     """Read one similarity column out of a hammock-cpp TSV, by header name.
 
     Returns {(query, reference): value}. Column lookup is by name, not
-    position: without --metrics the file has 3 columns, with it 9, so an
+    position: a --no-metrics file has 3 columns and the default has 9, so an
     index would silently read containment_AB as if it were a Jaccard.
 
     Raises KeyError if the file exists but lacks `column` -- that means the
-    binary ran without --metrics, and returning {} instead would show up
+    binary ran with --no-metrics, and returning {} instead would show up
     downstream as "no pairs in common", i.e. a silently empty accuracy column
     rather than a failure.
     """
@@ -101,7 +105,7 @@ def parse_hammock_csv(path: str, column: str = "jaccard_similarity"):
         except ValueError:
             raise KeyError(
                 f"{path} has no {column!r} column (header: {header}). "
-                f"Re-run hammock-cpp with --metrics.") from None
+                f"Re-run hammock-cpp without --no-metrics.") from None
         for line in f:
             parts = line.rstrip("\n").split("\t")
             if len(parts) <= idx:
@@ -264,6 +268,9 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
                         # above would inflate comparison_time and break
                         # comparability with the published RESULTS.md numbers.
                         # Nothing from this run's timing dict is recorded.
+                        # Since 0.7.0 the timed pass above is explicitly
+                        # --no-metrics, so this split is belt-and-braces rather
+                        # than the only thing keeping the timings honest.
                         print(f"    + untimed --metrics pass...", end=" ", flush=True)
                         hm2 = run_hammock(binary, f1, f2, p, num_threads,
                                           keep_output=True, sub_b=sub_b, metrics=True)
@@ -633,6 +640,11 @@ def main():
     binary = args.binary or find_hammock_cpp()
     if not os.path.exists(binary):
         print(f"hammock-cpp not found at {binary}", file=sys.stderr)
+        return 1
+    try:
+        print(f"hammock-cpp version: {check_binary_version(binary)}")
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
         return 1
     if not os.path.exists(BEDTOOLS_SCRIPT):
         print(f"bedtools.sh not found at {BEDTOOLS_SCRIPT}", file=sys.stderr)

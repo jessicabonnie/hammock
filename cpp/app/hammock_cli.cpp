@@ -1,7 +1,6 @@
 // hammock-cpp: standalone benchmark binary. Same algorithm as the Python
 // `hammock`, no Python in the loop. Modes A/B/C only — Mode D requires the
 // digest library and lives on the Python side.
-#include "hammock/bagminhash_sketch.hpp"
 #include "hammock/bed_parser.hpp"
 #include "hammock/hll_sketch.hpp"
 #include "hammock/processing_modes.hpp"
@@ -29,7 +28,7 @@ namespace {
 struct Args {
     std::string filepaths_file;
     std::string primary_file;
-    std::string mode = "A";
+    std::string mode = "B";
     std::string outprefix = "hammock";
     std::string separator = "\t";   // Python parity default
     size_t precision = 18;
@@ -39,10 +38,9 @@ struct Args {
     SubBMethod subB_method = SubBMethod::MixedStride;
     uint64_t seed = 42;
     uint32_t gate_seed = 31337;
-    int peak_height_column = -1;
     int threads = 0;
     bool verbose = false;
-    bool metrics = false;
+    bool metrics = true;
 };
 
 // Mirror of runner.py's _jaccard_ie_from_containments. Kept expression-for-
@@ -84,7 +82,8 @@ void print_help(const char* prog) {
     std::cerr <<
         "Usage: " << prog << " <filepaths_file> <primary_file> [options]\n\n"
         "Options:\n"
-        "  --mode <A|B|C>          Comparison mode (default: A)\n"
+        "  --mode <A|B|C>          Comparison mode (default: B, matching the Python CLI's\n"
+        "                          autodetect for BED input)\n"
         "  --subA <float>          Subsampling rate for intervals (Mode C, 0..1, default: 1.0)\n"
         "  --subB <float>          Subsampling rate for points (0..1, default: 1.0)\n"
         "  --subB-method <name>    Point-sampling method (default: mixed-stride)\n"
@@ -96,19 +95,17 @@ void print_help(const char* prog) {
         "  --expA <float>          Interval expansion exponent (default: 0)\n"
         "  --precision, -p <int>   HyperLogLog precision 4..24 (default: 18)\n"
         "  --separator, -s <str>   Separator for hashed strings (default: tab)\n"
-        "  --metrics               Also emit jaccard_similarity_ie, containment_AB/BA\n"
-        "                          and cosketch_* (matches the Python CLI's block).\n"
-        "                          Costs a union + cardinality per pair, so the\n"
-        "                          pairwise phase is markedly slower; off by default\n"
-        "                          to keep benchmark timings comparable.\n"
-        "                          Not available with --peak-height <n> for n > 0\n"
-        "                          (BagMinHash cardinality/intersection are on\n"
-        "                          different scales, so I-E would read 0).\n"
+        "  --metrics               Accepted for compatibility; this is now the default.\n"
+        "  --no-metrics            Emit only query/reference/jaccard_similarity, and\n"
+        "                          tag the output filename '_j3'. Skips a union plus\n"
+        "                          two cardinality estimates per pair -- use it for\n"
+        "                          timing runs that must stay comparable with results\n"
+        "                          published before 0.7.0.\n"
         "  --output, -o <prefix>   Output filename prefix (default: hammock)\n"
         "  --threads, -t <int>     Thread count (default: OpenMP auto)\n"
-        "  --peak-height <int>     1-based column index for count weights (Mode A → BagMinHash)\n"
         "  --verbose, -v           Print progress to stderr\n"
-        "  --help, -h              Show this help\n";
+        "  --help, -h              Show this help\n"
+        "  --version               Print the version and exit\n";
 }
 
 bool parse_args(int argc, char** argv, Args& out) {
@@ -117,6 +114,11 @@ bool parse_args(int argc, char** argv, Args& out) {
         std::string a = argv[i];
         if (a == "--help" || a == "-h") {
             print_help(argv[0]);
+            std::exit(0);
+        } else if (a == "--version") {
+            // stdout, unlike --help: a harness probes this to refuse a stale
+            // binary, and parsing stderr would also catch warnings.
+            std::cout << "hammock-cpp " << HAMMOCK_VERSION << "\n";
             std::exit(0);
         } else if (a == "--verbose" || a == "-v") {
             out.verbose = true;
@@ -150,10 +152,10 @@ bool parse_args(int argc, char** argv, Args& out) {
             out.outprefix = argv[++i];
         } else if ((a == "--threads" || a == "-t") && i + 1 < argc) {
             if (!parse_num("--threads", argv[++i], out.threads)) return false;
-        } else if (a == "--peak-height" && i + 1 < argc) {
-            if (!parse_num("--peak-height", argv[++i], out.peak_height_column)) return false;
         } else if (a == "--metrics") {
             out.metrics = true;
+        } else if (a == "--no-metrics") {
+            out.metrics = false;
         } else if (!a.empty() && a[0] != '-') {
             positional.push_back(a);
         } else {
@@ -184,61 +186,56 @@ bool parse_args(int argc, char** argv, Args& out) {
         std::cerr << "Error: --precision must be in [4, 24]\n";
         return false;
     }
-    // BagMinHash's cardinality() (sum/num_hashes) and intersection_size()
-    // (un-normalized sum-of-mins) are on different scales, so inclusion-
-    // exclusion over them silently yields a constant 0. Reject rather than
-    // emit garbage. Test the resolved column, not flag presence: --peak-height 0
-    // still produces an HLL.
-    if (out.metrics && out.peak_height_column > 0) {
-        std::cerr << "Error: --metrics is not available with --peak-height "
-                     "(BagMinHash cardinality and intersection are on different "
-                     "scales, so inclusion-exclusion is meaningless there)\n";
-        return false;
-    }
     return true;
 }
 
 std::unique_ptr<AbstractSketch> make_sketch(const Args& a) {
-    if (a.peak_height_column > 0) {
-        // BagMinHash for count-weighted similarity. Default 128 hashes
-        // matches the Python CLI's --num_hashes default.
-        return std::make_unique<BagMinHashSketch>(128, a.seed);
-    }
     return std::make_unique<HLLSketch>(a.precision);
 }
 
 void process_one(const std::string& path, AbstractSketch& sketch, const Args& a) {
     if (a.mode == "A") {
-        process_bed_file_mode_a(path, sketch, a.seed, a.separator, a.peak_height_column, a.verbose);
+        process_bed_file_mode_a(path, sketch, a.seed, a.separator, a.verbose);
     } else if (a.mode == "B") {
         process_bed_file_mode_b(path, sketch, a.seed, a.separator, a.subB, a.subB_method,
-                                a.gate_seed, a.peak_height_column, a.verbose);
+                                a.gate_seed, a.verbose);
     } else {  // "C"
         process_bed_file_mode_c(path, sketch, a.seed, a.separator, a.subA, a.subB, a.expA,
-                                a.subB_method, a.gate_seed, a.peak_height_column, a.verbose);
+                                a.subB_method, a.gate_seed, a.verbose);
     }
 }
 
 std::string outprefix_with_suffix(const Args& a) {
     std::string out = a.outprefix;
-    out += (a.peak_height_column > 0) ? "_bmh_jacc" : "_hll_p" + std::to_string(a.precision) + "_jacc";
+    out += "_hll_p" + std::to_string(a.precision) + "_jacc";
     out += a.mode;
+    // Mirrors outprefix.py::get_new_prefix, including its elif: expA wins over
+    // subA. Until 0.7.0 the subA branch was missing here entirely, so two Mode C
+    // runs differing only in --subA wrote to the same path and the second
+    // silently overwrote the first.
+    char buf[32];
     if (a.expA > 0) {
-        char buf[32];
         std::snprintf(buf, sizeof(buf), "%.2f", a.expA);
         out += "_expA";
         out += buf;
+    } else if (a.subA != 1.0) {
+        std::snprintf(buf, sizeof(buf), "%.2f", a.subA);
+        out += "_A";
+        out += buf;
     }
     if (a.subB != 1.0) {
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "%.2f", a.subB);
+        // Four decimals strictly below 0.01, matching outprefix.py: under %.2f
+        // every subB in (0, 0.005) renders as "0.00" and collides. The boundary
+        // is strict so subB == 0.01 keeps its historical "_B0.01".
+        std::snprintf(buf, sizeof(buf), a.subB < 0.01 ? "%.4f" : "%.2f", a.subB);
         out += "_B";
         out += buf;
     }
-    // Distinguish the two output shapes: without this a 3-column and a
-    // 9-column file collide on one path, and the positional readers in
-    // experiments/ would silently mis-parse whichever was left behind.
-    if (a.metrics) out += "_metrics";
+    // Tag the *reduced* shape, so filename <-> column count stays one-to-one
+    // while the default output keeps the path it has always had. Every reader
+    // of this file parses by header name, so the tag is provenance for humans,
+    // not a parsing hook.
+    if (!a.metrics) out += "_j3";
     return out + ".csv";
 }
 
@@ -397,6 +394,12 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // Split the pairwise phase from the serial write. The write loop below is
+    // single-threaded fprintf whose cost scales with the *column count*, so
+    // folding it into one number would charge --metrics' six extra %.17g fields
+    // to the estimator arithmetic. At low precision that formatting dominates.
+    auto t_w0 = std::chrono::steady_clock::now();
+
     for (size_t i = 0; i < n; i++) {
         const std::string ql = basename_of(queries[i]);
         for (size_t j = 0; j < m; j++) {
@@ -412,10 +415,22 @@ int main(int argc, char** argv) {
     auto t2 = std::chrono::steady_clock::now();
 
     if (args.verbose) {
-        const auto sketch_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-        const auto pair_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
-        std::cerr << "Sketching: " << sketch_ms << " ms\n"
-                  << "Pairwise+write: " << pair_ms << " ms\n"
+        // Microseconds, not milliseconds: at p=14 the whole pairwise phase is
+        // ~1 ms per 1024 pairs, so the old integer-ms timer reported a flat 0
+        // for every small collection and the harnesses had to floor it.
+        // "Pairwise+write" keeps its historical meaning (pair loop + write) so
+        // archived comparison_time values stay comparable; the two new lines
+        // decompose it.
+        using std::chrono::duration_cast;
+        using std::chrono::microseconds;
+        const auto sketch_us = duration_cast<microseconds>(t1 - t0).count();
+        const auto pair_only_us = duration_cast<microseconds>(t_w0 - t1).count();
+        const auto write_us = duration_cast<microseconds>(t2 - t_w0).count();
+        const auto pair_us = duration_cast<microseconds>(t2 - t1).count();
+        std::cerr << "Sketching: " << sketch_us << " us\n"
+                  << "Pairwise: " << pair_only_us << " us\n"
+                  << "Write: " << write_us << " us\n"
+                  << "Pairwise+write: " << pair_us << " us\n"
                   << "Wrote " << out_path << "\n";
     }
     return 0;

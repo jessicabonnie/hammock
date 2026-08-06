@@ -31,11 +31,14 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(SCRIPT_DIR.parent / "bedtools_benchmark"))
 from benchmark_cpp_vs_bedtools import (  # noqa: E402
+    check_binary_version,
     find_hammock_cpp,
     get_system_info,
     run_with_time,
     SKETCH_RE,
     PAIR_RE,
+    PAIRONLY_RE,
+    WRITE_RE,
 )
 
 SUBB_VALUES = [1.0, 0.5, 0.25, 0.1, 0.05, 0.01]
@@ -54,7 +57,9 @@ ROW_COLS = [
     "corpus", "method", "size_class", "num_intervals", "subB", "rep", "run_id",
     "file_a", "file_b", "jaccard",
     "wall_time", "cpu_time", "max_rss_mb",
-    "sketch_creation_time", "comparison_time",
+    # comparison_time keeps its historical meaning (pair loop + serial write);
+    # pair_time/write_time decompose it.
+    "sketch_creation_time", "comparison_time", "pair_time", "write_time",
     "precision", "threads",
 ]
 
@@ -138,6 +143,11 @@ def run_one(
             "-t", str(threads),
             "-o", out_prefix,
             "--verbose",
+            # Explicit: since 0.7.0 the binary emits the metrics block by
+            # default, and these wall times feed a published figure, so the
+            # timed pass must not silently start paying for a union plus two
+            # cardinality estimates per pair.
+            "--no-metrics",
         ]
         if verbose:
             print("  +", " ".join(cmd), file=sys.stderr)
@@ -145,16 +155,35 @@ def run_one(
 
         sketch_s: Optional[float] = None
         pair_s: Optional[float] = None
+        pair_only_s: Optional[float] = None
+        write_s: Optional[float] = None
         for line in r["stderr"].splitlines():
             m = SKETCH_RE.match(line)
             if m:
-                sketch_s = int(m.group(1)) / 1000.0
+                sketch_s = int(m.group(1)) / 1e6
                 continue
             m = PAIR_RE.match(line)
             if m:
-                pair_s = int(m.group(1)) / 1000.0
+                pair_s = int(m.group(1)) / 1e6
+                continue
+            m = PAIRONLY_RE.match(line)
+            if m:
+                pair_only_s = int(m.group(1)) / 1e6
+                continue
+            m = WRITE_RE.match(line)
+            if m:
+                write_s = int(m.group(1)) / 1e6
+        # Loud, not blank: an unparsed timing would otherwise reach the CSV as
+        # an empty cell indistinguishable from "not measured". Most likely cause
+        # is a pre-0.7.0 binary still reporting milliseconds.
+        if sketch_s is None or pair_s is None:
+            raise RuntimeError(
+                "could not parse hammock-cpp timing lines (need >= 0.7.0, which "
+                f"reports microseconds). stderr was:\n{r['stderr']}")
         r["sketch_creation_time"] = sketch_s
         r["comparison_time"] = pair_s
+        r["pair_time"] = pair_only_s
+        r["write_time"] = write_s
 
         csvs = [f for f in glob.glob(out_prefix + "*") if f.endswith(".csv")]
         if not csvs:
@@ -216,6 +245,7 @@ def main() -> None:
         args.reps = 1
 
     binary = args.binary or find_hammock_cpp()
+    check_binary_version(binary)
     groups = groups_for_corpus(args.corpus, args.size_classes)
     print(f"hammock-cpp: {binary}")
     print(f"corpus:       {args.corpus}")
@@ -271,6 +301,8 @@ def main() -> None:
                                 "max_rss_mb": r["max_rss_mb"],
                                 "sketch_creation_time": r["sketch_creation_time"],
                                 "comparison_time": r["comparison_time"],
+                                "pair_time": r["pair_time"],
+                                "write_time": r["write_time"],
                                 "precision": args.precision,
                                 "threads": args.threads,
                             })
