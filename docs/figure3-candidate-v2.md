@@ -60,6 +60,33 @@ a real power law across its whole range.
 The floor is replaced by a hard error: a zero there now means the CSV predates
 the microsecond timers, which is worth failing on rather than papering over.
 
+The published series is ragged for three separable reasons, and only the first
+two are fixed by the timer:
+
+- **Four of nine points were the floor**, as above.
+- **The other five were quantized to 1 ms per run.** Multiply the archived means
+  by the 3 runs and every one is an exact integer number of milliseconds — 19,
+  26, 85, 288, 991 — so each mean sat on a ⅓-ms grid. At N=32 that is a 22% grid
+  on a 1.5 ms quantity.
+- **The archived run was also far noisier than resolution alone explains.**
+  Coefficient of variation on `comparison_time` was 7.4% / **59.8%** / 20.2% /
+  6.8% / 14.1% at N = 32…512, against 0.6% / 0.4% / 0.5% / 1.4% / **0.13%** in
+  the rerun. At N=512 a 1 ms quantum is 0.3% of the value, so it cannot produce
+  a 14% spread. The N=64 point is the worst offender: ±60% run-to-run, landing
+  at 8.7 ms between neighbours now measured at 1.5 and 17.4 ms.
+
+  Two things changed at once — a different node, and arm order now rotates where
+  the old harness always ran subB=1.0 first, immediately after bedtools had
+  saturated 16 threads for minutes. Both are consistent with the tightening and
+  the archived CSV keeps only aggregates, so they cannot be separated after the
+  fact. Do not claim the rotation caused it.
+
+Note the rerun's series still bends at low N, and that is real, not residual
+noise: per-pair cost falls 43.3 → 11.1 → 3.6 → … → 1.02 µs from N=2 to N=512,
+asymptoting near 1 µs/pair as fixed per-run overhead (file open/close, thread
+startup) stops dominating a sub-millisecond phase. It should not be a straight
+line.
+
 **4. The y axis (two pre-existing defects, both fixed).**
 
 Both are present in the published figure and neither was introduced by the
