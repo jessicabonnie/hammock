@@ -94,16 +94,20 @@ Discuss both layers of the computational contribution: reusable sketches reduce 
 ## IV. Methods
 
 ### 4.1 Software implementation
-\program{hammock} is a command-line tool supported by an importable Python package library with a C++17 extension with OpenMP support for parallelism. It takes two positional inputs -- each a plain-text list of files between which pairwise comparison will be performed. \program{hammock} will default to `interval` or `sequence` mode depending on the extensions of the files in the lists. In all modes, \program{hammock} constructs one reusable sketch per listed file and emits a comma-separated table of pairwise comparisons between the two collections. There are 4 implemented modes which can be directly invoked using `--mode`.
+### 4.1 Software implementation
 
-| CLI mode | Input | Representation |
-|---|---|---|
-| `interval-string` | BED | Exact chromosome-start-end interval strings |
-| `interval` / `interval-points` | BED | Base-level genomic positions covered by intervals |
-| `interval-hybrid` | BED | Combined interval-string and position representation |
-| `sequence` | FASTA or BED + Reference | Sliding-window minimizers derived from sequence |
+\program{hammock} is a command-line tool and importable Python package with a C++17 extension that uses OpenMP for parallel execution. It accepts two positional inputs, each a plain-text file containing paths to a collection of genomic datasets to be compared. Hammock selects interval or sequence mode based on the input dataset formats and supplied reference arguments unless a mode is explicitly requested. In all modes, one reusable sketch is constructed for each listed dataset, and pairwise comparisons between the two collections are written to a comma-separated table.
 
+Hammock implements four representations that can be selected with `--mode`.
 
+| CLI mode                       | Input                                | Representation                                       |
+| ------------------------------ | ------------------------------------ | ---------------------------------------------------- |
+| `interval-string`              | BED                                  | Exact chromosome–start–end interval strings          |
+| `interval` / `interval-points` | BED                                  | Base-level genomic positions covered by intervals    |
+| `interval-hybrid`              | BED                                  | Combined interval-string and position representation |
+| `sequence`                     | FASTA or BED with a reference genome | Sliding-window minimizers derived from sequence      |
+
+This study evaluates the base-level `interval` representation for within-reference comparisons and the `sequence` representation for comparisons of interval-derived sequence. The interval-string and interval-hybrid representations remain available in the software but are not evaluated as primary methods here.
 
 ### 4.2 Interval-mode sketch construction
 
