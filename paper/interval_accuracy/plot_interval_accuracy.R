@@ -95,6 +95,10 @@ theme_paper <- function(base_size = 10.5) {
         face = "bold", size = rel(1.04), color = COL_TEXT,
         lineheight = 1.05, margin = margin(b = 7)
       ),
+      # Anchor title/subtitle to the plot edge, not the panel edge; the panel
+      # edge sits ~1 in right of it once the y-axis label and ticks are drawn,
+      # and long titles run off the device from there.
+      plot.title.position = "plot",
       plot.subtitle = element_text(
         size = rel(0.88), color = "#56616B", margin = margin(b = 8)
       ),
@@ -246,7 +250,11 @@ main_range <- range(
   c(main_points$bedtools_jaccard, main_points$hammock_jaccard),
   finite = TRUE
 )
-main_pad <- diff(main_range) * 0.08
+# Keep the pad small and let the scales expand: with expand = FALSE the panel
+# edge lands on the data limit, and the first break (0.10 here, ~0.5% of the
+# range inside) draws a light gridline a few pixels from the dark axis line,
+# which reads as a doubled axis.
+main_pad <- diff(main_range) * 0.02
 if (!is.finite(main_pad) || main_pad <= 0) main_pad <- 0.02
 main_limits <- c(
   max(0, main_range[1] - main_pad),
@@ -278,11 +286,21 @@ main_figure <- ggplot(
     size = 3.05, lineheight = 1.08,
     linewidth = 0, fill = alpha("white", 0.90), color = COL_TEXT
   ) +
-  coord_equal(xlim = main_limits, ylim = main_limits, expand = FALSE) +
-  scale_x_continuous(labels = label_number(accuracy = 0.02)) +
-  scale_y_continuous(labels = label_number(accuracy = 0.02)) +
+  coord_equal(xlim = main_limits, ylim = main_limits) +
+  scale_x_continuous(
+    labels = label_number(accuracy = 0.02),
+    expand = expansion(mult = 0.04)
+  ) +
+  scale_y_continuous(
+    labels = label_number(accuracy = 0.02),
+    expand = expansion(mult = 0.04)
+  ) +
   labs(
-    title = "Hammock inclusion–exclusion Jaccard reproduces exact interval overlap",
+    title = paste(
+      "Hammock inclusion–exclusion Jaccard",
+      "reproduces exact interval overlap",
+      sep = "\n"
+    ),
     subtitle = sprintf(
       "Maurano fetal DNase hypersensitivity data; HLL precision p = %d",
       REFERENCE_PRECISION
@@ -315,7 +333,7 @@ both_range <- range(
   c(both_points$bedtools_jaccard, both_points$hammock_jaccard),
   finite = TRUE
 )
-both_pad <- diff(both_range) * 0.08
+both_pad <- diff(both_range) * 0.02  # see the note on main_pad above
 if (!is.finite(both_pad) || both_pad <= 0) both_pad <- 0.02
 both_limits <- c(
   max(0, both_range[1] - both_pad),
@@ -365,9 +383,15 @@ panel_a <- ggplot(
   ) +
   scale_color_manual(values = EST_COLORS, drop = FALSE) +
   scale_fill_manual(values = EST_COLORS, drop = FALSE) +
-  coord_equal(xlim = both_limits, ylim = both_limits, expand = FALSE) +
-  scale_x_continuous(labels = label_number(accuracy = 0.05)) +
-  scale_y_continuous(labels = label_number(accuracy = 0.05)) +
+  coord_equal(xlim = both_limits, ylim = both_limits) +
+  scale_x_continuous(
+    labels = label_number(accuracy = 0.05),
+    expand = expansion(mult = 0.04)
+  ) +
+  scale_y_continuous(
+    labels = label_number(accuracy = 0.05),
+    expand = expansion(mult = 0.04)
+  ) +
   labs(
     title = sprintf("A  Metric behavior at p = %d", REFERENCE_PRECISION),
     x = "BEDTools exact base-pair Jaccard",
@@ -428,13 +452,14 @@ both_figure <- panel_a + panel_b +
   plot_layout(widths = c(1, 1.05)) +
   plot_annotation(
     title = paste(
-      "Inclusion–exclusion estimates BEDTools set Jaccard, while",
-      "register equality is a distinct compatibility statistic"
+      "Inclusion–exclusion estimates BEDTools set Jaccard,",
+      "while register equality is a distinct compatibility statistic",
+      sep = "\n"
     ),
     theme = theme(
       plot.title = element_text(
         family = base_family, face = "bold", size = 13.2,
-        color = COL_TEXT, margin = margin(b = 10)
+        color = COL_TEXT, lineheight = 1.15, margin = margin(b = 10)
       ),
       plot.margin = margin(12, 16, 12, 12)
     )
