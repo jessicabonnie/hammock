@@ -60,12 +60,22 @@ a real power law across its whole range.
 The floor is replaced by a hard error: a zero there now means the CSV predates
 the microsecond timers, which is worth failing on rather than papering over.
 
-**4. Log-axis labels (pre-existing defect, fixed).**
+**4. The y axis (two pre-existing defects, both fixed).**
 
-Both versions used `label_number(accuracy = 0.1)`, which renders every break
-below 0.1 as `"0.0"` — the published figure labels 10⁻⁴ as `0.0`. The candidate
-uses three significant figures in fixed notation, so the axis reads
-`0.001 / 0.1 / 10 / 1,000`.
+Both are present in the published figure and neither was introduced by the
+changes above, though removing the floor makes them easier to see.
+
+- **Breaks were two decades apart.** The data spans 6.6 decades, and over that
+  range `scale_y_log10()`'s default `log_breaks()` picks breaks **100× apart** —
+  `1e-4, 0.01, 1, 100`. So consecutive gridlines on the published figure are two
+  decades, and the axis appears to step `0.1 → 10 → 1,000`. On a log axis that
+  reads as a decade step unless you stop and check the numbers. The candidate
+  pins `breaks = 10^(-4:3)`, one decade per gridline.
+- **Labels collapsed below 0.1.** `label_number(accuracy = 0.1)` renders every
+  break under 0.1 as `"0.0"` — the published figure labels 10⁻⁴ as `0.0`. The
+  candidate uses three significant figures in fixed notation.
+
+Together the axis now reads `0.0001 / 0.001 / 0.01 / 0.1 / 1 / 10 / 100 / 1,000`.
 
 ## The rerun reproduces the archived run
 

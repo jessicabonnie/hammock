@@ -288,9 +288,16 @@ panel_a <- ggplot(
     )
   ) +
   scale_y_log10(
-    # Not label_number(accuracy = 0.1): the comparison series now reaches
+    # Breaks are pinned to decades. The data spans 6.6 decades, over which
+    # scale_y_log10()'s default log_breaks() picks breaks 100x apart
+    # (1e-4, 0.01, 1, 100) -- so consecutive gridlines are TWO decades and the
+    # axis appears to jump 10 -> 1,000. On a log axis that reads as a decade
+    # step unless you check the numbers.
+    breaks = 10^(-4:3),
+    minor_breaks = NULL,
+    # Not label_number(accuracy = 0.1) either: the comparison series reaches
     # 2e-4 s, and a fixed 0.1 accuracy renders every sub-decisecond break as
-    # "0.0". Three significant figures in fixed notation labels 0.001 and
+    # "0.0". Three significant figures in fixed notation labels 0.0001 and
     # 1,000 correctly with one rule.
     labels = function(x) formatC(x, format = "fg", digits = 3, big.mark = ","),
     expand = expansion(mult = c(0.06, 0.15))
