@@ -213,7 +213,23 @@ panel_a <- ggplot(
     )
   ) +
   scale_y_log10(
-    labels = label_number(accuracy = 0.1, big.mark = ","),
+    # Breaks pinned to decades. The data spans ~6.8 decades, over which
+    # scale_y_log10()'s default log_breaks() picks breaks 100x apart
+    # (1e-4, 0.01, 1, 100) -- so consecutive gridlines were TWO decades and the
+    # axis appeared to step 0.1 -> 10 -> 1,000, which on a log axis reads as a
+    # decade step unless you check the numbers.
+    breaks = 10^(-4:3),
+    minor_breaks = NULL,
+    # And not label_number(accuracy = 0.1), which renders every break below 0.1
+    # as "0.0" -- this axis reaches 1e-4. Three significant figures in fixed
+    # notation labels 0.0001 and 1,000 correctly with one rule.
+    #
+    # CAVEAT specific to this version: the comparison series is pmax()-floored
+    # at 1e-4 (see below), so its flat N<=16 segment now sits legibly on the
+    # bottom gridline and reads as a measured 0.0001 s. It is not a measurement
+    # -- the integer-millisecond timer reported 0.000000 there. Fixing that
+    # needs the microsecond-timer CSV; see docs/figure3-candidate-v2.md.
+    labels = function(x) formatC(x, format = "fg", digits = 3, big.mark = ","),
     expand = expansion(mult = c(0.06, 0.15))
   ) +
   labs(
