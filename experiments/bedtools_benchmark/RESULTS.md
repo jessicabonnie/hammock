@@ -1,4 +1,8 @@
-# bedtools_benchmark — May 12 results (subB comparison)
+# bedtools_benchmark — subB comparison
+
+**Mixed provenance.** The precision, threads, intervals and t=8 sweeps are
+from May 12 2026; the t=16 files sweep was re-run on Aug 4 2026 and its
+section is the only one restated onto that run. Each section says which.
 
 Four runs against `hammock-cpp`, on Rockfish `shared` partition (sr-class
 nodes), 16 cpus, 32 GB:
@@ -8,9 +12,10 @@ nodes), 16 cpus, 32 GB:
 > 3 columns unless `--metrics` was passed; since 0.7.0 the block is the default
 > and the harnesses pass `--no-metrics` explicitly to keep new timings on this
 > same footing. The block costs a union plus two cardinality estimates per pair,
-> which lands entirely in the pairwise phase — 0.61% of wall at N=512, p=14, so
-> the effect on these numbers would be about +1.5%. Timings from a run *with*
-> the block are not comparable to the tables below.
+> which lands entirely in the pairwise phase — 0.61% of wall at N=512, p=14.
+> That prediction has since been measured directly: the `hammock_ie_B` arm of
+> the Aug 4 files t=16 run costs **+1.45%** of wall at N=512. Timings from a run
+> *with* the block are not comparable to the tables below.
 
 - **2026-05-10 (morning)** — pre-optimization hammock-cpp, sequential pre-sort.
 - **2026-05-10 (evening)** — same sweeps with **parallel** pre-sort and the
@@ -18,16 +23,24 @@ nodes), 16 cpus, 32 GB:
 - **2026-05-11 (evening)** — second round of optimizations (inlined xxhash,
   removed `thread_local std::string`, incremental ASCII counter). Another
   ~2.1× wall-time win. subB=1.0 throughout.
-- **2026-05-12 (afternoon) — current canonical** — same hammock binary as
-  May-11 evening plus the new `--subB-method=mixed-stride` default and
-  `hash32_short` (commit 9778ef8). **Adds subB ∈ {0.25, 0.1} as new
-  hammock variants alongside the subB=1.0 baseline.**
+- **2026-05-12 (afternoon) — canonical for the precision, threads, intervals
+  and t=8 sweeps** — same hammock binary as May-11 evening plus the new
+  `--subB-method=mixed-stride` default and `hash32_short` (commit 9778ef8).
+  **Adds subB ∈ {0.25, 0.1} as new hammock variants alongside the subB=1.0
+  baseline.**
+- **2026-08-04 — canonical for the files t=16 sweep only** (job 29552415,
+  hammock-cpp 0.7.0). Same protocol, plus a fourth arm `hammock_ie_B` — subB=1.0
+  emitting the full similarity block — and microsecond phase timers in place of
+  the old integer-millisecond ones. This is the run behind Figure 3 Panel A; see
+  `docs/figure3-panel-a-rebuild.md`. **The other four sweeps were not re-run and
+  their tables below are still May 12.** Do not read a table here as coming from
+  one job unless its section says so.
 
 Headline: **mixed-stride subsampling is essentially free in accuracy and
 roughly halves hammock wall time per halving of subB.** Subsampling does
 not change bedtools' results (it's a hammock-only knob). With subB=0.1,
 hammock beats bedtools at **every N≥2** in the t=16 files sweep, with
-**52.77× speedup at N=512**. Per-pair Jaccard error is statistically
+**52.35× speedup at N=512** (52.77× in the superseded May 12 run). Per-pair Jaccard error is statistically
 indistinguishable across subB values — the definitional gap vs bedtools
 stays at ~0.164. **Read that as a null result about the gap, not as evidence
 that subsampling is unbiased** — see the precision-sweep caveat below.
@@ -38,7 +51,7 @@ CSVs/text reports live in `results/` (symlinked to
 `/vast/blangme2/jbonnie/hammock_claude_experiments/bedtools_benchmark/results/`).
 PNGs in `figures/`.
 
-**Current run (canonical, May 12):**
+**Current runs:**
 
 | Sweep         | Job ID      | CSV / report stem                            |
 | ------------- | ----------- | -------------------------------------------- |
@@ -46,7 +59,11 @@ PNGs in `figures/`.
 | threads       | 24057048    | `sweep_threads_20260512_150458`              |
 | intervals     | 24060777¹   | `sweep_intervals_20260512_160412`            |
 | files (t=8)   | 24057050    | `cpp_vs_bedtools_t8_20260512_150458`         |
-| files (t=16)  | 24060778¹   | `cpp_vs_bedtools_t16_20260512_160412`        |
+| files (t=16)  | 29552415    | `cpp_vs_bedtools_t16_20260804_172242` ²      |
+| files (t=16), superseded | 24060778¹ | `cpp_vs_bedtools_t16_20260512_160412` |
+
+² Aug 4 re-run; the only sweep here not from May 12. Archived to
+`docs/data/`. Everything else in this table is May 12.
 
 ¹ Resubmit — original jobs 24057049 (intervals) and 24057051 (files_t16)
 were cancelled by a scheduler event at 15:29:19 about 25 minutes in
@@ -55,17 +72,15 @@ were cancelled by a scheduler event at 15:29:19 about 25 minutes in
 **Previous run (May 11, subB=1.0 only):** see git history for the table
 of job IDs (`sweep_*_20260511_181918` / `cpp_vs_bedtools_*_20260511_181919`).
 
-**Aug 4 files_t16 rerun (job 29552415, `cpp_vs_bedtools_t16_20260804_172242`,
-archived to `docs/data/`).** Same protocol as the May 12 run plus a fourth
-hammock arm, `hammock_ie_B` — subB=1.0 run *without* `--no-metrics`, i.e.
-emitting `jaccard_similarity_ie` and the containment/cosketch block. It is the
-only run on disk that measures the configuration `CLAUDE.md` recommends; the
-block costs **1.45% of wall at N=512** (54.15 s vs 53.38 s) and 34.8 MB peak RSS
-vs 22.7 MB. Everything else reproduces May 12 to within the drift documented
-below: N=512 gives 12.68× / 26.05× / **52.35×** for subB 1.0 / 0.25 / 0.1
-against 13.14× / 26.69× / 52.77×. **The tables in this file have not been
-restated onto it** — the May 12 run is still canonical here. Whether it stays
-canonical is pending the Figure 3 decision in `docs/figure3-candidate-v2.md`.
+**The Aug 4 files_t16 re-run** adds a fourth hammock arm, `hammock_ie_B` —
+subB=1.0 run *without* `--no-metrics`, i.e. emitting `jaccard_similarity_ie` and
+the containment/cosketch block. It is the only run on disk that measures the
+configuration `CLAUDE.md` recommends: the block costs **1.45% of wall at N=512**
+(54.15 s vs 53.38 s, 12.50× over bedtools against 12.68×) and 34.8 MB peak RSS
+against 22.7 MB. Everything else reproduces May 12 inside the drift documented
+above — N=512 gives 12.68× / 26.05× / **52.35×** for subB 1.0 / 0.25 / 0.1
+against 13.14× / 26.69× / 52.77× — so the qualitative claims are unchanged.
+The files t=16 section below has been restated onto it; nothing else has.
 
 The precision sweep also dumps `*_pairs.csv` — per-pair bedtools and
 hammock jaccards across all 4096 pairs × 5 precisions × 3 subB × 3 runs
@@ -77,28 +92,32 @@ p=14, 10k intervals/file, N up to 512, 3 runs/config:
 
 | N   | bedtools | hammock @ subB=1.0 | @ subB=0.25 | @ subB=0.1 | speedup (bt/hm@0.1) |
 | --- | -------- | ------------------ | ----------- | ---------- | ------------------- |
-|   2 |   0.80 s |             0.29 s |      0.18 s |     0.11 s |  **7.15×** |
-|   4 |   0.49 s |             0.47 s |      0.26 s |     0.17 s |  **2.91×** |
-|   8 |   0.62 s |             0.89 s |      0.49 s |     0.30 s |  **2.08×** |
-|  16 |   1.10 s |             1.72 s |      0.89 s |     0.51 s |  **2.16×** |
-|  32 |   3.09 s |             3.39 s |      1.69 s |     0.92 s |  **3.36×** |
-|  64 |  11.04 s |             6.76 s |      3.30 s |     1.73 s |  **6.40×** |
-| 128 |  44.36 s |            13.63 s |      6.59 s |     3.28 s | **13.54×** |
-| 256 | 176.46 s |            26.80 s |     13.23 s |     6.87 s | **25.70×** |
-| 512 | 706.09 s |            53.72 s |     26.45 s |    13.38 s | **52.77×** |
+|   2 |   0.82 s |             0.22 s |      0.11 s |     0.06 s | **12.66×** |
+|   4 |   0.52 s |             0.43 s |      0.21 s |     0.11 s |  **4.93×** |
+|   8 |   0.64 s |             0.84 s |      0.41 s |     0.21 s |  **3.07×** |
+|  16 |   1.12 s |             1.67 s |      0.81 s |     0.40 s |  **2.77×** |
+|  32 |   3.04 s |             3.34 s |      1.62 s |     0.80 s |  **3.80×** |
+|  64 |  10.69 s |             6.67 s |      3.23 s |     1.60 s |  **6.69×** |
+| 128 |  41.10 s |            13.29 s |      6.45 s |     3.19 s | **12.89×** |
+| 256 | 166.46 s |            26.62 s |     12.92 s |     6.41 s | **25.98×** |
+| 512 | 676.62 s |            53.38 s |     25.98 s |    12.92 s | **52.35×** |
+
+The `hammock_ie_B` arm (subB=1.0, full similarity block) is in the same CSV and
+tracks subB=1.0 within 1.5%: 54.15 s at N=512 against 53.38 s.
 
 Persistent-crossover summary (smallest N where hammock wins and keeps winning):
 
 | subB | persistent crossover | speedup there | speedup at N=512 |
 | ---- | -------------------- | ------------- | ----------------- |
-| 1.0  |                 N=64 |         1.63× |             13.14× |
-| 0.25 |                 N≤2 |         4.55× |             26.69× |
-| 0.1  |                 N≤2 |         7.15× |             52.77× |
+| 1.0  |                 N=64 |         1.60× |             12.68× |
+| 0.25 |                 N≤2 |         7.65× |             26.05× |
+| 0.1  |                 N≤2 |        12.66× |             52.35× |
 
-For subB=1.0 hammock loses at N∈{4,8,16,32} before winning persistently
-at N=64. For subB ∈ {0.25, 0.1} hammock wins at every tested N — at
-subB=0.25 the dip is at N=16 (1.24×) and at subB=0.1 the dip is at N=8
-(2.08×). Halving subB roughly halves hammock walltime at every N, so
+For subB=1.0 hammock loses at N∈{8,16,32} before winning persistently
+at N=64. For subB ∈ {0.25, 0.1} hammock wins at every tested N. All three
+curves dip at N=16 — 0.67× / 1.37× / 2.77× — which is the worst point for
+hammock at every subB: bedtools' O(N²) is still cheap there while hammock is
+already paying full sketch construction on 32 files. Halving subB roughly halves hammock walltime at every N, so
 each subB step doubles the speedup over bedtools.
 
 ## subB perf scaling (intervals sweep)
@@ -145,9 +164,11 @@ OpenMP scaling efficiency is preserved across subB values (each line is
 near-linear). At t=16 the speedup over bedtools goes 1.49× → 3.07× →
 **6.19×** as subB drops from 1.0 → 0.25 → 0.1 (this is the N=64 threads
 sweep). Compare with the files sweep at the same (N=64, t=16) point,
-which lands at 1.63× / 3.34× / **6.40×** — same shape, slightly larger
+which lands at 1.60× / 3.31× / **6.69×** — same shape, slightly larger
 numbers because the threads sweep regenerates data per run and absorbs
-slightly more wall-time variance.
+slightly more wall-time variance. Note the two sweeps are now from different
+dates (threads May 12, files Aug 4), so a few percent of that gap is
+between-day drift rather than the effect being described.
 
 ## precision sweep — accuracy is subB-independent
 

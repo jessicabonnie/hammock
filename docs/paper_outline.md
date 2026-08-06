@@ -82,15 +82,20 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 
 **Synthetic scaling (10k intervals/file, p=14, 16 threads for both tools — hammock `-t 16`, bedtools 16-way GNU parallel):**
 
-| N files | bedtools | hammock | speedup |
-|---|---|---|---|
-| 64 | 11.0 s | 1.7 s | ~6× |
-| 128 | 44 s | 3 s | ~14× |
-| 256 | 176 s | 7 s | ~26× |
-| **512** | **706 s** | **13 s** | **~50×** |
+| N files | bedtools | hammock (subB=0.1) | speedup | hammock (subB=1.0) | speedup |
+|---|---|---|---|---|---|
+| 64 | 10.7 s | 1.6 s | ~7× | 6.7 s | 1.6× |
+| 128 | 41 s | 3.2 s | ~13× | 13.3 s | 3.1× |
+| 256 | 166 s | 6.4 s | ~26× | 26.6 s | 6.3× |
+| **512** | **677 s** | **12.9 s** | **~52×** | **53.4 s** | **12.7×** |
+
+> Both hammock columns are shown because the two get confused: the headline
+> ~50× is the **subB=0.1** arm, while Figure 3 Panel A plots **subB=1.0**.
+> Source: `docs/data/cpp_vs_bedtools_t16_20260804_172242.csv` (job 29552415,
+> Aug 4 2026); the earlier May 12 run gave ~53×/13.1× and is retained.
 
 Two things to communicate in this section:
-1. **hammock is faster than bedtools at every regime tested** — modestly faster on small real corpora (1.16× with no subsampling, up to ~3× at subB=0.01), dramatically faster as catalog size grows (≈50× at N=512 files).
+1. **hammock is faster than bedtools at every regime tested** — modestly faster on small real corpora (1.16× with no subsampling, up to ~3× at subB=0.01), dramatically faster as catalog size grows (≈52× at N=512 files with subB=0.1, ≈13× without subsampling).
 2. **The speedup is not bought with accuracy loss.** Subsampling changes hammock's own per-pair Jaccard by < 2×10⁻³ vs its no-subsample output, so the gap to bedtools is statistically indistinguishable across subsampling settings — the speed knob is effectively "free."
 
 **Fig 1 (headline):** Grouped wall-time bars — bedtools vs hammock at no-subsample / subB=0.1 / subB=0.01 (mixed-stride) on the Maurano corpus. Each hammock bar is annotated with its speedup over bedtools and the mean *absolute* per-pair Jaccard change vs hammock's own no-subsample output (mean |ΔJ| ≤ 2×10⁻³; magnitude only — the absolute value is taken before averaging, so it cannot show direction, and the no-subsample bar is the baseline, not a zero), carrying "faster at no accuracy cost" in a single view. (Additional supporting figure: Fig S5.)
@@ -310,7 +315,7 @@ hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real
 | # | Path | Carries |
 |---|---|---|
 | 1 | `docs/figures/maurano_speed_bars.png` (data: `docs/data/maurano_subB_summary.csv` + `docs/data/maurano_bedtools.csv`, script: `docs/scripts/maurano_speed.R`) | hammock wall-time bars vs bedtools at no-sub / subB=0.1 / 0.01 |
-| 2 | `docs/figures/synthetic_nscaling.png` (data: `docs/data/cpp_vs_bedtools_t16_20260512_160412.csv`, script: `docs/scripts/synthetic_nscaling.R`) | synthetic scaling to N=512 |
+| 2 | `docs/figures/synthetic_nscaling.png` (data: `docs/data/cpp_vs_bedtools_t16_20260804_172242.csv`, script: `docs/scripts/synthetic_nscaling.R`) | synthetic scaling to N=512 |
 | 3 | `docs/figures/mode_d_bedtools_vs_modeB_scatter.png` (data: `docs/data/mode_d_summary.csv`, script: `docs/scripts/mode_d_bedtools_vs_modeB_scatter.R`) | per-config sequence mode r vs bedtools vs interval mode (y=x) |
 | 4 | `docs/figures/mode_d_lines_p24.png` (data: `docs/data/mode_d_summary.csv`, script: `docs/scripts/mode_d_lines.R`) | sequence mode Pearson ridge vs ARI peak at p = 24 |
 | 5 | `maurano_dhs_validation/figures/mode_d_best_dendrogram.png` + `bedtools_dendrogram.png` | tissue recovery (a + b panels) |

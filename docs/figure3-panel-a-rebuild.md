@@ -1,23 +1,18 @@
-# Figure 3 candidate (v2) — for side-by-side review
+# Figure 3 Panel A, rebuilt (August 2026)
 
-Nothing in **Panel A** is adopted. `plot_pairwise_scaling.R`'s Panel A code, the
-CSV it reads, and the Panel A text in `paper/outline.md` are untouched; the
-candidate is a parallel copy so the published figure and it can be opened
-together.
+Why `paper/figures/pairwise_scaling.png` changed, and what a reader comparing it
+against an earlier draft is looking at. Panel A was rebuilt against a new
+benchmark run; Panel B changed only its bar labels.
 
-Panel B is a separate matter and *was* changed in place, in both scripts: its
-bar labels now read `mean |ΔJ|` and the `paper/outline.md:42` caption defines
-the quantity. That is a labelling correction to the published figure, unrelated
-to the Panel A question, and deliberately applied to v1 as well so the caption
-never describes a label only the candidate carries.
+| | before | after |
+|---|---|---|
+| Panel A data | `docs/data/cpp_vs_bedtools_t16_20260512_160412.csv` | `docs/data/cpp_vs_bedtools_t16_20260804_172242.csv` (job 29552415) |
+| Panel A series | 3 | 4 (adds `+IE`) |
+| Panel A secondary axis | N(N−1)/2 | N² |
+| Panel B data | `maurano_subB_summary.csv` | unchanged |
 
-| | script | figure | data |
-|---|---|---|---|
-| published | `paper/pairwise_scaling/plot_pairwise_scaling.R` | `paper/figures/pairwise_scaling.png` | `docs/data/cpp_vs_bedtools_t16_20260512_160412.csv` |
-| candidate | `paper/pairwise_scaling/plot_pairwise_scaling_v2.R` | `paper/figures/pairwise_scaling_v2.png` | `docs/data/cpp_vs_bedtools_t16_20260804_172242.csv` |
-
-Panel B is identical between them — its bar labels were relabelled to `mean |ΔJ|` in
-**both** scripts at the same time, so the figure decision stays purely about Panel A.
+The May 12 CSV is retained; it is still the provenance for every other table in
+`experiments/bedtools_benchmark/RESULTS.md`.
 
 ## What changed, and why
 
@@ -143,41 +138,35 @@ Full rerun table:
 | 256 | 166.46 s | 26.62 s | 12.92 s | 6.41 s | 25.98× |
 | 512 | 676.62 s | 53.38 s | 25.98 s | 12.92 s | **52.35×** |
 
-## If you adopt it
+## What moved with it
 
-```bash
-git mv paper/pairwise_scaling/plot_pairwise_scaling_v2.R \
-       paper/pairwise_scaling/plot_pairwise_scaling.R      # overwrite v1
-# then in that file: out_png default -> pairwise_scaling.png, drop the v2 header
-ml r/4.3.0 && Rscript paper/pairwise_scaling/plot_pairwise_scaling.R
-git rm paper/figures/pairwise_scaling_v2.png docs/figure3-candidate-v2.md
-```
+- `paper/pairwise_scaling/plot_pairwise_scaling.R` — the rebuilt script; the
+  candidate copy and `pairwise_scaling_v2.png` are gone.
+- `paper/outline.md` — the Panel A sentence (N² and the `+IE` series) and the
+  Figure 3 generation note, which now names the new CSV and **discloses the
+  timer change**, because that alone alters the sketch-comparison curve at low N
+  independently of the rerun. Panel B's "190 unique pairs" is correct and was
+  left alone.
+- `experiments/bedtools_benchmark/RESULTS.md` — the files_t16 table, the
+  headline speedup, the crossover table and the job provenance. **Only
+  files_t16 moved.** The precision, threads, intervals and t8 sweeps were not
+  re-run and remain May 12; that is now stated explicitly rather than implied by
+  a single "canonical run" heading.
+- `docs/paper_outline.md` — the speed table and its prose. Note that table's
+  "hammock" column is the **subB=0.1** arm, not the subB=1.0 arm Panel A plots;
+  restating it from the wrong column would turn ~50× into ~13× and read as a
+  regression. The arm is now labelled in the header.
+- `docs/scripts/synthetic_nscaling.R` and `docs/figures/synthetic_nscaling.png`
+  — repointed and regenerated, since that figure is embedded at
+  `docs/paper_outline.md:102` and would otherwise show May data beside an index
+  row citing the August CSV.
 
-and the text that then has to move with it:
+Not done, and still open: `paper/outline.md` §4.4 still carries hand-measured
+percentages that `docs/metrics-by-default.md` now supersedes with a 5-run table,
+and it does not disclose that Figure 3's timings come from the standalone C++
+binary rather than the `hammock` CLI a reader would install — the two have
+different default thread counts (OpenMP-all-cores vs `min(8, cpu_count())`).
 
-- `paper/outline.md:42` — the Panel A sentence, N(N−1)/2 → N². **Leave Panel B's
-  "190 unique pairs" alone**, it is correct.
-- `paper/outline.md:44` — "the correct unique-pair count, N(N−1)/2" is wrong.
-- `paper/outline.md` §4.4 — the hand-measured percentages, replaceable with the
-  measured table in `docs/metrics-by-default.md`. Note that section does not
-  currently disclose that Figure 3's timings come from the standalone C++
-  binary rather than the `hammock` CLI a reader would install, and the two have
-  different default thread counts (OpenMP-all-cores vs `min(8, cpu_count())`).
-- `RESULTS.md:12, 21, 32-44, 57-81, 126-127` — canonical-run framing, the
-  headline 52.77×, job provenance, and the files table.
-- `docs/paper_outline.md:85-90` — that table's "hammock" column is the
-  **subB=0.1** arm (1.7/3/7/13 s), not the subB=1.0 arm Panel A plots. Restating
-  it from the wrong column would turn ~50× into ~13× and read as a regression.
-  Worth labelling the arm while editing.
-- `docs/scripts/synthetic_nscaling.R:3,34` and `docs/paper_outline.md:313` point
-  at the 20260512 CSV. They are self-consistent today and only need repointing
-  if the new run becomes canonical — in which case regenerate and commit
-  `docs/figures/synthetic_nscaling.png` too, since it is embedded at
-  `docs/paper_outline.md:102`.
-
-Disclose in any restatement that the timer change alone alters the
-`hammock sketch comparison` series at low N, independently of the rerun's noise.
-
-If you keep v1 instead, delete this file, `plot_pairwise_scaling_v2.R` and
-`paper/figures/pairwise_scaling_v2.png`. The new CSV is worth keeping either
-way — it is the only run containing the `+IE` arm.
+To go back, `docs/data/cpp_vs_bedtools_t16_20260512_160412.csv` is still in the
+repo and the pre-rebuild script is in git history — but restoring it also
+restores the plotting floor, so re-read the "ragged" section first.

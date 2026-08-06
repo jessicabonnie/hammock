@@ -1,7 +1,18 @@
-#!/usr/bin/env Rscript
-
 # Figure 3 — Pairwise scaling of hammock versus BEDTools
 # Creates a publication-ready two-panel PNG using CairoPNG.
+#
+# Panel A was rebuilt in Aug 2026; see docs/figure3-panel-a-rebuild.md for the
+# evidence. Three things there are load-bearing and easy to undo by accident:
+#
+#   1. The secondary axis counts N^2. The harness builds two DISJOINT sets of N
+#      files and both tools run the full cross product, so N=512 is 262,144
+#      pairs, not 130,816. N(N-1)/2 is Panel B's denominator, not Panel A's.
+#   2. There is no pmax() floor on comparison_time, and its absence is checked.
+#      hammock-cpp reported integer milliseconds before v0.7.0, so a zero here
+#      means the CSV predates the microsecond timers -- fail, do not floor.
+#   3. Breaks are pinned to decades. Left to itself log_breaks() picks breaks
+#      100x apart over this range and the axis silently reads two decades per
+#      gridline.
 
 required_packages <- c("dplyr", "readr", "ggplot2", "scales", "patchwork", "Cairo")
 missing_packages <- required_packages[
@@ -33,7 +44,7 @@ script_dir <- dirname(normalizePath(script_path, mustWork = TRUE))
 repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 
 synthetic_csv <- file.path(
-  repo_root, "docs", "data", "cpp_vs_bedtools_t16_20260512_160412.csv"
+  repo_root, "docs", "data", "cpp_vs_bedtools_t16_20260804_172242.csv"
 )
 maurano_summary_csv <- file.path(
   repo_root, "docs", "data", "maurano_subB_summary.csv"
@@ -57,6 +68,7 @@ for (path in c(synthetic_csv, maurano_summary_csv, maurano_bedtools_csv)) {
 COL_BEDTOOLS <- "#46515C"
 COL_HAMMOCK <- "#007C83"
 COL_COMPARE <- "#D28B35"
+COL_COMPARE_IE <- "#9B4D9B"
 COL_GRID <- "#D9DEE3"
 COL_TEXT <- "#20262D"
 base_family <- "sans"
@@ -107,20 +119,52 @@ synthetic_hm <- synthetic_raw %>%
     precision
   )
 
+# A different row, not a different column of synthetic_hm, so it cannot be
+# transmuted out of it. left_join, not inner_join: against a CSV predating the
+# --metrics-arm option this must yield NA and drop the series, not empty
+# Panel A and trip the stop() below with a misleading message.
+synthetic_ie <- synthetic_raw %>%
+  filter(tool == "hammock_ie_B") %>%
+  transmute(
+    num_files,
+    threads = num_threads,
+    precision,
+    comparison_time_ie = mean_comparison_time
+  )
+
 synthetic <- inner_join(
   synthetic_bt,
   synthetic_hm,
   by = c("num_files", "threads", "precision"),
   suffix = c("_bedtools", "_hammock")
 ) %>%
+  left_join(synthetic_ie, by = c("num_files", "threads", "precision")) %>%
   arrange(num_files) %>%
   mutate(
-    unique_pairs = num_files * (num_files - 1) / 2,
+    # Full cross product of two disjoint N-file sets, not within-set all-pairs.
+    cross_pairs = num_files * num_files,
     speedup = wall_time_bedtools / wall_time_hammock
   )
 
 if (nrow(synthetic) == 0) {
   stop("No matching unsubsampled synthetic benchmark rows were found.", call. = FALSE)
+}
+
+# Without the pmax() floor a zero lands at -Inf on the log axis and the point
+# vanishes silently. A zero here means the CSV predates the microsecond timers
+# (v0.7.0), where the comparison phase read 0.000000 for N <= 16.
+if (any(synthetic$comparison_time <= 0, na.rm = TRUE)) {
+  stop(
+    "comparison_time <= 0: this CSV predates the microsecond timers in ",
+    "hammock-cpp 0.7.0. Re-run the benchmark rather than restoring a floor.",
+    call. = FALSE
+  )
+}
+if (!"hammock_ie_B" %in% synthetic_raw$tool) {
+  message(
+    "note: no hammock_ie_B rows in ", basename(synthetic_csv),
+    " -- the +IE series will be absent. Re-run with --metrics-arm."
+  )
 }
 
 synthetic_long <- bind_rows(
@@ -133,20 +177,29 @@ synthetic_long <- bind_rows(
     series = "hammock total"
   ),
   synthetic %>% transmute(
-    num_files, value = pmax(comparison_time, 1e-4), error = NA_real_,
+    num_files, value = comparison_time, error = NA_real_,
     series = "hammock sketch comparison"
-  )
+  ),
+  synthetic %>%
+    filter(!is.na(comparison_time_ie)) %>%
+    transmute(
+      num_files, value = comparison_time_ie, error = NA_real_,
+      series = "hammock sketch comparison (+IE)"
+    )
 ) %>%
   mutate(
+    # A series absent from levels becomes NA and ggplot drops it with only a
+    # warning, so the IE level is declared whether or not any row carries it.
     series = factor(
       series,
-      levels = c("BEDTools total", "hammock total", "hammock sketch comparison")
+      levels = c("BEDTools total", "hammock total",
+                 "hammock sketch comparison", "hammock sketch comparison (+IE)")
     )
   )
 
 n_breaks <- synthetic$num_files
 pair_labels <- format(
-  synthetic$unique_pairs,
+  synthetic$cross_pairs,
   scientific = FALSE,
   big.mark = ",",
   trim = TRUE
@@ -191,44 +244,42 @@ panel_a <- ggplot(
   scale_color_manual(values = c(
     "BEDTools total" = COL_BEDTOOLS,
     "hammock total" = COL_HAMMOCK,
-    "hammock sketch comparison" = COL_COMPARE
-  )) +
+    "hammock sketch comparison" = COL_COMPARE,
+    "hammock sketch comparison (+IE)" = COL_COMPARE_IE
+  ), drop = FALSE) +
   scale_linetype_manual(values = c(
     "BEDTools total" = "solid",
     "hammock total" = "solid",
-    "hammock sketch comparison" = "22"
-  )) +
+    "hammock sketch comparison" = "22",
+    "hammock sketch comparison (+IE)" = "42"
+  ), drop = FALSE) +
   scale_shape_manual(values = c(
     "BEDTools total" = 16,
     "hammock total" = 17,
-    "hammock sketch comparison" = 15
-  )) +
+    "hammock sketch comparison" = 15,
+    "hammock sketch comparison (+IE)" = 18
+  ), drop = FALSE) +
   scale_x_continuous(
     trans = log2_trans(),
     breaks = n_breaks,
     labels = n_breaks,
     sec.axis = sec_axis(
       ~ ., breaks = n_breaks, labels = pair_labels,
-      name = "Unique file pairs, N(N−1)/2"
+      name = "File pairs compared, N²"
     )
   ) +
   scale_y_log10(
-    # Breaks pinned to decades. The data spans ~6.8 decades, over which
+    # Breaks are pinned to decades. The data spans 6.6 decades, over which
     # scale_y_log10()'s default log_breaks() picks breaks 100x apart
-    # (1e-4, 0.01, 1, 100) -- so consecutive gridlines were TWO decades and the
-    # axis appeared to step 0.1 -> 10 -> 1,000, which on a log axis reads as a
-    # decade step unless you check the numbers.
+    # (1e-4, 0.01, 1, 100) -- so consecutive gridlines are TWO decades and the
+    # axis appears to jump 10 -> 1,000. On a log axis that reads as a decade
+    # step unless you check the numbers.
     breaks = 10^(-4:3),
     minor_breaks = NULL,
-    # And not label_number(accuracy = 0.1), which renders every break below 0.1
-    # as "0.0" -- this axis reaches 1e-4. Three significant figures in fixed
-    # notation labels 0.0001 and 1,000 correctly with one rule.
-    #
-    # CAVEAT specific to this version: the comparison series is pmax()-floored
-    # at 1e-4 (see below), so its flat N<=16 segment now sits legibly on the
-    # bottom gridline and reads as a measured 0.0001 s. It is not a measurement
-    # -- the integer-millisecond timer reported 0.000000 there. Fixing that
-    # needs the microsecond-timer CSV; see docs/figure3-candidate-v2.md.
+    # Not label_number(accuracy = 0.1) either: the comparison series reaches
+    # 2e-4 s, and a fixed 0.1 accuracy renders every sub-decisecond break as
+    # "0.0". Three significant figures in fixed notation labels 0.0001 and
+    # 1,000 correctly with one rule.
     labels = function(x) formatC(x, format = "fg", digits = 3, big.mark = ","),
     expand = expansion(mult = c(0.06, 0.15))
   ) +
@@ -238,9 +289,9 @@ panel_a <- ggplot(
     y = "Wall time (seconds, log scale)"
   ) +
   guides(
-    color = guide_legend(nrow = 1, byrow = TRUE),
-    linetype = guide_legend(nrow = 1, byrow = TRUE),
-    shape = guide_legend(nrow = 1, byrow = TRUE)
+    color = guide_legend(nrow = 2, byrow = TRUE),
+    linetype = guide_legend(nrow = 2, byrow = TRUE),
+    shape = guide_legend(nrow = 2, byrow = TRUE)
   ) +
   theme_paper() +
   theme(
