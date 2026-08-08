@@ -9,11 +9,13 @@
 # based similarity are not necessarily those that best preserve biological
 # organization.
 #
-# Data source: docs/data/mode_d_summary.csv
-# Default filter: p = 24, minimizer-only jaccard_similarity, BEDTools reference.
+# Data source: docs/data/mode_d_summary.csv, supplemented from the experiment
+# summary when the staged paper copy is missing a current metric.
+# Filters: p = 24, BEDTools reference; one figure per Jaccard estimator.
 #
 # Usage:
-#   Rscript paper/parameter_objective_tradeoff/plot_parameter_objective_tradeoff.R [output.png]
+#   Rscript paper/parameter_objective_tradeoff/plot_parameter_objective_tradeoff.R \
+#     [register_equality.png] [inclusion_exclusion.png]
 
 required_packages <- c("dplyr", "readr", "ggplot2", "scales", "Cairo")
 missing_packages <- required_packages[
@@ -44,17 +46,28 @@ script_dir <- dirname(normalizePath(script_path, mustWork = TRUE))
 repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 
 summary_csv <- file.path(repo_root, "docs", "data", "mode_d_summary.csv")
+experiment_summary_csv <- file.path(
+  repo_root, "experiments", "maurano_dhs_validation",
+  "results", "mode_d_summary.csv"
+)
 argv <- commandArgs(trailingOnly = TRUE)
 out_png <- if (length(argv) >= 1) {
   normalizePath(argv[1], mustWork = FALSE)
 } else {
   file.path(repo_root, "paper", "figures", "parameter_objective_tradeoff.png")
 }
-dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
+out_ie_png <- if (length(argv) >= 2) {
+  normalizePath(argv[2], mustWork = FALSE)
+} else {
+  sub("\\.png$", "_ie.png", out_png)
+}
+for (path in c(out_png, out_ie_png)) {
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+}
 if (!file.exists(summary_csv)) stop("Input file not found: ", summary_csv, call. = FALSE)
 
 PRECISION <- 24
-SIM_COLUMN <- "jaccard_similarity"
+SIM_COLUMNS <- c("jaccard_similarity", "jaccard_similarity_ie")
 REFERENCE <- "bedtools"
 FIG6_K <- 10
 FIG6_W <- 30
@@ -78,10 +91,39 @@ if (length(missing_cols) > 0) {
   )
 }
 
+missing_metrics <- setdiff(SIM_COLUMNS, unique(raw$column))
+if (length(missing_metrics) > 0) {
+  if (!file.exists(experiment_summary_csv)) {
+    stop(
+      basename(summary_csv), " lacks metrics: ",
+      paste(missing_metrics, collapse = ", "),
+      "; experiment summary not found at ", experiment_summary_csv,
+      call. = FALSE
+    )
+  }
+  experiment_raw <- read_csv(experiment_summary_csv, show_col_types = FALSE)
+  still_missing <- setdiff(missing_metrics, unique(experiment_raw$column))
+  if (length(still_missing) > 0) {
+    stop(
+      "No summary rows available for metrics: ",
+      paste(still_missing, collapse = ", "), call. = FALSE
+    )
+  }
+  message(
+    "Supplementing ", basename(summary_csv), " from experiment summary for: ",
+    paste(missing_metrics, collapse = ", ")
+  )
+  raw <- bind_rows(
+    raw,
+    experiment_raw %>% filter(column %in% missing_metrics)
+  )
+}
+
+render_tradeoff <- function(sim_column, output_path) {
 sweep <- raw %>%
   filter(
     precision == PRECISION,
-    column == SIM_COLUMN,
+    column == sim_column,
     reference == REFERENCE,
     k >= 8
   ) %>%
@@ -92,7 +134,7 @@ sweep <- raw %>%
   filter(!is.na(pearson), !is.na(ari))
 
 if (nrow(sweep) == 0) {
-  stop("No usable rows for p = ", PRECISION, ", column ", SIM_COLUMN, call. = FALSE)
+  stop("No usable rows for p = ", PRECISION, ", column ", sim_column, call. = FALSE)
 }
 
 k_levels <- sort(unique(sweep$k))
@@ -150,6 +192,12 @@ numeric_label_x <- 0.855
 numeric_label_y <- 0.585
 bio_label_x <- 0.785
 bio_label_y <- 0.940
+
+x_axis_label <- if (identical(sim_column, "jaccard_similarity_ie")) {
+  "Agreement with exact BEDTools Jaccard (Pearson r)\nInclusion–exclusion estimator"
+} else {
+  "Agreement with exact BEDTools Jaccard (Pearson r)"
+}
 
 p <- ggplot(sweep, aes(x = pearson, y = ari)) +
   geom_hline(
@@ -261,7 +309,7 @@ p <- ggplot(sweep, aes(x = pearson, y = ari)) +
   labs(
     title = "Numerical agreement and tissue recovery favor different settings",
     subtitle = "Each point is one (k, w) configuration; color shows k and size shows w",
-    x = "Agreement with exact BEDTools Jaccard (Pearson r)",
+    x = x_axis_label,
     y = "Tissue recovery (adjusted Rand index)"
   ) +
   theme_classic(base_size = 11, base_family = base_family) +
@@ -286,7 +334,7 @@ p <- ggplot(sweep, aes(x = pearson, y = ari)) +
   )
 
 CairoPNG(
-  filename = out_png,
+  filename = output_path,
   width = 8.6,
   height = 6.3,
   units = "in",
@@ -296,4 +344,8 @@ CairoPNG(
 print(p)
 dev.off()
 
-message("Wrote: ", out_png)
+message("Wrote ", sim_column, ": ", output_path)
+}
+
+render_tradeoff(SIM_COLUMNS[[1]], out_png)
+render_tradeoff(SIM_COLUMNS[[2]], out_ie_png)
