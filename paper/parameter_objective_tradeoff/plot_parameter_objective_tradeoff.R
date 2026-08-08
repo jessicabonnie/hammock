@@ -292,10 +292,12 @@ p <- ggplot(sweep, aes(x = pearson, y = ari)) +
     family = base_family
   )} +
   scale_color_manual(values = k_colors, name = "k-mer size (k)") +
+  # Explicit positive breaks: pretty_breaks([8,500]) includes 0, and
+  # log10(0) = -Inf which NaNs the size legend (points themselves were fine).
   scale_size_continuous(
     trans = "log10",
     range = c(2.2, 5.4),
-    breaks = pretty_breaks(n = 4),
+    breaks = c(10, 30, 100, 300),
     name = "Window size (w)"
   ) +
   scale_x_continuous(

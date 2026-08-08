@@ -189,16 +189,38 @@ numeric_labels <- best_numeric %>%
   inner_join(panel_ranges, by = c("column", "estimator")) %>%
   mutate(
     label_x = pmax(xmin + 0.04 * xspan, pearson - 0.34 * xspan),
-    label_y = pmax(ymin + 0.08 * yspan, ari - 0.13 * yspan),
-    label = sprintf("Best numerical agreement\nk=%d, w=%g\nr=%.4f", k, w, pearson)
+    # Slightly below the point for a clear angle, but closer than before.
+    label_y = pmax(ymin + 0.06 * yspan, ari - 0.22 * yspan),
+    label = sprintf("Best numerical agreement\nk=%d, w=%g\nr=%.4f", k, w, pearson),
+    # Attach at the middle of the callout top (hjust=0, vjust=0.5).
+    # Box is wide ("Best numerical agreement"); 0.14*xspan ≈ horizontal center.
+    line_x = label_x + 0.14 * xspan,
+    line_y = label_y + 0.055 * yspan,
+    nx = (line_x - pearson) / xspan,
+    ny = (line_y - ari) / yspan,
+    nlen = sqrt(nx^2 + ny^2),
+    pad_n = 0.022,
+    line_xend = pearson + (nx / nlen) * pad_n * xspan,
+    line_yend = ari + (ny / nlen) * pad_n * yspan
   )
 
+# Place bio callouts left of the top-right diamond so the boxes stay inside
+# each panel (rightward placement clips against the facet / plot edge).
 bio_labels <- fig6_points %>%
   inner_join(panel_ranges, by = c("column", "estimator")) %>%
   mutate(
-    label_x = pmin(xmax - 0.02 * xspan, pearson + 0.06 * xspan),
-    label_y = pmin(ymax - 0.02 * yspan, ari + 0.045 * yspan),
-    label = sprintf("Biological optimum\nk=%d, w=%g\nARI=%.3f", k, w, ari)
+    label_x = pmax(xmin + 0.03 * xspan, pearson - 0.42 * xspan),
+    label_y = pmin(ymax - 0.06 * yspan, ari - 0.02 * yspan),
+    label = sprintf("Biological optimum\nk=%d, w=%g\nARI=%.3f", k, w, ari),
+    # Horizontal callouts: attach at the right edge, mid-height.
+    line_x = label_x + 0.20 * xspan,
+    line_y = label_y,
+    nx = (line_x - pearson) / xspan,
+    ny = (line_y - ari) / yspan,
+    nlen = sqrt(nx^2 + ny^2),
+    pad_n = 0.022,
+    line_xend = pearson + (nx / nlen) * pad_n * xspan,
+    line_yend = ari + (ny / nlen) * pad_n * yspan
   )
 
 agreement_note <- sprintf(
@@ -222,63 +244,72 @@ for (i in seq_len(nrow(best_numeric))) {
 p <- ggplot(sweep, aes(x = pearson, y = ari)) +
   geom_hline(yintercept = 0, linewidth = 0.55, color = "#707981") +
   geom_point(aes(color = k_label, size = w), alpha = 0.76, stroke = 0.25) +
-  # Quietly mark the rare p=24 estimator-discordant cell(s).
+  # Quietly mark the rare p=24 estimator-discordant cell(s) with a grey
+  # outline on the real (k, w) point — not a fixed-size surrounding ring.
   geom_point(
     data = discordant_points,
-    aes(x = pearson, y = ari),
+    aes(x = pearson, y = ari, size = w, fill = k_label),
     inherit.aes = FALSE,
-    shape = 21, size = 6.0, stroke = 0.8,
-    fill = NA, color = COL_DISCORD
+    shape = 21, stroke = 1.15,
+    color = COL_DISCORD,
+    show.legend = FALSE
   ) +
-  # Estimator-specific numerical optimum.
+  # Estimator-specific numerical optimum: orange-red outline on the real
+  # (k, w) point so window size stays readable from the glyph size.
+  # show.legend = FALSE keeps the orange stroke out of the size legend.
   geom_point(
     data = best_numeric,
-    aes(x = pearson, y = ari),
+    aes(x = pearson, y = ari, size = w, fill = k_label),
     inherit.aes = FALSE,
-    shape = 21, size = 6.5, stroke = 1.25,
-    fill = NA, color = COL_NUMERIC
+    shape = 21, stroke = 1.35,
+    color = COL_NUMERIC,
+    show.legend = FALSE
   ) +
-  # Shared manuscript biological optimum.
+  # Shared manuscript biological optimum: orange-red diamond outline.
   geom_point(
     data = fig6_points,
     aes(x = pearson, y = ari),
     inherit.aes = FALSE,
     shape = 23, size = 5.8, stroke = 1.1,
-    fill = "white", color = COL_BIO
+    fill = NA, color = COL_NUMERIC,
+    show.legend = FALSE
   ) +
   geom_segment(
     data = numeric_labels,
-    aes(x = label_x, y = label_y, xend = pearson, yend = ari),
+    aes(x = line_x, y = line_y, xend = line_xend, yend = line_yend),
     inherit.aes = FALSE,
-    linewidth = 0.5, color = COL_NUMERIC
+    linewidth = 0.5, linetype = "dotted", color = COL_TEXT
   ) +
   geom_label(
     data = numeric_labels,
     aes(x = label_x, y = label_y, label = label),
     inherit.aes = FALSE,
     hjust = 0, vjust = 0.5,
-    size = 2.9, lineheight = 1.08, label.size = 0.22,
+    size = 2.9, lineheight = 1.08, linewidth = 0.22,
     color = COL_TEXT, fill = alpha("white", 0.94), family = base_family
   ) +
   geom_segment(
     data = bio_labels,
-    aes(x = label_x, y = label_y, xend = pearson, yend = ari),
+    aes(x = line_x, y = line_y, xend = line_xend, yend = line_yend),
     inherit.aes = FALSE,
-    linewidth = 0.5, color = COL_BIO
+    linewidth = 0.5, linetype = "dotted", color = COL_TEXT
   ) +
   geom_label(
     data = bio_labels,
     aes(x = label_x, y = label_y, label = label),
     inherit.aes = FALSE,
     hjust = 0, vjust = 0.5,
-    size = 2.9, lineheight = 1.08, label.size = 0.22,
+    size = 2.9, lineheight = 1.08, linewidth = 0.22,
     color = COL_TEXT, fill = alpha("white", 0.94), family = base_family
   ) +
   facet_wrap(~ estimator, nrow = 1, scales = "fixed") +
   scale_color_manual(values = k_colors, name = "k-mer size (k)") +
+  scale_fill_manual(values = k_colors, guide = "none") +
+  # Explicit positive breaks: pretty_breaks([8,500]) includes 0, and
+  # log10(0) = -Inf which NaNs the size legend (points themselves were fine).
   scale_size_continuous(
     trans = "log10", range = c(2.2, 5.2),
-    breaks = pretty_breaks(n = 4), name = "Window size (w)"
+    breaks = c(10, 30, 100, 300), name = "Window size (w)"
   ) +
   scale_x_continuous(
     labels = label_number(accuracy = 0.01),
@@ -294,9 +325,9 @@ p <- ggplot(sweep, aes(x = pearson, y = ari)) +
     x = "Agreement with exact BEDTools Jaccard (Pearson r)",
     y = "Tissue recovery (adjusted Rand index)",
     caption = paste(
-      "Orange ring: estimator-specific numerical optimum.",
-      "Diamond: k=10, w=30 biological optimum used in Figure 6.",
-      "Grey ring: p=24 cell whose ARI differs between estimators."
+      "Orange-red outline: estimator-specific numerical optimum.",
+      "Orange-red diamond: k=10, w=30 biological optimum used in Figure 6.",
+      "Grey outline: p=24 cell whose ARI differs between estimators."
     )
   ) +
   theme_classic(base_size = 11, base_family = base_family) +
