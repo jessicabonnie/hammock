@@ -53,7 +53,10 @@ bedtools_col <- "#333333"
 
 # ---------- load data ----------
 maur_csv <- pick_latest("^sweep_maurano_[0-9].*\\.csv$")
-syn_csv  <- pick_latest("^sweep_synthetic_.*\\.csv$")
+# [0-9] required: a bare `^sweep_synthetic_.*` would adopt a sweep_synthetic_ie_*
+# or _bedtools_* side-run as the synthetic sweep (pick_latest sorts decreasing,
+# and 'i'/'b' > '2'). Matches the maurano pattern above. See analyze.R:62.
+syn_csv  <- pick_latest("^sweep_synthetic_[0-9].*\\.csv$")
 if (is.null(syn_csv)) syn_csv <- pick_latest("^sweep_[0-9].*\\.csv$")
 bt_csv   <- pick_latest("^sweep_maurano_bedtools_.*\\.csv$")
 if (is.null(maur_csv)) stop("missing maurano sweep CSV")

@@ -59,7 +59,11 @@ if (length(args) >= 1) {
   job_list <- list(args[1])
 } else {
   jobs <- list()
-  syn <- pick_latest("^sweep_synthetic_.*\\.csv$")
+  # The [0-9] is load-bearing: pick_latest sorts decreasing, so a bare
+  # `^sweep_synthetic_.*` would adopt any sweep_synthetic_<word>_* file (e.g. an
+  # _ie or _bedtools side-run) as *the* synthetic sweep, since 'i'/'b' > '2'.
+  # Mirrors the maurano pattern below, which already required a digit.
+  syn <- pick_latest("^sweep_synthetic_[0-9].*\\.csv$")
   if (is.null(syn)) syn <- pick_latest("^sweep_[0-9].*\\.csv$")   # legacy
   if (!is.null(syn)) jobs <- c(jobs, syn)
   maur <- pick_latest("^sweep_maurano_[0-9].*\\.csv$")
