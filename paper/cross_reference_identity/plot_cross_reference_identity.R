@@ -4,7 +4,7 @@
 # Single-panel dendrogram rendered to PNG using CairoPNG.
 
 required_packages <- c(
-  "dplyr", "readr", "stringr", "ggplot2", "scales", "ggdendro", "Cairo"
+  "dplyr", "readr", "stringr", "ggplot2", "scales", "ggdendro", "png", "Cairo"
 )
 missing_packages <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
@@ -24,6 +24,7 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(scales)
   library(ggdendro)
+  library(png)
   library(Cairo)
 })
 
@@ -59,8 +60,18 @@ for (path in c(peaks_csv, meta_tsv)) {
 COL_TEXT <- "#20262D"
 base_family <- "sans"
 # Okabe-Ito hues (colour-vision-deficiency safe), darkened where needed so the
-# leaf labels clear ~4.5:1 contrast on white as body text.
+# leaf labels clear ~4.5:1 contrast on white as body text. These same values
+# recolor the organ outlines, so tissue labels and icons have one color source.
 TISSUE_PAL <- c(heart = "#B8500B", liver = "#00745B", lung = "#0072B2")
+
+organ_dir <- file.path(repo_root, "paper", "organs")
+ORGAN_FILES <- c(
+  heart = file.path(organ_dir, "heart_outline.png"),
+  liver = file.path(organ_dir, "liver_outline.png"),
+  lung = file.path(organ_dir, "lung_outline.png"),
+  stomach = file.path(organ_dir, "stomach_outline.png"),
+  kidney = file.path(organ_dir, "kidney_outline.png")
+)
 
 meta <- read_tsv(meta_tsv, show_col_types = FALSE) %>%
   mutate(key = paste(sample_id, ref, sep = "__"))
@@ -70,9 +81,6 @@ jaccard_ie_from_containments <- function(c_ab, c_ba) {
   #   1 / (1/C_AB + 1/C_BA - 1) == |A n B| / (|A| + |B| - |A n B|).
   # Mirrors python/hammock/runner.py::_jaccard_ie_from_containments, clamp
   # included, and matches experiments/maurano_dhs_validation/analyze.R:166-171.
-  # The clamp absorbs Ertl noise that can push a containment a few ulp past 1
-  # and is what guarantees denom >= 1. A zero containment means the
-  # intersection estimate was zero and is scored 0.0.
   cab <- pmin(as.numeric(c_ab), 1)
   cba <- pmin(as.numeric(c_ba), 1)
   ifelse(cab <= 0 | cba <= 0, 0, 1 / (1 / cab + 1 / cba - 1))
@@ -162,71 +170,49 @@ x_breaks <- pretty(c(0, x_max), n = 4)
 x_breaks <- x_breaks[x_breaks >= 0 & x_breaks <= x_max]
 
 # --- Organ glyphs ----------------------------------------------------------
-# Hand-drawn silhouettes, defined in a unit box and rendered at a fixed
-# absolute size so the panel aspect never distorts them. Each is stroked in
-# its tissue colour, matching the leaf labels it sits beside.
+# Publication-ready transparent PNG outlines live in paper/organs/. The files
+# themselves are monochrome masks; recoloring happens here from TISSUE_PAL so
+# changing a tissue color automatically updates both its labels and its icon.
+# Stomach and kidney assets are included for reuse by later tissue figures even
+# though this three-tissue cross-reference panel uses heart, liver, and lung.
 ICON_SIZE <- grid::unit(0.44, "in")
 
-outline <- function(x, y, gp) {
-  grid::xsplineGrob(x = x, y = y, shape = -0.75, open = FALSE, gp = gp)
-}
-
-stroke <- function(x, y, gp) {
-  grid::xsplineGrob(x = x, y = y, shape = -0.75, open = TRUE, gp = gp)
-}
-
-ORGAN_SHAPES <- list(
-  # Anatomical heart: tilted ventricular mass with the apex low-left, an aortic
-  # arch over the base, vena cava and pulmonary stubs, interventricular groove.
-  heart = function(gp) {
-    body_x <- c(0.30, 0.16, 0.14, 0.26, 0.48, 0.70, 0.82, 0.80, 0.62, 0.44)
-    body_y <- c(0.06, 0.28, 0.52, 0.68, 0.72, 0.68, 0.52, 0.32, 0.12, 0.04)
-    grid::gList(
-      outline(body_x, body_y, gp),
-      # aortic arch
-      stroke(c(0.40, 0.39, 0.50, 0.61, 0.62), c(0.70, 0.88, 0.96, 0.87, 0.72), gp),
-      # superior vena cava
-      stroke(c(0.71, 0.76, 0.74), c(0.66, 0.80, 0.93), gp),
-      # pulmonary trunk
-      stroke(c(0.31, 0.26, 0.28), c(0.70, 0.82, 0.93), gp),
-      # interventricular groove
-      stroke(c(0.47, 0.40, 0.31), c(0.71, 0.42, 0.10), gp)
-    )
-  },
-  liver = function(gp) {
-    lx <- c(0.05, 0.13, 0.32, 0.60, 0.85, 0.95, 0.90, 0.70, 0.44, 0.20)
-    ly <- c(0.36, 0.60, 0.75, 0.79, 0.69, 0.51, 0.33, 0.21, 0.22, 0.28)
-    grid::gList(
-      outline(lx, ly, gp),
-      # falciform ligament — the notch that reads as "liver"
-      grid::linesGrob(c(0.56, 0.52), c(0.78, 0.46), gp = gp)
-    )
-  },
-  lung = function(gp) {
-    lobe_x <- c(0.56, 0.72, 0.88, 0.92, 0.82, 0.66, 0.58, 0.55)
-    lobe_y <- c(0.70, 0.72, 0.55, 0.32, 0.10, 0.08, 0.26, 0.48)
-    grid::gList(
-      outline(lobe_x, lobe_y, gp),
-      outline(1 - lobe_x, lobe_y, gp),
-      grid::linesGrob(c(0.5, 0.5), c(0.96, 0.80), gp = gp),          # trachea
-      grid::linesGrob(c(0.33, 0.5, 0.67), c(0.70, 0.80, 0.70), gp = gp)  # bronchi
-    )
+recolor_icon <- function(path, color) {
+  if (!file.exists(path)) {
+    stop("Organ icon not found: ", path, call. = FALSE)
   }
-)
+
+  img <- png::readPNG(path)
+  if (length(dim(img)) != 3 || dim(img)[3] < 4) {
+    stop("Organ icon must be an RGBA PNG with transparency: ", path, call. = FALSE)
+  }
+
+  alpha <- img[, , 4]
+  rgb <- grDevices::col2rgb(color) / 255
+  img[, , 1] <- rgb[1]
+  img[, , 2] <- rgb[2]
+  img[, , 3] <- rgb[3]
+  img[, , 4] <- alpha
+  img
+}
 
 organ_grob <- function(tissue, color) {
-  if (is.null(ORGAN_SHAPES[[tissue]])) {
-    stop("No organ glyph defined for tissue: ", tissue, call. = FALSE)
+  path <- unname(ORGAN_FILES[tissue])
+  if (length(path) != 1 || is.na(path)) {
+    stop("No organ PNG defined for tissue: ", tissue, call. = FALSE)
   }
-  gp <- grid::gpar(
-    col = color, fill = NA, lwd = 1.3, lineend = "round", linejoin = "round"
+
+  # The outer grobTree absorbs the viewport annotation_custom() assigns to the
+  # top-level grob; the raster child retains a fixed physical size and is not
+  # distorted by the dendrogram panel aspect ratio.
+  grid::grobTree(
+    grid::rasterGrob(
+      recolor_icon(path, color),
+      width = ICON_SIZE,
+      height = ICON_SIZE,
+      interpolate = TRUE
+    )
   )
-  # The outer grobTree absorbs the viewport annotation_custom() forces onto the
-  # top-level grob; the inner gTree keeps the glyph at its absolute size.
-  grid::grobTree(grid::gTree(
-    children = ORGAN_SHAPES[[tissue]](gp),
-    vp = grid::viewport(width = ICON_SIZE, height = ICON_SIZE)
-  ))
 }
 
 organ_positions <- leaf_labels %>%
