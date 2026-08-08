@@ -162,9 +162,10 @@ x_max <- max(segs$x, segs$xend)
 # half: the gutter is not distance, so it must not pick up (negative) breaks
 # or carry the axis rule.
 TREE_PAD <- 1.04
-LABEL_PAD <- 0.56
+# Wider label gutter so the larger organ glyphs sit clear of the leaf text.
+LABEL_PAD <- 0.78
 tree_frac <- TREE_PAD / (TREE_PAD + LABEL_PAD)
-ICON_X <- -x_max * 0.39
+ICON_X <- -x_max * 0.52
 
 x_breaks <- pretty(c(0, x_max), n = 4)
 x_breaks <- x_breaks[x_breaks >= 0 & x_breaks <= x_max]
@@ -175,7 +176,34 @@ x_breaks <- x_breaks[x_breaks >= 0 & x_breaks <= x_max]
 # changing a tissue color automatically updates both its labels and its icon.
 # Stomach and kidney assets are included for reuse by later tissue figures even
 # though this three-tissue cross-reference panel uses heart, liver, and lung.
-ICON_SIZE <- grid::unit(0.44, "in")
+ICON_SIZE <- grid::unit(0.72, "in")
+# Dilate the alpha mask by this many pixels (in source-image space) so thin
+# outline strokes read as bold at figure size without editing the PNGs.
+ICON_STROKE_PX <- 5L
+
+# Disk max-filter on a 2-D alpha matrix. Thickens anti-aliased outline strokes
+# before recoloring.
+dilate_alpha <- function(mat, radius) {
+  if (radius <= 0L) {
+    return(mat)
+  }
+  nr <- nrow(mat)
+  nc <- ncol(mat)
+  pad <- matrix(0, nr + 2L * radius, nc + 2L * radius)
+  pad[(radius + 1L):(radius + nr), (radius + 1L):(radius + nc)] <- mat
+  out <- matrix(0, nr, nc)
+  for (dy in -radius:radius) {
+    for (dx in -radius:radius) {
+      if (dx * dx + dy * dy > radius * radius) {
+        next
+      }
+      ys <- (radius + 1L + dy):(radius + nr + dy)
+      xs <- (radius + 1L + dx):(radius + nc + dx)
+      out <- pmax(out, pad[ys, xs])
+    }
+  }
+  out
+}
 
 recolor_icon <- function(path, color) {
   if (!file.exists(path)) {
@@ -187,7 +215,7 @@ recolor_icon <- function(path, color) {
     stop("Organ icon must be an RGBA PNG with transparency: ", path, call. = FALSE)
   }
 
-  alpha <- img[, , 4]
+  alpha <- dilate_alpha(img[, , 4], ICON_STROKE_PX)
   rgb <- grDevices::col2rgb(color) / 255
   img[, , 1] <- rgb[1]
   img[, , 2] <- rgb[2]
