@@ -53,5 +53,15 @@ fi
 # hammock leg: 3 methods x 6 subB x 5 reps on the 20-sample DHS corpus.
 "$PYTHON" experiments/subB_mixed_stride/run_sweep.py --corpus maurano
 
+# Same grid again with the 9-column output (jaccard_similarity_ie plus the
+# containment/cosketch block) -- the configuration CLAUDE.md actually
+# recommends, which no published Panel B number has ever measured. Kept as a
+# separate arm rather than a replacement so the two are directly comparable and
+# switching the panel stays a decision, not a side effect: it lands in
+# sweep_maurano_ie_<stamp>.csv, which fails analyze.R's ^sweep_maurano_[0-9]
+# glob and so cannot be auto-adopted as the headline sweep.
+"$PYTHON" experiments/subB_mixed_stride/run_sweep.py --corpus maurano --metrics
+
 # bedtools baseline: 190 unique pairs x 5 reps, 8-way GNU parallel fan-out.
+# Shared by both arms -- bedtools is indifferent to hammock's output shape.
 "$PYTHON" experiments/subB_mixed_stride/run_bedtools_maurano.py --threads 8 --reps 5

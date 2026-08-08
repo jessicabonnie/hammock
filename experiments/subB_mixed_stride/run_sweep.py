@@ -61,6 +61,11 @@ ROW_COLS = [
     # pair_time/write_time decompose it.
     "sketch_creation_time", "comparison_time", "pair_time", "write_time",
     "precision", "threads",
+    # Which output shape was timed. False = the 3-column --no-metrics arm every
+    # published Panel B number comes from; True = the 9-column arm that emits
+    # jaccard_similarity_ie. The two are not timing-comparable, so this must be
+    # readable off the row rather than inferred from the filename.
+    "metrics",
 ]
 
 SIZE_TO_N = {"10k": 10_000, "100k": 100_000, "1M": 1_000_000}
@@ -119,6 +124,7 @@ def run_one(
     precision: int,
     threads: int,
     verbose: bool = False,
+    metrics: bool = False,
 ) -> Dict[str, Any]:
     """Run hammock-cpp Mode B on the given BEDs; return timing + per-pair rows."""
     for p in beds:
@@ -143,11 +149,14 @@ def run_one(
             "-t", str(threads),
             "-o", out_prefix,
             "--verbose",
-            # Explicit: since 0.7.0 the binary emits the metrics block by
-            # default, and these wall times feed a published figure, so the
-            # timed pass must not silently start paying for a union plus two
-            # cardinality estimates per pair.
-            "--no-metrics",
+            # Explicit in both directions: since 0.7.0 the binary emits the
+            # metrics block by default, and these wall times feed a published
+            # figure, so the shape of a timed pass must never be implicit.
+            # --metrics is the arm that emits jaccard_similarity_ie, i.e. the
+            # column CLAUDE.md tells readers to use; it is opt-in here because
+            # the existing Panel B numbers are all --no-metrics and the two are
+            # not comparable to each other.
+            "--metrics" if metrics else "--no-metrics",
         ]
         if verbose:
             print("  +", " ".join(cmd), file=sys.stderr)
@@ -234,6 +243,12 @@ def main() -> None:
     parser.add_argument("--output", default=None,
                         help="Output CSV path (default: results/sweep_<timestamp>.csv)")
     parser.add_argument("--verbose", action="store_true", help="Print every command")
+    parser.add_argument("--metrics", action="store_true",
+                        help="Time the 9-column arm (jaccard_similarity_ie plus the "
+                             "containment/cosketch block) instead of the 3-column "
+                             "--no-metrics arm. Writes to sweep_<corpus>_ie_<stamp>.csv "
+                             "so it cannot be mistaken for, or auto-adopted as, the "
+                             "headline sweep. Not timing-comparable to a run without it.")
     parser.add_argument("--smoke", action="store_true",
                         help="Smoke test: one rep at one subB on smallest class")
     args = parser.parse_args()
@@ -255,6 +270,7 @@ def main() -> None:
     print(f"reps:         {args.reps}")
     print(f"precision:    {args.precision}")
     print(f"threads:      {args.threads}")
+    print(f"output shape: {'9-column (--metrics, incl. jaccard_similarity_ie)' if args.metrics else '3-column (--no-metrics)'}")
     print(f"system:       {get_system_info()}")
     print()
 
@@ -263,7 +279,13 @@ def main() -> None:
     if args.output:
         out_path = Path(args.output)
     else:
-        out_path = RESULTS_DIR / f"sweep_{args.corpus}_{stamp}.csv"
+        # The `ie_` infix is load-bearing, not cosmetic: analyze.R,
+        # headline_figures.R and pareto_variants.R pick_latest on
+        # ^sweep_<corpus>_[0-9] and would otherwise adopt this file as the
+        # newest sweep, silently republishing metrics-arm wall times as the
+        # headline subB numbers. A non-digit after the corpus fails that glob.
+        infix = "ie_" if args.metrics else ""
+        out_path = RESULTS_DIR / f"sweep_{args.corpus}_{infix}{stamp}.csv"
 
     with open(out_path, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=ROW_COLS)
@@ -283,7 +305,8 @@ def main() -> None:
                         print(f"[{run_id:>3}/{total}] corpus={args.corpus} size={size_class} method={method} subB={subB} rep={rep+1}/{args.reps}  (elapsed {elapsed:.1f}s)",
                               flush=True)
                         r = run_one(binary, method, beds, subB,
-                                    args.precision, args.threads, verbose=args.verbose)
+                                    args.precision, args.threads,
+                                    verbose=args.verbose, metrics=args.metrics)
                         for pair in r["pairs"]:
                             w.writerow({
                                 "corpus": args.corpus,
@@ -305,6 +328,7 @@ def main() -> None:
                                 "write_time": r["write_time"],
                                 "precision": args.precision,
                                 "threads": args.threads,
+                                "metrics": args.metrics,
                             })
                         fh.flush()
                         print(f"      wall={r['wall_time']:.2f}s sketch={r['sketch_creation_time']}s pair={r['comparison_time']}s pairs={len(r['pairs'])}",
