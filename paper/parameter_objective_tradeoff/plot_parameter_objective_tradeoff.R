@@ -61,12 +61,12 @@ FIG6_W <- 30
 
 COL_TEXT <- "#20262D"
 COL_GRID <- "#D9DEE3"
-COL_FRONTIER <- "#5D6670"
-COL_HIGHLIGHT <- "#20262D"
+COL_HIGHLIGHT <- "#D94F2B"
 base_family <- "sans"
 
-# Centralized palette for k. Extend if the sweep gains additional k values.
-K_COLORS <- c("#86B6EF", "#5598E7", "#2A78D6", "#184F95", "#0D366B")
+# Sequential blue palette with larger lightness steps between discrete k values.
+# Extend if the sweep gains additional k values.
+K_COLORS <- c("#B3DDF2", "#6DB7E3", "#2F8FD3", "#1764A0", "#08345E")
 
 raw <- read_csv(summary_csv, show_col_types = FALSE)
 required_cols <- c("precision", "k", "w", "column", "reference", "pearson", "ari")
@@ -116,19 +116,6 @@ if (nrow(fig6) != 1) {
   stop("Expected exactly one k = ", FIG6_K, ", w = ", FIG6_W, " row.", call. = FALSE)
 }
 
-# A point is Pareto-optimal when no other configuration is at least as good on
-# both objectives and strictly better on one of them.
-is_pareto <- function(i, df) {
-  dominated <- (
-    df$pearson >= df$pearson[i] &
-    df$ari >= df$ari[i] &
-    (df$pearson > df$pearson[i] | df$ari > df$ari[i])
-  )
-  !any(dominated, na.rm = TRUE)
-}
-pareto <- sweep[vapply(seq_len(nrow(sweep)), is_pareto, logical(1), df = sweep), ] %>%
-  arrange(pearson, ari)
-
 message(sprintf(
   "Best numerical agreement: k = %d, w = %d -> r = %.4f, ARI = %.3f",
   best_numeric$k, best_numeric$w, best_numeric$pearson, best_numeric$ari
@@ -148,33 +135,36 @@ fig6_is_bio_optimum <- (
 )
 
 label_numeric <- sprintf(
-  "Best numerical agreement\nk = %d, w = %d\nr = %.4f; ARI = %.3f",
-  best_numeric$k, best_numeric$w,
-  best_numeric$pearson, best_numeric$ari
+  "Best numerical agreement\nk = %d, w = %d",
+  best_numeric$k, best_numeric$w
 )
 
-label_bio <- if (fig6_is_bio_optimum) {
-  sprintf(
-    "Best tissue recovery / Figure 6\nk = %d, w = %d\nr = %.4f; ARI = %.3f",
-    best_biological$k, best_biological$w,
-    best_biological$pearson, best_biological$ari
-  )
-} else {
-  sprintf(
-    "Best tissue recovery\nk = %d, w = %d\nr = %.4f; ARI = %.3f",
-    best_biological$k, best_biological$w,
-    best_biological$pearson, best_biological$ari
-  )
-}
+label_bio <- sprintf(
+  "Best tissue group recovery\nk = %d, w = %d",
+  best_biological$k, best_biological$w
+)
+
+# Fixed positions keep the callouts separate. The numerical label sits
+# below-left of its point so its short leader avoids the high-agreement row.
+numeric_label_x <- 0.855
+numeric_label_y <- 0.585
+bio_label_x <- 0.785
+bio_label_y <- 0.940
 
 p <- ggplot(sweep, aes(x = pearson, y = ari)) +
-  geom_path(
-    data = pareto,
-    aes(x = pearson, y = ari, group = 1),
-    inherit.aes = FALSE,
-    color = COL_FRONTIER,
-    linewidth = 0.65,
-    linetype = "22"
+  geom_hline(
+    yintercept = 0,
+    color = "#6B747D",
+    linewidth = 0.65
+  ) +
+  annotate(
+    "text",
+    x = 0.995, y = 0.015,
+    label = "ARI = 0 (chance agreement)",
+    hjust = 1, vjust = 0,
+    size = 2.8,
+    color = "#59636D",
+    family = base_family
   ) +
   geom_point(
     aes(color = k_label, size = w),
@@ -203,27 +193,39 @@ p <- ggplot(sweep, aes(x = pearson, y = ari)) +
     aes(x = pearson, y = ari)
   )} +
   annotate(
+    "segment",
+    x = numeric_label_x + 0.115, y = numeric_label_y,
+    xend = best_numeric$pearson - 0.006, yend = best_numeric$ari,
+    linewidth = 0.55, color = COL_HIGHLIGHT
+  ) +
+  annotate(
+    "segment",
+    x = bio_label_x + 0.115, y = bio_label_y,
+    xend = best_biological$pearson - 0.006, yend = best_biological$ari,
+    linewidth = 0.55, color = COL_HIGHLIGHT
+  ) +
+  annotate(
     "label",
-    x = best_numeric$pearson,
-    y = best_numeric$ari,
+    x = numeric_label_x,
+    y = numeric_label_y,
     label = label_numeric,
-    hjust = 1.05, vjust = -0.25,
-    size = 3.05, lineheight = 1.08,
+    hjust = 0, vjust = 0.5,
+    size = 3.05, lineheight = 1.12,
     label.size = 0.25,
     color = COL_TEXT,
-    fill = alpha("white", 0.92),
+    fill = "white",
     family = base_family
   ) +
   annotate(
     "label",
-    x = best_biological$pearson,
-    y = best_biological$ari,
+    x = bio_label_x,
+    y = bio_label_y,
     label = label_bio,
-    hjust = -0.05, vjust = 1.15,
-    size = 3.05, lineheight = 1.08,
+    hjust = 0, vjust = 0.5,
+    size = 3.05, lineheight = 1.12,
     label.size = 0.25,
     color = COL_TEXT,
-    fill = alpha("white", 0.92),
+    fill = "white",
     family = base_family
   ) +
   {if (!fig6_is_bio_optimum) annotate(
@@ -257,8 +259,8 @@ p <- ggplot(sweep, aes(x = pearson, y = ari)) +
     expand = expansion(mult = c(0.06, 0.13))
   ) +
   labs(
-    title = "Numerical agreement and biological resolution favor different sequence-mode settings",
-    subtitle = "Each point is one (k, w) configuration; dashed line connects Pareto-optimal settings",
+    title = "Numerical agreement and tissue recovery favor different settings",
+    subtitle = "Each point is one (k, w) configuration; color shows k and size shows w",
     x = "Agreement with exact BEDTools Jaccard (Pearson r)",
     y = "Tissue recovery (adjusted Rand index)"
   ) +
