@@ -139,7 +139,7 @@ which is **not** set Jaccard.
 
 Only `jaccard_similarity` uses register equality. The `containment_AB` /
 `containment_BA` columns (and the three `cosketch_*` derived from them) go
-through `HLLSketch::intersection_size` (`cpp/src/hll_sketch.cpp:169`), which
+through `pairwise_metrics_hll` (`bindings/_core.cpp`), which
 uses **inclusion–exclusion** — `|A| + |B| − |A ∪ B|`, Ertl estimator on each,
 union by register-wise max, clamped to `>= 0`. That path has no
 chance-agreement term, so those columns estimate the true set quantities.
@@ -336,7 +336,7 @@ expecting bit-equality.
 Two things to know:
 
 - **An exact `0.0` means "clamped or empty", never "measured zero."** The
-  clamp is in `HLLSketch::intersection_size` (`cpp/src/hll_sketch.cpp:183`),
+  clamp is in `pairwise_metrics_hll` (`bindings/_core.cpp`),
   one level below the column.
 - **Old CSVs cannot be back-filled.** Output written before 2026-05-14 carries
   the orig `containment` placeholder (constant 1.0) rather than the

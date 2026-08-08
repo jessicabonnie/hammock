@@ -300,7 +300,8 @@ with 190 distinct J values there are no ties, so τ_a = τ_b = 1 − 2D/C.
 ## 5. Censoring in `jaccard_similarity_ie`
 
 An exact `0.0` means the intersection hit the `std::max(0.0, …)` clamp in
-`HLLSketch::intersection_size` — clamped or empty, **never a measured zero**.
+the `>= 0` clamp in `pairwise_metrics_hll` — clamped or empty, **never a
+measured zero**.
 Consequences that must be handled and currently are not **[R]**:
 
 - `sd(err_ie)` over a censored variable **underestimates** σ_ie, biasing the

@@ -50,7 +50,7 @@ def _jaccard_ie_from_containments(c_ab, c_ba):
     correct projection, and it guarantees `denom >= 1`, making both a division
     by zero and an out-of-range result unreachable. A zero containment means
     the intersection estimate was zero -- genuinely empty, or clamped from a
-    negative in HLLSketch::intersection_size -- and is scored 0.0.
+    negative by the `>= 0` clamp in pairwise_metrics_hll -- and is scored 0.0.
 
     Note the emitted `containment_AB`/`containment_BA` columns are NOT clamped,
     so reconstructing J_ie from them can differ from this column in the last

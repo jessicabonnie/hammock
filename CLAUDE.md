@@ -70,11 +70,21 @@ IE derivation is written the same way in both — see
 accepted and is now a no-op.
 
 **Pass `--no-metrics` for timing runs.** It drops back to the 3 columns and
-tags the output `_j3`. The block costs a union plus two cardinality estimates
-per pair, so a timed run with it on is not comparable to the numbers in
-`experiments/bedtools_benchmark/RESULTS.md`, which are all `--no-metrics`. The
-benchmark harnesses pass the flag explicitly in both directions, so the shape
-of a timed run no longer depends on a default.
+tags the output `_j3`. The block costs one extra cardinality estimate per pair
+(the union histogram is accumulated inside the Jaccard pass — see the fused-pass
+note under Architecture), so a timed run with it on is not comparable to the
+numbers in `experiments/bedtools_benchmark/RESULTS.md`, which are all
+`--no-metrics`. The benchmark harnesses pass the flag explicitly in both
+directions, so the shape of a timed run no longer depends on a default.
+
+> **The "flat ≈2.5×" figures below are superseded and NOT yet re-measured.**
+> They describe the pre-fusion binary: the metrics arm used to be a union
+> allocation plus a separate cardinality pass on top of the Jaccard pass, and is
+> now one fused pass. Both front ends changed, so `pairwise_cost_by_precision.py`
+> must be re-run before any of these numbers is quoted again. The Python-path
+> measurement that *is* current: the metrics call got 2.2× faster at p=20 and
+> 5.4× at p=24 (see the fused-pass note). `--no-metrics` timings, and therefore
+> all of `RESULTS.md`, are unaffected — that arm never built a union.
 
 Measured cost (`--threads 16`, N=64/side, 10k intervals/file, 5 runs, medians;
 `docs/data/pairwise_cost_by_precision_20260804_164807.csv`): **the estimator
@@ -96,6 +106,25 @@ the pairwise phase is 0.61% of a p=14 N=512 run. Full table:
   default `--threads = min(8, cpu_count())` for interval modes, **1 for Mode D**
   (`cli._default_threads`). The C++ extension releases the GIL, so
   interval-mode threading is real parallelism.
+
+  **There are three thread budgets, not two** (`cli.main`):
+
+  | budget | drives | Mode D clamp? |
+  |---|---|---|
+  | `threads` | the sketching `ThreadPoolExecutor` | yes — 1, GIL convoy |
+  | `io_threads` | `bedtools getfasta` extraction | no |
+  | `omp_threads` | the C++ OpenMP **pairwise** phase | no |
+
+  `omp_threads` must not inherit Mode D's clamp: that clamp is about the GIL
+  while *sketching*, whereas the pairwise loop runs once from the main thread
+  with the GIL released, so clamping it to 1 would only make Mode D slower. It
+  is `0` ("leave OpenMP's own default") unless `--threads` was given explicitly,
+  so the no-flag path is unchanged. Before this existed the pairwise phase
+  ignored `--threads` outright — `omp_set_num_threads` was called only by the
+  standalone binary — so `hammock --threads 4` in a 4-CPU cgroup still spawned a
+  team per core on the node. Applied as a `num_threads()` clause, never
+  `omp_set_num_threads`, so it cannot leak into the sketching regions, which are
+  already parallel *and* nested inside the pool (see the seed note below).
 
   **Mode D threading is not — it is a GIL convoy.** Measured 2026-08-03 on a
   48-core node, 4 Maurano DHS FASTAs,
@@ -139,12 +168,69 @@ establishing. Read the seed before re-litigating the question.
   v0.6.1), but Mode D still runs on one core. Still open: making it genuinely
   parallel via a process pool, which needs pickling on `HLLSketch` — a
   binding-only addition, since `hll_sketch.hpp` already exposes `registers()`
-  publicly. Also still open: whether interval-mode threading benefits *on the
-  Python path* (`runner._parallel_map`), which has never been measured.
+  publicly. **Closed 2026-08-08: interval-mode `_parallel_map` threading.** It
+  had never been measured, and the guess that `min(8, cpu_count())` was leaving
+  a 48-core node idle is **wrong** — `process_bed_file_mode_b/c` are themselves
+  `#pragma omp parallel` (`cpp/src/processing_modes.cpp:134,241`), so sketching
+  already saturates the machine from inside one C++ call. Measured on 24 BED
+  files × 30k intervals, mode B p=16, medians of 3:
+
+  | `--threads` | 1 | 2 | 4 | 8 | 16 | 32 | 48 |
+  |---|---|---|---|---|---|---|---|
+  | wall (s) | 5.52 | 4.22 | 3.71 | 3.73 | 3.81 | 3.78 | 3.76 |
+  | cpu/wall | 34.8 | 39.4 | 43.8 | 44.7 | 44.0 | 44.4 | 44.6 |
+
+  `cpu/wall ≈ 35` at **one** Python thread is the tell. The pool plateaus by
+  ~4 threads and total CPU is flat (~165 s), so the Python layer adds nothing
+  past that — raising the cap would only deepen the nesting. Note the real
+  consequence runs the other way: 8 pool threads × a per-core OpenMP team, each
+  allocating a thread-local `HLLSketch` (16 MiB at p=24), is oversubscription,
+  not headroom. Sizing *that* is the open question, not raising the cap.
 - `docs/seed-mode-d-hash-width.md` — `digest` returns ≤32-bit minimizer hashes
   while the HLL assumes 64, biasing Mode D cardinality −0.5% to −8.3%. The
   `hash_size=32` option became viable once `_with_ends` was removed (divergence
   #8), since there is no longer a second sketch to merge with.
+  **The pairwise metrics loop is one fused register pass** (2026-08-08).
+  `HLLSketch::jaccard_and_union_cardinality` walks both register arrays once,
+  accumulating the matching/active tallies *and* `counts[max(a[i], b[i])]++` —
+  the union's register-value histogram — so no union sketch is ever built. It
+  replaced `jaccard_similarity()` + `intersection_size()`, which between them
+  walked the registers five times per pair and heap-allocated a whole sketch
+  (16 MiB at p=24) N·M times, while re-estimating both operands' cardinalities
+  that `pairwise_metrics_hll` had already hoisted.
+
+  **Bit-identical by construction, not by measurement.**
+  `ertl_improved_estimate` consumes registers *only* as the integer histogram it
+  builds at the top, and the fused histogram is the same multiset the
+  materialized union would produce — identical integers in, identical doubles
+  out of the same τ/σ code. The one register-order-sensitive path is the
+  `z < 1e-10` Flajolet fallback, reproduced over `max(a[i], b[i])` in index
+  order. Both front ends use the helper, so
+  `tests/test_hammock_cpp_metrics.py`'s cross-tool `==` still gates them.
+
+  Measured (medians of 9, `OMP_NUM_THREADS=16`), Python `pairwise_metrics_hll`:
+
+  | | p=20 | p=22 | p=24 |
+  |---|---|---|---|
+  | 144 pairs, before → after | 102 → 39 ms | 350 → 76 ms | 1320 → 274 ms |
+  | 1024 pairs (256 at p=24) | 580 → 268 ms | 2070 → 486 ms | 2342 → 432 ms |
+
+  i.e. **2.2–5.4×**, growing with precision. Part of that is the fusion and part
+  is no longer deep-copying the sketch list across the pybind boundary (see
+  below); they were measured together.
+
+  **`pairwise_metrics_hll`/`pairwise_jaccard_hll` borrow their sketches.** They
+  take `std::vector<const HLLSketch*>`, not `std::vector<HLLSketch>` — the
+  by-value form made `pybind11/stl.h` deep-copy every register array on every
+  call, serially and under the GIL (peak RSS 275 → 814 MiB for a 64-sketch
+  p=22 pool passed as both operands; now 268 → 282). Two consequences:
+  both arguments are `.noconvert()` and `require_uniform_precision` scans for
+  nulls **before** its `a.empty() || b.empty()` short-circuit, because pybind's
+  pointer caster turns `None` into a null that would be dereferenced with the
+  GIL released inside an OpenMP region; and mutating a sketch from another
+  Python thread *during* one of these calls is now a data race, where the copy
+  used to make it a snapshot.
+
 - `cpp/src/` — HLL sketch (parity-rewritten from scratch to match orig
   Python's algorithm exactly: low-bit register index, ctz rho, Ertl 2017
   improved estimator, register-equality Jaccard). Mode procs in
@@ -168,7 +254,8 @@ These are deliberate; parity tests that touch them are skipped or projected.
    was a placeholder. We replace it with a five-column block, computed
    from the **inclusion-exclusion** intersection — `|A| + |B| - |A ∪ B|`,
    Ertl estimator on each, union by register-wise max, clamped to `>= 0`
-   (`HLLSketch::intersection_size`, `cpp/src/hll_sketch.cpp:169`). Same
+   (the `>= 0` clamp lives in `pairwise_metrics_hll`; `HLLSketch::intersection_size`
+   is the equivalent scalar reference path, kept for tests). Same
    formula as orig's `hyperloglog.py estimate_intersection`. This is **not**
    the register-equality path that `jaccard_similarity` uses — see the
    estimator note below, it matters:
