@@ -70,17 +70,31 @@ HLLSketch sketch_bed_file_hll(const std::string& path,
 // interpreter instead of surfacing as a Python RuntimeError. Validating the
 // operands up front keeps the common failure out of the parallel region
 // entirely; OmpError below catches whatever else might still throw.
-void require_uniform_precision(const std::vector<HLLSketch>& a,
-                               const std::vector<HLLSketch>& b) {
-    if (a.empty() || b.empty()) return;
-    const size_t p = a[0].precision();
-    const size_t h = a[0].hash_size_bits();
+void require_uniform_precision(const std::vector<const HLLSketch*>& a,
+                               const std::vector<const HLLSketch*>& b) {
+    // Null scan first, and *before* the empty short-circuit below. The lists
+    // hold borrowed pointers now, and pybind's pointer caster turns `None` into
+    // a null rather than refusing it. `.noconvert()` on the bindings already
+    // makes None fail to load, so reaching here with a null should be
+    // impossible -- but a null that got through would be dereferenced with the
+    // GIL released inside an OpenMP region, i.e. a SIGSEGV with no traceback
+    // and no chance for OmpError to latch it. Note the check cannot live after
+    // the short-circuit: `(a=[s, None], b=[])` returns early there while the
+    // cardinality prepass still walks every element of `a`.
     for (const auto& v : {std::cref(a), std::cref(b)}) {
-        for (const auto& s : v.get()) {
-            if (s.precision() != p || s.hash_size_bits() != h) {
+        for (const HLLSketch* s : v.get()) {
+            if (!s) throw std::invalid_argument("sketch list contains a null entry");
+        }
+    }
+    if (a.empty() || b.empty()) return;
+    const size_t p = a[0]->precision();
+    const size_t h = a[0]->hash_size_bits();
+    for (const auto& v : {std::cref(a), std::cref(b)}) {
+        for (const HLLSketch* s : v.get()) {
+            if (s->precision() != p || s->hash_size_bits() != h) {
                 throw std::invalid_argument(
                     "all sketches must share precision and hash size; got p=" +
-                    std::to_string(s.precision()) + " alongside p=" +
+                    std::to_string(s->precision()) + " alongside p=" +
                     std::to_string(p));
             }
         }
@@ -129,8 +143,8 @@ private:
 };
 
 // Compute pairwise Jaccard between two lists of HLL sketches into a (N, M) matrix.
-py::array_t<double> pairwise_jaccard_hll(const std::vector<HLLSketch>& a,
-                                         const std::vector<HLLSketch>& b,
+py::array_t<double> pairwise_jaccard_hll(const std::vector<const HLLSketch*>& a,
+                                         const std::vector<const HLLSketch*>& b,
                                          int threads) {
     require_uniform_precision(a, b);
     const int nt = pairwise_team_size(threads);
@@ -146,7 +160,7 @@ py::array_t<double> pairwise_jaccard_hll(const std::vector<HLLSketch>& a,
             for (py::ssize_t j = 0; j < m; j++) {
                 if (err.tripped()) continue;
                 try {
-                    buf(i, j) = a[i].jaccard_similarity(b[j]);
+                    buf(i, j) = a[i]->jaccard_similarity(*b[j]);
                 } catch (...) {
                     err.capture();
                 }
@@ -164,8 +178,8 @@ py::array_t<double> pairwise_jaccard_hll(const std::vector<HLLSketch>& a,
 // Co-sketch summaries (geom / arith / max) are derived Python-side from
 // these two — keeps the binding narrow.
 std::tuple<py::array_t<double>, py::array_t<double>, py::array_t<double>>
-pairwise_metrics_hll(const std::vector<HLLSketch>& a,
-                     const std::vector<HLLSketch>& b,
+pairwise_metrics_hll(const std::vector<const HLLSketch*>& a,
+                     const std::vector<const HLLSketch*>& b,
                      int threads) {
     require_uniform_precision(a, b);
     const int nt = pairwise_team_size(threads);
@@ -184,11 +198,11 @@ pairwise_metrics_hll(const std::vector<HLLSketch>& a,
         std::vector<double> b_card(m);
 #pragma omp parallel for schedule(static) num_threads(nt)
         for (py::ssize_t i = 0; i < n; i++) {
-            a_card[i] = a[i].cardinality();
+            a_card[i] = a[i]->cardinality();
         }
 #pragma omp parallel for schedule(static) num_threads(nt)
         for (py::ssize_t j = 0; j < m; j++) {
-            b_card[j] = b[j].cardinality();
+            b_card[j] = b[j]->cardinality();
         }
 #pragma omp parallel for collapse(2) schedule(static) num_threads(nt)
         for (py::ssize_t i = 0; i < n; i++) {
@@ -203,7 +217,7 @@ pairwise_metrics_hll(const std::vector<HLLSketch>& a,
                     // HLLSketch::jaccard_and_union_cardinality for why this is
                     // bit-identical rather than merely close.
                     double u;
-                    a[i].jaccard_and_union_cardinality(b[j], jbuf(i, j), u);
+                    a[i]->jaccard_and_union_cardinality(*b[j], jbuf(i, j), u);
                     const double inter = std::max(0.0, a_card[i] + b_card[j] - u);
                     abbuf(i, j) = (a_card[i] > 0) ? (inter / a_card[i]) : 0.0;
                     babuf(i, j) = (b_card[j] > 0) ? (inter / b_card[j]) : 0.0;
@@ -277,12 +291,12 @@ PYBIND11_MODULE(_core, m) {
           "Build an HLL sketch from one BED file in mode A, B, or C.");
 
     m.def("pairwise_jaccard_hll", &pairwise_jaccard_hll,
-          py::arg("a"), py::arg("b"), py::arg("threads") = 0,
+          py::arg("a").noconvert(), py::arg("b").noconvert(), py::arg("threads") = 0,
           "Compute the (len(a), len(b)) pairwise-Jaccard matrix for HLL sketches.\n"
           "threads=0 (default) leaves the OpenMP team size alone.");
 
     m.def("pairwise_metrics_hll", &pairwise_metrics_hll,
-          py::arg("a"), py::arg("b"), py::arg("threads") = 0,
+          py::arg("a").noconvert(), py::arg("b").noconvert(), py::arg("threads") = 0,
           "Compute (Jaccard, containment_AB, containment_BA) matrices in one pass.");
 
     m.def("read_filepath_list", &read_filepath_list, py::arg("list_file"));

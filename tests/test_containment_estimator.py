@@ -277,3 +277,88 @@ def test_pairwise_jaccard_accepts_threads_too():
     b = [_hash_sketch(12, 5000, 42)]
     assert _core.pairwise_jaccard_hll(a, b, threads=3)[0][0] == \
         _core.pairwise_jaccard_hll(a, b)[0][0]
+
+
+# --- Phase 3: the sketch lists are borrowed pointers, not deep copies ---
+#
+# These exist because the byte-identity gate is blind here: the change has zero
+# numeric surface, so a diff of the emitted CSVs passes whether it worked,
+# silently did nothing, or introduced a dangling read. The assertions below are
+# the only things that can tell those apart.
+
+
+def test_none_in_sketch_list_is_a_type_error_not_a_crash():
+    """pybind's pointer caster turns `None` into a null rather than refusing it.
+
+    A null reaching the pair loop would be dereferenced with the GIL released
+    inside an OpenMP region: SIGSEGV, no traceback, and OmpError cannot latch it
+    because a segfault is not a C++ exception. `.noconvert()` on the bindings
+    keeps None from loading at all; the null scan in require_uniform_precision
+    is the backstop.
+
+    The empty-`b` case is separate on purpose -- it short-circuits the
+    uniformity check while the cardinality prepass still walks all of `a`.
+    """
+    a = _hash_sketch(12, 1000, 51)
+    b = _hash_sketch(12, 1000, 52)
+    for args in ([a, None], [b]), ([a, None], []), ([], [None]), ([None], [b]):
+        with pytest.raises((TypeError, ValueError)):
+            _core.pairwise_metrics_hll(*args)
+    with pytest.raises((TypeError, ValueError)):
+        _core.pairwise_jaccard_hll([a, None], [b])
+
+
+def test_sketch_lists_are_not_copied():
+    """Positive control: proves the borrow actually took effect.
+
+    Passing a pool as both operands used to duplicate it twice -- measured
+    275 -> 814 MiB peak for a 256 MiB pool at p=22. Without an assertion on
+    memory there is nothing that would notice a silent revert to copying.
+    """
+    def peak_mib():
+        for line in open("/proc/self/status"):
+            if line.startswith("VmHWM"):
+                return int(line.split()[1]) // 1024
+        pytest.skip("no VmHWM in /proc/self/status")
+
+    p = 20  # 1 MiB per sketch; 64 of them is a 64 MiB pool
+    pool = [_hash_sketch(p, 20000, 100 + i) for i in range(64)]
+    before = peak_mib()
+    _core.pairwise_metrics_hll(pool, pool)
+    grew = peak_mib() - before
+    # Copying both operands would add ~128 MiB. Allow generous slack for the
+    # result matrices and allocator behaviour, but not for a whole pool.
+    assert grew < 32, f"peak RSS grew {grew} MiB; sketches look like they are still being copied"
+
+
+def test_temporaries_and_gc_pressure_do_not_dangle():
+    """The borrowed pointers alias Python-owned storage across a GIL release.
+
+    Safe because the argument list holds a strong reference for the whole call,
+    but that is an argument, not a test -- so exercise it with lists that hold
+    the *only* reference, under an aggressive GC threshold.
+    """
+    import gc
+
+    old = gc.get_threshold()
+    gc.set_threshold(1, 1, 1)
+    try:
+        for _ in range(25):
+            jac, c_ab, c_ba = _core.pairwise_metrics_hll(
+                [_hash_sketch(12, 2000, 61), _hash_sketch(12, 2000, 62)],
+                [_hash_sketch(12, 2000, 61)],
+            )
+            gc.collect()
+            assert jac[0][0] == 1.0  # same seed both sides -> identical registers
+    finally:
+        gc.set_threshold(*old)
+
+
+def test_tuple_input_is_accepted():
+    """list_caster takes any sequence; the pointer path must handle the slow one."""
+    a = _hash_sketch(12, 1000, 71)
+    b = _hash_sketch(12, 1000, 72)
+    from_tuple = _core.pairwise_metrics_hll((a, b), (a,))
+    from_list = _core.pairwise_metrics_hll([a, b], [a])
+    for t, l in zip(from_tuple, from_list):
+        assert t[0][0] == l[0][0] and t[1][0] == l[1][0]
