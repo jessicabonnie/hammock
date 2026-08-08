@@ -71,6 +71,13 @@ ROW_COLS = [
     "precision", "num_files", "arm", "run_index", "threads", "num_intervals",
     "n_pairs", "sketch_time", "comparison_time", "pair_time", "write_time",
     "us_per_pair",
+    # run_hammock already measures all three (via /usr/bin/time -v and
+    # getrusage(RUSAGE_CHILDREN)); this harness was simply discarding them.
+    # Memory is not an afterthought for this comparison: the metrics arm used to
+    # heap-allocate a whole union sketch per pair -- 16 MiB at p=24, N*M times --
+    # so peak RSS against precision is the direct readout of that allocation, and
+    # the arm difference should now be flat in p where it once grew with 2^p.
+    "wall_time", "cpu_time", "max_rss_mb",
 ] + PROVENANCE_COLS
 
 
@@ -167,11 +174,20 @@ def main() -> int:
                         "pair_time": pair_time,
                         "write_time": r["write_time"],
                         "us_per_pair": us_per_pair,
+                        "wall_time": r["wall_time"],
+                        "cpu_time": r["cpu_time"],
+                        "max_rss_mb": r["max_rss_mb"],
                     })
+                    rss = r["max_rss_mb"]
+                    # /usr/bin/time -v can be absent or its output unparseable,
+                    # in which case run_with_time yields None. Format that as a
+                    # marker rather than letting it blank the whole line.
+                    rss_s = f"{rss:8.1f}MB" if rss is not None else "     n/a"
                     print(f"  p={p:2d} run={run_i} {arm:10s} "
                           f"sketch={r['sketch_creation_time']:8.3f}s "
                           f"pair={pair_time:8.4f}s write={r['write_time']:7.4f}s "
-                          f"{us_per_pair:9.2f} us/pair", flush=True)
+                          f"{us_per_pair:9.2f} us/pair "
+                          f"rss={rss_s}", flush=True)
 
     with open(out_path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=ROW_COLS)
@@ -179,16 +195,28 @@ def main() -> int:
         w.writerows(rows)
     print(f"\nWrote {out_path}")
 
+    def _median(p: int, arm: str, col: str):
+        vals = sorted(r[col] for r in rows
+                      if r["precision"] == p and r["arm"] == arm
+                      and r[col] is not None)
+        return vals[len(vals) // 2] if vals else None
+
+    # Peak RSS by arm. The interesting quantity is the *difference*: it used to
+    # grow with 2^p (a union sketch per pair), and should now be flat.
+    print("\nMedian peak RSS (MB) by precision:")
+    print(f"  {'p':>3}  {'no_metrics':>12}  {'metrics':>12}  {'delta':>8}")
+    for p in precisions:
+        n = _median(p, "no_metrics", "max_rss_mb")
+        m = _median(p, "metrics", "max_rss_mb")
+        if n is not None and m is not None:
+            print(f"  {p:>3}  {n:>12.1f}  {m:>12.1f}  {m - n:>+8.1f}")
+
     # Median per (precision, arm), so the summary is robust to one slow run.
     print("\nMedian us/pair by precision:")
     print(f"  {'p':>3}  {'no_metrics':>12}  {'metrics':>12}  {'ratio':>7}")
     for p in precisions:
-        med = {}
-        for arm in ("no_metrics", "metrics"):
-            vals = sorted(r["us_per_pair"] for r in rows
-                          if r["precision"] == p and r["arm"] == arm
-                          and r["us_per_pair"] is not None)
-            med[arm] = vals[len(vals) // 2] if vals else None
+        med = {arm: _median(p, arm, "us_per_pair")
+               for arm in ("no_metrics", "metrics")}
         if med["no_metrics"] and med["metrics"]:
             print(f"  {p:>3}  {med['no_metrics']:>12.2f}  {med['metrics']:>12.2f}  "
                   f"{med['metrics'] / med['no_metrics']:>7.2f}x")
