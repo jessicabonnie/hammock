@@ -30,8 +30,15 @@ this directory's existence.
 
 ## Working here — standing caveats
 
-- **Lead cell is k=15, w=15** (post-2026-05-14 bug fix). Pre-fix notes calling
-  k=15/20 a "saturated low" regime are wrong; the fix inverted that reading.
+- **There is no single lead cell; use the k ≥ 15 plateau.** "Lead cell is
+  k=15, w=15" was established on the deleted `_with_ends` column. Rescored on
+  `jaccard_similarity` across all 20 cells (2026-08-08,
+  `estimator_ie_crossref.py`), k15_w15 ranks **fifth** at Δ 0.483 broad, behind
+  k20_w30 (0.540), k20_w20 (0.533), k15_w30 (0.494) and k15_w20 (0.488). The
+  2026-08-06 recomputation in `docs/exp_a_results.md` did not catch this because
+  it rescored only two cells. The top five are within 0.06 of each other, so
+  none is meaningfully best — quote the plateau, not an argmax. Pre-fix notes
+  calling k=15/20 a "saturated low" regime are still wrong; that part holds.
 - **Archived CSVs carry `jaccard_similarity_with_ends`; hammock no longer
   emits it** (v0.6.0, `CLAUDE.md` divergence #8). The stats tables in
   `docs/exp_a_results.md` were computed on it. A re-run will not reproduce

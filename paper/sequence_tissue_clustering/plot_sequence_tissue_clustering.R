@@ -18,6 +18,13 @@
 #
 # Optional overrides:
 #   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column]
+#
+# `jaccard_similarity_ie` is accepted as the similarity column even though the
+# archived sweep predates it: the CSVs carry containment_AB/containment_BA, from
+# which it is exactly recoverable (see jaccard_ie_from_containments below). Every
+# run also writes estimator_agreement_stats.csv next to this script, scoring both
+# columns on the same clustering and recording whether they induce the same
+# partition.
 
 required_packages <- c("dplyr", "readr", "scales", "Cairo")
 missing_packages <- required_packages[
@@ -159,45 +166,138 @@ normalized_mi <- function(a, b) {
   2 * mutual_info / (h_a + h_b)
 }
 
+jaccard_ie_from_containments <- function(c_ab, c_ba) {
+  # Set-Jaccard from the two directional containments:
+  #   1 / (1/C_AB + 1/C_BA - 1) == |A n B| / (|A| + |B| - |A n B|).
+  # Mirrors python/hammock/runner.py::_jaccard_ie_from_containments, clamp
+  # included, and matches experiments/maurano_dhs_validation/analyze.R:166-171.
+  # The clamp absorbs Ertl noise that can push a containment a few ulp past 1
+  # and is what guarantees denom >= 1; it does not fire on this corpus (no
+  # containment in the 235 archived raw_d CSVs exceeds 1.0), but the extreme
+  # size-ratio regime it guards against is real elsewhere. A zero containment
+  # means the intersection estimate was zero -- genuinely empty, or clamped
+  # from a negative -- and is scored 0.0.
+  cab <- pmin(as.numeric(c_ab), 1)
+  cba <- pmin(as.numeric(c_ba), 1)
+  ifelse(cab <= 0 | cba <= 0, 0, 1 / (1 / cab + 1 / cba - 1))
+}
+
+# Oracle values lifted from tests/test_jaccard_ie.py, which pins the canonical
+# Python helper. Cheap, and it localises a clamp bug that the end-to-end ARI
+# check downstream would only show as a wrong number.
+local({
+  probe <- jaccard_ie_from_containments(
+    c(0.5, 1.0, 1.0000000000050957, 0.0, 0.5),
+    c(0.5, 1.0, 1.0,                0.5, 0.0)
+  )
+  stopifnot(
+    isTRUE(all.equal(probe[1], 1 / 3)),
+    probe[2] == 1, probe[3] == 1, probe[4] == 0, probe[5] == 0
+  )
+})
+
+# The archived Mode D sweep predates the jaccard_similarity_ie column (v0.5.0)
+# but already carries the containments it is derived from, so recover it here
+# rather than resweeping. Native _ie is passed through untouched when present.
+add_jaccard_ie <- function(df) {
+  if (!("jaccard_similarity_ie" %in% names(df)) &&
+      all(c("containment_AB", "containment_BA") %in% names(df))) {
+    df[["jaccard_similarity_ie"]] <-
+      jaccard_ie_from_containments(df$containment_AB, df$containment_BA)
+  }
+  df
+}
+
 key <- read_tsv(key_tsv, show_col_types = FALSE) %>%
   transmute(stem = strip_ext(File), tissue = Biosample_term_name)
 
-raw <- read_csv(input_csv, show_col_types = FALSE)
+raw <- add_jaccard_ie(read_csv(input_csv, show_col_types = FALSE))
 required_cols <- c("file1", "file2", sim_col)
 missing_cols <- setdiff(required_cols, names(raw))
 if (length(missing_cols) > 0) {
   stop("Input lacks columns: ", paste(missing_cols, collapse = ", "), call. = FALSE)
 }
 
-pairs <- raw %>%
-  transmute(
-    stem1 = strip_ext(file1),
-    stem2 = strip_ext(file2),
-    similarity = .data[[sim_col]]
-  )
-
-stems <- sort(unique(c(pairs$stem1, pairs$stem2)))
+stems <- sort(unique(c(strip_ext(raw$file1), strip_ext(raw$file2))))
 missing_stems <- setdiff(stems, key$stem)
 if (length(missing_stems) > 0) {
   stop("Tissue key is missing: ", paste(missing_stems, collapse = ", "), call. = FALSE)
 }
-
-mat <- matrix(NA_real_, length(stems), length(stems), dimnames = list(stems, stems))
-for (i in seq_len(nrow(pairs))) {
-  mat[pairs$stem1[i], pairs$stem2[i]] <- pairs$similarity[i]
-}
-mat[is.na(mat)] <- t(mat)[is.na(mat)]
-if (anyNA(mat)) stop("Similarity matrix is incomplete.", call. = FALSE)
-diag(mat) <- 1
-mat[] <- pmin(pmax(mat, 0), 1)
-
-hc <- hclust(as.dist(1 - mat), method = "average")
 tissue_by_stem <- setNames(key$tissue, key$stem)
+
+similarity_matrix <- function(df, column) {
+  pairs <- df %>%
+    transmute(
+      stem1 = strip_ext(file1),
+      stem2 = strip_ext(file2),
+      similarity = .data[[column]]
+    )
+  m <- matrix(NA_real_, length(stems), length(stems), dimnames = list(stems, stems))
+  for (i in seq_len(nrow(pairs))) {
+    m[pairs$stem1[i], pairs$stem2[i]] <- pairs$similarity[i]
+  }
+  m[is.na(m)] <- t(m)[is.na(m)]
+  if (anyNA(m)) stop("Similarity matrix is incomplete.", call. = FALSE)
+  diag(m) <- 1
+  m[] <- pmin(pmax(m, 0), 1)
+  m
+}
+
+mat <- similarity_matrix(raw, sim_col)
+hc <- hclust(as.dist(1 - mat), method = "average")
 true_tissue <- tissue_by_stem[hc$labels]
 n_tissues <- length(unique(true_tissue))
 predicted <- cutree(hc, k = n_tissues)
 ari <- adjusted_rand(true_tissue, predicted)
 nmi <- normalized_mi(true_tissue, predicted)
+
+# ---- estimator agreement ---------------------------------------------------
+# Figure 6 is drawn on jaccard_similarity because that is the column the
+# sequence-mode sweep emitted, but jaccard_similarity_ie is the
+# bedtools-comparable estimator (CLAUDE.md divergence #2). Record whether the
+# choice of column changes the k = n_tissues partition at all. cutree's cluster
+# ids are arbitrary, so partitions are compared as sets of member sets, not
+# elementwise.
+partition_signature <- function(p) {
+  paste(sort(vapply(split(names(p), p),
+                    function(g) paste(sort(g), collapse = ","),
+                    character(1))),
+        collapse = " | ")
+}
+
+agreement <- bind_rows(lapply(
+  intersect(c("jaccard_similarity", "jaccard_similarity_ie"), names(raw)),
+  function(cl) {
+    h <- hclust(as.dist(1 - similarity_matrix(raw, cl)), method = "average")
+    p <- cutree(h, k = n_tissues)
+    truth <- tissue_by_stem[h$labels]
+    data.frame(
+      column = cl,
+      ari = adjusted_rand(truth, p),
+      nmi = normalized_mi(truth, p),
+      signature = partition_signature(p),
+      stringsAsFactors = FALSE
+    )
+  }
+))
+
+ref_signature <- agreement$signature[agreement$column == "jaccard_similarity"]
+agreement$partition_identical <- if (length(ref_signature) == 1) {
+  agreement$signature == ref_signature
+} else {
+  NA
+}
+agreement$signature <- NULL
+agreement <- cbind(
+  data.frame(input = basename(input_csv), n_clusters = n_tissues,
+             stringsAsFactors = FALSE),
+  agreement
+)
+
+stats_csv <- file.path(script_dir, "estimator_agreement_stats.csv")
+write_csv(agreement, stats_csv)
+message("Wrote: ", stats_csv)
+print(agreement, row.names = FALSE)
 
 # Match the original experiment figure: one colour per tissue, tissue-coloured
 # leaf labels, and rectangles outlining contiguous same-tissue label runs.
@@ -251,7 +351,11 @@ plot(
   hc,
   hang = -1,
   labels = FALSE,
-  main = "Sequence sketches recover fetal-tissue organization",
+  main = if (identical(sim_col, DEFAULT_SIM_COL)) {
+    "Sequence sketches recover fetal-tissue organization"
+  } else {
+    sprintf("Sequence sketches recover fetal-tissue organization (%s)", sim_col)
+  },
   xlab = "",
   sub = "",
   ylab = "1 − Jaccard",

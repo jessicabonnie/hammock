@@ -381,20 +381,46 @@ if (nrow(d) > 0) {
     tidyr::pivot_wider(names_from = col_short,
                        values_from = c(pearson, mae, ari))
   if (nrow(ie_cmp) > 0 && "ari_ie" %in% names(ie_cmp)) {
+    ie_arm_summary <- ie_cmp %>%
+      group_by(precision) %>%
+      summarise(n = n(),
+                ari_differs = sum(!is.na(ari_register_equality) &
+                                    !is.na(ari_ie) &
+                                    abs(ari_register_equality - ari_ie) > 1e-9),
+                max_abs_ari_delta = max(
+                  abs(ari_register_equality - ari_ie), na.rm = TRUE),
+                median_mae_register_equality =
+                  median(mae_register_equality, na.rm = TRUE),
+                median_mae_ie = median(mae_ie, na.rm = TRUE),
+                .groups = "drop")
     cat("\nEstimator arm comparison (Mode D, reference = bedtools):\n")
-    print(ie_cmp %>%
-            group_by(precision) %>%
-            summarise(n = n(),
-                      ari_differs = sum(!is.na(ari_register_equality) &
-                                          !is.na(ari_ie) &
-                                          abs(ari_register_equality - ari_ie) > 1e-9),
-                      max_abs_ari_delta = max(
-                        abs(ari_register_equality - ari_ie), na.rm = TRUE),
-                      median_mae_register_equality =
-                        median(mae_register_equality, na.rm = TRUE),
-                      median_mae_ie = median(mae_ie, na.rm = TRUE),
-                      .groups = "drop"),
-          n = 50)
+    print(ie_arm_summary, n = 50)
+    # Persisted so the supplement can cite a file rather than a console dump;
+    # this table is the evidence for "the two columns agree where the figures
+    # make their claims but not across the whole sweep".
+    write_csv(ie_arm_summary,
+              file.path(results_dir, "estimator_arm_comparison.csv"))
+    cat("Wrote results/estimator_arm_comparison.csv\n")
+
+    # Per-cell, not just the per-precision aggregate above. The aggregate can
+    # only answer "how many cells differ"; this answers "which ones, and by how
+    # much", which is the form the question actually gets asked in. Note the
+    # answer is NOT "ARI is identical at every (k, w)" --- it is identical at
+    # the cells the published figures use, and differs at 48 of 235 overall.
+    ie_by_config <- ie_cmp %>%
+      transmute(precision, k, w,
+                ari_register_equality, ari_ie,
+                ari_delta = ari_ie - ari_register_equality,
+                ari_identical = !is.na(ari_register_equality) & !is.na(ari_ie) &
+                  abs(ari_ie - ari_register_equality) <= 1e-9,
+                mae_register_equality, mae_ie,
+                pearson_register_equality, pearson_ie) %>%
+      arrange(desc(abs(ari_delta)), precision, k, w)
+    write_csv(ie_by_config,
+              file.path(results_dir, "estimator_ari_by_config.csv"))
+    cat(sprintf(
+      "Wrote results/estimator_ari_by_config.csv (%d cells, %d with identical ARI)\n",
+      nrow(ie_by_config), sum(ie_by_config$ari_identical, na.rm = TRUE)))
   }
 
   # ── existing Pearson + MAE vs bedtools (filtered now) ────────────────────
@@ -530,6 +556,53 @@ if (nrow(d) > 0) {
   b <- pick_best(b_pool, "mae", descending = FALSE)
   cat(sprintf("k=%2d w=%3d p=%2d  -> mae=%.4f\n",
               b$k, b$w, b$precision, b$mae))
+
+  # ── Per-column optimum, read-only ────────────────────────────────────────
+  # The selection above drives every published Mode D figure and deliberately
+  # stays on jaccard_similarity. This block answers the separate question of
+  # which cell each estimator would pick, and writes it to its own file --- it
+  # must not feed the scatter, dendrogram or contingency outputs below, which
+  # write to fixed filenames (mode_d_best_dendrogram.png is Fig 5a in
+  # docs/paper_outline.md).
+  #
+  # Sourced from d_out, not b_pool: b_pool descends from d_plot, which is
+  # already filtered to jaccard_similarity, so re-filtering it is a no-op.
+  #
+  # Ties are recorded rather than broken. pick_best resolves them via dplyr's
+  # stable arrange over a frame sorted by (column, precision, k, w), so under
+  # jaccard_similarity_ie the ARI optimum lands on p=12 k=10 w=20 --- a
+  # sort artifact, not a preference. That tie is 9-way across precisions, and
+  # the jaccard_similarity one is already 8-way, so an arbitrary tie-break over
+  # precision is not new to the IE arm.
+  maximise <- c(pearson = TRUE, spearman = TRUE, ari = TRUE, nmi = TRUE,
+                mae = FALSE)
+  best_by_column <- bind_rows(lapply(sort(unique(d_out$column)), function(cl) {
+    pool <- d_out %>% filter(reference == "bedtools", column == cl)
+    bind_rows(lapply(names(maximise), function(obj) {
+      z <- pool %>% filter(!is.na(.data[[obj]]))
+      if (nrow(z) == 0) return(NULL)
+      target <- if (maximise[[obj]]) max(z[[obj]]) else min(z[[obj]])
+      ties <- z %>% filter(abs(.data[[obj]] - target) < 1e-9)
+      sel <- ties %>% slice(1)  # == pick_best's stable-sort winner
+      data.frame(
+        column = cl, objective = obj, value = target,
+        k = sel$k, w = sel$w, precision = sel$precision,
+        ari = sel$ari, nmi = sel$nmi, pearson = sel$pearson, mae = sel$mae,
+        n_tied = nrow(ties),
+        tie_set = paste(sprintf("p%d/k%d/w%d", ties$precision, ties$k, ties$w),
+                        collapse = " "),
+        stringsAsFactors = FALSE
+      )
+    }))
+  }))
+  write_csv(best_by_column, file.path(results_dir, "best_config_by_column.csv"))
+  cat("Wrote results/best_config_by_column.csv (", nrow(best_by_column), "rows)\n")
+  cat("\nPer-column optimum (ref=bedtools; ties recorded, not broken):\n")
+  for (i in seq_len(nrow(best_by_column))) {
+    r <- best_by_column[i, ]
+    cat(sprintf("  %-28s by %-8s : k=%2d w=%3d p=%2d -> %.4f  (%d tied)\n",
+                r$column, r$objective, r$k, r$w, r$precision, r$value, r$n_tied))
+  }
 
   # The "best" config used for the scatter + dendrogram below is now the
   # ARI-best (the question the user actually asks: do clusters match

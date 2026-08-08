@@ -152,6 +152,57 @@ the story being told.
 > value is exactly recoverable from the `containment_AB`/`containment_BA`
 > columns these files do carry, via `J = 1/(1/C_AB + 1/C_BA − 1)`.
 
+### Recomputed on `jaccard_similarity_ie` across all 20 cells, 2026-08-08
+
+Generator: `experiments/ref-comparison/estimator_ie_crossref.py`, writing
+`results/exp_a_estimator_delta.csv`. Same statistic, same 18/54 ordered pairs,
+no sketching — `_ie` is recovered from the containments via the canonical
+`runner._jaccard_ie_from_containments`. No p-values, for the reason given above.
+
+**Two separate findings. Only the second is about the estimator.**
+
+**1. "k=15, w=15 is the lead cell" does not survive the full grid — and this is
+a `jaccard_similarity` result, not an `_ie` one.** The 2026-08-06 recompute
+above covered only two cells (k15_w15, k10_w10), so it never tested whether
+k15_w15 still won once every cell was scored. It does not. Ranked by Δ on
+`jaccard_similarity`, broad:
+
+| rank | cell | Δ (register-equality) | Δ (IE) |
+|---:|---|---:|---:|
+| 1 | k20_w30 | 0.5398 | 0.5609 |
+| 2 | k20_w20 | 0.5326 | 0.5632 |
+| 3 | k15_w30 | 0.4940 | 0.5081 |
+| 4 | k15_w20 | 0.4883 | 0.5095 |
+| 5 | **k15_w15** | **0.4827** | **0.5099** |
+
+k15_w15 is fifth of twenty, on both columns; narrow peaks give the same
+ordering. It led on the deleted `_with_ends` column (Δ 0.398 against k20_w30's
+0.379) and lost that position when the column changed — the two-cell recompute
+simply could not see it. **Treat "k=15, w=15" as "a cell in the k ≥ 15 plateau",
+not as the argmax.** The top five are within 0.06 of each other and the top two
+within 0.008, so no cell in that band is meaningfully best.
+
+**2. The estimator change is close to a no-op for this ranking.** Spearman
+ρ = 0.9925 between the two orderings on both peak types; 4 of 20 cells change
+rank, all inside the top five near-tie band. Every cell from rank 6 down holds
+its position exactly, and Δ agrees to four decimals there (k10_w10 broad:
+0.0705 vs 0.0704). The claim Exp A actually rests on — that k ≥ 15 separates
+from k ≤ 10 — holds under both, and the gap is slightly *wider* on `_ie`:
+
+| peak | gap, register-equality | gap, IE |
+|---|---:|---:|
+| broad | +0.3891 | +0.4146 |
+| narrow | +0.4287 | +0.4490 |
+
+Full separation (`min(xref) > max(diff)`) holds under `_ie` at every cell where
+it holds under `jaccard_similarity`, which is the point made above: it is
+satisfied almost everywhere and carries no information. It is reported in the
+CSV as a diagnostic only.
+
+**Figure 5 is unaffected.** Rendering it on `_ie`
+(`paper/figures/cross_reference_identity_ie.png`) leaves all three tissue clades
+monophyletic — reference choice remains a within-tissue perturbation.
+
 ## New Mode D columns — at k=10, w=10
 
 `scripts/exp_a_metric_comparison.R` runs the same Wilcoxon test on each

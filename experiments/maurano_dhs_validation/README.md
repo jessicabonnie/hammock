@@ -130,8 +130,15 @@ experiments/maurano_dhs_validation/
 │   ├── raw_d/                one CSV per Mode D config
 │   ├── raw_d_buggy_pre_fix/  pre-2026-05-14 Mode D CSVs; do not analyse
 │   ├── abc_summary.csv       per-config accuracy (Modes A/B/C)
-│   ├── mode_d_summary.csv    per-config accuracy (Mode D)
+│   ├── mode_d_summary.csv    per-config accuracy (Mode D), one row per
+│   │                         (config x similarity column x reference)
 │   ├── best_cluster_assignment.csv / best_cluster_contingency.csv
+│   │                         for the ARI-best jaccard_similarity config only;
+│   │                         these drive mode_d_best_dendrogram.png (Fig 5a)
+│   ├── best_config_by_column.csv      per-column optimum per objective, with
+│   │                         the full tie set; read-only, feeds no figure
+│   ├── estimator_arm_comparison.csv   register-equality vs IE, per precision
+│   ├── estimator_ari_by_config.csv    the same comparison per (k, w, p) cell
 │   └── sweep_d_*.csv         Mode D sweep index (also cited in CLAUDE.md as
 │                             the cpu_s/wall_s ≈ 0.8 threading evidence)
 ├── figures/                  Cairo PNGs (lives in-repo; small)

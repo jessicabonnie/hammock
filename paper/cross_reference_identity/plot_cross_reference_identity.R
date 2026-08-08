@@ -38,7 +38,7 @@ repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 data_dir <- file.path(repo_root, "docs", "data")
 peaks_csv <- file.path(data_dir, "exp_a_broad_k10_w10.csv")
 meta_tsv <- file.path(data_dir, "exp_a_metadata.tsv")
-SIM_COL <- "jaccard_similarity"
+DEFAULT_SIM_COL <- "jaccard_similarity"
 
 argv <- commandArgs(trailingOnly = TRUE)
 out_png <- if (length(argv) >= 1) {
@@ -46,6 +46,10 @@ out_png <- if (length(argv) >= 1) {
 } else {
   file.path(repo_root, "paper", "figures", "cross_reference_identity.png")
 }
+# argv[2] selects the similarity column. `jaccard_similarity_ie` is accepted
+# even though this CSV predates that column: it carries containment_AB and
+# containment_BA, from which it is exactly recoverable (see below).
+SIM_COL <- if (length(argv) >= 2 && nzchar(argv[2])) argv[2] else DEFAULT_SIM_COL
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 
 for (path in c(peaks_csv, meta_tsv)) {
@@ -61,7 +65,37 @@ TISSUE_PAL <- c(heart = "#B8500B", liver = "#00745B", lung = "#0072B2")
 meta <- read_tsv(meta_tsv, show_col_types = FALSE) %>%
   mutate(key = paste(sample_id, ref, sep = "__"))
 
+jaccard_ie_from_containments <- function(c_ab, c_ba) {
+  # Set-Jaccard from the two directional containments:
+  #   1 / (1/C_AB + 1/C_BA - 1) == |A n B| / (|A| + |B| - |A n B|).
+  # Mirrors python/hammock/runner.py::_jaccard_ie_from_containments, clamp
+  # included, and matches experiments/maurano_dhs_validation/analyze.R:166-171.
+  # The clamp absorbs Ertl noise that can push a containment a few ulp past 1
+  # and is what guarantees denom >= 1. A zero containment means the
+  # intersection estimate was zero and is scored 0.0.
+  cab <- pmin(as.numeric(c_ab), 1)
+  cba <- pmin(as.numeric(c_ba), 1)
+  ifelse(cab <= 0 | cba <= 0, 0, 1 / (1 / cab + 1 / cba - 1))
+}
+
+# Oracle values from tests/test_jaccard_ie.py, which pins the canonical helper.
+local({
+  probe <- jaccard_ie_from_containments(
+    c(0.5, 1.0, 1.0000000000050957, 0.0, 0.5),
+    c(0.5, 1.0, 1.0,                0.5, 0.0)
+  )
+  stopifnot(
+    isTRUE(all.equal(probe[1], 1 / 3)),
+    probe[2] == 1, probe[3] == 1, probe[4] == 0, probe[5] == 0
+  )
+})
+
 raw <- read_csv(peaks_csv, show_col_types = FALSE)
+if (!("jaccard_similarity_ie" %in% names(raw)) &&
+    all(c("containment_AB", "containment_BA") %in% names(raw))) {
+  raw[["jaccard_similarity_ie"]] <-
+    jaccard_ie_from_containments(raw$containment_AB, raw$containment_BA)
+}
 if (!SIM_COL %in% names(raw)) {
   stop(
     "Similarity column '", SIM_COL, "' not present in ", basename(peaks_csv),
@@ -240,6 +274,12 @@ panel <- ggplot() +
   ) +
   labs(
     title = "Sequence sketches group samples by tissue across references",
+    # Named only on the non-default column, so the manuscript figure is
+    # unchanged. It goes in the subtitle rather than the title because the
+    # title is already near the panel width and appending to it clips.
+    subtitle = if (identical(SIM_COL, DEFAULT_SIM_COL)) NULL else {
+      sprintf("similarity = %s", SIM_COL)
+    },
     x = "1 − Jaccard (UPGMA)",
     y = NULL
   ) +

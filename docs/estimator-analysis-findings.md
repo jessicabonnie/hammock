@@ -599,6 +599,44 @@ because the two columns agree everywhere, but because they agree exactly where
 the figures make their claims, and moving would move them onto a column that
 `docs/seed-mode-d-hash-width.md` flags as suspect at p ≥ 20.
 
+**Addendum, 2026-08-08 — this section is now backed by files, not just prose.**
+Everything above reproduced exactly on re-derivation. Four artifacts now
+generate it, so the next session does not have to recompute:
+
+- `experiments/maurano_dhs_validation/results/estimator_ari_by_config.csv` —
+  the per-cell table. The per-precision aggregate above answers "how many cells
+  differ"; this answers "which, and by how much". 187 of 235 cells have
+  identical ARI. Worth stating in the form the question actually gets asked:
+  ARI is **not** identical at every (k, w) — but at p=24 it is identical at 38
+  of 39 cells, the exception being k=8, w=500 at ARI 0.059 vs 0.025, where both
+  clusterings are degenerate.
+- `results/best_config_by_column.csv` — per-column argmax per objective with the
+  full tie set. Confirms the `_ie` ARI optimum resolving to p=12, k=10, w=20 is
+  a 9-way tie broken by dplyr's stable sort, and that `jaccard_similarity`'s own
+  optimum is already an 8-way tie across precisions. The arbitrary tie-break is
+  not new to the IE arm.
+- `results/estimator_arm_comparison.csv` — the per-precision table above.
+- `paper/sequence_tissue_clustering/estimator_agreement_stats.csv` — partition
+  identity at Figure 6's cell, compared relabel-invariantly rather than by
+  cluster id.
+
+One thing this section did not say and should: **the Pearson optimum moves
+between columns** — k=20, w=100, p=24 on `jaccard_similarity` (r = 0.9996)
+against k=20, w=20 on `_ie` (r = 0.99997) — so Figure 7's two panels annotate
+different best-Pearson cells. The "Pearson-optimal ≠ ARI-optimal" claim survives
+either way (ARI 0.693 vs 0.910).
+
+Note also that `mode_d_summary.csv` grew again, to 3290 rows: commit `2958ac5`
+widened `d_metric_order` to all seven current minimizer metrics and dropped
+`jaccard_similarity_with_ends`, but the on-disk results were not regenerated at
+the time. The 1410-row figure quoted above describes the intermediate state.
+
+The cross-reference corpus was checked the same way; see
+`experiments/ref-comparison/docs/exp_a_results.md`, which records a separate
+finding not about the estimator at all — "k=15, w=15 is the lead cell" was
+established on the deleted `_with_ends` column and does not survive scoring the
+full 20-cell grid on the surviving one.
+
 ### 9.8 §3's "genuinely missing" list now has a generator
 
 `paper/interval_accuracy/plot_interval_accuracy.R` was extended rather than
