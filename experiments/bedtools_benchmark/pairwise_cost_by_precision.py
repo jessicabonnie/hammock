@@ -57,11 +57,21 @@ DEFAULT_NUM_INTERVALS = 10000  # matches the synthetic scaling benchmark
 DEFAULT_THREADS = 16           # pinned: the login node's OpenMP default is 48
 DEFAULT_RUNS = 5
 
+# Provenance travels in the rows, not just on stdout. The 20260804 CSV recorded
+# none of it, so it cannot be checked for comparability after the fact: with
+# `-march=native` baked in, a timing is only comparable to one from the same CPU
+# model, and a run outside a SLURM allocation shares its cores with whatever else
+# is on the node. Repeating five constant columns across 70 rows is a trivial
+# price for a self-describing file that still joins cleanly.
+PROVENANCE_COLS = [
+    "hostname", "cpu_model", "cpu_count", "slurm_job_id", "binary_version",
+]
+
 ROW_COLS = [
     "precision", "num_files", "arm", "run_index", "threads", "num_intervals",
     "n_pairs", "sketch_time", "comparison_time", "pair_time", "write_time",
     "us_per_pair",
-]
+] + PROVENANCE_COLS
 
 
 def make_corpus(num_files: int, num_intervals: int, tmp_dir: str):
@@ -110,7 +120,18 @@ def main() -> int:
     print(f"intervals:     {args.num_intervals}")
     print(f"threads:       {args.threads}")
     print(f"runs:          {args.runs}")
-    print(f"system:        {get_system_info()}")
+    sysinfo = get_system_info()
+    print(f"system:        {sysinfo}")
+    provenance = {
+        "hostname": sysinfo.get("hostname", "unknown"),
+        "cpu_model": sysinfo.get("cpu_model", "unknown"),
+        "cpu_count": sysinfo.get("cpu_count", "unknown"),
+        "slurm_job_id": sysinfo.get("slurm_job_id", "none"),
+        "binary_version": version,
+    }
+    if provenance["slurm_job_id"] == "none":
+        print("  NOTE: no SLURM allocation -- cores are shared with anything else "
+              "on this node, which inflates wall times unpredictably.")
 
     os.makedirs(args.output_dir, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -133,6 +154,7 @@ def main() -> int:
                     pair_time = r["pair_time"]
                     us_per_pair = (pair_time * 1e6 / n_pairs) if pair_time else None
                     rows.append({
+                        **provenance,
                         "precision": p,
                         "num_files": args.num_files,
                         "arm": arm,

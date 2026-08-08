@@ -111,11 +111,34 @@ MAXRSS_RE = re.compile(r"Maximum resident set size \(kbytes\):\s+(\d+)")
 
 
 def get_system_info() -> Dict[str, Any]:
+    """Where a measurement was taken, in enough detail to judge comparability.
+
+    `cpu_model` and `hostname` are load-bearing, not decoration: CMakeLists
+    bakes in `-march=native`, so a timing taken on one CPU model is not
+    strictly comparable to one taken on another, and this cluster mixes node
+    types. An archived CSV that records neither cannot be checked against --
+    which is exactly the gap this closes.
+
+    `slurm_job_id` distinguishes a run inside an allocation (cores actually
+    reserved) from one on a shared login/dev node, where a co-tenant job
+    silently inflates wall times. "none" means no allocation.
+    """
     info = {
+        "hostname": platform.node(),
         "cpu_count": os.cpu_count(),
+        "cpu_model": "unknown",
         "platform": platform.platform(),
         "python_version": platform.python_version(),
+        "slurm_job_id": os.environ.get("SLURM_JOB_ID", "none"),
     }
+    try:
+        with open("/proc/cpuinfo") as f:
+            for line in f:
+                if line.startswith("model name"):
+                    info["cpu_model"] = line.split(":", 1)[1].strip()
+                    break
+    except OSError:
+        pass
     try:
         with open("/proc/meminfo") as f:
             for line in f:
