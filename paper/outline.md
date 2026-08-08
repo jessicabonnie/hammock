@@ -24,7 +24,7 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 
 ### 2.1 Hammock creates reusable sketches of interval coordinates and interval-derived sequence
 
-**Key sentence:** Hammock converts each input dataset once into a reusable file-level sketch, allowing subsequent analyses to test whether interval sketches preserve overlap similarity at scale and whether sequence sketches preserve biological relationships across reference genomes.
+Hammock converts each input dataset once into a reusable file-level sketch. In interval mode the sketch represents genomic positions covered by the intervals, while in sequence mode, it represents minimizer-derived sequence features. Both representations use compact HyperLogLog (HLL) sketches, using summaries during pairwise comparison rather than the original files. The two modes are complementary rather than sequential: interval mode measures similarity in coordinate space, whereas sequence mode measures similarity in sequence space. The subsequent analyses evaluate whether interval sketches preserve overlap similarity at scale and whether sequence sketches preserve biological relationships across reference genomes.
 
 ![Figure 2](figures/hammock_workflow.png)
 
