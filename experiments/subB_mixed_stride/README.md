@@ -24,6 +24,12 @@ and against `bedtools jaccard` on the real-data corpus.
   default and the flag did not exist.
 - **Accuracy column:** `jaccard_similarity` (register-equality), not
   `jaccard_similarity_ie`. See the caveat box at the top of `RESULTS.md`.
+  The IE question is answered separately by `run_ie_subb.py` +
+  `analyze_ie_subb.py` (RESULTS.md §4.6): subB does not meaningfully degrade
+  `jaccard_similarity_ie` anywhere in 0.01 ≤ subB ≤ 1. Those two scripts measure
+  accuracy against exact bedtools truth rather than drift against subB=1.0, and
+  write `results/ie_maurano_*.csv` — deliberately not a `sweep_*` name, which the
+  `pick_latest` globs in `analyze.R` would adopt.
 - **Ground truth for accuracy:** `subB=1.0`, averaged across methods (every
   method should produce the same Jaccard at subB=1 since all points pass the
   gate). Self-consistent; isolates subsample-induced drift from HLL error.

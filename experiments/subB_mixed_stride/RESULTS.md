@@ -17,6 +17,13 @@ Design and how-to-rerun live in `README.md`.
 > comparison only. The one place the column choice changes the conclusion — the
 > 10k MAE cliff — is called out in its own box below.
 >
+> **Answered 2026-08-08 — see §4.6.** The IE arm now exists, measured against
+> exact bedtools truth on this corpus: `--subB` does **not** meaningfully degrade
+> `jaccard_similarity_ie` anywhere in 0.01 ≤ subB ≤ 1, at p=18 or p=23. The
+> guidance on this page stands, and its stated reason — that part of the
+> register-equality error is the floor moving rather than the sample degrading —
+> is now confirmed on real data rather than inferred.
+>
 > **Binary version.** These runs used a pre-0.7.0 `hammock-cpp`, when 3-column
 > output was the default and `--no-metrics` did not exist. `run_sweep.py` has
 > since been updated to require ≥ 0.7.0 and to pass `--no-metrics` explicitly,
@@ -139,6 +146,17 @@ Three observations:
 
 > **The 10k cliff is an estimator artifact, not a sampling failure**
 > (established 2026-07-31; these MAEs predate `jaccard_similarity_ie`).
+>
+> **Confirmed on real data 2026-08-08 (§4.6), with two corrections to how this
+> box should be read.** The mechanism holds: on Maurano at p=23, register-equality
+> drifts up to 0.124 as λ crosses the knee while IE stays at its unsubsampled
+> floor — a 670× gap at subB=0.01. But (a) the underlying CSV for the 4×4 table
+> below was never persisted, so it is not reproducible and is retained only as the
+> original observation; and (b) its "IE is *lower* at subB=0.01 than at 0.1"
+> reading is not supportable — that corpus is 15 pairs from 6 files whose
+> between-pair J spread (sd 0.0020) equals the MAE being compared, so the
+> 0.0022 → 0.0018 step is about one standard error. Cite §4.6, which has 190 pairs
+> and jackknife CIs, for anything load-bearing.
 > Every MAE above is measured on `jaccard_similarity`, which is
 > register-equality and carries a chance-agreement floor `c` that is a step
 > function of the load factor λ = n/m. Subsampling lowers `n`, so at low
@@ -219,8 +237,10 @@ subB drop below 0.1. **Caveat, same root cause:** that guidance is calibrated
 on `jaccard_similarity`, so part of what it is protecting against is the floor
 moving rather than the sample degrading. If you read
 `jaccard_similarity_ie`, the binding constraint at low subB is instead that λ
-must stay high enough for the sketch itself to be informative. Re-deriving the
-subB recommendation on the IE column is unfinished work.
+must stay high enough for the sketch itself to be informative. **Re-derived
+2026-08-08 — see §4.6. On the IE column the guidance is not binding at all:
+error stays within 1.66× its unsubsampled floor all the way down to subB=0.01,
+at both p=18 and p=23.**
 
 `hash-threshold` and `single-hash` are not competitive speed defaults on
 either corpus — at best ~1.5× speedup vs no-subsample even at `subB=0.01`
@@ -229,6 +249,71 @@ hash-threshold on synthetic 10k; Maurano tops out at 1.32×. For contrast,
 mixed-stride reaches 14.0× on synthetic 1M at the same subB). Keep them for
 parity reasons (`hash-threshold` matches the original hammock gate) or for
 codepath simplicity (`single-hash`), not performance.
+
+---
+
+## Does subB affect `jaccard_similarity_ie`? (2026-08-08)
+
+**No, not meaningfully.** Across 0.01 ≤ subB ≤ 1, all three methods, p ∈ {18, 23},
+IE error against exact bedtools truth never exceeds **1.66×** its own
+unsubsampled floor, and 26 of 30 subsampled cells sit within 1.3×.
+
+Generators: `run_ie_subb.py` (32 cells, unmodified v0.7.0 `hammock-cpp`, ~7 min)
+and `analyze_ie_subb.py` → `results/ie_maurano_summary.csv`,
+`results/ie_maurano_pairs.csv`. This needed no changes to the sweep harness:
+`hammock-cpp` emits `jaccard_similarity_ie` natively by default since v0.7.0, and
+exact per-pair truth already existed in `docs/data/maurano_bedtools_ref.tsv`.
+`--reps 1`, because the archived replicates are byte-identical (all 3420
+(method, subB, pair) cells hold exactly one distinct Jaccard across the five).
+
+Unlike everything above, the primary statistic here is **accuracy** — |IE −
+bedtools| — not drift against hammock's own subB=1.0 run. IE is on bedtools'
+scale; register-equality is not, so its numbers below remain *drift* and the two
+must not be compared by level.
+
+| p | unsubsampled IE floor | worst subsampled cell | λ at subB=1 → 0.01 |
+|---|---|---|---|
+| 18 | 1.152e-3 ± 1.0e-4 | 1.556e-3 (1.35×, mixed-stride @ 0.1) | 409 → 4.1 |
+| 23 | 2.022e-4 ± 2.2e-5 | 3.358e-4 (1.66×, hash-threshold @ 0.01) | 12.8 → 0.13 |
+
+Uncertainty is leave-one-file-out jackknife over the 20 files (the 190 pairs are
+not independent — each file is in 19 of them).
+
+**The effect is real but tiny.** 7 of 30 subsampled cells show a bias more than
+3 SE from zero — largest is mixed-stride at p=18, subB=0.1 (−1.33e-3, 8.2 SE),
+and hash-threshold at p=23, subB=0.01 (+2.63e-4, 4.7 SE, λ=0.13, i.e. the sketch
+far sparser than its register array). So subsampling *is* detectable on IE; it is
+simply small enough not to matter against a corpus whose true J spans
+0.135–0.627. Note the default method, `mixed-stride`, is the worst of the three
+for IE at p=18 subB=0.1 — it is chosen for speed, and that trade is unchanged.
+
+**The contrast with register-equality is the real finding.** At p=23, as λ falls
+through the knee, register-equality drifts from its own baseline by up to 0.124
+while IE stays flat at its floor:
+
+| subB | λ | IE error | RE drift | ratio |
+|---|---|---|---|---|
+| 0.5 | 6.39 | 1.95e-4 | 1.63e-4 | 1× |
+| 0.25 | 3.20 | 1.89e-4 | 4.49e-3 | 24× |
+| 0.1 | 1.28 | 1.83e-4 | 4.25e-2 | 232× |
+| 0.05 | 0.64 | 1.72e-4 | 7.97e-2 | 462× |
+| 0.01 | 0.13 | 1.86e-4 | 1.24e-1 | 670× |
+
+(mixed-stride; the other two methods track it.) IE at every one of those cells is
+at or **below** its unsubsampled floor of 2.022e-4. This is the λ mechanism the
+10k-cliff box below infers from synthetic data, now measured on real data against
+exact truth: what moves at low subB is the register-equality offset, not the
+set-Jaccard estimate.
+
+**Harness validation.** The new runs reproduce all 15 archived per-method
+register-equality drift cells at p=18 to five significant figures (ratio 1.000
+throughout) — so there is no pre-0.7.0 → v0.7.0 binary drift, and `--reps 1` loses
+nothing.
+
+**Scope.** Maurano only, Mode B, p ∈ {18, 23}, J ≥ 0.135. The low-J regime where
+IE is censored at 0 and uninformative (J ≲ a few/√m) is **not** tested, and it is
+where subsampling would be most likely to bite. A null here means "no effect above
+a minimum detectable ≈ 4.1e-4 at p=18", not "no effect".
 
 ---
 
