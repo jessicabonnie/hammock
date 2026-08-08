@@ -216,10 +216,195 @@ stats <- cross %>%
     .groups = "drop"
   )
 
-stats_csv <- file.path(script_dir, "interval_accuracy_stats.csv")
-write_csv(stats, stats_csv)
 message("Per-precision agreement; self-comparisons excluded:")
 print(as.data.frame(stats), digits = 5)
+
+# ---------------------------------------------------------------------------
+# Provenance for the numbers quoted in docs/paper_outline.md and the
+# Supplementary Note S4 in paper/outline.md.
+#
+# Everything in this section is reporting, not plotting: it exists so that the
+# discordance count, the largest inverted gap, the chance-agreement floor and
+# the residual-vs-size-ratio correlation have a committed generator instead of
+# living only in prose. It was dropped by accident in commit d00b611 (a
+# figure-splitting rewrite) and restored on 2026-08-08 -- the paper cites
+# 439/17,955 (2.45%), the 48 IE inversions (0.27%), the ~0.14 offset and the
+# DeltaJ <= 0.025 bound, none of which any other file in the repo can produce.
+# Do not delete it again without re-pointing those citations.
+#
+# Conventions are pinned here because they move the reported digits:
+#
+#   * pairs are unordered and self-comparisons are dropped, so n = 190 pairs
+#     and C(190, 2) = 17,955 comparisons;
+#   * discordance is counted over comparison *pairs*, not rows;
+#   * tau-a and tau-b are both reported. They coincide when no two pairs tie,
+#     which holds for BEDTools truth here but need not hold for a censored
+#     estimator -- an exact 0.0 in the IE column is the `>= 0` clamp in
+#     HLLSketch::intersection_size firing, and clamped rows tie with each other.
+# ---------------------------------------------------------------------------
+
+rank_agreement <- function(truth, est) {
+  dt <- outer(truth, truth, "-")
+  de <- outer(est, est, "-")
+  upper <- upper.tri(dt)
+  dt <- dt[upper]
+  de <- de[upper]
+  s <- sign(dt) * sign(de)
+  n_comparisons <- length(s)
+  n_disc <- sum(s < 0)
+  n_tied <- sum(s == 0)
+  # Largest true gap that the estimator puts the wrong way round.
+  worst <- if (n_disc > 0) max(abs(dt[s < 0])) else 0
+  tibble(
+    comparisons = n_comparisons,
+    discordant = n_disc,
+    discordant_pct = 100 * n_disc / n_comparisons,
+    tied = n_tied,
+    tau_a = (n_comparisons - 2 * n_disc - n_tied) / n_comparisons,
+    tau_b = cor(truth, est, method = "kendall"),
+    max_inverted_gap = worst
+  )
+}
+
+rank_stats <- cross %>%
+  group_by(precision, estimator) %>%
+  group_modify(~ rank_agreement(.x$bedtools_jaccard, .x$hammock_jaccard)) %>%
+  ungroup() %>%
+  left_join(
+    cross %>%
+      group_by(precision, estimator) %>%
+      summarise(clamped_at_zero = sum(hammock_jaccard == 0), .groups = "drop"),
+    by = c("precision", "estimator")
+  )
+
+message("\nRank agreement against BEDTools (unordered, off-diagonal):")
+print(as.data.frame(rank_stats), digits = 5)
+
+# --- chance-agreement floor c, three ways -----------------------------------
+# The register-equality column is approximately c + (1 - c) * J. The three fits
+# disagree in the second digit and the document quotes all three, so compute
+# them rather than restate them. `constrained` is the one-parameter fit that
+# respects the (1, 1) fixed point; `pointwise` inverts the relation per pair and
+# averages, which is what an over-dispersed reading of the same model gives.
+floor_fits <- function(j_bt, j_re) {
+  ols <- coef(lm(j_re ~ j_bt))
+  num <- sum((1 - j_bt) * (j_re - j_bt))
+  den <- sum((1 - j_bt)^2)
+  tibble(
+    c_ols_intercept = unname(ols[1]),
+    c_constrained = num / den,
+    c_pointwise = mean((j_re - j_bt) / (1 - j_bt))
+  )
+}
+
+floor_stats <- cross %>%
+  filter(estimator == EST_RE) %>%
+  group_by(precision) %>%
+  group_modify(~ floor_fits(.x$bedtools_jaccard, .x$hammock_jaccard)) %>%
+  ungroup()
+
+message("\nChance-agreement floor c for the register-equality column:")
+print(as.data.frame(floor_stats), digits = 5)
+
+# --- residual versus cardinality ratio --------------------------------------
+# c depends on |A|/|B|, so the register-equality residual should track the size
+# imbalance of the pair. The ratio needs no sketching: the BEDTools reference's
+# self-comparison rows give each file's exact covered bp (union of a file with
+# itself is its own size).
+file_sizes <- bedtools_raw %>%
+  filter(file1 == file2) %>%
+  transmute(file = file1, size_bp = as.numeric(union))
+
+ratio_stats <- cross %>%
+  filter(estimator == EST_RE) %>%
+  left_join(file_sizes, by = c(".a" = "file")) %>%
+  rename(size_a = size_bp) %>%
+  left_join(file_sizes, by = c(".b" = "file")) %>%
+  rename(size_b = size_bp) %>%
+  filter(!is.na(size_a), !is.na(size_b)) %>%
+  mutate(
+    log_ratio = abs(log(size_a / size_b)),
+    # Three residual definitions, all three reported because the prose in
+    # docs/ quotes values from more than one and does not say which is which.
+    # `raw` is the bare gap and is dominated by the floor itself, so it mostly
+    # reports the floor's dependence on J; `constrained` and `ols` remove a
+    # fitted c + (1 - c) J model first and differ only in how c was fitted.
+    resid_raw = hammock_jaccard - bedtools_jaccard,
+    resid_constrained = hammock_jaccard -
+      (bedtools_jaccard + (1 - bedtools_jaccard) *
+         floor_stats$c_constrained[match(precision, floor_stats$precision)]),
+    resid_ols = hammock_jaccard -
+      (bedtools_jaccard + (1 - bedtools_jaccard) *
+         floor_stats$c_ols_intercept[match(precision, floor_stats$precision)]),
+    resid_pointwise = hammock_jaccard -
+      (bedtools_jaccard + (1 - bedtools_jaccard) *
+         floor_stats$c_pointwise[match(precision, floor_stats$precision)])
+  ) %>%
+  group_by(precision) %>%
+  summarise(
+    n = n(),
+    max_log_ratio = max(log_ratio),
+    max_size_ratio = exp(max(log_ratio)),
+    cor_raw_logratio = cor(resid_raw, log_ratio),
+    cor_constrained_logratio = cor(resid_constrained, log_ratio),
+    cor_ols_logratio = cor(resid_ols, log_ratio),
+    cor_pointwise_logratio = cor(resid_pointwise, log_ratio),
+    # The free-slope two-parameter fit, i.e. residuals of lm(j_re ~ j_bt).
+    cor_freeslope_logratio = cor(resid(lm(hammock_jaccard ~ bedtools_jaccard)),
+                                 log_ratio),
+    .groups = "drop"
+  )
+
+message("\nRegister-equality residual versus |log(|A|/|B|)|:")
+print(as.data.frame(ratio_stats), digits = 5)
+
+# --- leave-one-file-out jackknife -------------------------------------------
+# The 17,955 comparisons come from 190 pairs over 20 files, each file appearing
+# in 19 pairs, so they are far from independent and a binomial SE on the
+# comparison count understates the uncertainty by roughly an order of magnitude.
+# Drop one file at a time and recompute. This is the evidence behind
+# docs/estimator-analysis-findings.md section 4.
+jackknife <- function(df) {
+  files <- sort(unique(c(df$.a, df$.b)))
+  reps <- lapply(files, function(f) {
+    sub <- df %>% filter(.a != f, .b != f)
+    rank_agreement(sub$bedtools_jaccard, sub$hammock_jaccard)
+  })
+  reps <- bind_rows(reps)
+  n <- length(files)
+  # Jackknife SE: sqrt((n-1)/n * sum (theta_i - mean)^2).
+  se <- function(x) sqrt((n - 1) / n * sum((x - mean(x))^2))
+  tibble(
+    n_files = n,
+    tau_b_se = se(reps$tau_b),
+    tau_b_min = min(reps$tau_b), tau_b_max = max(reps$tau_b),
+    discordant_pct_se = se(reps$discordant_pct),
+    discordant_pct_min = min(reps$discordant_pct),
+    discordant_pct_max = max(reps$discordant_pct)
+  )
+}
+
+jack_stats <- cross %>%
+  filter(precision == REFERENCE_PRECISION) %>%
+  group_by(estimator) %>%
+  group_modify(~ jackknife(.x)) %>%
+  ungroup()
+
+message(sprintf(
+  "\nLeave-one-file-out jackknife at p = %d (20 files, each in 19 pairs):",
+  REFERENCE_PRECISION))
+print(as.data.frame(jack_stats), digits = 5)
+
+# `stats` itself stays as the plotting frame; only the CSV carries the joins.
+stats_csv <- file.path(script_dir, "interval_accuracy_stats.csv")
+write_csv(
+  stats %>%
+    left_join(rank_stats, by = c("precision", "estimator")) %>%
+    left_join(floor_stats, by = "precision") %>%
+    left_join(ratio_stats %>% select(-n), by = "precision") %>%
+    left_join(jack_stats, by = "estimator"),
+  stats_csv
+)
 message("Wrote: ", stats_csv)
 
 format_stats <- function(row, include_name = FALSE) {
