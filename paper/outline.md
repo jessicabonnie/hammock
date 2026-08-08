@@ -22,7 +22,9 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 
 ## II. Results
 
-### 2.1 Hammock represents interval sets in complementary coordinate and sequence spaces
+### 2.1 Hammock creates reusable sketches of interval coordinates and interval-derived sequence
+
+**Key sentence:** Hammock converts each input dataset once into a reusable file-level sketch, allowing subsequent analyses to test whether interval sketches preserve overlap similarity at scale and whether sequence sketches preserve biological relationships across reference genomes.
 
 ![Figure 2](figures/hammock_workflow.png)
 
