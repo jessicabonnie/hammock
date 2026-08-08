@@ -125,3 +125,38 @@ def test_mode_name_alias_sequence_rejects_bad_value(tmp_path: Path) -> None:
                        capture_output=True, text=True)
     assert r.returncode != 0
     assert "invalid mode" in r.stderr
+
+
+def test_mode_d_default_clamp_does_not_reach_the_pairwise_budget(tmp_path, monkeypatch) -> None:
+    """Mode D's default clamp is threads=1; omp_threads must stay 0, not 1.
+
+    The clamp is about the GIL convoy while *sketching*. The pairwise loop runs
+    once from the main thread with the GIL released, so a 1 there would only make
+    Mode D slower. 0 means "leave OpenMP's own default alone", i.e. the no-flag
+    path is unchanged from before this budget existed -- which is the entire
+    reason the budget was split, and nothing asserted it.
+    """
+    fas = _fasta_list(tmp_path)
+    args = _resolved_args([str(fas), str(fas), "--mode", "D", "-o", str(tmp_path / "x")],
+                          monkeypatch)
+    assert args.threads == 1, "Mode D still clamps the sketching pool by default"
+    assert args.omp_threads == 0, (
+        f"omp_threads must not inherit the clamp, got {args.omp_threads}")
+
+
+def test_explicit_threads_reaches_the_pairwise_budget(tmp_path, monkeypatch) -> None:
+    """An explicit --threads is honored in Mode D (with a stderr note) and must
+    reach the OpenMP pairwise phase, so a run inside an N-CPU cgroup stops
+    spawning a team per core on the whole node."""
+    fas = _fasta_list(tmp_path)
+    args = _resolved_args([str(fas), str(fas), "--mode", "D", "--threads", "8",
+                           "-o", str(tmp_path / "x")], monkeypatch)
+    assert args.threads == 8 and args.omp_threads == 8
+
+
+def test_omp_threads_defaults_to_openmp_default(tmp_path, monkeypatch) -> None:
+    """Interval mode with no --threads: the pairwise phase is left alone."""
+    beds = _bed_list(tmp_path)
+    args = _resolved_args([str(beds), str(beds), "-o", str(tmp_path / "x")],
+                          monkeypatch)
+    assert args.omp_threads == 0

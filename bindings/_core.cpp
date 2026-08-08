@@ -112,6 +112,12 @@ void require_uniform_precision(const std::vector<const HLLSketch*>& a,
 // nested inside a Python thread pool and would compound rather than clamp.
 int pairwise_team_size(int threads) {
 #ifdef _OPENMP
+    // Clamp rather than trust: --threads is an unvalidated `type=int` on the
+    // CLI, and since it began driving num_threads() a fat-fingered --threads
+    // 100000 would ask libgomp for 100000 threads instead of merely oversizing
+    // a Python pool. 4x the machine's max is well past any real use.
+    const int cap = 4 * omp_get_num_procs();
+    if (threads > cap) return cap;
     return (threads > 0) ? threads : omp_get_max_threads();
 #else
     (void)threads;
@@ -142,10 +148,60 @@ private:
     std::exception_ptr err_;
 };
 
+// Borrow the sketches for the call, but hold a strong reference to each element
+// while doing it.
+//
+// Taking `std::vector<const HLLSketch*>` via pybind's list_caster avoids the
+// deep copy, but it also drops every guarantee that kept the by-value form
+// safe. The args tuple keeps the *list object* alive, not its elements, and
+// list_caster's element accessor releases each item as it iterates. Two
+// consequences, both reproduced as hard crashes before this helper existed:
+//
+//   * another Python thread calling lst.clear() (or del lst[:], lst[i] = x)
+//     during the GIL-released region drops the last reference to every sketch
+//     and frees it mid-loop -- SIGSEGV, no traceback;
+//   * any non-list sequence whose __getitem__ synthesizes objects (the "slow
+//     sequence" path list_caster accepts) has no other owner at all, so every
+//     pointer dangles immediately -- SIGABRT.
+//
+// One incref per element restores the old safety at O(N) refcount operations
+// instead of O(N * 2^p) bytes copied, which is the whole point of borrowing.
+static void borrow_sketches(const py::sequence& seq,
+                            const char* argname,
+                            std::vector<py::object>& keepalive,
+                            std::vector<const HLLSketch*>& out) {
+    const py::ssize_t n = static_cast<py::ssize_t>(py::len(seq));
+    keepalive.reserve(static_cast<size_t>(n));
+    out.reserve(static_cast<size_t>(n));
+    for (py::ssize_t i = 0; i < n; ++i) {
+        py::object item = seq[static_cast<size_t>(i)];
+        if (item.is_none()) {
+            throw py::type_error(std::string(argname) + "[" + std::to_string(i) +
+                                 "] is None, expected an HLLSketch");
+        }
+        const HLLSketch* ptr = nullptr;
+        try {
+            ptr = item.cast<const HLLSketch*>();
+        } catch (const py::cast_error&) {
+            ptr = nullptr;
+        }
+        if (!ptr) {
+            throw py::type_error(std::string(argname) + "[" + std::to_string(i) +
+                                 "] is not an HLLSketch");
+        }
+        keepalive.push_back(std::move(item));
+        out.push_back(ptr);
+    }
+}
+
 // Compute pairwise Jaccard between two lists of HLL sketches into a (N, M) matrix.
-py::array_t<double> pairwise_jaccard_hll(const std::vector<const HLLSketch*>& a,
-                                         const std::vector<const HLLSketch*>& b,
+py::array_t<double> pairwise_jaccard_hll(const py::sequence& a_seq,
+                                         const py::sequence& b_seq,
                                          int threads) {
+    std::vector<py::object> a_keep, b_keep;   // outlive the GIL-released region
+    std::vector<const HLLSketch*> a, b;
+    borrow_sketches(a_seq, "a", a_keep, a);
+    borrow_sketches(b_seq, "b", b_keep, b);
     require_uniform_precision(a, b);
     const int nt = pairwise_team_size(threads);
     const py::ssize_t n = static_cast<py::ssize_t>(a.size());
@@ -178,9 +234,13 @@ py::array_t<double> pairwise_jaccard_hll(const std::vector<const HLLSketch*>& a,
 // Co-sketch summaries (geom / arith / max) are derived Python-side from
 // these two — keeps the binding narrow.
 std::tuple<py::array_t<double>, py::array_t<double>, py::array_t<double>>
-pairwise_metrics_hll(const std::vector<const HLLSketch*>& a,
-                     const std::vector<const HLLSketch*>& b,
+pairwise_metrics_hll(const py::sequence& a_seq,
+                     const py::sequence& b_seq,
                      int threads) {
+    std::vector<py::object> a_keep, b_keep;   // outlive the GIL-released region
+    std::vector<const HLLSketch*> a, b;
+    borrow_sketches(a_seq, "a", a_keep, a);
+    borrow_sketches(b_seq, "b", b_keep, b);
     require_uniform_precision(a, b);
     const int nt = pairwise_team_size(threads);
     const py::ssize_t n = static_cast<py::ssize_t>(a.size());
@@ -196,13 +256,29 @@ pairwise_metrics_hll(const std::vector<const HLLSketch*>& a,
         py::gil_scoped_release release;
         std::vector<double> a_card(n);
         std::vector<double> b_card(m);
+        // Latched like the pair loop below, not bare. cardinality() allocates
+        // its histogram, so std::bad_alloc is reachable here, and an exception
+        // escaping an OpenMP structured block calls std::terminate -- the
+        // interpreter dies with no traceback. The comment on
+        // require_uniform_precision claims OmpError catches "whatever else might
+        // still throw"; before this it did not cover these two loops.
 #pragma omp parallel for schedule(static) num_threads(nt)
         for (py::ssize_t i = 0; i < n; i++) {
-            a_card[i] = a[i]->cardinality();
+            if (err.tripped()) continue;
+            try {
+                a_card[i] = a[i]->cardinality();
+            } catch (...) {
+                err.capture();
+            }
         }
 #pragma omp parallel for schedule(static) num_threads(nt)
         for (py::ssize_t j = 0; j < m; j++) {
-            b_card[j] = b[j]->cardinality();
+            if (err.tripped()) continue;
+            try {
+                b_card[j] = b[j]->cardinality();
+            } catch (...) {
+                err.capture();
+            }
         }
 #pragma omp parallel for collapse(2) schedule(static) num_threads(nt)
         for (py::ssize_t i = 0; i < n; i++) {
@@ -291,12 +367,12 @@ PYBIND11_MODULE(_core, m) {
           "Build an HLL sketch from one BED file in mode A, B, or C.");
 
     m.def("pairwise_jaccard_hll", &pairwise_jaccard_hll,
-          py::arg("a").noconvert(), py::arg("b").noconvert(), py::arg("threads") = 0,
+          py::arg("a"), py::arg("b"), py::arg("threads") = 0,
           "Compute the (len(a), len(b)) pairwise-Jaccard matrix for HLL sketches.\n"
           "threads=0 (default) leaves the OpenMP team size alone.");
 
     m.def("pairwise_metrics_hll", &pairwise_metrics_hll,
-          py::arg("a").noconvert(), py::arg("b").noconvert(), py::arg("threads") = 0,
+          py::arg("a"), py::arg("b"), py::arg("threads") = 0,
           "Compute (Jaccard, containment_AB, containment_BA) matrices in one pass.");
 
     m.def("read_filepath_list", &read_filepath_list, py::arg("list_file"));

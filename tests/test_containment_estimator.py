@@ -14,6 +14,10 @@ from __future__ import annotations
 
 import math
 
+import gc
+import threading
+import time
+
 import pytest
 
 _core = pytest.importorskip("hammock._core")
@@ -264,7 +268,9 @@ def test_pairwise_metrics_values_are_thread_count_invariant(threads):
     a = [_hash_sketch(14, 20000, 31), _hash_sketch(14, 5000, 32)]
     b = [_hash_sketch(14, 20000, 31), _hash_sketch(14, 40000, 33)]
 
-    ref = _core.pairwise_metrics_hll(a, b, threads=0)
+    # Reference is an explicit single thread, so the threads=0 case compares a
+    # default-team run against a serial one rather than against itself.
+    ref = _core.pairwise_metrics_hll(a, b, threads=1)
     got = _core.pairwise_metrics_hll(a, b, threads=threads)
     for r, g in zip(ref, got):
         for i in range(len(a)):
@@ -315,20 +321,44 @@ def test_sketch_lists_are_not_copied():
     275 -> 814 MiB peak for a 256 MiB pool at p=22. Without an assertion on
     memory there is nothing that would notice a silent revert to copying.
     """
-    def peak_mib():
+    # VmHWM is deliberately NOT used here. It is a monotone, process-global
+    # high-water mark, so by the time this runs it has already been set by the
+    # p=24 parametrization above -- the delta measured 0 MiB whether or not the
+    # call copied anything, i.e. the assertion passed without observing the call
+    # at all. VmRSS is a current-usage reading, so a copy of the pool shows up as
+    # a rise while the copy is live.
+    def rss_mib():
         for line in open("/proc/self/status"):
-            if line.startswith("VmHWM"):
+            if line.startswith("VmRSS"):
                 return int(line.split()[1]) // 1024
-        pytest.skip("no VmHWM in /proc/self/status")
+        pytest.skip("no VmRSS in /proc/self/status")
 
     p = 20  # 1 MiB per sketch; 64 of them is a 64 MiB pool
     pool = [_hash_sketch(p, 20000, 100 + i) for i in range(64)]
-    before = peak_mib()
-    _core.pairwise_metrics_hll(pool, pool)
-    grew = peak_mib() - before
-    # Copying both operands would add ~128 MiB. Allow generous slack for the
-    # result matrices and allocator behaviour, but not for a whole pool.
-    assert grew < 32, f"peak RSS grew {grew} MiB; sketches look like they are still being copied"
+    gc.collect()
+    before = rss_mib()
+    peak_during = []
+
+    stop = threading.Event()
+
+    def sample():
+        while not stop.is_set():
+            peak_during.append(rss_mib())
+            time.sleep(0.001)
+
+    t = threading.Thread(target=sample)
+    t.start()
+    try:
+        _core.pairwise_metrics_hll(pool, pool)
+    finally:
+        stop.set()
+        t.join()
+
+    grew = (max(peak_during) if peak_during else rss_mib()) - before
+    # Copying both operands would add ~128 MiB while the copies are live. Allow
+    # slack for the three result matrices and allocator behaviour, but not for a
+    # whole pool.
+    assert grew < 32, f"RSS rose {grew} MiB during the call; sketches look like they are still being copied"
 
 
 def test_temporaries_and_gc_pressure_do_not_dangle():
@@ -362,3 +392,107 @@ def test_tuple_input_is_accepted():
     from_list = _core.pairwise_metrics_hll([a, b], [a])
     for t, l in zip(from_tuple, from_list):
         assert t[0][0] == l[0][0] and t[1][0] == l[1][0]
+
+
+# --- Regressions for the borrowed-pointer crashes -------------------------
+#
+# Both were introduced by the switch to std::vector<const HLLSketch*> and both
+# reproduced as hard crashes (SIGSEGV / SIGABRT), not exceptions, so they are
+# run in a subprocess: an in-process regression would take pytest down with it
+# and report nothing.
+
+_CRASH_PREAMBLE = """
+import gc, threading, time
+import hammock._core as c
+
+def mk(seed, p):
+    s = c.HLLSketch(p)
+    for i in range(seed * 1000, seed * 1000 + 5000):
+        s.add_hash64(i)
+    return s
+"""
+
+
+def _run_isolated(body: str):
+    import subprocess
+    import sys
+    return subprocess.run([sys.executable, "-c", _CRASH_PREAMBLE + body],
+                          capture_output=True, text=True, timeout=300)
+
+
+def test_clearing_the_list_mid_call_does_not_free_the_sketches():
+    """The args tuple keeps the *list* alive, not its elements.
+
+    Another thread calling list.clear() during the GIL-released region used to
+    drop the last reference to every sketch and free it mid-loop. The by-value
+    form was immune because it copied under the GIL; borrowing has to hold a
+    reference per element to get that back.
+    """
+    r = _run_isolated("""
+A = [mk(i, 22) for i in range(48)]
+B = [mk(500 + i, 22) for i in range(48)]
+
+def evict():
+    time.sleep(0.05)
+    A.clear(); B.clear(); gc.collect()
+    [bytearray(4 << 20) for _ in range(64)]      # reuse the freed arenas
+
+t = threading.Thread(target=evict); t.start()
+res = c.pairwise_metrics_hll(A, B, threads=8)
+t.join()
+print("OK", res[0][0][0])
+""")
+    assert r.returncode == 0, (
+        f"crashed with rc={r.returncode} (-11 SIGSEGV / -6 SIGABRT): {r.stderr[-400:]}")
+    assert "OK" in r.stdout
+
+
+def test_synthesizing_sequence_elements_do_not_dangle():
+    """list_caster accepts any sequence, including one that builds elements on
+    demand. Those have no other owner, so borrowing their pointers dangles
+    immediately unless the call holds a reference. A tuple does NOT cover this
+    case -- it holds strong references and is exactly the safe one.
+    """
+    r = _run_isolated("""
+class TempSeq:
+    def __init__(self, seeds): self.seeds = seeds
+    def __len__(self): return len(self.seeds)
+    def __getitem__(self, i):
+        if i >= len(self.seeds): raise IndexError
+        return mk(self.seeds[i], 14)            # fresh object per access
+
+res = c.pairwise_metrics_hll(TempSeq([1, 2]), TempSeq([1, 3]))
+print("OK", len(res[0]))
+""")
+    assert r.returncode == 0, (
+        f"crashed with rc={r.returncode} (-11 SIGSEGV / -6 SIGABRT): {r.stderr[-400:]}")
+    assert "OK" in r.stdout
+
+
+def _saturated(precision: int):
+    """Every register at its maximum, which drives the estimator's z to 0.
+
+    This is the only way to reach the Flajolet fallback in
+    jaccard_and_union_cardinality -- the one branch whose bit-exactness rests on
+    reproducing an index-ordered float sum rather than on the integer-histogram
+    argument. Random-hash fixtures never get near it.
+    """
+    s = _core.HLLSketch(precision)
+    for i in range(1 << precision):
+        s.add_hash64(i)
+    return s
+
+
+@pytest.mark.parametrize("precision", [4, 6, 8])
+def test_fused_matches_scalar_path_on_the_flajolet_fallback(precision):
+    sat_a = _saturated(precision)
+    sat_b = _saturated(precision)
+    partial = _hash_sketch(precision, 50, 7)
+
+    for a, b in ((sat_a, sat_b), (sat_a, partial), (partial, sat_b)):
+        jac, c_ab, c_ba = _core.pairwise_metrics_hll([a], [b])
+        ca, cb = a.estimate_cardinality(), b.estimate_cardinality()
+        inter = a.estimate_intersection(b)
+        assert c_ab[0][0] == ((inter / ca) if ca > 0 else 0.0)
+        assert c_ba[0][0] == ((inter / cb) if cb > 0 else 0.0)
+        assert jac[0][0] == a.estimate_jaccard(b)

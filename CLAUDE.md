@@ -72,7 +72,7 @@ accepted and is now a no-op.
 **Pass `--no-metrics` for timing runs.** It drops back to the 3 columns and
 tags the output `_j3`. The block costs one extra cardinality estimate per pair
 (the union histogram is accumulated inside the Jaccard pass — see the fused-pass
-note under Architecture), so a timed run with it on is not comparable to the
+note under Open seeds), so a timed run with it on is not comparable to the
 numbers in `experiments/bedtools_benchmark/RESULTS.md`, which are all
 `--no-metrics`. The benchmark harnesses pass the flag explicitly in both
 directions, so the shape of a timed run no longer depends on a default.
@@ -83,8 +83,20 @@ directions, so the shape of a timed run no longer depends on a default.
 > now one fused pass. Both front ends changed, so `pairwise_cost_by_precision.py`
 > must be re-run before any of these numbers is quoted again. The Python-path
 > measurement that *is* current: the metrics call got 2.2× faster at p=20 and
-> 5.4× at p=24 (see the fused-pass note). `--no-metrics` timings, and therefore
-> all of `RESULTS.md`, are unaffected — that arm never built a union.
+> 5.4× at p=24 (see the fused-pass note).
+>
+> **`--no-metrics` timings are unaffected — that arm never built a union — but
+> "therefore all of `RESULTS.md`" does NOT follow, and an earlier version of this
+> note said it did.** `RESULTS.md` is *not* all `--no-metrics`: the Aug 4 files
+> t=16 run added a `hammock_ie_B` arm, which is a metrics run, and it is the one
+> published measurement of the recommended configuration. Every number derived
+> from it is pre-fusion and now overstates the block's cost — the **+1.45% of
+> wall at N=512** figure at `RESULTS.md:19-21,:78-83` and `docs/figure3-panel-a-rebuild.md:33`,
+> the **34.8 MB vs 22.7 MB** peak RSS beside it, the "3.4–3.8× within the
+> comparison phase" claim, and the Figure 3 Panel A prose at `paper/outline.md`.
+> The direction is safe (the block is now *cheaper*, so the paper's "the two
+> curves are indistinguishable" conclusion holds a fortiori) but the magnitudes
+> are stale. Everything else in `RESULTS.md` genuinely is `--no-metrics`.
 
 Measured cost (`--threads 16`, N=64/side, 10k intervals/file, 5 runs, medians;
 `docs/data/pairwise_cost_by_precision_20260804_164807.csv`): **the estimator
@@ -180,9 +192,15 @@ establishing. Read the seed before re-litigating the question.
   | wall (s) | 5.52 | 4.22 | 3.71 | 3.73 | 3.81 | 3.78 | 3.76 |
   | cpu/wall | 34.8 | 39.4 | 43.8 | 44.7 | 44.0 | 44.4 | 44.6 |
 
-  `cpu/wall ≈ 35` at **one** Python thread is the tell. The pool plateaus by
-  ~4 threads and total CPU is flat (~165 s), so the Python layer adds nothing
-  past that — raising the cap would only deepen the nesting. Note the real
+  `cpu/wall ≈ 35` at **one** Python thread is the tell — 72% of a 48-core node
+  busy before the pool contributes anything. The pool plateaus by ~4 threads and
+  total CPU is flat past that (~165 s for 2–48 threads; the 1-thread cell is
+  192 s, 16% higher), so the Python layer buys nothing beyond ~4 — raising the
+  cap would only deepen the nesting. **Scope: one config** (24 files × 30k
+  intervals, mode B, **p=16**, medians of 3, one node). It does not reach the
+  p=24 regime where each nested thread holds a 16 MiB sketch, which is where
+  oversubscription would bite hardest, so read it as "no headroom at p=16",
+  not as a precision-independent result. Note the real
   consequence runs the other way: 8 pool threads × a per-core OpenMP team, each
   allocating a thread-local `HLLSketch` (16 MiB at p=24), is oversubscription,
   not headroom. Sizing *that* is the open question, not raising the cap.

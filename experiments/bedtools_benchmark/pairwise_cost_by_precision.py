@@ -65,6 +65,10 @@ DEFAULT_RUNS = 5
 # price for a self-describing file that still joins cleanly.
 PROVENANCE_COLS = [
     "hostname", "cpu_model", "cpu_count", "slurm_job_id", "binary_version",
+    # binary_version alone cannot identify the code: pyproject's version is
+    # bumped per release, not per commit, so a pre- and post-change binary both
+    # report 0.7.0 -- exactly the pair a re-run exists to distinguish.
+    "git_sha",
 ]
 
 ROW_COLS = [
@@ -73,10 +77,17 @@ ROW_COLS = [
     "us_per_pair",
     # run_hammock already measures all three (via /usr/bin/time -v and
     # getrusage(RUSAGE_CHILDREN)); this harness was simply discarding them.
-    # Memory is not an afterthought for this comparison: the metrics arm used to
-    # heap-allocate a whole union sketch per pair -- 16 MiB at p=24, N*M times --
-    # so peak RSS against precision is the direct readout of that allocation, and
-    # the arm difference should now be flat in p where it once grew with 2^p.
+    # Memory matters here because the metrics arm used to heap-allocate a whole
+    # union sketch per pair (16 MiB at p=24, N*M times) and now allocates none.
+    # Read the arm-to-arm delta with two caveats, though: /usr/bin/time -v gives
+    # one lifetime peak for the whole child, not a per-phase figure, and it is
+    # dominated by the retained sketch pool (2*N*2^p, ~2 GiB at p=24/N=64) plus
+    # the per-thread sketches that BOTH arms allocate while sketching. And there
+    # is no pre-fusion RSS to compare against -- the 20260804 CSV has no such
+    # column and that binary is gone. So a flat delta is consistent with the
+    # allocation being gone, but does not by itself prove it: at p<=16 the
+    # predicted difference is under a thread-count multiple of 64 KiB, i.e.
+    # inside noise, whatever the code does.
     "wall_time", "cpu_time", "max_rss_mb",
 ] + PROVENANCE_COLS
 
@@ -135,6 +146,7 @@ def main() -> int:
         "cpu_count": sysinfo.get("cpu_count", "unknown"),
         "slurm_job_id": sysinfo.get("slurm_job_id", "none"),
         "binary_version": version,
+        "git_sha": sysinfo.get("git_sha", "unknown"),
     }
     if provenance["slurm_job_id"] == "none":
         print("  NOTE: no SLURM allocation -- cores are shared with anything else "

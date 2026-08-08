@@ -125,7 +125,13 @@ def get_system_info() -> Dict[str, Any]:
     """
     info = {
         "hostname": platform.node(),
-        "cpu_count": os.cpu_count(),
+        # Two different numbers, and the affinity one is what a timing depends
+        # on. os.cpu_count() reports the node; inside --cpus-per-task=16 it still
+        # says 48, which would contradict the job's own log line. Note this also
+        # means a bare cpu_count cannot distinguish "dev node, no allocation"
+        # from "48-core node, allocated" -- don't use it as evidence of either.
+        "cpu_count": len(os.sched_getaffinity(0)),
+        "cpu_count_node": os.cpu_count(),
         "cpu_model": "unknown",
         "platform": platform.platform(),
         "python_version": platform.python_version(),
@@ -138,6 +144,23 @@ def get_system_info() -> Dict[str, Any]:
                     info["cpu_model"] = line.split(":", 1)[1].strip()
                     break
     except OSError:
+        pass
+    # The version string cannot identify the code. pyproject's version is bumped
+    # on release, not per commit, so a pre- and post-change binary both report
+    # 0.7.0 -- which is exactly the pair a re-run exists to tell apart. The git
+    # SHA can. Recorded with a -dirty marker because an uncommitted working tree
+    # is a real state for a benchmark to be run from.
+    info["git_sha"] = "unknown"
+    try:
+        repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        sha = subprocess.run(["git", "-C", repo, "rev-parse", "--short", "HEAD"],
+                             capture_output=True, text=True, timeout=10)
+        if sha.returncode == 0:
+            dirty = subprocess.run(["git", "-C", repo, "status", "--porcelain"],
+                                   capture_output=True, text=True, timeout=10)
+            suffix = "-dirty" if (dirty.returncode == 0 and dirty.stdout.strip()) else ""
+            info["git_sha"] = sha.stdout.strip() + suffix
+    except (OSError, subprocess.SubprocessError):
         pass
     try:
         with open("/proc/meminfo") as f:

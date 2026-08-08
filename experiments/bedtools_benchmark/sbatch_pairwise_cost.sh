@@ -22,11 +22,14 @@
 # intervals, threads 16, 5 runs, p 12..24) so the two are comparable except for
 # the code change and the contention.
 #
-# NOTE on --threads 16 vs --cpus-per-task=16: as of the pairwise-phase fix,
-# hammock honors --threads for the OpenMP pairwise loop via a num_threads()
-# clause, so the team is actually 16 here. Before that fix the binary spawned a
-# team per core on the node regardless, which is one more reason the old numbers
-# are not a clean baseline.
+# NOTE on --threads 16 vs --cpus-per-task=16: hammock-cpp has called
+# omp_set_num_threads(args.threads) since the initial commit (hammock_cli.cpp),
+# so -t 16 has always meant a 16-thread team here, sketching and pairwise alike.
+# The num_threads() clause added alongside the fused pass fixed the *Python*
+# path only (bindings/_core.cpp), which had ignored --threads for the pairwise
+# phase. So the 20260804 baseline was NOT taken with a 48-wide team, and nothing
+# about the thread count distinguishes it from this run -- the differences are
+# the fused code and the reserved cores.
 
 set -euo pipefail
 cd /home/jbonnie1/interval_sketch/hammock_claude
@@ -51,11 +54,27 @@ echo "binary:  $HAMMOCK_CPP_BIN"
 
 # -march=native is baked in (CMakeLists.txt:42,47,68) and the binary really does
 # contain AVX-512 (zmm) instructions, so a node older than the build host dies
-# with SIGILL. Fail here with a clear message instead of 70 confusing runs.
-if ! "$HAMMOCK_CPP_BIN" --version >/dev/null 2>&1; then
-    echo "FATAL: $HAMMOCK_CPP_BIN will not run on $(hostname)." >&2
-    echo "  Most likely an -march=native/AVX-512 mismatch with the build host." >&2
-    echo "  Rebuild on this node type, or submit with -w <node-like-build-host>." >&2
+# with SIGILL. Fail here with a clear message instead of mid-sweep.
+#
+# --version alone is NOT a sufficient probe: it parses argv and prints a string,
+# and the loader performs no ISA check, so an unsupported instruction faults only
+# when the sketching/pairwise kernel actually executes it. Check the CPU flag
+# directly, then force a real end-to-end run through those kernels.
+if ! grep -qm1 avx512f /proc/cpuinfo; then
+    echo "FATAL: $(hostname) lacks avx512f; the -march=native binary will SIGILL." >&2
+    echo "  Rebuild on this node type, or target a node matching the build host." >&2
+    exit 1
+fi
+_probe=$(mktemp -d)
+trap 'rm -rf "$_probe"' EXIT
+printf 'chr1\t100\t200\nchr1\t500\t900\n' > "$_probe/a.bed"
+printf 'chr1\t150\t250\nchr2\t10\t99\n'   > "$_probe/b.bed"
+printf '%s\n' "$_probe/a.bed" "$_probe/b.bed" > "$_probe/list.txt"
+if ! "$HAMMOCK_CPP_BIN" "$_probe/list.txt" "$_probe/list.txt" \
+        --mode B -p 14 -t 2 -o "$_probe/out" >/dev/null 2>&1; then
+    echo "FATAL: $HAMMOCK_CPP_BIN failed a smoke run on $(hostname)." >&2
+    echo "  Exercises the real sketching+pairwise kernels, so this catches an" >&2
+    echo "  -march=native mismatch that --version would not." >&2
     exit 1
 fi
 
