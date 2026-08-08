@@ -165,3 +165,91 @@ def test_jaccard_ie_matches_direct_inclusion_exclusion():
             union = sa.estimate_cardinality() + sb.estimate_cardinality() - inter
             expected = inter / union if union > 0 else 0.0
             assert jac_ie[i][j] == pytest.approx(expected, rel=1e-12)
+
+
+def _hash_sketch(precision: int, n: int, seed: int) -> "_core.HLLSketch":
+    """Sketch of `n` pseudo-random 64-bit hashes. Cheaper than range_sketch's
+    per-key add_string, which makes the 1e7-element fixtures below tractable."""
+    import random
+
+    rnd = random.Random(seed)
+    s = _core.HLLSketch(precision)
+    for _ in range(n):
+        s.add_hash64(rnd.getrandbits(64))
+    return s
+
+
+# The fused jaccard+union pass (HLLSketch::jaccard_and_union_cardinality) is
+# claimed bit-identical to the route it replaced -- jaccard_similarity() plus
+# union_with()->cardinality() reached via intersection_size(). That claim is an
+# integer-multiset argument, so it deserves an exact test, not an approximate
+# one: `estimate_intersection` and `estimate_cardinality` still expose the old
+# scalar path untouched, which makes them an independent oracle.
+#
+# `==`, deliberately. `pytest.approx` here would pass through any drift up to
+# its default 1e-6 relative tolerance and defeat the point. If this fails, the
+# fused histogram has diverged from the materialized union -- fix that rather
+# than loosening the comparison.
+@pytest.mark.parametrize("precision", [4, 12, 18, 24])
+def test_pairwise_metrics_exactly_matches_scalar_path(precision):
+    a = [_hash_sketch(precision, 5000, 1), _hash_sketch(precision, 20000, 2)]
+    b = [_hash_sketch(precision, 5000, 1), _hash_sketch(precision, 1000, 3)]
+
+    jac, c_ab, c_ba = _core.pairwise_metrics_hll(a, b)
+    for i, sa in enumerate(a):
+        for j, sb in enumerate(b):
+            inter = sa.estimate_intersection(sb)
+            ca, cb = sa.estimate_cardinality(), sb.estimate_cardinality()
+            assert jac[i][j] == sa.estimate_jaccard(sb)
+            assert c_ab[i][j] == ((inter / ca) if ca > 0 else 0.0)
+            assert c_ba[i][j] == ((inter / cb) if cb > 0 else 0.0)
+
+
+def test_pairwise_metrics_exact_on_degenerate_sketches():
+    """Empty (all-zero-register) sketches, self-pairs, and nested subsets.
+
+    The all-zero case exercises cardinality()'s short-circuit, which the fused
+    path has to reproduce off the union histogram rather than off the registers.
+    """
+    p = 14
+    import random
+
+    empty = _core.HLLSketch(p)
+    small = _hash_sketch(p, 1000, 11)
+    big = _hash_sketch(p, 50000, 12)
+    # `nested` is a strict superset of `small`: it replays seed 11's first 1000
+    # draws, then adds 9000 more from a different stream.
+    nested = _hash_sketch(p, 1000, 11)
+    rnd = random.Random(13)
+    for _ in range(9000):
+        nested.add_hash64(rnd.getrandbits(64))
+
+    a = [empty, small, big, nested]
+    b = [empty, small, nested]
+    jac, c_ab, c_ba = _core.pairwise_metrics_hll(a, b)
+    for i, sa in enumerate(a):
+        for j, sb in enumerate(b):
+            inter = sa.estimate_intersection(sb)
+            ca, cb = sa.estimate_cardinality(), sb.estimate_cardinality()
+            assert jac[i][j] == sa.estimate_jaccard(sb)
+            assert c_ab[i][j] == ((inter / ca) if ca > 0 else 0.0)
+            assert c_ba[i][j] == ((inter / cb) if cb > 0 else 0.0)
+
+
+def test_pairwise_metrics_exact_at_extreme_size_ratio():
+    """|A| ~ 1e3 against |B| ~ 1e7, A a subset of B.
+
+    The regime where `inter` inherits ulp(cB) and the containment can exceed 1
+    by ~3.4e4 ulp (see runner._jaccard_ie_from_containments). Exact agreement
+    with the scalar path must hold there too.
+    """
+    p = 18
+    tiny = _hash_sketch(p, 1000, 21)
+    huge = _hash_sketch(p, 10_000_000, 22)
+    a, b = [tiny], [huge]
+    jac, c_ab, c_ba = _core.pairwise_metrics_hll(a, b)
+    inter = tiny.estimate_intersection(huge)
+    ca, cb = tiny.estimate_cardinality(), huge.estimate_cardinality()
+    assert jac[0][0] == tiny.estimate_jaccard(huge)
+    assert c_ab[0][0] == ((inter / ca) if ca > 0 else 0.0)
+    assert c_ba[0][0] == ((inter / cb) if cb > 0 else 0.0)

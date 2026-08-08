@@ -384,14 +384,22 @@ int main(int argc, char** argv) {
         for (size_t j = 0; j < m; j++) rcard[j] = rsk[j]->cardinality();
     }
 
-    // union_with() allocates a fresh sketch per pair (16 MiB at p=24), and the
-    // precision guards inside it throw. An exception escaping an OpenMP
-    // structured block calls std::terminate, so catch and latch instead.
-    // Fixed buffer, not std::string: the exception this most plausibly catches
-    // is bad_alloc (union_with allocates 16 MiB per pair at p=24), and a
-    // std::string assignment would allocate again -- throwing out of the
-    // critical section and calling std::terminate, i.e. exactly what the latch
-    // exists to prevent. snprintf into stack storage cannot allocate.
+    // The fused jaccard+union path below is a non-virtual HLLSketch method, so
+    // downcast once here rather than per pair. HLLSketch is the only
+    // AbstractSketch implementation, so this always succeeds; if a second
+    // backend ever lands, a null entry falls back to the virtual route.
+    std::vector<const HLLSketch*> qh(n, nullptr), rh(m, nullptr);
+    if (args.metrics) {
+        for (size_t i = 0; i < n; i++) qh[i] = dynamic_cast<const HLLSketch*>(qsk[i].get());
+        for (size_t j = 0; j < m; j++) rh[j] = dynamic_cast<const HLLSketch*>(rsk[j].get());
+    }
+
+    // The guards inside the sketch methods throw. An exception escaping an
+    // OpenMP structured block calls std::terminate, so catch and latch instead.
+    // Fixed buffer, not std::string: a std::string assignment would allocate
+    // inside the critical section -- throwing out of it and calling
+    // std::terminate, i.e. exactly what the latch exists to prevent. snprintf
+    // into stack storage cannot allocate.
     std::atomic<bool> failed{false};
     char first_error[256] = {0};
 #pragma omp parallel for collapse(2) schedule(static)
@@ -400,9 +408,17 @@ int main(int argc, char** argv) {
             if (failed.load(std::memory_order_relaxed)) continue;
             try {
                 double* cell = &matrix[(i * m + j) * stride];
-                cell[0] = qsk[i]->jaccard_similarity(*rsk[j]);
-                if (!args.metrics) continue;
-                const double u = qsk[i]->union_with(*rsk[j])->cardinality();
+                if (!args.metrics) {
+                    cell[0] = qsk[i]->jaccard_similarity(*rsk[j]);
+                    continue;
+                }
+                double u;
+                if (qh[i] && rh[j]) {
+                    qh[i]->jaccard_and_union_cardinality(*rh[j], cell[0], u);
+                } else {
+                    cell[0] = qsk[i]->jaccard_similarity(*rsk[j]);
+                    u = qsk[i]->union_with(*rsk[j])->cardinality();
+                }
                 const double inter = std::max(0.0, qcard[i] + rcard[j] - u);
                 const double c_ab = (qcard[i] > 0.0) ? inter / qcard[i] : 0.0;
                 const double c_ba = (rcard[j] > 0.0) ? inter / rcard[j] : 0.0;

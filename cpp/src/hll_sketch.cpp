@@ -126,9 +126,9 @@ double HLLSketch::ertl_improved_estimate() const {
     //       + Σ_{k=1}^q C[k] · 2^(−k)
     //       + m · σ(C[0]/m)
     // where q = hash_size − precision, and α_∞ = 1 / (2·ln 2).
-    // The geometric loop below produces the m·τ·2^(−q) term and the C[k]·2^(−k)
-    // sum in one pass. τ and σ are the iterative series from Ertl Eq. 11–12.
-    const double alpha_inf = 1.0 / (2.0 * std::log(2.0));
+    // The geometric loop in ertl_from_counts produces the m·τ·2^(−q) term and
+    // the C[k]·2^(−k) sum in one pass. τ and σ are the iterative series from
+    // Ertl Eq. 11–12.
     const double m = static_cast<double>(num_registers_);
     const size_t max_register_value = hash_size_ - precision_;
 
@@ -136,6 +136,22 @@ double HLLSketch::ertl_improved_estimate() const {
     // accommodate at least max_register_value + 1.
     std::vector<size_t> counts(std::max<size_t>(max_register_value + 2, 64), 0);
     for (size_t v : registers_) counts[v]++;
+
+    double out;
+    if (ertl_from_counts(counts, out)) return out;
+
+    // Fall back to the original Flajolet estimate. Python does this too.
+    // Order-sensitive: the sum runs over the registers in index order.
+    const double alpha = get_alpha();
+    double sum = 0.0;
+    for (size_t v : registers_) sum += std::pow(2.0, -static_cast<int>(v));
+    return alpha * m * m / sum;
+}
+
+bool HLLSketch::ertl_from_counts(const std::vector<size_t>& counts, double& out) const {
+    const double alpha_inf = 1.0 / (2.0 * std::log(2.0));
+    const double m = static_cast<double>(num_registers_);
+    const size_t max_register_value = hash_size_ - precision_;
 
     const double n_maxed = static_cast<double>(counts[max_register_value + 1]);
     const double non_maxreg_frac = (m - n_maxed) / m;
@@ -149,14 +165,63 @@ double HLLSketch::ertl_improved_estimate() const {
     }
     const double sigma = get_sigma(zero_reg_frac);
     z += m * sigma;
-    if (z < 1e-10) {
-        // Fall back to the original Flajolet estimate. Python does this too.
-        const double alpha = get_alpha();
-        double sum = 0.0;
-        for (size_t v : registers_) sum += std::pow(2.0, -static_cast<int>(v));
-        return alpha * m * m / sum;
+    if (z < 1e-10) return false;
+    out = alpha_inf * m * m / z;
+    return true;
+}
+
+void HLLSketch::jaccard_and_union_cardinality(const HLLSketch& other,
+                                              double& jaccard,
+                                              double& union_cardinality) const {
+    // Same guards as jaccard_similarity() and union_with(): equal precision
+    // *and* hash size. Unequal precision would overread the operand's
+    // registers; equal precision with unequal hash size gives rho values on
+    // different scales.
+    if (precision_ != other.precision_ || hash_size_ != other.hash_size_) {
+        throw std::runtime_error(
+            "HLLs must have same precision and hash size for fused jaccard/union");
     }
-    return alpha_inf * m * m / z;
+
+    const size_t max_register_value = hash_size_ - precision_;
+    std::vector<size_t> counts(std::max<size_t>(max_register_value + 2, 64), 0);
+
+    size_t matching = 0, active = 0;
+    bool union_all_zero = true;
+    for (size_t i = 0; i < num_registers_; ++i) {
+        const uint8_t a = registers_[i];
+        const uint8_t b = other.registers_[i];
+        if (a != 0 || b != 0) {
+            ++active;
+            if (a == b) ++matching;
+        }
+        const uint8_t u = (a > b) ? a : b;
+        counts[u]++;
+        if (u != 0) union_all_zero = false;
+    }
+
+    jaccard = (active == 0) ? 0.0
+                            : static_cast<double>(matching) / static_cast<double>(active);
+
+    // Mirrors cardinality()'s all-zero short-circuit on the union sketch.
+    if (union_all_zero) {
+        union_cardinality = 0.0;
+        return;
+    }
+    double out;
+    if (ertl_from_counts(counts, out)) {
+        union_cardinality = out;
+        return;
+    }
+    // Flajolet fallback, over the union registers in index order.
+    const double m = static_cast<double>(num_registers_);
+    const double alpha = get_alpha();
+    double sum = 0.0;
+    for (size_t i = 0; i < num_registers_; ++i) {
+        const uint8_t u = (registers_[i] > other.registers_[i]) ? registers_[i]
+                                                                : other.registers_[i];
+        sum += std::pow(2.0, -static_cast<int>(u));
+    }
+    union_cardinality = alpha * m * m / sum;
 }
 
 double HLLSketch::cardinality() const {

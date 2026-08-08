@@ -8,6 +8,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <algorithm>
 #include <atomic>
 #include <exception>
 #include <functional>
@@ -168,8 +169,16 @@ pairwise_metrics_hll(const std::vector<HLLSketch>& a,
             for (py::ssize_t j = 0; j < m; j++) {
                 if (err.tripped()) continue;
                 try {
-                    jbuf(i, j) = a[i].jaccard_similarity(b[j]);
-                    const double inter = a[i].intersection_size(b[j]);
+                    // One register pass yields both the Jaccard and the union
+                    // cardinality. intersection_size() would re-estimate both
+                    // operands' cardinalities per pair (they are already
+                    // hoisted above) and materialize a union sketch — 16 MiB at
+                    // p=24, allocated and freed N*M times. See
+                    // HLLSketch::jaccard_and_union_cardinality for why this is
+                    // bit-identical rather than merely close.
+                    double u;
+                    a[i].jaccard_and_union_cardinality(b[j], jbuf(i, j), u);
+                    const double inter = std::max(0.0, a_card[i] + b_card[j] - u);
                     abbuf(i, j) = (a_card[i] > 0) ? (inter / a_card[i]) : 0.0;
                     babuf(i, j) = (b_card[j] > 0) ? (inter / b_card[j]) : 0.0;
                 } catch (...) {

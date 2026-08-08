@@ -47,6 +47,27 @@ public:
     void merge_max(const HLLSketch& other);
     double jaccard_similarity(const AbstractSketch& other) const override;
     double cardinality() const override;
+
+    // One pass over both register arrays, yielding the register-equality
+    // Jaccard *and* the cardinality of the union — without materializing the
+    // union sketch. This is what the pairwise metric loops want: the old route
+    // (jaccard_similarity + union_with()->cardinality(), or worse
+    // intersection_size()) walks the registers three to five times per pair and
+    // heap-allocates 16 MiB at p=24 for a union that is read once and thrown
+    // away.
+    //
+    // Bit-identical to the separate calls by construction, not by measurement:
+    // ertl_improved_estimate() consumes the registers *only* as the integer
+    // histogram built at the top of it, and `counts[max(a[i], b[i])]++` is the
+    // same multiset as `counts[union[i]]++`. Identical integers in, identical
+    // doubles out of the same tau/sigma code. The one place that reads the
+    // registers directly is the z < 1e-10 Flajolet fallback, which is
+    // summation-order sensitive; it is reproduced here over max(a[i], b[i]) in
+    // index order.
+    void jaccard_and_union_cardinality(const HLLSketch& other,
+                                       double& jaccard,
+                                       double& union_cardinality) const;
+
     double intersection_size(const AbstractSketch& other) const override;
     std::unique_ptr<AbstractSketch> union_with(const AbstractSketch& other) const override;
     void clear() override;
@@ -67,6 +88,13 @@ private:
     double get_tau(double x) const;
     double get_sigma(double x) const;
     double ertl_improved_estimate() const;
+
+    // Ertl 2017 Eq. 13 evaluated from a register-value histogram. `counts` must
+    // be sized as ertl_improved_estimate() sizes it. Returns false without
+    // touching `out` when z < 1e-10, i.e. when the caller must fall back to the
+    // Flajolet estimate — that path needs the registers themselves in index
+    // order, which a histogram cannot reconstruct, so its owner supplies it.
+    bool ertl_from_counts(const std::vector<size_t>& counts, double& out) const;
 };
 
 #endif
