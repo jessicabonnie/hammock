@@ -312,33 +312,40 @@ if (nrow(abc) > 0) {
   cat("No A/B/C outputs found in", abc_dir, "-- skipping.\n")
 }
 
-# ---------- scan Mode D (both columns × two references + clustering) ───────
+# ---------- scan Mode D (all current metrics × references + clustering) ────
 d_dir <- file.path(results_dir, "raw_d")
 cat("Scanning", d_dir, "...\n")
 d_refs <- list(bedtools = ref)
 if (!is.null(modeB_ref)) d_refs$mode_B <- modeB_ref
-# hammock v0.6.0 removed jaccard_similarity_with_ends (CLAUDE.md divergence #8).
-# Archived CSVs under raw_d/ still carry it, so request it only when it is
-# actually present -- that keeps this script working on both old and new output.
-d_jcols <- c("jaccard_similarity", "jaccard_similarity_with_ends")
-d_jcols <- Filter(function(cn) {
-  any(vapply(list.files(d_dir, pattern = "\\.csv$", full.names = TRUE),
-             function(p) cn %in% names(read_csv(p, n_max = 0, show_col_types = FALSE)),
-             logical(1)))
-}, d_jcols)
-# jaccard_similarity_ie is always available: present in modern CSVs, derived
-# from the containments in older ones (see read_hammock_csv). Kept out of the
-# Filter above for that reason. The published figures stay on
-# `jaccard_similarity` -- this arm exists so the choice of column is measured
-# rather than assumed; see docs/estimator-analysis-findings.md section 9.
-if (any(vapply(list.files(d_dir, pattern = "\\.csv$", full.names = TRUE),
-               function(p) all(c("containment_AB", "containment_BA") %in%
-                                 names(read_csv(p, n_max = 0, show_col_types = FALSE))),
-               logical(1)))) {
-  d_jcols <- c(d_jcols, "jaccard_similarity_ie")
+# Keep this canonical order aligned with runner._write_mode_d_csv. Discover
+# availability from the files instead of maintaining a separate "Jaccard-only"
+# list: current Mode D output carries this entire minimizer block. The removed
+# `_with_ends` family is intentionally absent even when archived CSVs contain it.
+d_metric_order <- c(
+  "jaccard_similarity", "jaccard_similarity_ie",
+  "containment_AB", "containment_BA",
+  "cosketch_geom", "cosketch_arith", "cosketch_max"
+)
+d_files <- list.files(d_dir, pattern = "\\.csv$", full.names = TRUE)
+d_headers <- lapply(d_files, function(p) {
+  names(read_csv(p, n_max = 0, show_col_types = FALSE))
+})
+metric_available <- function(metric, header) {
+  metric %in% header ||
+    (identical(metric, "jaccard_similarity_ie") &&
+       all(c("containment_AB", "containment_BA") %in% header))
 }
+d_metrics <- Filter(
+  function(metric) {
+    length(d_headers) > 0 &&
+      all(vapply(d_headers, function(header) metric_available(metric, header),
+                 logical(1)))
+  },
+  d_metric_order
+)
+cat("  Mode D metrics:", paste(d_metrics, collapse = ", "), "\n")
 d <- scan_dir(d_dir, parse_d_name,
-              jcols = d_jcols,
+              jcols = d_metrics,
               refs = d_refs,
               do_clustering = TRUE)
 
@@ -349,18 +356,18 @@ if (nrow(d) > 0) {
   write_csv(d_out, file.path(results_dir, "mode_d_summary.csv"))
   cat("Wrote results/mode_d_summary.csv (", nrow(d_out), "rows)\n")
 
-  short_col <- function(x) dplyr::case_when(
-    x == "jaccard_similarity"           ~ "no_ends",
-    x == "jaccard_similarity_with_ends" ~ "with_ends",
-    x == "jaccard_similarity_ie"        ~ "ie",
-    TRUE                                ~ x)
-  d_out$col_short <- factor(short_col(d_out$column),
-                            levels = c("no_ends", "with_ends", "ie"))
+  short_col <- function(x) dplyr::recode(
+    x,
+    jaccard_similarity = "register_equality",
+    jaccard_similarity_ie = "ie",
+    .default = x
+  )
+  d_out$col_short <- short_col(d_out$column)
 
-  # Published figures stay on the columns hammock actually emitted for this
-  # sweep; the derived `ie` arm is summarised numerically below instead, so
-  # adding it does not silently redraw every heatmap with an extra facet row.
-  d_plot     <- d_out %>% filter(col_short != "ie")
+  # Keep the existing published figures on their declared primary estimator.
+  # The complete discovered metric block is available in mode_d_summary.csv;
+  # adding summary metrics must not silently redraw every historical heatmap.
+  d_plot     <- d_out %>% filter(column == "jaccard_similarity")
   d_bedtools <- d_plot %>% filter(reference == "bedtools")
   d_modeB    <- d_plot %>% filter(reference == "mode_B")
   n_p <- length(unique(d_plot$precision))
@@ -368,7 +375,8 @@ if (nrow(d) > 0) {
   # ── does the estimator choice change anything? (see
   #    docs/estimator-analysis-findings.md section 9) ────────────────────────
   ie_cmp <- d_out %>%
-    filter(reference == "bedtools", col_short %in% c("no_ends", "ie")) %>%
+    filter(reference == "bedtools",
+           col_short %in% c("register_equality", "ie")) %>%
     select(precision, k, w, col_short, pearson, mae, ari) %>%
     tidyr::pivot_wider(names_from = col_short,
                        values_from = c(pearson, mae, ari))
@@ -377,10 +385,13 @@ if (nrow(d) > 0) {
     print(ie_cmp %>%
             group_by(precision) %>%
             summarise(n = n(),
-                      ari_differs = sum(!is.na(ari_no_ends) & !is.na(ari_ie) &
-                                          abs(ari_no_ends - ari_ie) > 1e-9),
-                      max_abs_ari_delta = max(abs(ari_no_ends - ari_ie), na.rm = TRUE),
-                      median_mae_no_ends = median(mae_no_ends, na.rm = TRUE),
+                      ari_differs = sum(!is.na(ari_register_equality) &
+                                          !is.na(ari_ie) &
+                                          abs(ari_register_equality - ari_ie) > 1e-9),
+                      max_abs_ari_delta = max(
+                        abs(ari_register_equality - ari_ie), na.rm = TRUE),
+                      median_mae_register_equality =
+                        median(mae_register_equality, na.rm = TRUE),
                       median_mae_ie = median(mae_ie, na.rm = TRUE),
                       .groups = "drop"),
           n = 50)

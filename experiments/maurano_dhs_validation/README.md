@@ -51,12 +51,15 @@ The authoritative grid is `workflow/config.yaml`; the summary below tracks it.
 - Fill-in jobs outside `config.yaml`: `sbatch_fill_highk_w.sh`
   (k ∈ {15,20,25} × w ∈ {300,500} × p ∈ {20,22,23,24}) and the two one-off
   k=5 scripts. `results/mode_d_summary.csv` currently holds **235** configs.
-- Analysis reads `jaccard_similarity` (the minimizer HLL column).
+- Analysis automatically summarizes the seven current minimizer metrics:
+  `jaccard_similarity`, `jaccard_similarity_ie`, `containment_AB/BA`, and
+  `cosketch_geom/arith/max`. Published figures remain explicitly filtered to
+  `jaccard_similarity`.
 
 > **`jaccard_similarity_with_ends` was removed in v0.6.0** (`CLAUDE.md`
 > divergence #8). The archived CSVs under `results/raw_d/` still carry it and
-> `analyze.R` still scores it where present, but a fresh Mode D run will not
-> emit it, so that half of the summary cannot be regenerated. The earlier
+> `analyze.R` intentionally ignores it; a fresh Mode D run will not emit it.
+> The earlier
 > claim here that the boundary-less column "is known to be noisy" was an
 > artifact of the `add_string` bug fixed 2026-05-14; post-fix it is the better
 > of the two on every metric.
