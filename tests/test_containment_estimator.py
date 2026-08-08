@@ -253,3 +253,27 @@ def test_pairwise_metrics_exact_at_extreme_size_ratio():
     assert jac[0][0] == tiny.estimate_jaccard(huge)
     assert c_ab[0][0] == ((inter / ca) if ca > 0 else 0.0)
     assert c_ba[0][0] == ((inter / cb) if cb > 0 else 0.0)
+
+
+# The pairwise loops used to ignore --threads entirely: omp_set_num_threads was
+# called only by the standalone C++ binary, so `hammock --threads 4` inside a
+# 4-CPU cgroup still ran this loop with a team per core on the whole node. The
+# team size must not change any emitted value.
+@pytest.mark.parametrize("threads", [0, 1, 2, 7])
+def test_pairwise_metrics_values_are_thread_count_invariant(threads):
+    a = [_hash_sketch(14, 20000, 31), _hash_sketch(14, 5000, 32)]
+    b = [_hash_sketch(14, 20000, 31), _hash_sketch(14, 40000, 33)]
+
+    ref = _core.pairwise_metrics_hll(a, b, threads=0)
+    got = _core.pairwise_metrics_hll(a, b, threads=threads)
+    for r, g in zip(ref, got):
+        for i in range(len(a)):
+            for j in range(len(b)):
+                assert r[i][j] == g[i][j]
+
+
+def test_pairwise_jaccard_accepts_threads_too():
+    a = [_hash_sketch(12, 5000, 41)]
+    b = [_hash_sketch(12, 5000, 42)]
+    assert _core.pairwise_jaccard_hll(a, b, threads=3)[0][0] == \
+        _core.pairwise_jaccard_hll(a, b)[0][0]

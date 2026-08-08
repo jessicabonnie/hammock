@@ -8,6 +8,10 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include <algorithm>
 #include <atomic>
 #include <exception>
@@ -83,6 +87,24 @@ void require_uniform_precision(const std::vector<HLLSketch>& a,
     }
 }
 
+// Team size for the pairwise loops. `threads <= 0` means "whatever OpenMP would
+// have picked", so passing omp_get_max_threads() back in is a no-op.
+//
+// Without this the pairwise phase ignored --threads entirely: omp_set_num_threads
+// appears only in hammock_cli.cpp, so `hammock --threads 4` inside a 4-CPU cgroup
+// still ran this loop on every core on the node. Applied as a num_threads()
+// clause rather than omp_set_num_threads() so it cannot leak into unrelated
+// regions -- notably the sketching loops in processing_modes.cpp, which are
+// nested inside a Python thread pool and would compound rather than clamp.
+int pairwise_team_size(int threads) {
+#ifdef _OPENMP
+    return (threads > 0) ? threads : omp_get_max_threads();
+#else
+    (void)threads;
+    return 1;
+#endif
+}
+
 // Captures the first exception thrown inside a parallel region so it can be
 // rethrown once the region has closed.
 class OmpError {
@@ -108,8 +130,10 @@ private:
 
 // Compute pairwise Jaccard between two lists of HLL sketches into a (N, M) matrix.
 py::array_t<double> pairwise_jaccard_hll(const std::vector<HLLSketch>& a,
-                                         const std::vector<HLLSketch>& b) {
+                                         const std::vector<HLLSketch>& b,
+                                         int threads) {
     require_uniform_precision(a, b);
+    const int nt = pairwise_team_size(threads);
     const py::ssize_t n = static_cast<py::ssize_t>(a.size());
     const py::ssize_t m = static_cast<py::ssize_t>(b.size());
     py::array_t<double> out({n, m});
@@ -117,7 +141,7 @@ py::array_t<double> pairwise_jaccard_hll(const std::vector<HLLSketch>& a,
     OmpError err;
     {
         py::gil_scoped_release release;
-#pragma omp parallel for collapse(2) schedule(static)
+#pragma omp parallel for collapse(2) schedule(static) num_threads(nt)
         for (py::ssize_t i = 0; i < n; i++) {
             for (py::ssize_t j = 0; j < m; j++) {
                 if (err.tripped()) continue;
@@ -141,8 +165,10 @@ py::array_t<double> pairwise_jaccard_hll(const std::vector<HLLSketch>& a,
 // these two — keeps the binding narrow.
 std::tuple<py::array_t<double>, py::array_t<double>, py::array_t<double>>
 pairwise_metrics_hll(const std::vector<HLLSketch>& a,
-                     const std::vector<HLLSketch>& b) {
+                     const std::vector<HLLSketch>& b,
+                     int threads) {
     require_uniform_precision(a, b);
+    const int nt = pairwise_team_size(threads);
     const py::ssize_t n = static_cast<py::ssize_t>(a.size());
     const py::ssize_t m = static_cast<py::ssize_t>(b.size());
     py::array_t<double> jaccard({n, m});
@@ -156,15 +182,15 @@ pairwise_metrics_hll(const std::vector<HLLSketch>& a,
         py::gil_scoped_release release;
         std::vector<double> a_card(n);
         std::vector<double> b_card(m);
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) num_threads(nt)
         for (py::ssize_t i = 0; i < n; i++) {
             a_card[i] = a[i].cardinality();
         }
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) num_threads(nt)
         for (py::ssize_t j = 0; j < m; j++) {
             b_card[j] = b[j].cardinality();
         }
-#pragma omp parallel for collapse(2) schedule(static)
+#pragma omp parallel for collapse(2) schedule(static) num_threads(nt)
         for (py::ssize_t i = 0; i < n; i++) {
             for (py::ssize_t j = 0; j < m; j++) {
                 if (err.tripped()) continue;
@@ -251,11 +277,12 @@ PYBIND11_MODULE(_core, m) {
           "Build an HLL sketch from one BED file in mode A, B, or C.");
 
     m.def("pairwise_jaccard_hll", &pairwise_jaccard_hll,
-          py::arg("a"), py::arg("b"),
-          "Compute the (len(a), len(b)) pairwise-Jaccard matrix for HLL sketches.");
+          py::arg("a"), py::arg("b"), py::arg("threads") = 0,
+          "Compute the (len(a), len(b)) pairwise-Jaccard matrix for HLL sketches.\n"
+          "threads=0 (default) leaves the OpenMP team size alone.");
 
     m.def("pairwise_metrics_hll", &pairwise_metrics_hll,
-          py::arg("a"), py::arg("b"),
+          py::arg("a"), py::arg("b"), py::arg("threads") = 0,
           "Compute (Jaccard, containment_AB, containment_BA) matrices in one pass.");
 
     m.def("read_filepath_list", &read_filepath_list, py::arg("list_file"));

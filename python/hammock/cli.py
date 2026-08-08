@@ -457,6 +457,14 @@ def main(argv=None) -> int:
     # `bedtools getfasta` and genuinely parallelizes regardless of mode.
     args.io_threads = (args.threads if args.threads is not None
                        else min(8, os.cpu_count() or 1))
+    # A third budget, for the C++ OpenMP pairwise phase. It must NOT inherit
+    # Mode D's `threads = 1` clamp: that clamp is about the GIL convoy while
+    # *sketching*, and the pairwise loop is called once from the main thread
+    # with the GIL released, so clamping it to 1 would just make Mode D slower.
+    # 0 means "leave OpenMP's own default alone", which keeps the no-flag path
+    # exactly as it was; an explicit --threads is honored so a run inside a
+    # 4-CPU cgroup stops spawning a team per core on the whole node.
+    args.omp_threads = args.threads if args.threads is not None else 0
     if args.threads is None:
         args.threads = _default_threads(args.mode)
     elif args.mode == "D" and args.threads > 1:

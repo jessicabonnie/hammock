@@ -335,7 +335,8 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches,
     minimizer_query = [s.minimizer_hll for s in query_sketches]
     minimizer_ref = [s.minimizer_hll for s in ref_sketches]
 
-    jac, c_ab, c_ba = _core.pairwise_metrics_hll(minimizer_query, minimizer_ref)
+    jac, c_ab, c_ba = _core.pairwise_metrics_hll(
+        minimizer_query, minimizer_ref, threads=getattr(args, "omp_threads", 0) or 0)
     cs_geom, cs_arith, cs_max = _cosketch_from_containments(c_ab, c_ba)
     jac_ie = _jaccard_ie_from_containments(c_ab, c_ba)
 
@@ -517,7 +518,8 @@ def run(args) -> int:
 
     if args.verbose:
         print("Computing pairwise Jaccard + containment...", file=sys.stderr)
-    jaccard, c_ab, c_ba = _core.pairwise_metrics_hll(query_sketches, ref_sketches)
+    jaccard, c_ab, c_ba = _core.pairwise_metrics_hll(
+        query_sketches, ref_sketches, threads=getattr(args, "omp_threads", 0) or 0)
     cs_geom, cs_arith, cs_max = _cosketch_from_containments(c_ab, c_ba)
     jac_ie = _jaccard_ie_from_containments(c_ab, c_ba)
 
