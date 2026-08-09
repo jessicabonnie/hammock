@@ -251,6 +251,23 @@ MAURANO_DIR = os.path.join(os.path.dirname(_SWEEP_DIR),
                            "subB_mixed_stride", "data", "maurano_sorted")
 
 
+def maurano_bed_paths():
+    """The Maurano BED paths, sorted by name.
+
+    One function so main() and make_maurano_data() cannot disagree. They used to
+    call os.listdir separately, which meant the num_files LABEL written into
+    every CSV row came from a different directory listing than the one actually
+    swept -- harmless for a static corpus, but the kind of mislabeling that is
+    invisible afterwards if it ever does happen.
+    """
+    beds = sorted(f for f in os.listdir(MAURANO_DIR) if f.endswith(".bed"))
+    if not beds:
+        raise FileNotFoundError(
+            f"no .bed files in {MAURANO_DIR}; run "
+            f"experiments/subB_mixed_stride/prepare_maurano.sh first")
+    return [os.path.join(MAURANO_DIR, b) for b in beds]
+
+
 def make_maurano_data(tmp_dir: str):
     """Point the sweep at the 20 real Maurano BEDs instead of generating a corpus.
 
@@ -271,9 +288,11 @@ def make_maurano_data(tmp_dir: str):
         corpus was sorted before the experiment began", which is the same
         starting condition for both tools.
 
-    The corpus is NOT copied into tmp_dir: 20 files at ~100 Mbp each is ~2 GB,
-    and copying would put the page-cache state of the copy, not of the shared
-    read-only originals, in front of whichever tool runs first.
+    The corpus is NOT copied into tmp_dir. Copying would put the page-cache
+    state of the copy, not of the shared read-only originals, in front of
+    whichever tool happens to run first. (An earlier version of this note said
+    "20 files at ~100 Mbp each is ~2 GB", conflating covered bases with bytes:
+    the files total 110 MB on disk, ~5.5 MB each, while covering ~91 Mbp.)
     """
     beds = sorted(f for f in os.listdir(MAURANO_DIR) if f.endswith(".bed"))
     if not beds:
