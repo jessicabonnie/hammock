@@ -44,6 +44,7 @@ from datetime import datetime
 
 from benchmark_cpp_vs_bedtools import (
     check_binary_version,
+    derive_seed,
     find_hammock_cpp,
     generate_bed_file,
     get_system_info,
@@ -69,6 +70,9 @@ PROVENANCE_COLS = [
     # bumped per release, not per commit, so a pre- and post-change binary both
     # report 0.7.0 -- exactly the pair a re-run exists to distinguish.
     "git_sha",
+    # "unseeded" for a legacy-style run; an integer means the corpus is
+    # reproducible and this file can be compared to another with the same value.
+    "corpus_seed",
 ]
 
 ROW_COLS = [
@@ -92,7 +96,8 @@ ROW_COLS = [
 ] + PROVENANCE_COLS
 
 
-def make_corpus(num_files: int, num_intervals: int, tmp_dir: str):
+def make_corpus(num_files: int, num_intervals: int, tmp_dir: str,
+                corpus_seed=None):
     """Two disjoint lists of num_files BEDs each, as the scaling benchmark builds.
 
     No pre-sort: hammock is indifferent to input order and there is no bedtools
@@ -102,8 +107,8 @@ def make_corpus(num_files: int, num_intervals: int, tmp_dir: str):
     for i in range(num_files):
         a = os.path.join(tmp_dir, f"set1_{i}.bed")
         b = os.path.join(tmp_dir, f"set2_{i}.bed")
-        generate_bed_file(num_intervals, a)
-        generate_bed_file(num_intervals, b)
+        generate_bed_file(num_intervals, a, derive_seed(corpus_seed, i, 0))
+        generate_bed_file(num_intervals, b, derive_seed(corpus_seed, i, 1))
         file1.append(a)
         file2.append(b)
     f1 = os.path.join(tmp_dir, "file1_list.txt")
@@ -123,6 +128,11 @@ def main() -> int:
     ap.add_argument("--num-intervals", type=int, default=DEFAULT_NUM_INTERVALS)
     ap.add_argument("--threads", type=int, default=DEFAULT_THREADS)
     ap.add_argument("--runs", type=int, default=DEFAULT_RUNS)
+    ap.add_argument("--corpus-seed", type=int, default=None,
+                    help="Seed the synthetic BED corpus for cross-run reproducibility. "
+                         "One corpus serves every precision and both arms here, so "
+                         "unlike the files sweep there is no replicate dimension to "
+                         "preserve -- seeding costs nothing.")
     ap.add_argument("--binary", default=None)
     ap.add_argument("--output-dir", default=RESULTS_DIR)
     args = ap.parse_args()
@@ -147,6 +157,7 @@ def main() -> int:
         "slurm_job_id": sysinfo.get("slurm_job_id", "none"),
         "binary_version": version,
         "git_sha": sysinfo.get("git_sha", "unknown"),
+        "corpus_seed": args.corpus_seed if args.corpus_seed is not None else "unseeded",
     }
     if provenance["slurm_job_id"] == "none":
         print("  NOTE: no SLURM allocation -- cores are shared with anything else "
@@ -159,7 +170,8 @@ def main() -> int:
     rows = []
     with tempfile.TemporaryDirectory() as tmp_dir:
         print(f"\ngenerating {2 * args.num_files} BED files...", flush=True)
-        f1, f2 = make_corpus(args.num_files, args.num_intervals, tmp_dir)
+        f1, f2 = make_corpus(args.num_files, args.num_intervals, tmp_dir,
+                             args.corpus_seed)
 
         for p in precisions:
             for run_i in range(args.runs):

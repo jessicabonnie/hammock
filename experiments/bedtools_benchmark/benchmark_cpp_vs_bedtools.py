@@ -173,13 +173,39 @@ def get_system_info() -> Dict[str, Any]:
     return info
 
 
-def generate_bed_file(num_intervals: int, output_file: str) -> None:
+def derive_seed(base: Optional[int], *parts: int) -> Optional[int]:
+    """Per-file seed from a run-level base, or None to keep the legacy behaviour.
+
+    Mixing the coordinates in (rather than seeding the global RNG once) makes a
+    corpus reproducible independently of generation order, so parallelising the
+    generation loop later cannot silently change the data.
+    """
+    if base is None:
+        return None
+    h = base & 0xFFFFFFFF
+    for x in parts:
+        h = (h * 1_000_003 + x) & 0xFFFFFFFF
+    return h
+
+
+def generate_bed_file(num_intervals: int, output_file: str,
+                      seed: Optional[int] = None) -> None:
+    """Random BED. `seed` makes it reproducible; None keeps the global RNG.
+
+    Unseeded is the historical behaviour and stays the default, because every
+    archived CSV was produced that way. It is also the reason a cross-run
+    comparison of these benchmarks is only good to a few percent on the bedtools
+    leg: hammock's cost barely depends on the interval content (it hashes a fixed
+    number of positions) while bedtools' does, so a fresh draw moves the two legs
+    by different amounts and the *ratio* drifts without either tool changing.
+    """
+    rng = random.Random(seed) if seed is not None else random
     chroms = [f"chr{i}" for i in range(1, 23)] + ["chrX", "chrY"]
     with open(output_file, "w") as f:
         for _ in range(num_intervals):
-            chrom = random.choice(chroms)
-            start = random.randint(0, 10_000_000)
-            end = random.randint(start + 100, start + 10_000)
+            chrom = rng.choice(chroms)
+            start = rng.randint(0, 10_000_000)
+            end = rng.randint(start + 100, start + 10_000)
             f.write(f"{chrom}\t{start}\t{end}\n")
 
 
@@ -411,11 +437,13 @@ def run_benchmark(
     precision: int,
     sub_b_list: List[float],
     metrics_arm: bool = False,
+    corpus_seed: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
     print("\nBenchmark configuration:")
     print(f"  hammock-cpp binary: {binary}")
     print(f"  intervals/file:     {num_intervals}")
+    print(f"  corpus seed:        {corpus_seed if corpus_seed is not None else 'unseeded (not reproducible)'}")
     print(f"  file counts:        {num_files_list}")
     print(f"  runs/config:        {num_runs}")
     print(f"  threads:            {num_threads}")
@@ -443,8 +471,14 @@ def run_benchmark(
                 for i in range(num_files):
                     a = os.path.join(tmp_dir, f"set1_{i}.bed")
                     b = os.path.join(tmp_dir, f"set2_{i}.bed")
-                    generate_bed_file(num_intervals, a)
-                    generate_bed_file(num_intervals, b)
+                    # run_i is mixed in deliberately: replicates must keep
+                    # drawing DIFFERENT corpora or std_wall_time would collapse
+                    # to machine noise alone and silently change meaning. The
+                    # sequence of draws is what becomes reproducible.
+                    generate_bed_file(num_intervals, a,
+                                      derive_seed(corpus_seed, run_i, i, 0))
+                    generate_bed_file(num_intervals, b,
+                                      derive_seed(corpus_seed, run_i, i, 1))
                     file1_list.append(a)
                     file2_list.append(b)
 
@@ -555,7 +589,8 @@ def write_text_report(results: List[Dict[str, Any]], path: str) -> None:
 # checked for comparability afterwards, and -march=native makes the CPU model
 # load-bearing. get_system_info() is also written to the sibling .txt report,
 # but a report is not joinable and nothing reads it back.
-PROVENANCE_COLS = ["hostname", "cpu_model", "cpu_count", "slurm_job_id", "git_sha"]
+PROVENANCE_COLS = ["hostname", "cpu_model", "cpu_count", "slurm_job_id", "git_sha",
+                   "corpus_seed"]
 
 
 def write_csv(results: List[Dict[str, Any]], path: str,
@@ -680,6 +715,14 @@ def main() -> int:
                              "'^hammock_cpp_B' filter the R consumers use, and cannot double "
                              "rows in their joins.")
     parser.add_argument("--test", action="store_true", help="Quick test (small files, few runs)")
+    parser.add_argument("--corpus-seed", type=int, default=None,
+                        help="Seed the synthetic BED corpus so a re-run draws the "
+                             "same files. Default (unseeded) matches every archived "
+                             "run, but makes cross-run comparison good only to a few "
+                             "percent on the bedtools leg, whose cost -- unlike "
+                             "hammock's -- depends on the interval content. "
+                             "Replicates still draw different corpora; it is the "
+                             "sequence that becomes reproducible.")
     parser.add_argument("--binary", type=str, default=None, help="Path to hammock-cpp")
     parser.add_argument("--output-dir", type=str, default=RESULTS_DIR,
                         help="Directory for txt and csv reports")
@@ -739,11 +782,13 @@ def main() -> int:
         precision=args.precision,
         sub_b_list=sub_b_list,
         metrics_arm=args.metrics_arm,
+        corpus_seed=args.corpus_seed,
     )
 
     write_text_report(results, txt_path)
     prov = get_system_info()
     prov["binary_version"] = binary_version
+    prov["corpus_seed"] = args.corpus_seed if args.corpus_seed is not None else "unseeded"
     write_csv(results, csv_path, prov)
     plot(results, png_path)
     print(f"\nReports: {txt_path}\n         {csv_path}\nFigure:  {png_path}")
