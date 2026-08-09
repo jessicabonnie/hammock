@@ -52,17 +52,50 @@ ACCURACY_KEYS = [
     "jaccard_ie_mae_vs_bt", "jaccard_ie_max_err_vs_bt",
     "jaccard_ie_mae_vs_hll", "jaccard_ie_max_err_vs_hll",
 ]
+# Timing of the --metrics invocation that supplies the jaccard_ie_* columns.
+# Kept apart from METRIC_KEYS so it can never be mistaken for the timed arm.
+METRICS_ARM_KEYS = ["metrics_wall_time", "metrics_cpu_time", "metrics_max_rss_mb"]
+# Provenance travels in the rows, not just on stdout, mirroring
+# pairwise_cost_by_precision.py's PROVENANCE_COLS. Before this the file recorded
+# none of it: `get_system_info()` was printed once and then discarded, so a
+# finished CSV could not be checked for comparability against any other. That
+# matters for the p=18 figure specifically, because the two jobs behind it are
+# two separate SLURM allocations and may land on different nodes -- and with
+# `-march=native` baked into the binary, a different node can mean different
+# code. Repeating six constant columns is a trivial price for a self-describing
+# file.
+PROVENANCE_COLS = [
+    "hostname", "cpu_model", "cpu_count", "slurm_job_id", "binary_version",
+    # binary_version cannot identify the code on its own: pyproject's version is
+    # bumped per release, not per commit, so a pre- and post-change binary both
+    # report the same string.
+    "git_sha",
+]
+
 # sort_time: wall time to pre-sort BED files for the (run_id, num_files, num_intervals)
 # realization. Pre-sort happens outside per-tool timing (bedtools needs sorted input,
 # hammock is indifferent). Same sort_time is attached to every row from the same
-# realization. See docs/bedtools-parallelism-caveat.md.
+# realization. See docs/bedtools-parallelism-caveat.md. On a fixed corpus that
+# ships pre-sorted it is 0.0 -- "sorted before the experiment began", the same
+# starting condition for both tools, not "sorting was free".
 ROW_COLS = [
     "axis", "tool", "sub_b", "precision", "threads", "num_files", "num_intervals", "run_id",
+    # Which BED corpus the row came from: "synthetic" (generated per replicate)
+    # or "maurano" (20 real fetal DHS files, fixed across replicates). Speed and
+    # accuracy are only jointly interpretable within one corpus.
+    "corpus",
     "wall_time", "cpu_time", "max_rss_mb", "sort_time",
     # comparison_time keeps its historical meaning (pair loop + serial write);
     # pair_time/write_time decompose it and are blank on bedtools rows.
     "sketch_creation_time", "comparison_time", "pair_time", "write_time",
-] + ACCURACY_KEYS
+    # Wall time of the SECOND, --metrics invocation on the precision axis --
+    # the one that produces the jaccard_ie_* columns. It used to be printed as
+    # "(not recorded)" and thrown away, which meant a frontier plot would show
+    # the *speed* of the 3-column arm against the *accuracy* of the 9-column
+    # arm. Blank when the sweep ran --no-ie, and on every non-precision axis.
+    # Not comparable to `wall_time` as a substitute: it is a different output
+    # shape. It is there to answer "what does computing the x-axis cost?".
+] + METRICS_ARM_KEYS + ACCURACY_KEYS + PROVENANCE_COLS
 
 
 def parse_bedtools_jaccards(stdout: str):
@@ -117,7 +150,20 @@ def parse_hammock_csv(path: str, column: str = "jaccard_similarity"):
     return out
 
 
-def jaccard_error_stats(est: dict, *, vs_bt: dict, vs_hll: dict, prefix: str = "jaccard"):
+def _is_self_pair(key) -> bool:
+    """True when a (query, reference) key compares a file with itself.
+
+    Only reachable when the same list is passed as both operands, which is the
+    fixed-corpus convention (`--corpus maurano`, mirroring
+    experiments/subB_mixed_stride/run_sweep.py). The synthetic path builds two
+    disjoint lists, so nothing there matches.
+    """
+    q, r = key
+    return os.path.basename(q) == os.path.basename(r)
+
+
+def jaccard_error_stats(est: dict, *, vs_bt: dict, vs_hll: dict, prefix: str = "jaccard",
+                        drop_self_pairs: bool = False):
     """Compare hammock estimates against TWO ground truths.
 
     vs_bt: bedtools per-pair jaccards (set-jaccard ground truth — definitional gap)
@@ -128,8 +174,17 @@ def jaccard_error_stats(est: dict, *, vs_bt: dict, vs_hll: dict, prefix: str = "
     drawn from the SAME estimator as `est` -- comparing IE estimates against a
     register-equality p_max reference would report the definitional gap as if
     it were precision error.
+
+    drop_self_pairs excludes file-vs-itself comparisons. With one 20-file list
+    passed twice, 20 of the 400 ordered pairs are self-comparisons where both
+    tools return ~1.0 at zero error -- free correctness that dilutes MAE by
+    ~5% (1.152e-3 -> 1.094e-3 at p=18 on Maurano) without measuring anything.
+    Off by default so the synthetic path, where the two lists are disjoint and
+    no key can match, keeps producing byte-identical numbers to the archive.
     """
     out = {}
+    if drop_self_pairs:
+        est = {k: v for k, v in est.items() if not _is_self_pair(k)}
     common_bt = set(est.keys()) & set(vs_bt.keys())
     common_hll = set(est.keys()) & set(vs_hll.keys()) if vs_hll else set()
     if prefix == "jaccard":
@@ -187,19 +242,68 @@ def make_data(num_files: int, num_intervals: int, tmp_dir: str, num_sort_workers
     return f1, f2, sort_time
 
 
-def _row(axis, tool, *, precision, threads, num_files, num_intervals, run_id, result, keys, sub_b=None):
+# Maurano fetal-tissue DHS corpus, already sorted on disk by
+# experiments/subB_mixed_stride/prepare_maurano.sh. This file lives in
+# <repo>/experiments/bedtools_benchmark/, so the sibling experiment is two
+# levels up and back down.
+_SWEEP_DIR = os.path.dirname(os.path.abspath(__file__))
+MAURANO_DIR = os.path.join(os.path.dirname(_SWEEP_DIR),
+                           "subB_mixed_stride", "data", "maurano_sorted")
+
+
+def make_maurano_data(tmp_dir: str):
+    """Point the sweep at the 20 real Maurano BEDs instead of generating a corpus.
+
+    Returns the same (file1_list_path, file2_list_path, sort_time) triple as
+    make_data, so sweep_precision does not care which it got.
+
+    Two deliberate differences from the synthetic path:
+
+      * **The same list is passed as both operands**, following
+        experiments/subB_mixed_stride/run_sweep.py. That yields 400 ordered
+        pairs of which 20 are self-comparisons -- see `drop_self_pairs` in
+        jaccard_error_stats for why those are excluded from MAE but still
+        timed. They are legitimately part of the timed workload; they are just
+        not evidence about accuracy.
+      * **sort_time is 0.0, not a measurement.** These files ship pre-sorted,
+        so there is no sort to time. It is 0.0 rather than None so the column
+        stays numeric, but do not read it as "sorting was free" -- it is "the
+        corpus was sorted before the experiment began", which is the same
+        starting condition for both tools.
+
+    The corpus is NOT copied into tmp_dir: 20 files at ~100 Mbp each is ~2 GB,
+    and copying would put the page-cache state of the copy, not of the shared
+    read-only originals, in front of whichever tool runs first.
+    """
+    beds = sorted(f for f in os.listdir(MAURANO_DIR) if f.endswith(".bed"))
+    if not beds:
+        raise FileNotFoundError(
+            f"no .bed files in {MAURANO_DIR}; run "
+            f"experiments/subB_mixed_stride/prepare_maurano.sh first")
+    paths = [os.path.join(MAURANO_DIR, b) for b in beds]
+    f1 = os.path.join(tmp_dir, "file1_list.txt")
+    with open(f1, "w") as f:
+        f.write("\n".join(paths) + "\n")
+    return f1, f1, 0.0
+
+
+def _row(axis, tool, *, precision, threads, num_files, num_intervals, run_id, result, keys,
+         sub_b=None, corpus="synthetic", provenance=None):
     r = {
         "axis": axis, "tool": tool, "sub_b": sub_b,
         "precision": precision, "threads": threads,
         "num_files": num_files, "num_intervals": num_intervals,
-        "run_id": run_id,
+        "run_id": run_id, "corpus": corpus,
     }
+    if provenance:
+        r.update(provenance)
     for k in keys:
         r[k] = result.get(k)
     return r
 
 
-def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, num_runs, sub_b_list, ie=True):
+def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, num_runs,
+                    sub_b_list, ie=True, corpus="synthetic", provenance=None):
     """Vary precision; bedtools is precision-independent so it's run once per data realization.
 
     Computes jaccard accuracy with TWO ground truths:
@@ -215,11 +319,19 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
     pair_rows = []  # for the scatter plot: one row per (run, query, reference, precision, sub_b)
     p_max = max(precisions)
 
+    drop_self = corpus != "synthetic"
+
     for run_i in range(num_runs):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            print(f"\n[precision] run {run_i+1}/{num_runs}: gen {num_files} files × {num_intervals} intervals")
-            f1, f2, sort_time = make_data(num_files, num_intervals, tmp_dir, num_sort_workers=num_threads)
-            print(f"  sort:    {sort_time:.2f}s wall (parallel, {num_threads} workers; pre-sort, not in tool wall below)")
+            if corpus == "maurano":
+                print(f"\n[precision] run {run_i+1}/{num_runs}: fixed Maurano corpus "
+                      f"({num_files} files, same list both sides)")
+                f1, f2, sort_time = make_maurano_data(tmp_dir)
+                print(f"  sort:    n/a (corpus ships pre-sorted)")
+            else:
+                print(f"\n[precision] run {run_i+1}/{num_runs}: gen {num_files} files × {num_intervals} intervals")
+                f1, f2, sort_time = make_data(num_files, num_intervals, tmp_dir, num_sort_workers=num_threads)
+                print(f"  sort:    {sort_time:.2f}s wall (parallel, {num_threads} workers; pre-sort, not in tool wall below)")
 
             print("  bedtools...", end=" ", flush=True)
             bt = run_bedtools(f1, f2, num_threads)
@@ -228,10 +340,19 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
             print(f"{bt['wall_time']:.2f}s wall, {rss:.1f} MB" if rss is not None else f"{bt['wall_time']:.2f}s wall")
             bt_truth = parse_bedtools_jaccards(bt.get("stdout", ""))
             print(f"    captured {len(bt_truth)} bedtools jaccards (set-jaccard ground truth)")
+            if not bt_truth:
+                # An empty parse is the silent-failure mode this whole sweep is
+                # most exposed to: every MAE column would come out blank and the
+                # run would still "succeed" after ~12 minutes of compute.
+                raise RuntimeError(
+                    "bedtools produced no parseable jaccards -- every accuracy "
+                    "column would be empty. Check bedtools.sh and that the "
+                    "inputs are sorted.")
             rows.append(_row("precision", "bedtools",
                              precision=None, threads=num_threads,
                              num_files=num_files, num_intervals=num_intervals,
-                             run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"]))
+                             run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"],
+                             corpus=corpus, provenance=provenance))
 
             # Run all (precision, subB) combos; collect per-pair estimates first
             # so subB=1.0 @ p_max can serve as the HLL ground truth for all
@@ -239,6 +360,7 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
             estimates: dict = {}
             estimates_ie: dict = {}
             hm_results: dict = {}
+            metrics_timing: dict = {}
 
             def _drop(hm):
                 prefix = hm.get("_out_prefix")
@@ -263,21 +385,38 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
                     _drop(hm)
 
                     if ie:
-                        # SECOND, UNTIMED pass. --metrics adds a union +
-                        # cardinality per pair, so folding it into the run
-                        # above would inflate comparison_time and break
+                        # SECOND pass, in its OWN columns. --metrics adds a
+                        # cardinality estimate per pair, so folding it into the
+                        # run above would inflate comparison_time and break
                         # comparability with the published RESULTS.md numbers.
-                        # Nothing from this run's timing dict is recorded.
                         # Since 0.7.0 the timed pass above is explicitly
-                        # --no-metrics, so this split is belt-and-braces rather
+                        # --no-metrics, so the split is belt-and-braces rather
                         # than the only thing keeping the timings honest.
-                        print(f"    + untimed --metrics pass...", end=" ", flush=True)
+                        #
+                        # What changed: this used to print "(not recorded)" and
+                        # throw the timing away. That made a precision-frontier
+                        # plot dishonest by construction -- the x-axis (IE MAE)
+                        # comes from THIS invocation while the y-axis (speed)
+                        # came from the other one, so the figure would report
+                        # the accuracy of an arm nobody timed at the speed of an
+                        # arm that does not compute it. The numbers go to
+                        # metrics_* columns, never into wall_time, so no
+                        # archived series changes meaning.
+                        print(f"    + --metrics pass...", end=" ", flush=True)
                         hm2 = run_hammock(binary, f1, f2, p, num_threads,
                                           keep_output=True, sub_b=sub_b, metrics=True)
                         estimates_ie[(p, sub_b)] = parse_hammock_csv(
                             hm2.get("output_csv"), column="jaccard_similarity_ie")
+                        metrics_timing[(p, sub_b)] = {
+                            "metrics_wall_time": hm2.get("wall_time"),
+                            "metrics_cpu_time": hm2.get("cpu_time"),
+                            "metrics_max_rss_mb": hm2.get("max_rss_mb"),
+                        }
                         _drop(hm2)
-                        print(f"{hm2['wall_time']:.2f}s (not recorded)")
+                        ratio = (hm2["wall_time"] / hm["wall_time"]
+                                 if hm.get("wall_time") else None)
+                        print(f"{hm2['wall_time']:.2f}s wall"
+                              + (f" ({ratio:.2f}x the --no-metrics arm)" if ratio else ""))
 
             hll_truth = estimates.get((p_max, 1.0), {})
             # IE ground truth must be the IE value at p_max, not the
@@ -289,11 +428,12 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
                     est = estimates[(p, sub_b)]
                     est_ie = estimates_ie.get((p, sub_b), {})
                     err = {k: None for k in ACCURACY_KEYS}
-                    err.update(jaccard_error_stats(est, vs_bt=bt_truth, vs_hll=hll_truth))
+                    err.update(jaccard_error_stats(est, vs_bt=bt_truth, vs_hll=hll_truth,
+                                                   drop_self_pairs=drop_self))
                     if est_ie:
                         err.update(jaccard_error_stats(
                             est_ie, vs_bt=bt_truth, vs_hll=hll_truth_ie,
-                            prefix="jaccard_ie"))
+                            prefix="jaccard_ie", drop_self_pairs=drop_self))
 
                     def _f(k):
                         v = err[k]
@@ -305,12 +445,14 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
                           f"MAE_hll={_f('jaccard_mae_vs_hll')}")
                     merged = dict(hm_results[(p, sub_b)])
                     merged.update(err)
+                    merged.update(metrics_timing.get((p, sub_b), {}))
                     rows.append(_row("precision", tool_name_for_subb(sub_b),
                                      precision=p, threads=num_threads,
                                      num_files=num_files, num_intervals=num_intervals,
                                      run_id=run_i, result=merged,
-                                     keys=HAMMOCK_KEYS + ["sort_time"] + ACCURACY_KEYS,
-                                     sub_b=sub_b))
+                                     keys=HAMMOCK_KEYS + ["sort_time"] + ACCURACY_KEYS
+                                          + METRICS_ARM_KEYS,
+                                     sub_b=sub_b, corpus=corpus, provenance=provenance))
                     for (q, r), j_hm in est.items():
                         pair_rows.append({
                             "run_id": run_i, "precision": p, "sub_b": sub_b,
@@ -322,7 +464,8 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
     return rows, pair_rows
 
 
-def sweep_threads(binary, thread_list, precision, num_files, num_intervals, num_runs, sub_b_list):
+def sweep_threads(binary, thread_list, precision, num_files, num_intervals, num_runs,
+                  sub_b_list, provenance=None):
     rows = []
     for run_i in range(num_runs):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -339,7 +482,8 @@ def sweep_threads(binary, thread_list, precision, num_files, num_intervals, num_
                 rows.append(_row("threads", "bedtools",
                                  precision=None, threads=t,
                                  num_files=num_files, num_intervals=num_intervals,
-                                 run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"]))
+                                 run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"],
+                                 provenance=provenance))
 
                 for sub_b in sub_b_list:
                     print(f"  t={t} hammock-cpp p={precision} subB={sub_b:g}...", end=" ", flush=True)
@@ -350,11 +494,13 @@ def sweep_threads(binary, thread_list, precision, num_files, num_intervals, num_
                                      precision=precision, threads=t,
                                      num_files=num_files, num_intervals=num_intervals,
                                      run_id=run_i, result=hm,
-                                     keys=HAMMOCK_KEYS + ["sort_time"], sub_b=sub_b))
+                                     keys=HAMMOCK_KEYS + ["sort_time"], sub_b=sub_b,
+                                     provenance=provenance))
     return rows
 
 
-def sweep_intervals(binary, intervals_list, precision, num_threads, num_files, num_runs, sub_b_list):
+def sweep_intervals(binary, intervals_list, precision, num_threads, num_files, num_runs,
+                    sub_b_list, provenance=None):
     """Regenerates data per intervals point — file size is the swept variable."""
     rows = []
     for ni in intervals_list:
@@ -371,7 +517,8 @@ def sweep_intervals(binary, intervals_list, precision, num_threads, num_files, n
                 rows.append(_row("intervals", "bedtools",
                                  precision=None, threads=num_threads,
                                  num_files=num_files, num_intervals=ni,
-                                 run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"]))
+                                 run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"],
+                                 provenance=provenance))
 
                 for sub_b in sub_b_list:
                     print(f"  hammock-cpp subB={sub_b:g}...", end=" ", flush=True)
@@ -382,7 +529,8 @@ def sweep_intervals(binary, intervals_list, precision, num_threads, num_files, n
                                      precision=precision, threads=num_threads,
                                      num_files=num_files, num_intervals=ni,
                                      run_id=run_i, result=hm,
-                                     keys=HAMMOCK_KEYS + ["sort_time"], sub_b=sub_b))
+                                     keys=HAMMOCK_KEYS + ["sort_time"], sub_b=sub_b,
+                                     provenance=provenance))
     return rows
 
 
@@ -394,7 +542,17 @@ def write_long_csv(rows, path):
             out = dict(r)
             for k, v in out.items():
                 if isinstance(v, float):
-                    out[k] = f"{v:.6f}"
+                    # %.9g, not %.6f. The old format gave six *decimal places*,
+                    # not six significant figures, so an accuracy column was
+                    # written at whatever precision its magnitude happened to
+                    # allow: at p=24 an IE MAE near 1.4e-4 landed as 0.000144 --
+                    # three significant figures for the quantity the precision
+                    # frontier is plotted against, and anything under 5e-7
+                    # rounded to a hard 0.000000, indistinguishable from a real
+                    # zero. Timing columns are unaffected in practice (they are
+                    # O(1-100 s), where the two formats agree to more digits
+                    # than the measurement carries).
+                    out[k] = f"{v:.9g}"
                 elif v is None:
                     out[k] = ""
             w.writerow(out)
@@ -599,6 +757,21 @@ def plot_pair_scatter(pair_rows, png_path, title_suffix,
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--axis", choices=["precision", "threads", "intervals"], required=True)
+    parser.add_argument("--corpus", choices=["synthetic", "maurano"], default="synthetic",
+                        help="BED corpus for the precision axis. 'synthetic' "
+                             "regenerates per replicate (the default, and what "
+                             "every archived sweep used). 'maurano' uses the 20 "
+                             "real fetal DHS files in "
+                             "experiments/subB_mixed_stride/data/maurano_sorted/, "
+                             "passed as BOTH operands. Use maurano when the run "
+                             "has to carry an accuracy axis: the synthetic "
+                             "generator draws every file from the same 10 Mbp "
+                             "span over 24 chromosomes, so true J is ~0.10 for "
+                             "essentially every pair -- a delta function, with "
+                             "no range for a MAE-vs-precision curve to be read "
+                             "against. Maurano spans J = 0.135-0.627. Ignored "
+                             "on the threads and intervals axes, which sweep a "
+                             "property of the corpus itself.")
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--binary", type=str, default=None)
     parser.add_argument("--output-dir", type=str, default=RESULTS_DIR)
@@ -637,12 +810,20 @@ def main():
         if not (0.0 < s <= 1.0):
             print(f"subB values must lie in (0, 1.0]; got {s}", file=sys.stderr)
             return 1
+    if args.corpus != "synthetic" and args.axis != "precision":
+        # Fail loudly rather than silently ignoring the flag: the threads and
+        # intervals axes sweep properties of the generated corpus itself, so
+        # there is no coherent fixed-corpus meaning for them.
+        print(f"--corpus {args.corpus} is only supported on --axis precision "
+              f"(got --axis {args.axis})", file=sys.stderr)
+        return 1
     binary = args.binary or find_hammock_cpp()
     if not os.path.exists(binary):
         print(f"hammock-cpp not found at {binary}", file=sys.stderr)
         return 1
     try:
-        print(f"hammock-cpp version: {check_binary_version(binary)}")
+        binary_version = check_binary_version(binary)
+        print(f"hammock-cpp version: {binary_version}")
     except RuntimeError as e:
         print(str(e), file=sys.stderr)
         return 1
@@ -654,27 +835,57 @@ def main():
     os.makedirs(args.figures_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    print(f"system: {get_system_info()}")
+    sysinfo = get_system_info()
+    print(f"system: {sysinfo}")
     print(f"binary: {binary}")
+    provenance = {
+        "hostname": sysinfo.get("hostname", "unknown"),
+        "cpu_model": sysinfo.get("cpu_model", "unknown"),
+        "cpu_count": sysinfo.get("cpu_count", "unknown"),
+        "slurm_job_id": sysinfo.get("slurm_job_id", "none"),
+        "binary_version": binary_version,
+        "git_sha": sysinfo.get("git_sha", "unknown"),
+    }
+    if provenance["slurm_job_id"] == "none":
+        print("  NOTE: no SLURM allocation -- cores are shared with anything else "
+              "on this node, which inflates wall times unpredictably.")
 
     pair_rows = []
     subb_tag = ",".join(f"{s:g}" for s in sub_b_list)
     if args.axis == "precision":
         precisions = [int(x) for x in args.precisions.split(",")]
-        nf = args.num_files if args.num_files is not None else 64
-        print(f"[precision] p ∈ {precisions}, t={args.threads}, files={nf}, "
-              f"intervals={args.num_intervals}, subB ∈ {sub_b_list}")
-        rows, pair_rows = sweep_precision(binary, precisions, nf, args.num_intervals,
+        if args.corpus == "maurano":
+            # num_files/num_intervals are inputs to the synthetic generator but
+            # only labels on a fixed corpus -- and they reach the CSV and the
+            # plot suffix, so they have to describe what actually ran rather
+            # than keep whatever default the generator would have used.
+            beds = sorted(f for f in os.listdir(MAURANO_DIR) if f.endswith(".bed"))
+            nf = len(beds)
+            # Coarse interval count from file size (~30 B/line), matching
+            # subB_mixed_stride/run_sweep.py's convention. A label, not a
+            # measurement.
+            avg_bytes = sum(os.path.getsize(os.path.join(MAURANO_DIR, b))
+                            for b in beds) / max(1, nf)
+            num_intervals = int(avg_bytes / 30)
+        else:
+            nf = args.num_files if args.num_files is not None else 64
+            num_intervals = args.num_intervals
+        print(f"[precision] corpus={args.corpus}, p ∈ {precisions}, t={args.threads}, "
+              f"files={nf}, intervals≈{num_intervals}, subB ∈ {sub_b_list}")
+        rows, pair_rows = sweep_precision(binary, precisions, nf, num_intervals,
                                           args.threads, args.runs, sub_b_list,
-                                          ie=args.ie)
-        suffix = f"(t={args.threads}, files={nf}, intervals={args.num_intervals}, subB={subb_tag})"
+                                          ie=args.ie, corpus=args.corpus,
+                                          provenance=provenance)
+        suffix = (f"({args.corpus}, t={args.threads}, files={nf}, "
+                  f"intervals={num_intervals}, subB={subb_tag})")
     elif args.axis == "threads":
         thread_list = [int(x) for x in args.thread_list.split(",")]
         nf = args.num_files if args.num_files is not None else 64
         print(f"[threads] t ∈ {thread_list}, p={args.precision}, files={nf}, "
               f"intervals={args.num_intervals}, subB ∈ {sub_b_list}")
         rows = sweep_threads(binary, thread_list, args.precision, nf,
-                             args.num_intervals, args.runs, sub_b_list)
+                             args.num_intervals, args.runs, sub_b_list,
+                             provenance=provenance)
         suffix = f"(p={args.precision}, files={nf}, intervals={args.num_intervals}, subB={subb_tag})"
     else:
         intervals_list = [int(x) for x in args.intervals_list.split(",")]
@@ -682,7 +893,7 @@ def main():
         print(f"[intervals] N ∈ {intervals_list}, p={args.precision}, t={args.threads}, "
               f"files={nf}, subB ∈ {sub_b_list}")
         rows = sweep_intervals(binary, intervals_list, args.precision, args.threads,
-                               nf, args.runs, sub_b_list)
+                               nf, args.runs, sub_b_list, provenance=provenance)
         suffix = f"(p={args.precision}, t={args.threads}, files={nf}, subB={subb_tag})"
 
     stem = f"sweep_{args.axis}_{timestamp}"
