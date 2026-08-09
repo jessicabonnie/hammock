@@ -173,8 +173,18 @@ the pairwise phase is 0.61% of a p=14 N=512 run. Full table:
 
 ## Open seeds (handoff notes for future work)
 
-Neither is a decision; each is evidence gathered plus what still needs
+None is a decision; each is evidence gathered plus what still needs
 establishing. Read the seed before re-litigating the question.
+
+- `docs/seed-benchmark-methodology.md` — **read this before quoting or
+  generating any performance number.** Comparing one benchmark run to another in
+  this repo is confounded by an unmeasured machine factor of up to 1.5×: the
+  `--no-metrics` arm is byte-identical code across the fusion and it still
+  measured 1.27–1.53× slower on the 2026-08-04 run, which had no SLURM
+  allocation. Within-run *ratios* survive; cross-run absolutes do not. The seed
+  carries the corrective paired/interleaved design (job 29628907), the reason
+  the peak-RSS argument is null by construction, and the fact that the residual
+  `+IE` cost is now 72% `fprintf` rather than estimator work.
 
 - `docs/seed-mode-d-threading.md` — the *default* is fixed (Mode D → 1 thread,
   v0.6.1), but Mode D still runs on one core. Still open: making it genuinely
