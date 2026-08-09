@@ -101,6 +101,39 @@ sensitivity and 3–17% within-cell CV at the extremes. Quote **≈2.5–2.7 →
    three keys, so `sweep_maurano_ie_*.csv` held jaccards **bit-identical** to
    the no-metrics arm across all 17,100 cells, under a filename containing "ie".
 4. **`fusion_ab.py` + `sbatch_fusion_ab.sh`** — the corrective design, below.
+5. **`bedtools.sh` is pinned to `bedtools/2.30.0`** (2026-08-09), the load is
+   fatal on failure, and the resolved version + path are echoed to stderr. It
+   previously read `ml bedtools2 … || ml bedtools … || true`, resolving to
+   **2.27.1** (2017) while `estimator_compare.py` hardcoded 2.30.0 — two parts of
+   one experiment scored against different bedtools — and the trailing `|| true`
+   made a total module failure silent.
+
+   **This is a ground-truth correctness fix, not version hygiene.** Run the full
+   400-pair Maurano workload under both builds and 93 pairs disagree. The
+   `intersection` and `n_intersections` columns are identical; only the **union**
+   differs, and **2.27.1 is order-dependent** — `jaccard -a A -b B` and
+   `-a B -b A` return different unions, with the swapped orientation agreeing
+   with 2.30.0. So under 2.27.1, **93 of the 190 unordered Maurano pairs have
+   J(A,B) ≠ J(B,A)** in what is supposed to be the *exact* reference. Under
+   2.30.0: 0.
+
+   That bites hardest exactly where the fixed-corpus sweep operates, since it
+   passes one list as both operands and therefore scores both orientations of
+   every pair against a reference that was not symmetric while hammock's
+   estimate is.
+
+   Magnitude is small — max |Δ| 1.3×10⁻⁵, mean 5.6×10⁻⁷ — so **no archived
+   conclusion changes**: against an IE MAE of 1.15×10⁻³ at p=18 the mean shift is
+   0.05%, and the p=18 gate still reproduces (1.15166×10⁻³ under 2.30.0 vs
+   1.151647×10⁻³ under 2.27.1). But it is **6.4% of the MAE at p=23 in the worst
+   single pair**, so do not wave it away at the high-precision end of a frontier
+   plot. hammock's own per-pair output is bit-identical across the two runs,
+   which is what makes the attribution clean.
+
+   Consequence for archived data: `docs/data/maurano_bedtools_ref.tsv` and every
+   bedtools column in the pre-2026-08-09 sweeps carry the asymmetric-union
+   artifact. Fine as a gate to ~4 significant figures; do not use them to argue
+   about differences at the 10⁻⁵ level.
 
 ## The corrective design (job 29628907)
 
