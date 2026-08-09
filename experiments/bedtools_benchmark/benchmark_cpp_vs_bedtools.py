@@ -253,6 +253,89 @@ def run_bedtools(file1_list: str, file2_list: str, num_threads: int) -> Dict[str
     return run_with_time(["bash", BEDTOOLS_SCRIPT, file1_list, file2_list, str(num_threads)])
 
 
+_BEDTOOLS_BIN: Any = "unset"
+
+
+def _resolve_bedtools():
+    """Path to the same bedtools bedtools.sh will use, resolved once per process.
+
+    Cached because resolving it costs a login shell plus an Lmod load (~0.8 s),
+    which is 60x the thing being measured -- doing that per rep is what made the
+    first version of the calibration meaningless.
+    """
+    global _BEDTOOLS_BIN
+    if _BEDTOOLS_BIN != "unset":
+        return _BEDTOOLS_BIN
+    _BEDTOOLS_BIN = None
+    module = os.environ.get("HAMMOCK_BEDTOOLS_MODULE", "bedtools/2.30.0")
+    probe = f"ml {module} 2>/dev/null; command -v bedtools" if module else "command -v bedtools"
+    try:
+        r = subprocess.run(["bash", "-lc", probe], capture_output=True, text=True, timeout=120)
+        path = (r.stdout or "").strip().splitlines()[-1] if (r.stdout or "").strip() else ""
+        if path and os.path.exists(path):
+            _BEDTOOLS_BIN = path
+    except (OSError, subprocess.SubprocessError, IndexError):
+        pass
+    return _BEDTOOLS_BIN
+
+
+def bedtools_serial_ms(file1_list: str, file2_list: str, reps: int = 5):
+    """Median wall time of ONE `bedtools jaccard` on the first pair, in ms.
+
+    This is the calibration that makes the bedtools leg auditable. `bedtools
+    jaccard` has no batch mode, so a pairwise workflow launches one process per
+    pair -- N^2 of them -- and on these nodes process creation is capped near
+    123 exec/s and does not scale with cores. The consequence is that
+    "bedtools at t=16" can silently mean "bedtools at t~1.5": measured, 1024
+    pairs cost the same at --jobs 16 as at --jobs 1.
+
+    Recording a serial per-pair cost lets the CSV carry bedtools' ACHIEVED
+    parallel efficiency
+
+        eff = n_pairs * serial_per_pair / (wall * threads)
+
+    instead of leaving a reader to assume it was near 1. Without it, a speedup
+    computed against a wrapper that failed to parallelize is indistinguishable
+    from one against a baseline that used its cores -- and the first inflates
+    our result by up to ~6x.
+
+    Costs `reps` extra invocations per cell (~50-100 ms), which is noise next to
+    the N^2 loop it calibrates. Returns None if it cannot be measured, so a
+    failure here degrades the audit rather than the benchmark.
+    """
+    binary = _resolve_bedtools()
+    if binary is None:
+        return None
+    try:
+        with open(file1_list) as f:
+            a = f.readline().strip()
+        with open(file2_list) as f:
+            b = f.readline().strip()
+        if not a or not b:
+            return None
+        # Invoke the resolved binary DIRECTLY. An earlier version ran
+        # `bash -lc 'ml bedtools/...; bedtools jaccard ...'` per rep and
+        # measured 810 ms/pair -- that is a login shell plus an Lmod module
+        # load, not bedtools, and it inflated the implied efficiency to a
+        # physically impossible 4.02x-of-4. The module is resolved once, in
+        # _resolve_bedtools, and never again.
+        cmd = [binary, "jaccard", "-a", a, "-b", b]
+        # One warm-up: the first exec pays page-in for the binary and its
+        # shared libs, a cost the N^2 loop pays once rather than per pair.
+        subprocess.run(cmd, capture_output=True, timeout=120)
+        times = []
+        for _ in range(reps):
+            t0 = time.time()
+            r = subprocess.run(cmd, capture_output=True, timeout=120)
+            if r.returncode != 0:
+                return None
+            times.append((time.time() - t0) * 1000.0)
+        times.sort()
+        return times[len(times) // 2]
+    except Exception:
+        return None
+
+
 def run_hammock(
     binary: str,
     file1_list: str,
@@ -458,6 +541,11 @@ def run_benchmark(
     print(f"  system:             {get_system_info()}")
 
     metric_keys = ["wall_time", "cpu_time", "max_rss_mb", "sort_time"]
+    # bedtools-only: serial per-pair cost and the parallel efficiency it
+    # implies. Blank on hammock rows, which are one process and whose
+    # threading is a different object entirely (OpenMP inside one address
+    # space, not N^2 process launches under a wrapper).
+    bedtools_keys = metric_keys + ["bedtools_serial_ms", "bedtools_parallel_eff"]
     # pair_time/write_time decompose comparison_time and are hammock-only, so
     # bedtools rows legitimately leave those cells blank.
     hammock_keys = metric_keys + ["sketch_creation_time", "comparison_time",
@@ -524,6 +612,14 @@ def run_benchmark(
                         print("  bedtools...", end=" ", flush=True)
                         r = run_bedtools(file1_list_path, file2_list_path, num_threads)
                         r["sort_time"] = sort_time
+                        # Calibrate the baseline so its achieved parallelism is
+                        # recorded rather than assumed -- see bedtools_serial_ms.
+                        ser = bedtools_serial_ms(file1_list_path, file2_list_path)
+                        r["bedtools_serial_ms"] = ser
+                        n_pairs = num_files * num_files
+                        r["bedtools_parallel_eff"] = (
+                            (n_pairs * ser / 1000.0) / (r["wall_time"] * num_threads)
+                            if ser and r.get("wall_time") else None)
                         bedtools_runs.append(r)
                     else:
                         shown = f"subB={sub_b:g}" + (" +IE" if use_metrics else "")
@@ -546,7 +642,7 @@ def run_benchmark(
             # Anchor for every downstream consumer. sub_b alone no longer
             # identifies an arm: the IE arm shares subB=1.0 with the baseline.
             "hammock_arms": [(label, sub_b) for label, sub_b, _ in arms],
-            "bedtools": aggregate(bedtools_runs, metric_keys),
+            "bedtools": aggregate(bedtools_runs, bedtools_keys),
         }
         for tool, runs_for in runs_by_tool.items():
             entry[tool] = aggregate(runs_for, hammock_keys)
@@ -626,6 +722,21 @@ def write_csv(results: List[Dict[str, Any]], path: str,
         "mean_comparison_time", "std_comparison_time",
         "mean_pair_time", "std_pair_time",
         "mean_write_time", "std_write_time",
+        # bedtools-only; blank on hammock rows. Without these a reader has to
+        # ASSUME the baseline used the cores it was given, and on these nodes it
+        # does not: `bedtools jaccard` has no batch mode, so the workflow
+        # launches one process per pair, and process creation caps near
+        # 123 exec/s regardless of core count. mean_bedtools_parallel_eff is the
+        # fraction of `num_threads` the baseline actually achieved -- measured
+        # ~1.7x out of 16x. A speedup quoted without it is not interpretable.
+        # Read it only at large N. At N=2 or 4 the whole bedtools leg is a few
+        # pairs behind a fixed ~0.5 s of module load and process setup, so the
+        # ratio reads ~0.01-0.04 and means "startup-dominated", not "no
+        # parallelism". It becomes meaningful once n_pairs * serial >> startup,
+        # i.e. from about N=32 up.
+        "mean_bedtools_serial_ms", "std_bedtools_serial_ms",
+        "mean_bedtools_parallel_eff", "std_bedtools_parallel_eff",
+        "min_bedtools_parallel_eff", "max_bedtools_parallel_eff",
     ]
     metric_cols = cols[5:]          # resolved from the aggregate dict
     cols = cols + PROVENANCE_COLS   # resolved from provenance, not from `d`

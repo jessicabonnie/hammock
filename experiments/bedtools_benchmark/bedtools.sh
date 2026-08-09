@@ -50,22 +50,70 @@ NUM_THREADS=${3:-1}
 mapfile -t file1_lines < "$file1"
 mapfile -t file2_lines < "$file2"
 
-run_jaccard() {
-    local jac
-    jac=$(bedtools jaccard -a "$1" -b "$2" | tail -n 1 | cut -f 3)
-    printf '%s\t%s\t%s\n' "$1" "$2" "$jac"
+# Buffer the result so the pair-count check below can run before anything
+# reaches stdout -- a partial stream that the caller has already started
+# parsing is exactly the failure this check exists to prevent.
+TMP_OUT=$(mktemp)
+trap 'rm -f "$TMP_OUT"' EXIT
+
+EXPECTED=$(( ${#file1_lines[@]} * ${#file2_lines[@]} ))
+
+# ONE process per pair, not three.
+#
+# This used to run an exported bash function doing
+#     jac=$(bedtools jaccard -a "$1" -b "$2" | tail -n 1 | cut -f 3)
+# which costs a shell + bedtools + tail + cut for every pair. That matters far
+# more than it looks, because a pairwise bedtools workflow launches a process
+# per pair -- N^2 of them -- and on Rockfish compute nodes process creation is
+# capped near 123 exec/s and does NOT scale with cores. Under that cap, exec
+# count is the throughput, so trimming 3 execs to 1 is close to a 3x change in
+# what the baseline appears to cost.
+#
+# Measured, 1024 pairs at --jobs 16 on a `parallel` node, against 12.95 ms/pair
+# of serial bedtools work:
+#
+#   fn + bedtools|tail|cut (old)     16.41 s   parallel efficiency 0.81x
+#   fn + bedtools|awk                12.23 s                       1.08x
+#   --tagstring, bedtools only       7.89 s                        1.68x
+#
+# 1.68x out of a possible 16x is still poor -- that is the process-creation cap,
+# not something this script can fix -- but it is the fairest available shot at
+# the baseline, and understating bedtools would overstate our own speedup.
+#
+# --tagstring prefixes each of bedtools' two output lines with the pair, so the
+# per-pair text handling disappears and ONE awk parses the whole stream at the
+# end. Fields are: 1=file_a 2=file_b 3=intersection 4=union 5=jaccard
+# 6=n_intersections. The `$3+0==$3` test keeps only rows whose intersection
+# column is numeric, which drops bedtools' repeated header line.
+parse_stream() {
+    awk -F'\t' '$3 != "" && $3+0 == $3 { print $1 "\t" $2 "\t" $5 }'
 }
-export -f run_jaccard
 
 if command -v parallel &>/dev/null && [ "$NUM_THREADS" -gt 1 ]; then
-    parallel --jobs "$NUM_THREADS" run_jaccard ::: "${file1_lines[@]}" ::: "${file2_lines[@]}"
+    parallel --jobs "$NUM_THREADS" --tagstring '{1}\t{2}' \
+        bedtools jaccard -a {1} -b {2} \
+        :::: "$file1" :::: "$file2" | parse_stream > "$TMP_OUT"
 else
     if [ "$NUM_THREADS" -gt 1 ]; then
-        echo "Warning: GNU parallel not found, running sequentially." >&2
+        echo "bedtools.sh: GNU parallel not found -- running SEQUENTIALLY." >&2
+        echo "  Timings from this run are single-threaded regardless of the" >&2
+        echo "  requested thread count; do not report them as parallel." >&2
     fi
     for a in "${file1_lines[@]}"; do
         for b in "${file2_lines[@]}"; do
-            run_jaccard "$a" "$b"
+            bedtools jaccard -a "$a" -b "$b" \
+                | awk -F'\t' -v q="$a" -v r="$b" 'NR==2 {print q "\t" r "\t" $3}'
         done
-    done
+    done > "$TMP_OUT"
 fi
+
+# A dropped pair used to be invisible: the caller would just see fewer rows and
+# average over whatever survived. Failing loudly here is the difference between
+# a wrong MAE and a stopped run.
+GOT=$(wc -l < "$TMP_OUT")
+if [ "$GOT" -ne "$EXPECTED" ]; then
+    echo "bedtools.sh: expected $EXPECTED pairs, got $GOT." >&2
+    echo "  Some bedtools invocations produced no parseable jaccard." >&2
+    exit 1
+fi
+cat "$TMP_OUT"
