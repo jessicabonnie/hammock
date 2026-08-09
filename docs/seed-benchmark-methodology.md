@@ -257,7 +257,7 @@ machine factor, with a calibration arm.
 |---|---|---|
 | 29651772 | Panel A, p=18, synthetic | **cancelled at 40 min** — its bedtools leg ran at ~0.8x parallel efficiency; see the caveat doc |
 | 29651773 | Panel B, Maurano precision frontier, t=16 and t=8 | passed all gates; `docs/precision-frontier-maurano.md` |
-| 29652415 | thread scaling, both tools | Supplementary Fig S1; `docs/data/sweep_threads_p18.csv` |
+| 29652415 | thread scaling, both tools | Supplementary Fig S6; `docs/data/sweep_threads_p18.csv` |
 | 29652408 | Panel A rerun, fixed baseline | — |
 | 29652432 | hammock-only N = 512/1024/2048 | — |
 

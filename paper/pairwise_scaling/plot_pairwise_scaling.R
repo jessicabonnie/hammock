@@ -43,8 +43,15 @@ script_path <- sub("^--file=", "", script_arg)
 script_dir <- dirname(normalizePath(script_path, mustWork = TRUE))
 repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 
+# p=18 (the CLI default), job 29652408, node c595, one exclusive allocation,
+# 2026-08-09. Replaces cpp_vs_bedtools_t16_20260804_172242.csv, which was p=14 --
+# a precision used nowhere else in the paper -- and whose bedtools leg ran under
+# the three-process-per-pair bedtools.sh with its achieved parallelism
+# unrecorded. Every bedtools row here carries mean_bedtools_parallel_eff; it
+# reads 0.10 at N >= 64, i.e. the baseline converted ~1.6 of its 16 cores into
+# throughput. Quote that alongside any speedup taken from this figure.
 synthetic_csv <- file.path(
-  repo_root, "docs", "data", "cpp_vs_bedtools_t16_20260804_172242.csv"
+  repo_root, "docs", "data", "cpp_vs_bedtools_t16_p18.csv"
 )
 maurano_summary_csv <- file.path(
   repo_root, "docs", "data", "maurano_subB_summary.csv"
