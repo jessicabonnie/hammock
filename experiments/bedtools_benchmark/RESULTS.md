@@ -7,6 +7,30 @@ Script inventory, flags, and the SLURM wrappers are in
 from May 12 2026; the t=16 files sweep was re-run on Aug 4 2026 and its
 section is the only one restated onto that run. Each section says which.
 
+> ## Every bedtools number in this file is affected by a defect found 2026-08-09
+>
+> A pairwise bedtools workflow launches one process per pair -- N^2 of them --
+> and on these nodes process creation caps near **123 exec/s and does not scale
+> with cores**. Every sweep below therefore compares hammock at its stated
+> thread count against a bedtools that achieved somewhere between ~1x and ~5.7x,
+> unrecorded and varying by node and day. A speedup quoted from this file can be
+> inflated by up to ~6x.
+>
+> Two things were fixed after these runs, so nothing below reproduces exactly:
+>
+> * `bedtools.sh` now runs **one** process per pair instead of three, which is
+>   worth ~2.1x to the baseline. Every bedtools wall time here is from the slow
+>   version and is correspondingly too high.
+> * `bedtools` is pinned to 2.30.0. The 2.27.1 build used here computes an
+>   **order-dependent union**: 93 of 190 unordered Maurano pairs had
+>   J(A,B) != J(B,A) in what is supposed to be the exact reference. Magnitude is
+>   small (max 1.3e-5) so no conclusion below changes, but do not use these
+>   files to argue about differences at the 1e-5 level.
+>
+> New bedtools rows carry `mean_bedtools_parallel_eff`; these do not. Prefer the
+> p=18 re-runs and `docs/bedtools-parallelism-caveat.md` over this file for any
+> speed claim.
+
 Four runs against `hammock-cpp`, on Rockfish `shared` partition (sr-class
 nodes), 16 cpus, 32 GB:
 
@@ -40,7 +64,10 @@ nodes), 16 cpus, 32 GB:
   one job unless its section says so.
 
 Headline: **mixed-stride subsampling is essentially free in accuracy and
-roughly halves hammock wall time per halving of subB.** Subsampling does
+substantially reduces hammock wall time.** (This previously read "roughly
+halves hammock wall time per halving of subB", which the data does not support:
+a 10x subsample buys **4.21x** on synthetic at p=14 and **1.83x** on Maurano at
+p=18, not 10x. The per-step factor is neither 2 nor stable across corpora.) Subsampling does
 not change bedtools' results (it's a hammock-only knob). With subB=0.1,
 hammock beats bedtools at **every N≥2** in the t=16 files sweep, with
 **52.35× speedup at N=512** (52.77× in the superseded May 12 run). Per-pair Jaccard error is statistically

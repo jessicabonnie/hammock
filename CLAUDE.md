@@ -181,6 +181,36 @@ establishing. Read the seed before re-litigating the question.
   the peak-RSS argument is null by construction, and the fact that the residual
   `+IE` cost is now 72% `fprintf` rather than estimator work.
 
+  **The bedtools baseline is process-creation-bound (2026-08-09).** A pairwise
+  `bedtools jaccard` workflow launches one process per pair — N² of them — and
+  on these nodes process creation caps near **123 exec/s and does not scale with
+  cores**, so "bedtools at t=16" can mean "bedtools at t≈1.5" and inflate a
+  quoted speedup by up to ~6×. It is not a bedtools defect and not GNU
+  parallel's: `md5sum` on node-local files measures **0.46×** at 16-way,
+  `xargs -P16` hits the same ceiling, and moving the binary off GPFS to local
+  NVMe changes nothing. Measured achieved efficiency swings **1.17×–2.86×**
+  across nodes on identical code, and bedtools *regresses* past t=8 (3.30× at
+  t=8 → 1.89× at t=48, wall rising 18.7→32.5 s) while hammock is monotonic to
+  18.81× and keeps 43.3 of 48 cores busy.
+
+  Consequences, all already applied: `bedtools.sh` runs **one** process per pair
+  (`parallel --tagstring` + one `awk`) rather than three, worth ~2.1×; every
+  bedtools CSV row now carries `mean_bedtools_serial_ms` and
+  `mean_bedtools_parallel_eff` — **read the latter before quoting any speedup**,
+  and only at N ≳ 32, since smaller cells are startup-dominated and read ~0.01.
+  Full evidence and the superseded "~5.7× premium" table:
+  `docs/bedtools-parallelism-caveat.md`. Figure:
+  `paper/figures/threading_supplement.png`.
+
+  **`bedtools` is pinned to 2.30.0**, and this is a correctness fix, not
+  hygiene: 2.27.1 computes an **order-dependent union**, so 93 of the 190
+  unordered Maurano pairs had J(A,B) ≠ J(B,A) in what is supposed to be the
+  *exact* reference. Magnitude is small (max |Δ| 1.3×10⁻⁵, mean 5.6×10⁻⁷) so no
+  archived conclusion changes, but it is 6.4% of the IE MAE at p=23 in the worst
+  pair — do not use pre-2026-08-09 bedtools columns, including
+  `docs/data/maurano_bedtools_ref.tsv`, to argue about differences at the 10⁻⁵
+  level.
+
 - `docs/seed-mode-d-threading.md` — the *default* is fixed (Mode D → 1 thread,
   v0.6.1), but Mode D still runs on one core. Still open: making it genuinely
   parallel via a process pool, which needs pickling on `HLLSketch` — a

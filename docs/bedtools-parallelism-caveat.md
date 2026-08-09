@@ -59,7 +59,68 @@ The one we report is the workflow comparison. We surface the strict
 tool-vs-tool baseline alongside it (see below) so the framing is
 visible rather than hidden.
 
-## Empirical: the parallelism premium for bedtools
+## Empirical: the parallelism premium is NOT a constant (updated 2026-08-09)
+
+**Read this before the table below.** The premium has now been measured twice on
+the same workload and disagrees by 3×. It is a property of the node's
+process-creation throughput on the day, not a property of either tool, and the
+larger of the two numbers is the one that flatters hammock's baseline least —
+so do not pick one and quote it.
+
+| N=64, 10k intervals/file | t=1 | t=2 | t=4 | t=8 | t=16 | t=32 | t=48 |
+|---|---|---|---|---|---|---|---|
+| 2026-05 wall (s) | 57.0 | 37.8 | 19.4 | 10.3 | 10.1 | — | — |
+| 2026-05 speedup | 1.00 | 1.51 | 2.94 | 5.54 | **5.65** | — | — |
+| 2026-08-09 wall (s) | 61.62 | 37.53 | 21.82 | 18.66 | 32.06 | 32.45 | 32.53 |
+| 2026-08-09 speedup | 1.00 | 1.64 | 2.82 | **3.30** | 1.92 | 1.90 | 1.89 |
+| 2026-08-09 cores busy | 1.4 | 2.0 | 3.9 | 5.5 | 3.6 | 3.6 | 3.6 |
+
+The 2026-08-09 row is job 29652415 (node c707, one exclusive allocation, p=18,
+3 replicates, medians) using the **fixed** one-process-per-pair `bedtools.sh`,
+which is *faster* per pair than the version behind the 2026-05 row. It still
+scales worse. Two findings follow.
+
+**1. bedtools does not merely plateau — it regresses.** Wall time rises from
+18.66 s at t=8 to 32.53 s at t=48 and stays there, so 16, 32 and 48 concurrent
+jobs are all *slower* than 8. `cpu_time/wall_time` shows why: the workflow keeps
+at most ~5.5 cores busy and falls back to 3.6 once oversubscribed. The 2026-05
+table stopped at t=16 and so could not see this. For contrast, hammock on the
+same node and workload is monotonic to 18.81× and keeps 43.3 of 48 cores busy.
+
+**2. The ceiling is process creation, and it is not bedtools' fault.** A
+pairwise workflow launches one process per pair — N² of them — and on these
+nodes process creation caps near **123 exec/s** and does not scale with cores.
+Measured controls, all on the same node:
+
+- `md5sum` on node-local files: **0.46×** at 16-way — *slower* than serial.
+  Nothing to do with bedtools.
+- `xargs -P16` hits the same ceiling as GNU `parallel` (8.26 s vs 7.74 s for
+  1024 pairs), so it is not the dispatcher.
+- Copying the bedtools binary from GPFS to local NVMe changes nothing
+  (1.46× vs 1.48×), so it is not filesystem latency on the executable.
+- GNU parallel itself is healthy: 32 × `sleep 1` at `-j16` takes 2.19 s
+  (14.6× parallelism), and it dispatches shell builtins at 468 jobs/s.
+
+**Consequence for every speedup this repo reports.** "bedtools at t=16" can
+silently mean "bedtools at t≈1.5", which inflates a quoted speedup by up to ~6×.
+Job 29651772 was cancelled 40 minutes in for exactly this. Two mitigations are
+now in place:
+
+- `bedtools.sh` runs **one** process per pair (`parallel --tagstring` + a single
+  `awk`) instead of three (`bedtools | tail | cut` inside an exported function).
+  Worth ~2.1× consistently: measured 0.81→1.68 (exclusive c599), 1.27→2.86
+  (c516), 0.62→1.17 (shared/sr08) in achieved efficiency.
+- Every bedtools row in `benchmark_cpp_vs_bedtools.py`'s CSV now carries
+  `mean_bedtools_serial_ms` and `mean_bedtools_parallel_eff`, so the achieved
+  parallelism is recorded rather than assumed. **Read it before quoting a
+  speedup.** It is only meaningful at large N; below about N=32 the bedtools leg
+  is a few pairs behind a fixed ~0.5 s of startup and reads ~0.01.
+
+Figure: `paper/figures/threading_supplement.png`
+(`paper/pairwise_scaling/plot_threading_supplement.R`, data
+`docs/data/sweep_threads_p18.csv`).
+
+### The original (2026-05) measurement, kept for the record
 
 From `experiments/bedtools_benchmark/sweep.py --axis threads` at
 N=64 files × 10k intervals/file:
@@ -79,6 +140,15 @@ of the workflow, not of the bedtools binary. Note also the diminishing
 return between t=8 and t=16 (10.3 → 10.1): bedtools wall stops scaling
 because per-pair cost is small enough that GNU parallel's spawn
 overhead and node I/O bandwidth become the bottleneck, not core count.
+
+> **Superseded as a quotable number (2026-08-09).** "~5.7×" is one observation,
+> not the premium. The same measurement on the same workload now reads 1.92× at
+> t=16, and the diagnosis in the paragraph above — spawn overhead becoming the
+> bottleneck — turned out to be right in kind and badly understated in degree:
+> the ceiling is ~123 exec/s and it makes wall time *rise* past t=8. See the
+> updated section at the top of this file. The hammock rows below are from the
+> same 2026-05 run and are p=14, so they are not comparable to the p=18 numbers
+> quoted elsewhere either.
 
 Hammock-cpp at the same N=64, p=14:
 
