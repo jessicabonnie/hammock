@@ -2,10 +2,36 @@
 
 Handoff note for a fresh chat. Written 2026-08-08.
 
-**Status: the defect is established and quantified; the fix is designed, partly
-built, and unfinished.** One corrective job (`29628907`) was submitted the same
-day; if its CSV exists, start from "What job 29628907 settles" below rather than
-re-deriving any of this.
+**Status: the defect is established and quantified; the corrective job has RUN
+and settled the headline. The eleven open items below are still open.**
+
+Job `29628907` completed 2026-08-09 (sr09, Xeon Gold 6448Y, 16 reserved cores,
+59m28s, 140 runs, seed 20260808). Data: `docs/data/fusion_ab_20260808_232422.csv`.
+
+**The control worked.** `post/pre` on `--no-metrics` — byte-identical code —
+landed at **0.96–1.02** on `pair_time` and 0.99–1.00 on wall, so the
+experiment's own measurement error is ±2–4%. Contrast the cross-run comparison
+this replaces, where the same control read 0.65–0.79.
+
+**Settled result** (within-run, paired, one machine, error bar above):
+
+| p | 12 | 14 | 16 | 18 | 20 | 22 | 24 |
+|---|---|---|---|---|---|---|---|
+| fusion speedup, metrics `pair_time` | 1.60× | 1.63× | 1.66× | 1.67× | 1.72× | 1.77× | 1.78× |
+| block cost **before** (metrics÷no_metrics) | 2.90× | 2.65× | 2.67× | 2.65× | 2.69× | 2.98× | 2.97× |
+| block cost **after** | 1.79× | 1.62× | 1.61× | 1.59× | 1.64× | 1.67× | 1.67× |
+
+So: **the fusion made the block's pairwise phase 1.6–1.8× faster, rising with
+precision, and cut the block's cost multiplier from ≈2.7–3.0× to ≈1.6–1.8×.**
+
+This *supersedes* the "2.09× at p=24" figure derived from the 08-04/08-08
+comparison, which was inflated by that run's 1.34× machine factor; the honest
+number is 1.78×. It also supersedes the "≈2.5×" pre-fusion multiplier — measured
+on one machine with a control, the pre-fusion multiplier is ≈2.7–3.0×.
+
+On `comparison_time` (pair + serial write) the same effect reads 0.90 → 0.56
+from p=12 to p=24: at low precision the unchanged `fprintf` loop dominates and
+dilutes it, which is open item 3 in a different guise.
 
 Everything here is evidence and open questions. The only *decisions* taken are
 the four listed under "What was already changed".
