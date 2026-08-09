@@ -584,13 +584,17 @@ def write_text_report(results: List[Dict[str, Any]], path: str) -> None:
             f.write("\n")
 
 
-# Same five fields the pairwise-cost benchmark carries, for the same reason: an
+# The same fields the pairwise-cost benchmark carries, for the same reason: an
 # archived CSV that records neither the hardware nor the allocation cannot be
 # checked for comparability afterwards, and -march=native makes the CPU model
 # load-bearing. get_system_info() is also written to the sibling .txt report,
 # but a report is not joinable and nothing reads it back.
+# binary_version is NOT redundant with git_sha: HAMMOCK_CPP_BIN and --binary both
+# bypass the build tree, so the binary that ran can be a stale site-packages copy
+# while the repo sits at a newer SHA -- the exact case check_binary_version's
+# docstring warns about.
 PROVENANCE_COLS = ["hostname", "cpu_model", "cpu_count", "slurm_job_id", "git_sha",
-                   "corpus_seed"]
+                   "binary_version", "corpus_seed"]
 
 
 def write_csv(results: List[Dict[str, Any]], path: str,
@@ -788,7 +792,10 @@ def main() -> int:
     write_text_report(results, txt_path)
     prov = get_system_info()
     prov["binary_version"] = binary_version
-    prov["corpus_seed"] = args.corpus_seed if args.corpus_seed is not None else "unseeded"
+    # Empty, not the string "unseeded": the column is otherwise an integer, and a
+    # mixed character/numeric column makes a seeded and an unseeded CSV fail to
+    # bind_rows in R. Empty reads as NA in both R and pandas.
+    prov["corpus_seed"] = args.corpus_seed if args.corpus_seed is not None else ""
     write_csv(results, csv_path, prov)
     plot(results, png_path)
     print(f"\nReports: {txt_path}\n         {csv_path}\nFigure:  {png_path}")

@@ -56,6 +56,8 @@ RESULTS_DIR = SCRIPT_DIR / "results"
 ROW_COLS = [
     "corpus", "method", "size_class", "num_intervals", "subB", "rep", "run_id",
     "file_a", "file_b", "jaccard",
+    # Populated only by the --metrics arm; empty in the 3-column shape.
+    "jaccard_ie", "containment_AB", "containment_BA",
     "wall_time", "cpu_time", "max_rss_mb",
     # comparison_time keeps its historical meaning (pair loop + serial write);
     # pair_time/write_time decompose it.
@@ -108,10 +110,22 @@ def parse_hammock_csv(path: str) -> List[Dict[str, Any]]:
             j = r.get("jaccard_similarity") or r.get("jaccard")
             if j is None:
                 continue
+            # Capturing the IE column is the entire point of the --metrics arm.
+            # Without it that arm pays for the 9-column block, discards it, and
+            # writes a file whose only similarity column is register-equality --
+            # verified bit-identical to the no-metrics arm across all 17,100
+            # cells of the 20260808 run, under a filename containing "ie".
+            # Absent (3-column shape) these stay None and reach the CSV empty.
+            j_ie = r.get("jaccard_similarity_ie")
+            c_ab = r.get("containment_AB")
+            c_ba = r.get("containment_BA")
             rows.append({
                 "file_a": os.path.basename(r.get("query") or r.get("file_a") or ""),
                 "file_b": os.path.basename(r.get("reference") or r.get("file_b") or ""),
                 "jaccard": float(j),
+                "jaccard_ie": float(j_ie) if j_ie not in (None, "") else None,
+                "containment_AB": float(c_ab) if c_ab not in (None, "") else None,
+                "containment_BA": float(c_ba) if c_ba not in (None, "") else None,
             })
     return rows
 
@@ -209,7 +223,11 @@ def run_one(
             if key in seen:
                 continue
             seen.add(key)
-            kept.append({"file_a": key[0], "file_b": key[1], "jaccard": row["jaccard"]})
+            # Carry the whole row through rather than rebuilding it from three
+            # named keys: the metrics columns were silently dropped here even
+            # after parse_hammock_csv started reading them, which is how the
+            # --metrics arm came to write a file containing no metrics.
+            kept.append({**row, "file_a": key[0], "file_b": key[1]})
 
         r["pairs"] = kept
         return r
@@ -319,6 +337,9 @@ def main() -> None:
                                 "file_a": pair["file_a"],
                                 "file_b": pair["file_b"],
                                 "jaccard": pair["jaccard"],
+                                "jaccard_ie": pair.get("jaccard_ie"),
+                                "containment_AB": pair.get("containment_AB"),
+                                "containment_BA": pair.get("containment_BA"),
                                 "wall_time": r["wall_time"],
                                 "cpu_time": r["cpu_time"],
                                 "max_rss_mb": r["max_rss_mb"],

@@ -157,7 +157,9 @@ def main() -> int:
         "slurm_job_id": sysinfo.get("slurm_job_id", "none"),
         "binary_version": version,
         "git_sha": sysinfo.get("git_sha", "unknown"),
-        "corpus_seed": args.corpus_seed if args.corpus_seed is not None else "unseeded",
+        # Empty rather than "unseeded" -- see the note in benchmark_cpp_vs_bedtools:
+        # a mixed character/numeric column breaks concatenation in R.
+        "corpus_seed": args.corpus_seed if args.corpus_seed is not None else "",
     }
     if provenance["slurm_job_id"] == "none":
         print("  NOTE: no SLURM allocation -- cores are shared with anything else "
@@ -183,7 +185,12 @@ def main() -> int:
                     r = run_hammock(binary, f1, f2, p, args.threads,
                                     metrics=use_metrics)
                     pair_time = r["pair_time"]
-                    us_per_pair = (pair_time * 1e6 / n_pairs) if pair_time else None
+                    # `is not None`, not truthiness: a pair_time of exactly 0.0 is a
+                    # real measurement at tiny N, and treating it as missing set
+                    # us_per_pair=None which then raised TypeError in the print below
+                    # -- discarding every completed row, since the CSV is written only
+                    # at the end.
+                    us_per_pair = (pair_time * 1e6 / n_pairs) if pair_time is not None else None
                     rows.append({
                         **provenance,
                         "precision": p,
@@ -210,7 +217,7 @@ def main() -> int:
                     print(f"  p={p:2d} run={run_i} {arm:10s} "
                           f"sketch={r['sketch_creation_time']:8.3f}s "
                           f"pair={pair_time:8.4f}s write={r['write_time']:7.4f}s "
-                          f"{us_per_pair:9.2f} us/pair "
+                          f"{us_per_pair:9.2f} us/pair " if us_per_pair is not None else "      n/a us/pair "
                           f"rss={rss_s}", flush=True)
 
     with open(out_path, "w", newline="") as f:
