@@ -41,8 +41,29 @@
 # bedtools was exempt and ran first every time, immediately behind the pre-sort
 # that had just walked every input into page cache.
 #
-# COST: ~4.6 h for 3 replicates. MEASURED, on job 29651772 -- an earlier version
-# of this header said "~1318 s per replicate, so ~1.1 h", which was wrong by 4x.
+# THE BEDTOOLS BASELINE IS THE FRAGILE PART OF THIS JOB. `bedtools jaccard` has
+# no batch mode, so the workflow launches one process per pair -- N^2 of them --
+# and on these nodes process creation caps near 123 exec/s and does not scale
+# with cores. Job 29651772 was cancelled for exactly this: its bedtools leg ran
+# at ~0.8x parallel efficiency, i.e. "t=16" meant "t<1", which would have
+# inflated the reported speedup by roughly 6x.
+#
+# Two mitigations, both in place before this job:
+#   * bedtools.sh now runs ONE process per pair (--tagstring + a single awk)
+#     instead of three. Worth ~2.1x, consistently, on every config tested.
+#   * every bedtools row carries mean_bedtools_parallel_eff, so the achieved
+#     parallelism is recorded rather than assumed. READ IT before quoting any
+#     speedup from this run.
+#
+# The achieved level is node-dependent and cannot be fixed from here -- measured
+# 1.17x (shared/sr08), 1.68x (parallel/exclusive/c599), 2.86x
+# (parallel/cpus-per-task=16/c516), all with the new dispatch. That spread is
+# why the number travels in the CSV instead of being assumed to be ~1.
+#
+# COST: was ~4.6 h for 3 replicates on job 29651772; expect roughly half that
+# now that the bedtools leg is ~2.1x faster per pair. MEASURED there -- an
+# earlier version of this header said "~1318 s per replicate, so ~1.1 h", which
+# was wrong by 4x.
 #
 # The error is worth recording because it is structural, not arithmetic: the job
 # is bedtools' N^2 term at the largest N and essentially nothing else. Measured
