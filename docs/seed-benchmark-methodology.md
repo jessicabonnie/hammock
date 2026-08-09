@@ -251,6 +251,21 @@ machine factor, with a calibration arm.
 
 ## Where things are
 
+**2026-08-09 jobs (the p=18 Figure 3 rebuild).**
+
+| job | what | outcome |
+|---|---|---|
+| 29651772 | Panel A, p=18, synthetic | **cancelled at 40 min** — its bedtools leg ran at ~0.8x parallel efficiency; see the caveat doc |
+| 29651773 | Panel B, Maurano precision frontier, t=16 and t=8 | passed all gates; `docs/precision-frontier-maurano.md` |
+| 29652415 | thread scaling, both tools | Supplementary Fig S1; `docs/data/sweep_threads_p18.csv` |
+| 29652408 | Panel A rerun, fixed baseline | — |
+| 29652432 | hammock-only N = 512/1024/2048 | — |
+
+Diagnostic jobs behind the process-creation finding: 29651845/48/54/58/63/93
+(controls, dispatch variants, GPFS-vs-local binary), 29652388/29652406/29652407
+(dispatch on `parallel` exclusive, `parallel` cpus-per-task=16, and `shared`).
+
+
 - Harness: `experiments/bedtools_benchmark/fusion_ab.py`,
   `sbatch_fusion_ab.sh`; binaries in `build/ab/bin_pre`, `build/ab/bin_post`
   (gitignored; rebuild from `826d7b4^` and `HEAD` if missing — the recipe is in
