@@ -38,3 +38,6 @@ venv/
 
 # Claude Code local settings
 .claude/
+
+# R session debris (Rscript writes this when a plot goes to the default device)
+Rplots.pdf
