@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --exclusive
 #SBATCH --mem=0
-#SBATCH --time=06:00:00
+#SBATCH --time=12:00:00
 #SBATCH --output=experiments/bedtools_benchmark/logs/fig3_panelA_%j.out
 #SBATCH --error=experiments/bedtools_benchmark/logs/fig3_panelA_%j.err
 
@@ -41,9 +41,29 @@
 # bedtools was exempt and ran first every time, immediately behind the pre-sort
 # that had just walked every input into page cache.
 #
-# COST. ~1318 s per replicate including corpus generation (42 s of pure-Python
-# generate_bed_file) and the pre-sort (11 s), so ~1.1 h for 3 replicates. The
-# 6 h limit is slack, not an estimate.
+# COST: ~4.6 h for 3 replicates. MEASURED, on job 29651772 -- an earlier version
+# of this header said "~1318 s per replicate, so ~1.1 h", which was wrong by 4x.
+#
+# The error is worth recording because it is structural, not arithmetic: the job
+# is bedtools' N^2 term at the largest N and essentially nothing else. Measured
+# bedtools wall per replicate at t=16, 10k intervals/file:
+#
+#   N        2     4     8    16    32    64   128   256*   512*
+#   wall  0.86  0.86  1.58  4.47 15.88 61.70 244.8  ~972  ~3859     (* projected)
+#
+# per-doubling ratio 2.83 -> 3.55 -> 3.89 -> 3.97, converging up to the
+# theoretical 4.0. So N=512 alone is ~69% of the job and N in {256,512} is ~92%:
+# every N below 128 is free, and the total is set almost entirely by one cell.
+# Any estimate that does not start from the largest-N bedtools term is wrong.
+#
+# hammock is not the constraint and does not scale the same way -- it goes
+# 7.33 s (N=64) -> 14.75 s (N=128), roughly linear, because at p=18 it is
+# sketching-dominated (O(N) files) rather than pairwise-dominated.
+#
+# --time=12:00:00, not 6. The harness aggregates and writes its CSV only at the
+# END, so a timeout loses the whole run rather than truncating it. 6 h did fit
+# (~1.35 h margin), but the asymmetry between "a few idle hours in the
+# reservation" and "lose 4.6 h of compute and start over" is not close.
 #
 # READING THE OUTPUT. Report within-job ratios. Do not divide an absolute from
 # this job by an absolute from Panel B's -- they are separate allocations and
