@@ -526,6 +526,7 @@ def run_benchmark(
     sub_b_list: List[float],
     metrics_arm: bool = False,
     corpus_seed: Optional[int] = None,
+    with_bedtools: bool = True,
 ) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
     print("\nBenchmark configuration:")
@@ -606,8 +607,8 @@ def run_benchmark(
                 # remove; there was no reason to exempt the baseline from it.
                 # (Symptom in the archived data: bedtools at N=2 reads
                 # 0.772 +/- 0.475 s, CV 61.5%, and is *slower* than at N=4.)
-                for tool, sub_b, use_metrics in _rotate(
-                        [(BEDTOOLS_TOOL, None, None)] + arms, run_i):
+                leg = ([(BEDTOOLS_TOOL, None, None)] if with_bedtools else []) + arms
+                for tool, sub_b, use_metrics in _rotate(leg, run_i):
                     if tool == BEDTOOLS_TOOL:
                         print("  bedtools...", end=" ", flush=True)
                         r = run_bedtools(file1_list_path, file2_list_path, num_threads)
@@ -642,7 +643,10 @@ def run_benchmark(
             # Anchor for every downstream consumer. sub_b alone no longer
             # identifies an arm: the IE arm shares subB=1.0 with the baseline.
             "hammock_arms": [(label, sub_b) for label, sub_b, _ in arms],
-            "bedtools": aggregate(bedtools_runs, bedtools_keys),
+            # None, not aggregate([]), when --no-bedtools: an empty aggregate
+            # would be a dict of Nones that reads as "measured, and missing"
+            # rather than "not run". Consumers branch on the key being None.
+            "bedtools": aggregate(bedtools_runs, bedtools_keys) if with_bedtools else None,
         }
         for tool, runs_for in runs_by_tool.items():
             entry[tool] = aggregate(runs_for, hammock_keys)
@@ -665,6 +669,22 @@ def write_text_report(results: List[Dict[str, Any]], path: str) -> None:
             bt = r["bedtools"]
             f.write(f"num_files={r['num_files']}\n")
             f.write("-" * 80 + "\n")
+            if bt is None:
+                f.write("bedtools: not run (--no-bedtools)\n")
+                for tool, sub_b in arms_of(r):
+                    hm = r[tool]
+                    ie = ", +IE columns" if tool == IE_ARM_TOOL else ""
+                    f.write(f"hammock-cpp Mode B [subB={sub_b:g}, mixed-stride{ie}]:\n")
+                    f.write(f"  wall:    {hm['mean_wall_time']:.3f} +/- {hm['std_wall_time']:.3f} s\n")
+                    f.write(f"  cpu:     {hm['mean_cpu_time']:.3f} s\n")
+                    if hm["mean_max_rss_mb"] is not None:
+                        f.write(f"  max RSS: {hm['mean_max_rss_mb']:.1f} MB\n")
+                    if hm["mean_sketch_creation_time"] is not None:
+                        f.write(f"  sketch:  {hm['mean_sketch_creation_time']:.3f} s\n")
+                    if hm["mean_comparison_time"] is not None:
+                        f.write(f"  pairs:   {hm['mean_comparison_time']:.3f} s\n")
+                f.write("\n")
+                continue
             f.write("bedtools:\n")
             f.write(f"  wall:    {bt['mean_wall_time']:.3f} ± {bt['std_wall_time']:.3f} s "
                     f"(min {bt['min_wall_time']:.3f}, max {bt['max_wall_time']:.3f})\n")
@@ -744,7 +764,7 @@ def write_csv(results: List[Dict[str, Any]], path: str,
         w = csv.writer(f)
         w.writerow(cols)
         for r in results:
-            tools = [("bedtools", "bedtools", "")]
+            tools = [("bedtools", "bedtools", "")] if r.get("bedtools") is not None else []
             for tool, sub_b in arms_of(r):
                 tools.append((tool, tool, f"{sub_b:g}"))
             for tool, key, sub_b_str in tools:
@@ -766,6 +786,12 @@ def plot(results: List[Dict[str, Any]], png_path: str) -> None:
         print("matplotlib not available, skipping plot")
         return
 
+    if any(r.get("bedtools") is None for r in results):
+        # Every panel of this plot is drawn against the bedtools series.
+        # A hammock-only run (--no-bedtools) has no baseline to plot, so
+        # skip rather than emit axes with one curve missing and no note.
+        print("no bedtools arm in these results, skipping the comparison plot")
+        return
     nfiles = [r["num_files"] for r in results]
     bt_wall = [r["bedtools"]["mean_wall_time"] for r in results]
     bt_cpu = [r["bedtools"]["mean_cpu_time"] for r in results]
@@ -843,6 +869,17 @@ def main() -> int:
                              f"block. Labelled '{IE_ARM_TOOL}' so it fails the "
                              "'^hammock_cpp_B' filter the R consumers use, and cannot double "
                              "rows in their joins.")
+    parser.add_argument("--no-bedtools", dest="with_bedtools", action="store_false",
+                        default=True,
+                        help="Skip the bedtools arm entirely. For extending the N axis past "
+                             "the point where an exact baseline is affordable: bedtools is "
+                             "Theta(N^2) with a large constant (~2.2 h per replicate at "
+                             "N=1024, ~8.6 h at N=2048), while hammock is near-linear in "
+                             "this regime because at p=18 it is sketching-dominated. The "
+                             "resulting CSV has NO bedtools rows, so plot_pairwise_scaling.R "
+                             "cannot consume it -- it is for measuring hammock at catalog "
+                             "scale and projecting bedtools from its own fitted curve, "
+                             "which must be labelled as a projection wherever it is shown.")
     parser.add_argument("--test", action="store_true", help="Quick test (small files, few runs)")
     parser.add_argument("--corpus-seed", type=int, default=None,
                         help="Seed the synthetic BED corpus so a re-run draws the "
@@ -912,6 +949,7 @@ def main() -> int:
         sub_b_list=sub_b_list,
         metrics_arm=args.metrics_arm,
         corpus_seed=args.corpus_seed,
+        with_bedtools=args.with_bedtools,
     )
 
     write_text_report(results, txt_path)
