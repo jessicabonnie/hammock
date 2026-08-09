@@ -77,39 +77,34 @@ numbers in `experiments/bedtools_benchmark/RESULTS.md`, which are all
 `--no-metrics`. The benchmark harnesses pass the flag explicitly in both
 directions, so the shape of a timed run no longer depends on a default.
 
-> **The "flat ≈2.5×" figures below are superseded and NOT yet re-measured.**
-> They describe the pre-fusion binary: the metrics arm used to be a union
-> allocation plus a separate cardinality pass on top of the Jaccard pass, and is
-> now one fused pass. Both front ends changed, so `pairwise_cost_by_precision.py`
-> must be re-run before any of these numbers is quoted again. The Python-path
-> measurement that *is* current: the metrics call got 2.2× faster at p=20 and
-> 5.4× at p=24 (see the fused-pass note).
->
-> **`--no-metrics` timings are unaffected — that arm never built a union — but
-> "therefore all of `RESULTS.md`" does NOT follow, and an earlier version of this
-> note said it did.** `RESULTS.md` is *not* all `--no-metrics`: the Aug 4 files
-> t=16 run added a `hammock_ie_B` arm, which is a metrics run, and it is the one
-> published measurement of the recommended configuration. Every number derived
-> from it is pre-fusion and now overstates the block's cost — the **+1.45% of
-> wall at N=512** figure at `RESULTS.md:19-21,:78-83` and `docs/figure3-panel-a-rebuild.md:33`,
-> the **34.8 MB vs 22.7 MB** peak RSS beside it, the "3.4–3.8× within the
-> comparison phase" claim, and the Figure 3 Panel A prose at `paper/outline.md`.
-> The direction is safe (the block is now *cheaper*, so the paper's "the two
-> curves are indistinguishable" conclusion holds a fortiori) but the magnitudes
-> are stale. Everything else in `RESULTS.md` genuinely is `--no-metrics`.
+**Measured cost of the metrics block, settled 2026-08-09** (job 29628907,
+`docs/data/fusion_ab_20260808_232422.csv`; sr09, 16 reserved cores, N=64/side,
+10k intervals, seeded corpus, 5 replicates, arm order permuted per replicate):
 
-Measured cost (`--threads 16`, N=64/side, 10k intervals/file, 5 runs, medians;
-`docs/data/pairwise_cost_by_precision_20260804_164807.csv`): **the estimator
-multiplier is flat at ≈2.5×** — 2.22–2.62 over p=12…24 — and `pair_time` scales
-as Θ(2^p) to within 0.3% (p=14→24 measures 1021× against 1024× predicted). The
-write phase adds a **constant ≈8 ms** regardless of p, six extra `%.17g` fields
-over 4,096 rows. So the *wall-visible* `comparison_time` multiplier is largest at
-low precision (4.4× at p=12, 3.4× at p=14, settling to ≈2.5× from p=16 up) purely
-because that fixed `fprintf` cost dominates a cheap register pass — which is why
-`--verbose` reports `Pairwise:` and `Write:` separately. Do not read the low-p
-multiplier as an estimator effect. In wall-time terms this is small either way:
-the pairwise phase is 0.61% of a p=14 N=512 run. Full table:
-`docs/metrics-by-default.md`.
+| p | 12 | 14 | 16 | 18 | 20 | 22 | 24 |
+|---|---|---|---|---|---|---|---|
+| block cost, `pair_time` (metrics ÷ no_metrics) | 1.79× | 1.62× | 1.61× | 1.59× | 1.64× | 1.67× | 1.67× |
+| what the fusion bought (pre ÷ post, metrics arm) | 1.60× | 1.63× | 1.66× | 1.67× | 1.72× | 1.77× | 1.78× |
+
+The **control** — the same two binaries on `--no-metrics`, which is
+byte-identical code — reads 0.96–1.02, so ±2–4% is this experiment's
+measurement error.
+
+**Do not compare absolute timings across benchmark runs.** The earlier version
+of this section reported a "flat ≈2.5×" multiplier and a 2.09× fusion speedup by
+comparing a 2026-08-04 run to a 2026-08-08 one. The 08-04 run had no SLURM
+allocation and was **1.27–1.53× slower on unchanged code**; the same control
+above read 0.65–0.79 there. Within-run *ratios* survive that (they are paired);
+absolutes do not. Full reasoning, and eleven still-open items:
+`docs/seed-benchmark-methodology.md`.
+
+Two things that section used to claim and should not be repeated. The
+`comparison_time` multiplier is **not** the estimator's cost — at N=512 it is
+now **72% serial `fprintf`** of six extra columns, precision-independent and
+Θ(N²). And peak RSS cannot show the removed per-pair union allocation at all:
+the per-thread sketching sketch is exactly co-sized with it and lives in a
+different phase, so `max(RSS)` is identical either way. Older per-precision
+tables: `docs/metrics-by-default.md` (still carries superseded numbers).
 
 ## Architecture
 
