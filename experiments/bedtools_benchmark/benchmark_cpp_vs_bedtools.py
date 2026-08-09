@@ -550,7 +550,19 @@ def write_text_report(results: List[Dict[str, Any]], path: str) -> None:
             f.write("\n")
 
 
-def write_csv(results: List[Dict[str, Any]], path: str) -> None:
+# Same five fields the pairwise-cost benchmark carries, for the same reason: an
+# archived CSV that records neither the hardware nor the allocation cannot be
+# checked for comparability afterwards, and -march=native makes the CPU model
+# load-bearing. get_system_info() is also written to the sibling .txt report,
+# but a report is not joinable and nothing reads it back.
+PROVENANCE_COLS = ["hostname", "cpu_model", "cpu_count", "slurm_job_id", "git_sha"]
+
+
+def write_csv(results: List[Dict[str, Any]], path: str,
+              provenance: Optional[Dict[str, Any]] = None) -> None:
+    if provenance is None:
+        provenance = get_system_info()
+    prov_row = [provenance.get(c, "unknown") for c in PROVENANCE_COLS]
     cols = [
         "num_files", "num_threads", "precision", "sub_b", "tool",
         "mean_wall_time", "std_wall_time", "min_wall_time", "max_wall_time",
@@ -562,6 +574,8 @@ def write_csv(results: List[Dict[str, Any]], path: str) -> None:
         "mean_pair_time", "std_pair_time",
         "mean_write_time", "std_write_time",
     ]
+    metric_cols = cols[5:]          # resolved from the aggregate dict
+    cols = cols + PROVENANCE_COLS   # resolved from provenance, not from `d`
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(cols)
@@ -572,9 +586,10 @@ def write_csv(results: List[Dict[str, Any]], path: str) -> None:
             for tool, key, sub_b_str in tools:
                 d = r[key]
                 row = [r["num_files"], r["num_threads"], r["precision"], sub_b_str, tool]
-                for c in cols[5:]:
+                for c in metric_cols:
                     v = d.get(c)
                     row.append(f"{v:.6f}" if isinstance(v, float) else ("" if v is None else v))
+                row.extend(prov_row)
                 w.writerow(row)
 
 
@@ -680,7 +695,8 @@ def main() -> int:
     # both bypass find_hammock_cpp()'s search, and the env var is what the
     # sbatch scripts set.
     try:
-        print(f"hammock-cpp version: {check_binary_version(binary)}")
+        binary_version = check_binary_version(binary)
+        print(f"hammock-cpp version: {binary_version}")
     except RuntimeError as e:
         print(str(e), file=sys.stderr)
         return 1
@@ -726,7 +742,9 @@ def main() -> int:
     )
 
     write_text_report(results, txt_path)
-    write_csv(results, csv_path)
+    prov = get_system_info()
+    prov["binary_version"] = binary_version
+    write_csv(results, csv_path, prov)
     plot(results, png_path)
     print(f"\nReports: {txt_path}\n         {csv_path}\nFigure:  {png_path}")
     return 0
