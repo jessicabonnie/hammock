@@ -2,7 +2,7 @@
 
 **Working title (placeholder):** *hammock: HLL-sketch similarity for genomic intervals — faster than bedtools, with biological signal preserved*
 
-**Thesis (one sentence):** hammock — a Python+C++ HyperLogLog-backed interval-set sketcher — ranks pairwise interval-Jaccard in close agreement with bedtools (interval mode, off-diagonal Pearson r = 0.997, Kendall τ = 0.951; its register-equality estimator is *near*-affine in bedtools' set-Jaccard, order-preserving within a fixed cardinality ratio but inverting 2.5% of pairs across ratios, all at ΔJ_bedtools < 0.031) while its inclusion–exclusion column `jaccard_similarity_ie` reproduces bedtools' values outright (MAE 4.3 × 10⁻⁴, r = 0.99999, τ = 0.9947 at p = 21; §3.3), and at high k/w its sequence mode additionally reproduces bedtools' values to four decimals (r ≈ 0.9996, MAE ≈ 0.006), with **interval mode** substantially faster than bedtools at every scale tested (all §4.1 timings are Mode B; no sequence-mode speed comparison has been run); the same sketches independently recover tissue clustering (ARI = 0.91) and are robust to reference-genome choice — so the speed gain comes with, not at the cost of, biological fidelity; hammock extends beyond bedtools capabilities by enabling interval comparisons across references.
+**Thesis (one sentence):** hammock — a Python+C++ HyperLogLog-backed interval-set sketcher — ranks pairwise interval-Jaccard in close agreement with bedtools (interval mode, off-diagonal Pearson r = 0.997, Kendall τ = 0.951; its register-equality estimator is *near*-affine in bedtools' set-Jaccard, order-preserving within a fixed cardinality ratio but inverting 2.5% of pairs across ratios, all at ΔJ_bedtools < 0.031) while its inclusion–exclusion column `jaccard_similarity_ie` reproduces bedtools' values outright (MAE 4.3 × 10⁻⁴, r = 0.99999, τ = 0.9947 at p = 21; §3.3), and at high k/w its sequence mode additionally reproduces bedtools' values to four decimals (r ≈ 0.9996, MAE ≈ 0.006), with **interval mode**'s advantage over bedtools *growing with the number of files* — large at catalog scale, but with a crossover below which exact pairwise computation is competitive or faster (all §4.1 timings are Mode B; no sequence-mode speed comparison has been run; see the speed caveat below); the same sketches independently recover tissue clustering (ARI = 0.91) and are robust to reference-genome choice — so the speed gain comes with, not at the cost of, biological fidelity; hammock extends beyond bedtools capabilities by enabling interval comparisons across references.
 
 ---
 
@@ -306,7 +306,39 @@ The reference-genome invariance result (§4.4) is established on 9 samples — 3
 
 ## 8. Conclusion
 
-hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real DHS data interval mode matches bedtools at off-diagonal r = 0.997 (τ = 0.951) and sequence mode matches it at r = 0.9996 / MAE = 0.006. **Interval mode** runs substantially faster than bedtools at every scale tested (orders of magnitude faster at large catalog size) — every timing result in §4.1 is Mode B, and no sequence-mode speed comparison has been run. (A sequence-mode "faster than bedtools" claim would also need care: for BED input, sequence mode *invokes* `bedtools getfasta`, so extraction cost belongs inside any such comparison.) The same sequence mode sketches recover tissue clustering at ARI = 0.91 directly from peak FASTAs and are robust to reference-genome choice within a species. The combination — speed *plus* near-exact agreement *plus* preserved biology *plus* reference-build invariance — positions sketching as a viable default for large-scale epigenome comparison.
+hammock provides a fast, sketch-based alternative to `bedtools jaccard`. On real DHS data interval mode matches bedtools at off-diagonal r = 0.997 (τ = 0.951) and sequence mode matches it at r = 0.9996 / MAE = 0.006. **Interval mode**'s speed advantage over bedtools grows with the number of files
+being compared, and is large at catalog scale — but it is *not* present at every
+scale. Every timing result in §4.1 is Mode B, and no sequence-mode speed
+comparison has been run.
+
+> **Speed claims are under re-measurement (2026-08-09); do not quote a number
+> from this section yet.** Two problems, both established by measurement:
+>
+> 1. **"Faster at every scale" was false in our own published data.** In
+>    `results/cpp_vs_bedtools_t16_20260808_190441.csv` (p=14, t=16) hammock is
+>    *slower* than bedtools at N = 8, 16 and 32 files (0.71×, 0.69×, 0.87×),
+>    crossing over around N ≈ 64 and reaching 12.35× only at N = 512.
+> 2. **The bedtools baseline is partly measuring process creation, not
+>    bedtools.** `bedtools jaccard` has no batch mode, so a pairwise workflow
+>    launches one process per pair — N² of them — wrapped in GNU `parallel`.
+>    On Rockfish `parallel`-partition nodes that dispatch is capped at roughly
+>    123 exec/s and does not scale with cores: 1024 pairs at `--jobs 16` take
+>    the same wall time as at `--jobs 1` (16.6 s vs 16.6 s). The cap is not
+>    specific to bedtools or to GNU parallel — `md5sum` on local files measures
+>    **0.46×** (slower at 16-way than serial), `xargs -P16` hits the same
+>    ceiling, and copying the binary from GPFS to local NVMe changes nothing
+>    (1.46× vs 1.48×). An archived run reached ~7× on the same code, so the
+>    number is node- and load-dependent rather than a property of either tool.
+>
+> Consequence: "bedtools at t=16" can silently mean "bedtools at t≈1.5", which
+> inflates the reported speedup by up to ~6×. Any headline ratio must state the
+> parallel efficiency bedtools actually achieved in that run, and the fraction
+> of its per-pair cost that is process startup (~8 ms of ~11-16 ms at 10k
+> intervals/file). Note this is still a real workflow difference — hammock
+> launches one process and reads each file once, bedtools launches N² and reads
+> each file N times — but it must be attributed to batch-mode absence rather
+> than to sketching, and it must not be reported as if bedtools had been given
+> 16 working cores. See `docs/bedtools-parallelism-caveat.md`. (A sequence-mode "faster than bedtools" claim would also need care: for BED input, sequence mode *invokes* `bedtools getfasta`, so extraction cost belongs inside any such comparison.) The same sequence mode sketches recover tissue clustering at ARI = 0.91 directly from peak FASTAs and are robust to reference-genome choice within a species. The combination — speed *plus* near-exact agreement *plus* preserved biology *plus* reference-build invariance — positions sketching as a viable default for large-scale epigenome comparison.
 
 ---
 
