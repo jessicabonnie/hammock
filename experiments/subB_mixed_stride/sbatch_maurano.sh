@@ -13,6 +13,18 @@
 # Panel B of paper/figures/pairwise_scaling.png: the Maurano subB tradeoff and
 # its bedtools baseline.
 #
+# RE-RUN 2026-08-09, third time, and this one is the baseline fix. Every prior
+# Maurano bedtools number in this repo -- the June 3 CSV that docs/data still
+# ships and the 2026-08-08 rerun that was never promoted -- was taken with the
+# three-processes-per-pair bedtools.sh (bedtools | cut | awk per pair). Dropping
+# that to one process cut bedtools' CPU 85.5 s -> 62.9 s and its wall 11.09 s ->
+# 8.26 s on this exact corpus, i.e. the published "1.16x faster than bedtools"
+# bar is measured against a baseline carrying 1.34x of our own harness overhead.
+# Note bedtools was NOT parallelism-starved here (7.6 of 8 cores busy, before and
+# after) -- Maurano pairs are ~150 ms of real work, so process launch is not the
+# bottleneck it is on the 10k-interval synthetic corpus. The old number was
+# simply doing more work, not scaling worse.
+#
 # Why re-run something the code change did not touch. Both legs are --no-metrics
 # throughout, so the fused pairwise pass cannot have moved them. What is wrong
 # with the existing data is where it was taken: sacct has no job for either leg,
@@ -33,7 +45,10 @@
 set -euo pipefail
 cd /home/jbonnie1/interval_sketch/hammock_claude
 
-ml bedtools2
+# bedtools.sh pins bedtools/2.30.0 itself and is fatal if the module will not
+# load, so do not `ml bedtools2` here -- that resolves to 2.27.1, whose jaccard
+# union column is order-dependent (93 of 190 Maurano pairs had J(A,B) != J(B,A);
+# 2.30.0 has none). Panel A was measured on 2.30.0; this must match it.
 ml parallel
 mkdir -p experiments/subB_mixed_stride/logs
 
