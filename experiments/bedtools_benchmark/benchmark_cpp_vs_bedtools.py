@@ -386,6 +386,11 @@ def tool_name_for_subb(sub_b: float) -> str:
 # no R changes at all.
 IE_ARM_TOOL = "hammock_ie_B"
 
+# Sentinel arm label for the bedtools leg. It is not a CSV tool name (bedtools
+# columns are written from `entry["bedtools"]`, a separate key); it exists only
+# so bedtools can ride the same _rotate as the hammock arms.
+BEDTOOLS_TOOL = "bedtools"
+
 
 def arms_for(sub_b_list: List[float], metrics_arm: bool):
     """(tool_label, sub_b, use_metrics) per hammock arm in a run.
@@ -503,25 +508,34 @@ def run_benchmark(
                     f.write("\n".join(file2_list) + "\n")
 
                 print(f"  sort:    {sort_time:.2f}s wall (parallel, {sort_workers} workers)")
-                print("  bedtools...", end=" ", flush=True)
-                bt = run_bedtools(file1_list_path, file2_list_path, num_threads)
-                bt["sort_time"] = sort_time
-                bedtools_runs.append(bt)
-                rss = bt["max_rss_mb"]
-                rss_str = f"{rss:.1f} MB" if rss is not None else "n/a"
-                print(f"{bt['wall_time']:.2f}s wall, {rss_str} max RSS")
 
-                for tool, sub_b, use_metrics in _rotate(arms, run_i):
-                    shown = f"subB={sub_b:g}" + (" +IE" if use_metrics else "")
-                    print(f"  hammock-cpp Mode B {shown}...", end=" ", flush=True)
-                    hm = run_hammock(binary, file1_list_path, file2_list_path,
-                                     precision, num_threads, sub_b=sub_b,
-                                     metrics=use_metrics)
-                    hm["sort_time"] = sort_time
-                    runs_by_tool[tool].append(hm)
-                    rss = hm["max_rss_mb"]
+                # bedtools rotates with the hammock arms rather than running
+                # first every time. It used to sit permanently in position 0,
+                # immediately after the pre-sort had just walked every input
+                # file and left it in page cache -- so bedtools alone was
+                # measured against a warm cache while the hammock arms followed
+                # it. That is the same confound _rotate already exists to
+                # remove; there was no reason to exempt the baseline from it.
+                # (Symptom in the archived data: bedtools at N=2 reads
+                # 0.772 +/- 0.475 s, CV 61.5%, and is *slower* than at N=4.)
+                for tool, sub_b, use_metrics in _rotate(
+                        [(BEDTOOLS_TOOL, None, None)] + arms, run_i):
+                    if tool == BEDTOOLS_TOOL:
+                        print("  bedtools...", end=" ", flush=True)
+                        r = run_bedtools(file1_list_path, file2_list_path, num_threads)
+                        r["sort_time"] = sort_time
+                        bedtools_runs.append(r)
+                    else:
+                        shown = f"subB={sub_b:g}" + (" +IE" if use_metrics else "")
+                        print(f"  hammock-cpp Mode B {shown}...", end=" ", flush=True)
+                        r = run_hammock(binary, file1_list_path, file2_list_path,
+                                        precision, num_threads, sub_b=sub_b,
+                                        metrics=use_metrics)
+                        r["sort_time"] = sort_time
+                        runs_by_tool[tool].append(r)
+                    rss = r["max_rss_mb"]
                     rss_str = f"{rss:.1f} MB" if rss is not None else "n/a"
-                    print(f"{hm['wall_time']:.2f}s wall, {rss_str} max RSS")
+                    print(f"{r['wall_time']:.2f}s wall, {rss_str} max RSS")
 
         entry: Dict[str, Any] = {
             "num_files": num_files,
