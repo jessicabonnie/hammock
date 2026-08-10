@@ -229,9 +229,22 @@ establishing. Read the seed before re-litigating the question.
   unordered Maurano pairs had J(A,B) ≠ J(B,A) in what is supposed to be the
   *exact* reference. Magnitude is small (max |Δ| 1.3×10⁻⁵, mean 5.6×10⁻⁷) so no
   archived conclusion changes, but it is 6.4% of the IE MAE at p=23 in the worst
-  pair — do not use pre-2026-08-09 bedtools columns, including
-  `docs/data/maurano_bedtools_ref.tsv`, to argue about differences at the 10⁻⁵
-  level.
+  pair — do not use pre-2026-08-09 bedtools columns to argue about differences
+  at the 10⁻⁵ level.
+
+  **`docs/data/maurano_bedtools_ref.tsv` specifically is exempt from that
+  warning, verified 2026-08-10, not just asserted.** Its actual provenance was
+  unknown — it turned out to be a byte-identical carry-forward of a file dated
+  2025-07-21 in the pre-refactor repo, with no record of which bedtools build
+  produced it, and it had never been checked against the warning above despite
+  being named in it. Regenerated it independently against the pinned 2.30.0
+  binary (`bedtools jaccard` over all 400 ordered pairs on the same 20 Maurano
+  BEDs) and diffed every column: **0/400 rows differ, 0/190 unique pairs
+  asymmetric** — bit-identical to the checked-in file, `md5sum` included.
+  Whatever produced the original file, it did not exhibit the 2.27.1
+  order-dependent-union bug. So this specific file is fine to use at the 10⁻⁵
+  level too; the warning above still applies to other pre-2026-08-09 bedtools
+  columns whose provenance hasn't been checked the same way.
 
 - `docs/seed-mode-d-threading.md` — the *default* is fixed (Mode D → 1 thread,
   v0.6.1), but Mode D still runs on one core. Still open: making it genuinely
