@@ -1,38 +1,9 @@
-> # ⛔ EVERY BEDTOOLS-RELATIVE NUMBER BELOW IS SUPERSEDED (2026-08-09)
->
-> **Do not quote any speedup-over-bedtools figure from this file.** Four defects
-> were found in the benchmark harness in one day, **all inflating the bedtools
-> baseline, i.e. all in hammock's favour**:
->
-> 1. `bedtools.sh` ran three processes per pair instead of one (~2.1×).
-> 2. bedtools was pinned to 2.27.1, whose jaccard union is order-dependent.
-> 3. `ml` module loads ran inside the timed region.
-> 4. **The bedtools module exports `LD_LIBRARY_PATH` with 17 directories, of
->    which bedtools uses 4. The dynamic linker searches the other 13 — on GPFS —
->    on every `execve`, and a pairwise workflow is N² execs.** This alone
->    inflated bedtools 2.4–2.8×.
->
-> Measured effect at N=512: bedtools 1978 s → 716 s. **The headline speedup falls
-> from 27.61× to roughly 10.2×.** That number was itself provisional and has
-> since moved again: a small-N noise bug in the same rerun was found and fixed,
-> landing at **9.21× at N=512 on the register-equality (`jaccard_similarity`)
-> column** — see Supplementary Figure S9. As of the 2026-08-10 figure
-> simplification, main-text **Figure 3 itself reports `jaccard_similarity_ie`
-> only, landing at 8.4× at N=512** — see the Figure 3 section below, which is
-> current.
->
-> Also retracted: the "process creation caps near **123 exec/s** and does not
-> scale with cores" mechanism. Measured 16-way: **364 exec/s** clean, 196 slow.
-> The `md5sum` control that appeared to confirm it ran in the same polluted
-> environment, so it confirmed nothing.
->
-> **What survives:** anything hammock-internal — mixed-stride vs hash-threshold,
-> the precision sweeps, the fused-pass A/B, Mode D threading. Those divide two
-> hammock numbers measured in one run and are unaffected.
->
-> Status and worklist: `docs/bedtools-baseline-retraction.md`.
-
 This document used for brainstorming and drafting. For current outline with all draft text see: https://www.overleaf.com/read/kggqsxtxrbdy#4685d0
+
+> Every bedtools-relative number below is current as of 2026-08-10 and
+> measured on the corrected benchmark harness. Full bug-hunt and
+> re-measurement history: `docs/bedtools-baseline-retraction.md`.
+
 ## Thesis
 
 Modern interval collections are limited by two boundaries: the computational cost of comparing every dataset and the coordinate dependence that prevents comparison across references. Hammock creates reusable sketches of either interval coordinates or interval-derived sequences, expanding comparison within and across those boundaries while preserving useful biological structure.
@@ -93,12 +64,12 @@ This section should distinguish three sources of the interval-mode speedup:
 Mixed-stride should be presented as a methodological contribution within the interval-mode scaling result, not as an unrelated implementation optimization. The main text should briefly contrast it with hash-threshold subsampling; the full comparison among mixed-stride, hash-threshold, and single-hash strategies can remain supplementary.
 
 - **Synthetic scaling result (Figure 3A):** each benchmark configuration comprises two disjoint collections of N files compared as a full cross product, so the number of comparisons grows as N^{2}, reaching 262,144 pairs at N=512. Because hammock constructs one reusable sketch per file while the BEDTools workflow repeatedly processes the underlying interval files, the performance advantage of sketch reuse increases with collection size.
-- **Sketch-comparison output cost (Figure 3A):** ~~the lower curves separate the three-column sketch-comparison output used for timing from the analysis-oriented `+IE` output... at N=512, `+IE` increases total wall time by only 1.45%... The two total-time curves are therefore indistinguishable, and only the three-column total is drawn.~~ ~~Corrected 2026-08-09, numbers refreshed 2026-08-10. First: that 1.45%/"indistinguishable" figure was measured at p=14... Second: both total-wall curves are now actually plotted (not just the three-column one)... labelled "hammock total" and "hammock total (+IE)"... with the N=512 annotation stating both speedups over BEDTools (9.2× / 8.4×).~~ **Superseded again, same day (figure simplified).** That two-curve design was itself an intermediate state. As of the 2026-08-10 simplification, Figure 3A plots `jaccard_similarity_ie` exclusively — there is only one hammock curve ("hammock total") and one N=512 annotation (8.4×). The register-equality curve and the paired 9.2×/8.4× annotation moved to Supplementary Figure S9, not deleted. The comparison-phase-cost numbers themselves are unaffected by the simplification (1.64–1.94× at N≥64, total wall +10.0% at N=512 vs +0.7% at N=32) since they describe the +IE arm, which is what's still plotted.
-- **Real-data timing result (Figure 3B):** ~~on the 20 Maurano fetal-tissue DNase hypersensitivity BED files, hammock is faster than the parallelized BEDTools workflow even without subsampling.~~ ~~Superseded 2026-08-09: parity or slightly behind, 1.02× at 16 threads and 0.92× at 8 (job 29651773).~~ ~~Superseded again, same day, by the fully-fixed harness: `docs/data/maurano_bedtools.csv` + `maurano_subB_summary.csv`, unsubsampled hammock is 1.16× slower than BEDTools on this corpus... subB=0.1 is 1.58× faster, subB=0.01 is 2.49× faster.~~ **Superseded again, 2026-08-10 (figure simplified):** those 1.16×/1.58×/2.49× numbers are the register-equality (`--no-metrics`) arm (`maurano_subB_summary.csv`), which Panel B no longer plots — they are preserved in Supplementary Figure S9 instead. The current Panel B reads the `jaccard_similarity_ie` arm (`maurano_subB_ie_summary.csv`, costlier since it computes the full metrics block): unsubsampled hammock is **1.33× slower** than BEDTools, subB=0.1 is **1.41× faster**, subB=0.01 is **2.04× faster**. Still the expected shape — N=20 is far below the N≈64 crossover Panel A shows.
-- **Mixed-stride result (Figure 3B):** `subB=0.1` and `subB=0.01` further reduce runtime while producing little change relative to exact BEDTools truth (not, as an earlier draft of this bullet said, relative to hammock's own unsubsampled similarity estimates — see the next bullet).
-- **Definition of the plotted approximation change (Figure 3B):** ~~\Delta J is defined per pair as the difference between a subsampled run's `jaccard_similarity` and the mean `jaccard_similarity` from hammock's own unsubsampled (`subB=1.0`) runs on that same pair. Mean |\Delta J| is the mean absolute value over the 190 pairs.~~ **Superseded 2026-08-10 (figure simplified):** Panel B's accuracy label is no longer mean |ΔJ| against hammock's own baseline. It is now the MAE of `jaccard_similarity_ie` against **exact BEDTools** Jaccard, over the same 190 unique off-diagonal pairs (self-comparisons excluded). The ΔJ-against-own-baseline framing above, and its underlying `jaccard_similarity` (register-equality) numbers, are preserved as-is in Supplementary Figure S9 rather than being recomputed for the new metric; see that figure's caption for the corresponding definition. (An earlier draft reported the pair count as "950 pair-by-replicate comparisons (190 pairs \times 5 replicates)": the five replicates are byte-identical — hammock is deterministic given the seed — so the effective n is 190, not 950; this correction still applies to whichever quantity is being averaged.)
+- **Sketch-comparison output cost (Figure 3A):** Figure 3A plots `jaccard_similarity_ie` exclusively — one hammock curve ("hammock total") and one N=512 annotation (8.4×). The register-equality curve and its own N=512 number (9.2×) are in Supplementary Figure S9 instead. The comparison phase costs 1.64–1.94× more than sketching for N≥64, growing total wall by +10.0% at N=512 against +0.7% at N=32.
+- **Real-data timing result (Figure 3B):** Panel B reads the `jaccard_similarity_ie` arm (costlier than register-equality, since it computes the full metrics block): unsubsampled hammock is **1.33× slower** than BEDTools, subB=0.1 is **1.41× faster**, subB=0.01 is **2.04× faster**. The register-equality equivalents (1.16× slower / 1.58× / 2.49×) are in Supplementary Figure S9. Still the expected shape — N=20 is far below the N≈64 crossover Panel A shows.
+- **Mixed-stride result (Figure 3B):** `subB=0.1` and `subB=0.01` further reduce runtime while producing little change relative to exact BEDTools truth.
+- **Definition of the plotted approximation change (Figure 3B):** Panel B's accuracy label is the MAE of `jaccard_similarity_ie` against **exact BEDTools** Jaccard, over 190 unique off-diagonal pairs (self-comparisons excluded; the five replicates are byte-identical, so the effective n is 190, not 950). The register-equality equivalent (mean |ΔJ| against hammock's own unsubsampled baseline) is in Supplementary Figure S9.
 
-~~**NOTE: this figure is likely to change.**~~ **Resolved 2026-08-10.** Both panels are now measured on the LD_LIBRARY_PATH-fixed, rotated-arm harness (see `docs/bedtools-baseline-retraction.md`'s "Re-measured and gated" section for the full gate history superseding the process-creation-cap story this note used to tell), and Panel A's small-N cells (N≤32) — which an n=3 draw had gotten backwards, showing hammock faster than bedtools at N=2 — are now corrected by a same-node, 20-replicate rerun (job 29671317). bedtools reliably wins below N≈64; the crossover falls between N=32 and N=64.
+Both panels are measured on the corrected, rotated-arm benchmark harness (`docs/bedtools-baseline-retraction.md`); bedtools reliably wins below N≈64, with the crossover between N=32 and N=64.
 
 ![Figure 3](figures/pairwise_scaling.png)
 
@@ -227,10 +198,9 @@ Explain determinism, seed handling, expected sampling density, computational cos
   - Relative error ≈ 0.6/(J√m), hence uninformative below J ≈ a few/√m — state as the column's domain of validity.
 - **Cost.**
   - *"Register-equality is a ratio of two register counts and costs a single pass over the register arrays; inclusion–exclusion additionally requires a union sketch and cardinality estimates per pair, so its cost scales as O(N²·2^p) against O(N·M) for sketch construction."*
-  - Measured overhead, same job and binary, 16 threads, p = 14 (`docs/data/cpp_vs_bedtools_t16_20260804_172242.csv`): the comparison *phase* costs 2.9–3.8× more for N ≥ 32, but that phase is only 0.4–0.5% of wall time, so **total wall rises 1.45% at N = 512** (54.15 s against 53.38 s) and stays below 0.6% at every smaller N. Peak RSS 34.8 MB against 22.7 MB.
-    - *(Corrected 2026-08-09. This read "not measurable at N = 20, +2.4% at N = 100, +10.4% at N = 512". None of the three was sourced — that CSV has no N=20 or N=100 row — and the N=512 value contradicted the 1.45% recorded above under "Sketch-comparison output cost" and in `docs/figure3-panel-a-rebuild.md`. The old number is consistent with a pre-fusion measurement: the 2026-08-08 fused register pass bought 2.2–5.4× on exactly this path.)*
-  - *"The overhead is therefore negligible in wall time across the entire measured range, and the choice between the two columns can be made on statistical grounds rather than cost."* Note the phase ratio does grow with N, so the phase must eventually dominate; it has not done so by N = 512. (This bullet previously concluded the overhead was "material at the catalog scale", which followed from the +10.4% number corrected above.)
-  - ~~State explicitly which configuration Figure 3 benchmarks, so the speed claim and the reporting recommendation refer to the same thing.~~ **Done, 2026-08-09**: see the Figure 3 caption above.
+  - Measured overhead, 16 threads, p = 18 (`docs/data/cpp_vs_bedtools_t16_p18.csv`, job 29671317): the comparison *phase* costs **1.64–1.94×** more for N ≥ 64, and that phase is **1.0% of wall at N = 32 rising to 14.1% at N = 512**, so **total wall rises 10.0% at N = 512** (78.08 s against 70.97 s) — 0.7% at N = 32, 2.6% at N = 128, 5.3% at N = 256. Peak RSS 278 MB against 266 MB.
+  - *"The overhead is modest but no longer negligible at the default precision: it is under 1% up to N = 32 and 8.5% at N = 512, and it grows with N because the phase is Θ(N²) against Θ(N) sketching."* The crossover where the comparison phase dominates is visible in this data rather than merely inferred — its share passes 15% by N = 512 — so the choice between the columns can still be made on statistical grounds at realistic N, but not asymptotically.
+  - Figure 3 plots `jaccard_similarity_ie` only, so the speed claim and the reporting recommendation refer to literally the same run. The register-equality comparison is Supplementary Figure S9.
 - **Why not the joint maximum-likelihood estimator.** *"Ertl's joint MLE is the lower-variance choice for HyperLogLog Jaccard, but it requires the joint register histogram of the pair, which hammock's sketch interface does not expose; the inclusion–exclusion form is recoverable from the containment estimates already computed and needs no additional interface."* Pre-empts the obvious reviewer question.
 - **Which column to report.** *"We report* `jaccard_similarity_ie` *for any comparison of magnitude, and for any comparison spanning different set sizes;* `jaccard_similarity` *is retained as the low-cost default."*
   - One clause on the exception (register-equality ranks better below J ≈ 0.05 at p ≤ 20 among comparably-sized pairs, and one step of precision removes the advantage), with the quantification deferred to a supplementary note rather than carried in Methods.
