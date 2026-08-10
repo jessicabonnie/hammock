@@ -80,22 +80,43 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 | hammock (subB = 0.1, high) | 5.20 | 2.13× | 9×10⁻⁴ |
 | hammock (subB = 0.01, max) | 3.64 | 3.05× | 2×10⁻³ |
 
-**Synthetic scaling (10k intervals/file, p=14, 16 threads for both tools — hammock `-t 16`, bedtools 16-way GNU parallel):**
+**Synthetic scaling (10k intervals/file, p=18 — the CLI default — 16 threads for both tools; hammock `-t 16`, bedtools 16-way GNU parallel), subB=1.0:**
 
-| N files | bedtools | hammock (subB=0.1) | speedup | hammock (subB=1.0) | speedup |
-|---|---|---|---|---|---|
-| 64 | 10.7 s | 1.6 s | ~7× | 6.7 s | 1.6× |
-| 128 | 41 s | 3.2 s | ~13× | 13.3 s | 3.1× |
-| 256 | 166 s | 6.4 s | ~26× | 26.6 s | 6.3× |
-| **512** | **677 s** | **12.9 s** | **~52×** | **53.4 s** | **12.7×** |
+| N files | bedtools | hammock | speedup | bedtools cores busy |
+|---|---|---|---|---|
+| 8 | 1.10 s | 0.96 s | **1.15×** | 0.6 of 16 |
+| 32 | 8.38 s | 3.85 s | 2.18× | 1.5 of 16 |
+| 64 | 31.56 s | 7.74 s | 4.08× | 1.6 of 16 |
+| 128 | 124.46 s | 15.79 s | 7.88× | 1.6 of 16 |
+| 256 | 495.37 s | 33.20 s | 14.92× | 1.6 of 16 |
+| **512** | **1978.35 s** | **71.65 s** | **27.61×** | **1.6 of 16** |
 
-> Both hammock columns are shown because the two get confused: the headline
-> ~50× is the **subB=0.1** arm, while Figure 3 Panel A plots **subB=1.0**.
-> Source: `docs/data/cpp_vs_bedtools_t16_20260804_172242.csv` (job 29552415,
-> Aug 4 2026); the earlier May 12 run gave ~53×/13.1× and is retained.
+> Source: `docs/data/cpp_vs_bedtools_t16_p18.csv` (job 29652408, node c595, one
+> exclusive allocation, 2026-08-09). **This replaces the p=14 table**, which
+> reported 12.7× at N=512 for the same arm; the difference is precision, not an
+> improvement, and the two must never be quoted side by side.
+>
+> **The `subB=0.1` arm is deliberately absent.** The familiar "~52× at N=512"
+> is a p=14 subB=0.1 number and there is no p=18 measurement of that arm at
+> scale, so quoting it beside this table would splice two precisions. Figure 3
+> Panel A plots subB=1.0; subsampling is Panel B's axis.
+>
+> The last column is why the speedup is defensible rather than an artifact of a
+> hobbled baseline: bedtools converted ~1.6 of its 16 cores into throughput on
+> this corpus. Framed at bedtools' *own* thread optimum (t=8) instead of an
+> equal core budget, N=512 reads **16.1×** rather than 27.61× — still large, so
+> the conclusion survives either framing. See Supplementary Fig S6, and note
+> the effect is workload-dependent: on Maurano, where a pair is ~150 ms of real
+> work rather than ~5 ms, bedtools holds 7.6 of 8 cores.
 
 Two things to communicate in this section:
-1. **hammock is faster than bedtools at every regime tested** — modestly faster on small real corpora (1.16× with no subsampling, up to ~3× at subB=0.01), dramatically faster as catalog size grows (≈52× at N=512 files with subB=0.1, ≈13× without subsampling).
+1. **The advantage is a crossover, not a constant.** hammock's cost is dominated
+   by sketching, which is Θ(N); bedtools re-reads every file for every pair, which
+   is Θ(N²). Below N ≈ 8 the two are within ~15% of each other and the ordering
+   is not robust; from N ≈ 32 the gap opens monotonically to 27.6× at N=512 and a
+   *measured* 72× at N=2048 against a projected bedtools (Supplementary Fig S7).
+   **Do not write "faster at every scale tested"** — at N=8 the margin is 1.15×,
+   and at N=20 on Maurano at p=18 hammock is marginally *slower* (0.98× at t=16).
 2. **The speedup is not bought with accuracy loss.** Subsampling changes hammock's own per-pair Jaccard by < 2×10⁻³ vs its no-subsample output, so the gap to bedtools is statistically indistinguishable across subsampling settings — the speed knob is effectively "free."
 
 **Fig 1 (headline):** Grouped wall-time bars — bedtools vs hammock at no-subsample / subB=0.1 / subB=0.01 (mixed-stride) on the Maurano corpus. Each hammock bar is annotated with its speedup over bedtools and the mean *absolute* per-pair Jaccard change vs hammock's own no-subsample output (mean |ΔJ| ≤ 2×10⁻³; magnitude only — the absolute value is taken before averaging, so it cannot show direction, and the no-subsample bar is the baseline, not a zero), carrying "faster at no accuracy cost" in a single view. (Additional supporting figure: Fig S5.)
