@@ -27,7 +27,14 @@ from typing import Any, Dict, List
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(SCRIPT_DIR.parent / "bedtools_benchmark"))
-from benchmark_cpp_vs_bedtools import run_with_time  # noqa: E402
+# run_bedtools(), not the bare run_with_time(): it resolves the bedtools
+# binary once and exports a minimal, ldd-derived LD_LIBRARY_PATH. Without it,
+# the bedtools module's LD_LIBRARY_PATH (17 dirs, 4 used) gets searched by the
+# dynamic linker on every one of 190 execs per replicate, inflating this
+# baseline the same way it inflated Panel A 2.4-2.8x (see
+# docs/bedtools-baseline-retraction.md). This file used to call run_with_time
+# directly and bypassed that fix entirely.
+from benchmark_cpp_vs_bedtools import run_bedtools  # noqa: E402
 
 DATA_DIR = SCRIPT_DIR / "data"
 SORTED_DIR = DATA_DIR / "maurano_sorted"
@@ -95,10 +102,9 @@ def run_one_batch(sorted_beds: List[Path], threads: int,
         for p in sorted_beds:
             fh.write(str(p) + "\n")
     try:
-        cmd = ["bash", str(BEDTOOLS_SCRIPT), listfile, listfile, str(threads)]
         if verbose:
-            print("  +", " ".join(cmd), file=sys.stderr)
-        r = run_with_time(cmd)
+            print(f"  + run_bedtools({listfile}, {listfile}, {threads})", file=sys.stderr)
+        r = run_bedtools(listfile, listfile, threads)
         pairs_dict = parse_bedtools_output(r["stdout"])
         r["pairs"] = [{"file_a": k[0], "file_b": k[1], "jaccard": v}
                       for k, v in pairs_dict.items()]

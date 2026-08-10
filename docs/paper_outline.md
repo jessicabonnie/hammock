@@ -27,6 +27,8 @@
 >
 > Status and worklist: `docs/bedtools-baseline-retraction.md`.
 
+> **Update, 2026-08-09 23:5x:** Figure 3 (both panels) has been re-measured on the fully-fixed harness and its numbers in this file are now current — 10.17× at N=512, 1.16× slower/1.58×/2.49× on Maurano. Everything else this banner warns about (S6/S7/S8, the RESULTS.md files) is still retracted. See `docs/bedtools-baseline-retraction.md` for the ledger.
+
 # Paper outline: hammock — fast, accurate, biology-preserving interval-set sketching
 
 **Working title (placeholder):** *hammock: HLL-sketch similarity for genomic intervals — faster than bedtools, with biological signal preserved*
@@ -104,64 +106,79 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 
 | tool / setting | wall median (s) | speedup over bedtools | mean \|ΔJ\| vs hammock no-subsample |
 |---|---|---|---|
-| bedtools | 7.34 | 1.00× (ref) | — |
-| hammock (no subsample) | 8.19 | **0.90× — i.e. 1.12× *slower*** | 0 |
-| hammock (subB = 0.1, high) | 4.47 | 1.64× | 9.4×10⁻⁴ |
-| hammock (subB = 0.01, max) | 2.84 | 2.58× | 1.5×10⁻³ |
+| bedtools | 7.07 | 1.00× (ref) | — |
+| hammock (no subsample) | 8.19 | **0.86× — i.e. 1.16× *slower*** | 0 |
+| hammock (subB = 0.1, high) | 4.47 | 1.58× | 9.4×10⁻⁴ |
+| hammock (subB = 0.01, max) | 2.84 | 2.49× | 1.5×10⁻³ |
 
-> **Every row here is new (job 29652709, node sr06, 2026-08-09) and every one
-> replaces a superseded number.** The previous table read 11.08 / 9.52 / 5.20 /
-> 3.64 s for 1.16× / 2.13× / 3.05×. The baseline moved because `bedtools.sh` was
-> running *three* processes per pair (bedtools | cut | awk) instead of one; that
-> alone made the reference 1.51× faster. Hammock's own rows also improved
-> ~1.16–1.28× (fused pairwise pass, and a reserved allocation rather than a
-> shared interactive node), but not enough to keep the ratio.
+> **Re-measured 2026-08-09 22:51 on the fully fixed harness**
+> (`run_bedtools_maurano.py`, which previously called `run_with_time` directly
+> and bypassed the LD_LIBRARY_PATH fix below). bedtools moves 7.34 s → 7.07 s
+> — a small further correction, consistent in direction with Panel A's larger
+> one but diluted here because a Maurano pair (~150 ms real work) is ~30× more
+> expensive than a synthetic pair, so the per-exec linker tax is a smaller
+> fraction of it. Full chain from the original number: 11.08 s (3 processes per
+> pair) → 7.34 s (1 process per pair) → 7.07 s (minimal `LD_LIBRARY_PATH`).
 >
-> **The consequence is a retraction: hammock does not beat bedtools at
-> subB = 1.0 on this corpus.** It is 1.12× slower. Two independent jobs agree —
-> the precision sweep (job 29651773) measures 0.92× for the same configuration —
-> so this is a real effect, not run-to-run noise. It is also the *expected*
-> effect: N = 20 is well below the N ≈ 64 crossover, so sketching cost has not
-> been amortised over enough pairs. Subsampling is what makes hammock win on a
-> corpus this small, and scale is what makes it win without subsampling.
+> **hammock does not beat bedtools at subB = 1.0 on this corpus — 1.16× slower,
+> not 1.12×.** Consistent with the precision sweep's independent 0.92× at t=8
+> (job 29651773, not yet re-measured with the LD_LIBRARY_PATH fix, so treat that
+> figure as a lower bound on how slow). Expected: N = 20 is well below the
+> N ≈ 64 crossover in Panel A below. Subsampling is what makes hammock win on a
+> corpus this small; scale is what makes it win without subsampling.
 
 **Synthetic scaling (10k intervals/file, p=18 — the CLI default — 16 threads for both tools; hammock `-t 16`, bedtools 16-way GNU parallel), subB=1.0:**
 
 | N files | bedtools | hammock | speedup | bedtools cores busy |
 |---|---|---|---|---|
-| 8 | 1.10 s | 0.96 s | **1.15×** | 0.6 of 16 |
-| 32 | 8.38 s | 3.85 s | 2.18× | 1.5 of 16 |
-| 64 | 31.56 s | 7.74 s | 4.08× | 1.6 of 16 |
-| 128 | 124.46 s | 15.79 s | 7.88× | 1.6 of 16 |
-| 256 | 495.37 s | 33.20 s | 14.92× | 1.6 of 16 |
-| **512** | **1978.35 s** | **71.65 s** | **27.61×** | **1.6 of 16** |
+| 8 | 0.34 s | 0.96 s | 0.35× (below the noise floor, see below) | 2.3 of 16 |
+| 32 | 3.35 s | 3.83 s | 0.87× | 3.6 of 16 |
+| 64 | 12.32 s | 7.72 s | 1.60× | 3.9 of 16 |
+| 128 | 48.13 s | 15.70 s | 3.07× | 4.0 of 16 |
+| 256 | 186.38 s | 33.04 s | 5.64× | 4.1 of 16 |
+| **512** | **714.77 s** | **70.32 s** | **10.17×** | **4.3 of 16** |
 
-> Source: `docs/data/cpp_vs_bedtools_t16_p18.csv` (job 29652408, node c595, one
-> exclusive allocation, 2026-08-09). **This replaces the p=14 table**, which
-> reported 12.7× at N=512 for the same arm; the difference is precision, not an
-> improvement, and the two must never be quoted side by side.
+> **Source: `docs/data/cpp_vs_bedtools_t16_p18.csv` (job 29656140, node c531,
+> 2026-08-09 21:38 — 23:43), the fully-fixed harness. This table replaces one
+> that read 27.61× at N=512, which was wrong, not merely superseded by a
+> precision change like the p=14→p=18 move before it.** The bedtools module's
+> `LD_LIBRARY_PATH` carries 17 directories of which bedtools uses 4; `ld.so`
+> searched the other unused ones — over GPFS — on every one of N² process
+> launches. Fixing it moved bedtools from 1978.35 s to 714.77 s at N=512; the
+> whole table above is corrected accordingly. Full account, including the two
+> earlier partial fixes this same day: `docs/bedtools-baseline-retraction.md`.
+> Verified: hammock's own N=512 wall time is unchanged by this fix (71.65 s →
+> 70.32 s), confirming only the bedtools arm moved.
 >
-> **The `subB=0.1` arm is deliberately absent.** The familiar "~52× at N=512"
-> is a p=14 subB=0.1 number and there is no p=18 measurement of that arm at
-> scale, so quoting it beside this table would splice two precisions. Figure 3
-> Panel A plots subB=1.0; subsampling is Panel B's axis.
+> **N=8's speedup is not reliable and should not be read as "bedtools wins at
+> small N."** bedtools' three replicates at N=2 span 0.14–1.22 s (CV 102%) —
+> the whole small-N end of this table is n=3 on a workload of a few ms/pair,
+> dominated by process-launch scheduling jitter (`docs/seed-benchmark-methodology.md`
+> item 6). Trust the shape (crossover somewhere in N≈32–64) over any single
+> small-N ratio.
 >
-> The last column is why the speedup is defensible rather than an artifact of a
-> hobbled baseline: bedtools converted ~1.6 of its 16 cores into throughput on
-> this corpus. Framed at bedtools' *own* thread optimum (t=8) instead of an
-> equal core budget, N=512 reads **16.1×** rather than 27.61× — still large, so
-> the conclusion survives either framing. See Supplementary Fig S6, and note
-> the effect is workload-dependent: on Maurano, where a pair is ~150 ms of real
-> work rather than ~5 ms, bedtools holds 7.6 of 8 cores.
+> **The `subB=0.1` arm is deliberately absent** — no p=18 measurement of it
+> exists at this scale; Figure 3 Panel A plots subB=1.0, subsampling is Panel
+> B's axis.
+>
+> The last column is why the speedup is a real effect and not an artifact of a
+> hobbled baseline: bedtools converts more of its 16 cores as N grows (2.3 → 4.3
+> of 16), still well short of saturated. **The bedtools-own-optimum reframing
+> (t=8) that appeared in the previous version of this table (16.1×) has not been
+> recomputed against the fixed harness and should not be quoted until it is** —
+> it depends on Supplementary Fig S6, which still uses the unfixed `sweep.py`
+> path (see `docs/bedtools-baseline-retraction.md`).
 
 Two things to communicate in this section:
 1. **The advantage is a crossover, not a constant.** hammock's cost is dominated
    by sketching, which is Θ(N); bedtools re-reads every file for every pair, which
-   is Θ(N²). Below N ≈ 8 the two are within ~15% of each other and the ordering
-   is not robust; from N ≈ 32 the gap opens monotonically to 27.6× at N=512 and a
-   *measured* 72× at N=2048 against a projected bedtools (Supplementary Fig S7).
-   **Do not write "faster at every scale tested"** — at N=8 the margin is 1.15×,
-   and at N=20 on Maurano at p=18 hammock is marginally *slower* (0.98× at t=16).
+   is Θ(N²). Below N ≈ 32 the two are close and the ordering is not reliably
+   measured at n=3; from N ≈ 32 the gap opens monotonically to **10.2× at N=512**
+   (job 29656140, fixed harness — Supplementary Fig S7's 72× at N=2048 is NOT
+   recomputed against this fix and should not be quoted; see
+   `docs/bedtools-baseline-retraction.md`).
+   **Do not write "faster at every scale tested"** — on Maurano hammock is
+   *slower* without subsampling (1.16× slower at t=8, see table above).
 2. **The speedup is not bought with accuracy loss.** Subsampling changes hammock's own per-pair Jaccard by < 2×10⁻³ vs its no-subsample output, so the gap to bedtools is statistically indistinguishable across subsampling settings — the speed knob is effectively "free."
 
 **Fig 1 (headline):** Grouped wall-time bars — bedtools vs hammock at no-subsample / subB=0.1 / subB=0.01 (mixed-stride) on the Maurano corpus. Each hammock bar is annotated with its speedup over bedtools and the mean *absolute* per-pair Jaccard change vs hammock's own no-subsample output (mean |ΔJ| ≤ 2×10⁻³; magnitude only — the absolute value is taken before averaging, so it cannot show direction, and the no-subsample bar is the baseline, not a zero), carrying "faster at no accuracy cost" in a single view. (Additional supporting figure: Fig S5.)

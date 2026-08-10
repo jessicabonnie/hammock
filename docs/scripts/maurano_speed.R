@@ -95,11 +95,18 @@ bars <- bars %>%
   mutate(order = row_number(),
          label = factor(label, levels = label[order(order)]),
          speedup = bt_wall / wall,
+         # Never hardcode "faster" -- the no-subsample bar can be (and, as of
+         # the 2026-08-09 LD_LIBRARY_PATH fix, is) slower than bedtools on this
+         # 20-file corpus, and a bare "faster" label next to a sub-1x ratio
+         # reads as a speedup to anyone skimming. See plot_pairwise_scaling.R
+         # for the same fix applied to Figure 3B.
+         ratio_word = ifelse(speedup >= 1, "faster", "slower"),
+         ratio_val = ifelse(speedup >= 1, speedup, 1 / speedup),
          # annotation above each bar
          tag = ifelse(tool == "bedtools",
                       sprintf("%.1f s\n1.00× (ref)", wall),
-                      sprintf("%.1f s\n%.2f× faster\nΔJ = %s vs no-sub",
-                              wall, speedup,
+                      sprintf("%.1f s\n%.2f× %s\nΔJ = %s vs no-sub",
+                              wall, ratio_val, ratio_word,
                               ifelse(mae == 0, "0",
                                      formatC(mae, format = "e", digits = 0)))))
 
@@ -113,12 +120,25 @@ p_bars <- ggplot(bars, aes(x = label, y = wall, fill = tool)) +
   scale_y_continuous(limits = c(0, 14),
                      breaks = seq(0, 14, 2),
                      expand = expansion(mult = c(0, 0.02))) +
-  labs(title = "hammock is faster than bedtools at every subsampling level",
+  # Title and caption are derived from the data, not hardcoded, because a
+  # hardcoded "faster at every level" is exactly the claim the 2026-08-09
+  # LD_LIBRARY_PATH fix falsified for the no-subsample bar -- see
+  # docs/bedtools-baseline-retraction.md. Recompute rather than re-assert.
+  labs(title = if (all(bars$speedup[bars$tool == "hammock"] >= 1))
+         "hammock is faster than bedtools at every subsampling level" else
+         "Subsampling is what makes hammock faster than bedtools on this corpus",
        subtitle = sprintf(
          "Maurano fetal-tissue DHS: 20 BEDs, 190 pairs, interval mode, p=18, 8 threads. Bedtools wall = %.2f s (8-way GNU parallel).",
          bt_wall),
        x = NULL, y = "wall time (s)  —  lower is faster",
-       caption = wrapcap("Even with no subsampling the HLL path beats bedtools (1.16×); mixed-stride subB extends the lead to ~3×. ΔJ is the mean per-pair Jaccard change vs hammock's own no-subsample output (the speed knob is near-free), not the gap to bedtools.")) +
+       caption = {
+         nosub <- bars[bars$tool == "hammock" & grepl("no subsample", bars$label, fixed = TRUE), ]
+         nosub_txt <- if (nrow(nosub) == 1 && nosub$speedup[1] < 1)
+           sprintf("Without subsampling hammock is %.2f× slower than bedtools on this 20-file corpus (N=20 is well below the crossover in Figure 3A); subsampling is what recovers a win here, not sketching alone.",
+                   1 / nosub$speedup[1]) else
+           sprintf("Even without subsampling the HLL path beats bedtools (%.2f×).", nosub$speedup[1])
+         wrapcap(paste(nosub_txt, "ΔJ is the mean per-pair Jaccard change vs hammock's own no-subsample output (the speed knob is near-free), not the gap to bedtools."))
+       }) +
   theme_pub +
   theme(axis.text.x = element_text(size = 11))
 save_png(file.path(figures_dir, "maurano_speed_bars.png"),

@@ -102,4 +102,28 @@ None of these are "be more careful"; all are mechanical.
 
 ## Re-measured and gated
 
-*(Nothing yet. Entries here require all six gates above.)*
+**Figure 3 Panel A (synthetic N-scaling, p=18, t=16).** Job 29656140, node
+c531, `docs/data/cpp_vs_bedtools_t16_p18.csv`. N=512: bedtools 714.77 s,
+hammock 70.32 s, **10.17×** (was wrongly 27.61×). hammock's own N=512 wall is
+unchanged by the fix (71.65 s → 70.32 s) — the control confirming only the
+bedtools arm moved. Gate 1 (monotonicity): passes at every N except N=2→N=4,
+which is genuine n=3 noise on a ~15 ms/pair cell (CV 102%), not a new defect —
+see `docs/seed-benchmark-methodology.md` item 6. Gates 2–6 not yet run as
+automated checks (done by hand for this rerun); still worth building as code.
+
+**Figure 3 Panel B (Maurano, subB sweep, t=8).** `run_bedtools_maurano.py`
+ported to call the fixed `run_bedtools()` wrapper instead of `run_with_time`
+directly — it had none of the (c)/(d) fixes until this pass.
+`docs/data/maurano_bedtools.csv`, `docs/data/maurano_subB_summary.csv`.
+bedtools 7.07 s (was 7.34 s under the partial fix, 11.08 s originally).
+hammock at subB=1.0 is **1.16× slower** (not 1.12×); subB=0.1 is 1.58× faster
+(not 1.64×); subB=0.01 is 2.49× faster (not 2.58×). `docs/figures/maurano_speed_bars.png`
+and `maurano_subB_pareto_scatter.png` regenerated from the corrected CSVs;
+the bar-chart title and per-bar labels were hardcoded to "faster" and have
+been changed to derive from the data's sign (same defect, different file,
+as the one already fixed in `plot_pairwise_scaling.R`).
+
+**Still not re-measured**: Figs S6/S7/S8 (`sweep.py` path), `RESULTS.md` in
+both experiment directories, and the bedtools-own-optimum (t=8) reframing
+that used to accompany the Panel A table. Do not quote any of these until
+they go through `run_bedtools()` and get an entry here.
