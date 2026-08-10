@@ -139,7 +139,8 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 | **512** | **714.77 s** | **70.32 s** | **10.17×** | **4.3 of 16** |
 
 > **Source: `docs/data/cpp_vs_bedtools_t16_p18.csv` (job 29656140, node c531,
-> 2026-08-09 21:38 — 23:43), the fully-fixed harness. This table replaces one
+> 2026-08-09 21:38 — 22:43, per `sacct` — 1h04m, not the ~2h05m an earlier
+> draft of this note guessed at without checking), the fully-fixed harness. This table replaces one
 > that read 27.61× at N=512, which was wrong, not merely superseded by a
 > precision change like the p=14→p=18 move before it.** The bedtools module's
 > `LD_LIBRARY_PATH` carries 17 directories of which bedtools uses 4; `ld.so`
