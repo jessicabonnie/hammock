@@ -34,11 +34,21 @@ Design and how-to-rerun live in `README.md`.
 
 ## TL;DR
 
-On real DHS data, `--subB-method mixed-stride --subB 0.1` is **2.13× faster
-than `bedtools jaccard`** with mean absolute Jaccard error < 0.001 vs the
-no-subsample reference. Even at `subB=1.0` (no subsampling) hammock-cpp is
-**1.16× faster** than bedtools — the HLL sketch path is intrinsically
-cheaper than bedtools's per-pair sorted-merge for many-pair comparison.
+> **SUPERSEDED 2026-08-09 — re-measured as job 29652709; see the correction
+> block below before quoting anything in this file against bedtools.** The
+> bedtools baseline every ratio here divides by was taken with a `bedtools.sh`
+> that ran three processes per pair instead of one. Ratios *among hammock
+> settings* are unaffected; ratios *against bedtools* are all ~1.5× too
+> generous.
+
+On real DHS data, `--subB-method mixed-stride --subB 0.1` is **1.64× faster
+than `bedtools jaccard`** (was reported as 2.13×) with mean absolute Jaccard
+error < 0.001 vs the no-subsample reference. At `subB=1.0` (no subsampling)
+hammock-cpp is **1.12× *slower*** than bedtools on this corpus — the earlier
+claim of "1.16× faster" is retracted. Twenty files is well below the N ≈ 64
+crossover, so the sketch path has not yet amortised its construction cost over
+enough pairs; subsampling is what buys the win at this corpus size, and scale
+is what buys it without subsampling (27.6× at N=512, `bedtools_benchmark`).
 
 ![](figures/headline_maurano_pareto.png)
 
@@ -199,11 +209,20 @@ real-data tails:
 Bedtools wall (8-way GNU parallel, sort time not charged): **11.08 s
 median**, very tight (10.99–11.10 s across 5 reps).
 
+> The `bedtools / hammock` column below is **superseded**: it divides by an
+> 11.08 s baseline measured with three processes per pair. The corrected
+> baseline is **7.34 s**. Corrected values, mixed-stride, job 29652709:
+> subB 1.00 → **0.90×** (1.12× slower), 0.10 → **1.64×**, 0.01 → **2.58×**.
+> The hammock wall column is also ~1.16–1.28× stale (fused pairwise pass,
+> reserved allocation). Left in place because the *within-hammock* method
+> comparison it supports — mixed-stride beating hash-threshold and single-hash
+> at equal subB — is a ratio among these rows and survives unchanged.
+
 | method         | subB | hammock wall | bedtools / hammock |
 |----------------|------|--------------|--------------------|
-| (any)          | 1.00 | ~9.5 s       | **1.16×**          |
+| (any)          | 1.00 | ~9.5 s       | **1.16×** (now 0.90×) |
 | hash-threshold | 0.10 |  8.95 s      | 1.24×              |
-| **mixed-stride** | **0.10** | **5.20 s** | **2.13×**       |
+| **mixed-stride** | **0.10** | **5.20 s** | **2.13×** (now 1.64×) |
 | single-hash    | 0.10 |  9.21 s      | 1.20×              |
 | mixed-stride   | 0.05 |  4.37 s      | 2.54×              |
 | mixed-stride   | 0.01 |  3.64 s      | **3.04×**          |

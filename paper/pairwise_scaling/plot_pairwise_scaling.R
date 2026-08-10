@@ -363,15 +363,21 @@ bars <- bind_rows(
     # "mean |ΔJ|", not "ΔJ": mae is mean(abs(j - j_truth)) over the 950
     # pair-by-replicate comparisons, so it carries magnitude but no direction.
     # And subB = 1.0 IS the baseline it is measured against, so its zero is true
-    # by construction -- printing a bare "0" beside "1.16x faster" reads as
-    # "agrees exactly with BEDTools", which is false by ~0.16 here (the
+    # by construction -- printing a bare "0" beside the speed ratio reads as
+    # "agrees exactly with BEDTools", which is false by ~0.14 here (the
     # register-equality chance floor, see CLAUDE.md divergence #2).
+    # Never hardcode "faster". Against the corrected BEDTools baseline the
+    # subB=1.0 bar is 0.90x, and "0.90x faster" is not a slower way of saying
+    # slower -- it reads as a speedup to anyone skimming. Word it from the sign.
+    ratio_txt = ifelse(speedup >= 1,
+                       sprintf("%.2f× faster", speedup),
+                       sprintf("%.2f× slower", 1 / speedup)),
     label = case_when(
       tool == "BEDTools" ~ sprintf("%.1f s\nspeed reference", wall),
-      mae == 0 ~ sprintf("%.1f s\n%.2f× faster\nΔJ baseline", wall, speedup),
+      mae == 0 ~ sprintf("%.1f s\n%s\nΔJ baseline", wall, ratio_txt),
       TRUE ~ sprintf(
-        "%.1f s\n%.2f× faster\nmean |ΔJ| = %s",
-        wall, speedup, formatC(mae, format = "e", digits = 1)
+        "%.1f s\n%s\nmean |ΔJ| = %s",
+        wall, ratio_txt, formatC(mae, format = "e", digits = 1)
       )
     )
   )

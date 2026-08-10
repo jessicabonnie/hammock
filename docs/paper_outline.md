@@ -65,7 +65,7 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 
 ## 4. Results
 
-### 4.1 Speed: hammock is substantially faster than bedtools on real and synthetic interval corpora
+### 4.1 Speed: hammock's advantage grows with collection size, and is a crossover rather than a constant
 
 > **Sources:** `experiments/subB_mixed_stride/RESULTS.md` (real DHS); `experiments/bedtools_benchmark/RESULTS.md` (synthetic).
 
@@ -75,10 +75,26 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 
 | tool / setting | wall median (s) | speedup over bedtools | mean \|ΔJ\| vs hammock no-subsample |
 |---|---|---|---|
-| bedtools | 11.08 | 1.00× (ref) | — |
-| hammock (no subsample) | 9.52 | 1.16× | 0 |
-| hammock (subB = 0.1, high) | 5.20 | 2.13× | 9×10⁻⁴ |
-| hammock (subB = 0.01, max) | 3.64 | 3.05× | 2×10⁻³ |
+| bedtools | 7.34 | 1.00× (ref) | — |
+| hammock (no subsample) | 8.19 | **0.90× — i.e. 1.12× *slower*** | 0 |
+| hammock (subB = 0.1, high) | 4.47 | 1.64× | 9.4×10⁻⁴ |
+| hammock (subB = 0.01, max) | 2.84 | 2.58× | 1.5×10⁻³ |
+
+> **Every row here is new (job 29652709, node sr06, 2026-08-09) and every one
+> replaces a superseded number.** The previous table read 11.08 / 9.52 / 5.20 /
+> 3.64 s for 1.16× / 2.13× / 3.05×. The baseline moved because `bedtools.sh` was
+> running *three* processes per pair (bedtools | cut | awk) instead of one; that
+> alone made the reference 1.51× faster. Hammock's own rows also improved
+> ~1.16–1.28× (fused pairwise pass, and a reserved allocation rather than a
+> shared interactive node), but not enough to keep the ratio.
+>
+> **The consequence is a retraction: hammock does not beat bedtools at
+> subB = 1.0 on this corpus.** It is 1.12× slower. Two independent jobs agree —
+> the precision sweep (job 29651773) measures 0.92× for the same configuration —
+> so this is a real effect, not run-to-run noise. It is also the *expected*
+> effect: N = 20 is well below the N ≈ 64 crossover, so sketching cost has not
+> been amortised over enough pairs. Subsampling is what makes hammock win on a
+> corpus this small, and scale is what makes it win without subsampling.
 
 **Synthetic scaling (10k intervals/file, p=18 — the CLI default — 16 threads for both tools; hammock `-t 16`, bedtools 16-way GNU parallel), subB=1.0:**
 
