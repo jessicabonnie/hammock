@@ -740,6 +740,7 @@ def run_benchmark(
                         r["bedtools_parallel_eff"] = (
                             (n_pairs * ser / 1000.0) / (r["wall_time"] * num_threads)
                             if ser and r.get("wall_time") else None)
+                        r["run_index"] = run_i
                         bedtools_runs.append(r)
                     else:
                         shown = f"subB={sub_b:g}" + (" +IE" if use_metrics else "")
@@ -748,6 +749,7 @@ def run_benchmark(
                                         precision, num_threads, sub_b=sub_b,
                                         metrics=use_metrics)
                         r["sort_time"] = sort_time
+                        r["run_index"] = run_i
                         runs_by_tool[tool].append(r)
                     rss = r["max_rss_mb"]
                     rss_str = f"{rss:.1f} MB" if rss is not None else "n/a"
@@ -766,6 +768,20 @@ def run_benchmark(
             # would be a dict of Nones that reads as "measured, and missing"
             # rather than "not run". Consumers branch on the key being None.
             "bedtools": aggregate(bedtools_runs, bedtools_keys) if with_bedtools else None,
+            # Raw per-replicate rows, kept alongside the aggregate rather than
+            # instead of it. aggregate() above reduces to mean/std/min/max and
+            # is what every existing consumer (write_csv, plot, the R scripts)
+            # reads -- that stays unchanged. But a wrong SIGN can hide behind a
+            # correct-looking std at n=3: Panel A's N=2 cell aggregated to
+            # "hammock 2.02x faster" from three reps of 0.14/0.50/1.22s, and a
+            # 20-rep re-check of the same cell found the true, tight answer is
+            # the opposite (bedtools 1.53x faster, 20/20). That could not be
+            # recovered from the aggregate CSV after the fact -- only a rerun
+            # could show it, because the raw values were never written down.
+            # Leading underscore: private to this module, not part of the
+            # public `results` schema anything else should read.
+            "_raw_bedtools_runs": list(bedtools_runs),
+            "_raw_hammock_runs": {t: list(rs) for t, rs in runs_by_tool.items()},
         }
         for tool, runs_for in runs_by_tool.items():
             entry[tool] = aggregate(runs_for, hammock_keys)
@@ -894,6 +910,52 @@ def write_csv(results: List[Dict[str, Any]], path: str,
                     row.append(f"{v:.6f}" if isinstance(v, float) else ("" if v is None else v))
                 row.extend(prov_row)
                 w.writerow(row)
+
+
+RUNS_METRIC_COLS = [
+    "wall_time", "cpu_time", "max_rss_mb", "sort_time",
+    "sketch_creation_time", "comparison_time", "pair_time", "write_time",
+    "bedtools_serial_ms", "bedtools_parallel_eff",
+]
+
+
+def write_runs_csv(results: List[Dict[str, Any]], path: str,
+                   provenance: Optional[Dict[str, Any]] = None) -> None:
+    """One row per (num_files, tool, replicate) -- the data aggregate() throws
+    away. Not a replacement for the aggregate CSV: every existing consumer
+    (write_csv, plot, the R scripts) keeps reading that one unchanged. This is
+    what makes a confidence interval, a bootstrap, or a "was that cell's mean
+    actually reliable" check possible without rerunning the job -- previously
+    none of those were possible on an already-collected CSV at all.
+    """
+    if provenance is None:
+        provenance = get_system_info()
+    prov_row = [provenance.get(c, "unknown") for c in PROVENANCE_COLS]
+    cols = (["num_files", "num_threads", "precision", "sub_b", "tool", "run_index"]
+            + RUNS_METRIC_COLS + PROVENANCE_COLS)
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(cols)
+        for r in results:
+            for run in r.get("_raw_bedtools_runs", []):
+                row = [r["num_files"], r["num_threads"], r["precision"], "",
+                      "bedtools", run.get("run_index", "")]
+                for c in RUNS_METRIC_COLS:
+                    v = run.get(c)
+                    row.append(f"{v:.6f}" if isinstance(v, float) else ("" if v is None else v))
+                row.extend(prov_row)
+                w.writerow(row)
+            for tool, runs_for in r.get("_raw_hammock_runs", {}).items():
+                sub_b = next((s for t, s in arms_of(r) if t == tool), None)
+                sub_b_str = f"{sub_b:g}" if sub_b is not None else ""
+                for run in runs_for:
+                    row = [r["num_files"], r["num_threads"], r["precision"],
+                          sub_b_str, tool, run.get("run_index", "")]
+                    for c in RUNS_METRIC_COLS:
+                        v = run.get(c)
+                        row.append(f"{v:.6f}" if isinstance(v, float) else ("" if v is None else v))
+                    row.extend(prov_row)
+                    w.writerow(row)
 
 
 def plot(results: List[Dict[str, Any]], png_path: str) -> None:
@@ -1079,8 +1141,10 @@ def main() -> int:
     # bind_rows in R. Empty reads as NA in both R and pandas.
     prov["corpus_seed"] = args.corpus_seed if args.corpus_seed is not None else ""
     write_csv(results, csv_path, prov)
+    runs_csv_path = re.sub(r"\.csv$", "_runs.csv", csv_path)
+    write_runs_csv(results, runs_csv_path, prov)
     plot(results, png_path)
-    print(f"\nReports: {txt_path}\n         {csv_path}\nFigure:  {png_path}")
+    print(f"\nReports: {txt_path}\n         {csv_path}\n         {runs_csv_path} (raw per-replicate rows)\nFigure:  {png_path}")
     return 0
 
 
