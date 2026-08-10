@@ -15,13 +15,31 @@
 # `|| true` meant that if no module loaded at all the script continued and
 # failed later, or silently used whatever `bedtools` happened to be on PATH.
 #
-# 2.30.0 is safe to pin: on three Maurano pairs it returns output byte-identical
-# to 2.27.1 on all four columns (intersection, union, jaccard, n_intersections),
-# so no archived jaccard changes and the accuracy gates are unaffected.
+# Pinning 2.30.0 is also a CORRECTNESS fix, not just hygiene. An earlier version
+# of this comment claimed the two versions were byte-identical "on three Maurano
+# pairs"; running all 190 falsified it. 2.27.1 computes an ORDER-DEPENDENT union,
+# so 93 of the 190 unordered pairs had J(A,B) != J(B,A) in what is supposed to be
+# the exact reference. 2.30.0 has none. Magnitude is small (max |d| 1.3e-5) so no
+# archived conclusion flips, but do not use pre-2026-08-09 bedtools columns to
+# argue about differences at the 1e-5 level.
 #
 # HAMMOCK_BEDTOOLS_MODULE overrides the pin for a machine with different module
 # names; an empty value skips the load and uses PATH.
-BEDTOOLS_MODULE="${HAMMOCK_BEDTOOLS_MODULE-bedtools/2.30.0}"
+#
+# TIMING HAZARD -- read before changing. `ml` costs ~0.28 s and GNU parallel
+# another ~0.11 s, and both used to land INSIDE the timed region on every call.
+# Against a fixed ~0.83 s floor that is 0.04% of the N=512 cell and 99% of the
+# N=2 cell, which silently inverted the small-N comparison: Panel A showed
+# hammock 3.40x faster at N=2 when bedtools was in fact ~5x faster, because the
+# bedtools bar was almost entirely our own Lmod. The driver now resolves the
+# binary once outside timing and exports HAMMOCK_BEDTOOLS_BIN; when that is set
+# we skip the module load entirely. Never reintroduce an `ml` on this path.
+if [ -n "${HAMMOCK_BEDTOOLS_BIN:-}" ]; then
+    BEDTOOLS_MODULE=""
+    PATH="$(dirname "$HAMMOCK_BEDTOOLS_BIN"):$PATH"
+    export PATH
+fi
+BEDTOOLS_MODULE="${BEDTOOLS_MODULE-${HAMMOCK_BEDTOOLS_MODULE-bedtools/2.30.0}}"
 if [ -n "$BEDTOOLS_MODULE" ]; then
     ml "$BEDTOOLS_MODULE" 2>/dev/null || {
         echo "bedtools.sh: could not load module '$BEDTOOLS_MODULE'." >&2
@@ -30,7 +48,7 @@ if [ -n "$BEDTOOLS_MODULE" ]; then
         exit 1
     }
 fi
-ml parallel 2>/dev/null || true
+command -v parallel >/dev/null 2>&1 || ml parallel 2>/dev/null || true
 
 command -v bedtools >/dev/null 2>&1 || {
     echo "bedtools.sh: no bedtools on PATH after module load" >&2
@@ -39,7 +57,11 @@ command -v bedtools >/dev/null 2>&1 || {
 # To stderr, so it lands in the job log without touching the stdout the caller
 # parses per-pair jaccards out of. Which binary produced a timing is not
 # recoverable after the fact otherwise.
-echo "bedtools.sh: $(bedtools --version) at $(command -v bedtools)" >&2
+# Two extra execs per call. Harmless at N=512, measurable against the small-N
+# cells this script was just fixed for, so make it opt-in.
+if [ "${HAMMOCK_BEDTOOLS_QUIET:-0}" != "1" ]; then
+    echo "bedtools.sh: $(bedtools --version) at $(command -v bedtools)" >&2
+fi
 
 set -euo pipefail
 

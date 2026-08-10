@@ -209,7 +209,7 @@ def generate_bed_file(num_intervals: int, output_file: str,
             f.write(f"{chrom}\t{start}\t{end}\n")
 
 
-def run_with_time(cmd: List[str]) -> Dict[str, Any]:
+def run_with_time(cmd: List[str], env: Dict[str, str] = None) -> Dict[str, Any]:
     """Run cmd under /usr/bin/time -v, capturing wall, child CPU, and max RSS.
 
     /usr/bin/time -v writes its report to stderr; we tee that into a temp file
@@ -221,7 +221,8 @@ def run_with_time(cmd: List[str]) -> Dict[str, Any]:
         wall_start = time.time()
         ru_start = resource.getrusage(resource.RUSAGE_CHILDREN)
         wrapped = [TIME_CMD, "-v", "-o", time_log] + cmd
-        result = subprocess.run(wrapped, capture_output=True, text=True, check=True)
+        result = subprocess.run(wrapped, capture_output=True, text=True, check=True,
+                                env=env)
         ru_end = resource.getrusage(resource.RUSAGE_CHILDREN)
         wall_end = time.time()
 
@@ -250,7 +251,27 @@ def run_with_time(cmd: List[str]) -> Dict[str, Any]:
 
 
 def run_bedtools(file1_list: str, file2_list: str, num_threads: int) -> Dict[str, Any]:
-    return run_with_time(["bash", BEDTOOLS_SCRIPT, file1_list, file2_list, str(num_threads)])
+    """Time one full pairwise bedtools sweep.
+
+    The environment below is what keeps the small-N cells meaningful. bedtools.sh
+    used to run `ml bedtools/2.30.0` (~0.28 s), `ml parallel` and two
+    `bedtools --version` execs inside the timed region, against a fixed floor of
+    ~0.83 s measured end to end. At N=512 that is 0.04% of the cell; at N=2 it is
+    99% of it, and it inverted the comparison -- Panel A reported hammock 3.40x
+    faster at N=2 when bedtools, given the same work without our Lmod, is roughly
+    5x faster. Resolving the binary once per process and handing bedtools.sh the
+    path removes the module load from every timed call.
+
+    This does not touch the large-N numbers in any meaningful way; it is the
+    small-N end, and the location of the crossover, that it makes honest.
+    """
+    env = dict(os.environ)
+    binary = _resolve_bedtools()
+    if binary:
+        env["HAMMOCK_BEDTOOLS_BIN"] = binary
+    env["HAMMOCK_BEDTOOLS_QUIET"] = "1"
+    return run_with_time(
+        ["bash", BEDTOOLS_SCRIPT, file1_list, file2_list, str(num_threads)], env=env)
 
 
 _BEDTOOLS_BIN: Any = "unset"
