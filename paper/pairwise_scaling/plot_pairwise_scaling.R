@@ -1,6 +1,17 @@
 # Figure 3 — Pairwise scaling of hammock versus BEDTools
 # Creates a publication-ready two-panel PNG using CairoPNG.
 #
+# Main-text version: both panels report the +IE (jaccard_similarity_ie)
+# column exclusively, in place of register-equality (jaccard_similarity).
+# Simplified 2026-08-10 from a dual-metric design that plotted both hammock
+# variants side by side; register-equality carries a chance-agreement floor
+# and is not comparable to BEDTools on the same scale (CLAUDE.md divergence
+# #2), so showing it next to a bedtools-calibrated column in the main text
+# invites exactly that miscomparison. The full register-equality-vs-+IE
+# picture (accuracy for BOTH now measured against exact BEDTools, so they
+# ARE comparable) lives in plot_pairwise_scaling_supplement.R, for the
+# supplement or advisor review, not this figure.
+#
 # Panel A was rebuilt in Aug 2026; see docs/figure3-panel-a-rebuild.md for the
 # evidence. Three things there are load-bearing and easy to undo by accident:
 #
@@ -53,8 +64,8 @@ repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 synthetic_csv <- file.path(
   repo_root, "docs", "data", "cpp_vs_bedtools_t16_p18.csv"
 )
-maurano_summary_csv <- file.path(
-  repo_root, "docs", "data", "maurano_subB_summary.csv"
+maurano_ie_summary_csv <- file.path(
+  repo_root, "docs", "data", "maurano_subB_ie_summary.csv"
 )
 maurano_bedtools_csv <- file.path(
   repo_root, "docs", "data", "maurano_bedtools.csv"
@@ -68,7 +79,7 @@ out_png <- if (length(argv) >= 1) {
 }
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 
-for (path in c(synthetic_csv, maurano_summary_csv, maurano_bedtools_csv)) {
+for (path in c(synthetic_csv, maurano_bedtools_csv, maurano_ie_summary_csv)) {
   if (!file.exists(path)) stop("Input file not found: ", path, call. = FALSE)
 }
 
@@ -76,6 +87,12 @@ COL_BEDTOOLS <- "#46515C"
 COL_HAMMOCK <- "#007C83"
 COL_COMPARE <- "#D28B35"
 COL_COMPARE_IE <- "#9B4D9B"
+# Distinct from COL_COMPARE_IE on purpose: 4 independent reviewers (2026-08-09)
+# flagged that "hammock total (+IE)" reusing COL_COMPARE_IE made it collide,
+# visually and in the legend, with the unrelated "hammock sketch comparison
+# (+IE)" series, on top of already nearly-overlapping COL_HAMMOCK in the line
+# itself. This color is not reused anywhere else in the panel.
+COL_TOTAL_IE <- "#C2185B"
 COL_GRID <- "#D9DEE3"
 COL_TEXT <- "#20262D"
 base_family <- "sans"
@@ -114,9 +131,19 @@ synthetic_bt <- synthetic_raw %>%
     precision
   )
 
+# Uses the +IE (jaccard_similarity_ie) arm exclusively, in place of
+# register-equality -- see the file header. wall_time/comparison_time here
+# are the +IE arm's, i.e. the full 9-column metrics block, not the
+# --no-metrics timing a pre-2026-08-10 reader of this file would expect.
+if (!"hammock_ie_B" %in% synthetic_raw$tool) {
+  stop(
+    "No hammock_ie_B rows in ", basename(synthetic_csv), " -- Panel A now ",
+    "requires the +IE arm (re-run the benchmark with --metrics-arm).",
+    call. = FALSE
+  )
+}
 synthetic_hm <- synthetic_raw %>%
-  mutate(sub_b = suppressWarnings(as.numeric(sub_b))) %>%
-  filter(grepl("^hammock_cpp_B", tool), abs(sub_b - 1) < 1e-9) %>%
+  filter(tool == "hammock_ie_B") %>%
   transmute(
     num_files,
     wall_time = mean_wall_time,
@@ -126,26 +153,12 @@ synthetic_hm <- synthetic_raw %>%
     precision
   )
 
-# A different row, not a different column of synthetic_hm, so it cannot be
-# transmuted out of it. left_join, not inner_join: against a CSV predating the
-# --metrics-arm option this must yield NA and drop the series, not empty
-# Panel A and trip the stop() below with a misleading message.
-synthetic_ie <- synthetic_raw %>%
-  filter(tool == "hammock_ie_B") %>%
-  transmute(
-    num_files,
-    threads = num_threads,
-    precision,
-    comparison_time_ie = mean_comparison_time
-  )
-
 synthetic <- inner_join(
   synthetic_bt,
   synthetic_hm,
   by = c("num_files", "threads", "precision"),
   suffix = c("_bedtools", "_hammock")
 ) %>%
-  left_join(synthetic_ie, by = c("num_files", "threads", "precision")) %>%
   arrange(num_files) %>%
   mutate(
     # Full cross product of two disjoint N-file sets, not within-set all-pairs.
@@ -154,7 +167,7 @@ synthetic <- inner_join(
   )
 
 if (nrow(synthetic) == 0) {
-  stop("No matching unsubsampled synthetic benchmark rows were found.", call. = FALSE)
+  stop("No matching +IE synthetic benchmark rows were found.", call. = FALSE)
 }
 
 # Without the pmax() floor a zero lands at -Inf on the log axis and the point
@@ -165,12 +178,6 @@ if (any(synthetic$comparison_time <= 0, na.rm = TRUE)) {
     "comparison_time <= 0: this CSV predates the microsecond timers in ",
     "hammock-cpp 0.7.0. Re-run the benchmark rather than restoring a floor.",
     call. = FALSE
-  )
-}
-if (!"hammock_ie_B" %in% synthetic_raw$tool) {
-  message(
-    "note: no hammock_ie_B rows in ", basename(synthetic_csv),
-    " -- the +IE series will be absent. Re-run with --metrics-arm."
   )
 }
 
@@ -186,21 +193,12 @@ synthetic_long <- bind_rows(
   synthetic %>% transmute(
     num_files, value = comparison_time, error = NA_real_,
     series = "hammock sketch comparison"
-  ),
-  synthetic %>%
-    filter(!is.na(comparison_time_ie)) %>%
-    transmute(
-      num_files, value = comparison_time_ie, error = NA_real_,
-      series = "hammock sketch comparison (+IE)"
-    )
+  )
 ) %>%
   mutate(
-    # A series absent from levels becomes NA and ggplot drops it with only a
-    # warning, so the IE level is declared whether or not any row carries it.
     series = factor(
       series,
-      levels = c("BEDTools total", "hammock total",
-                 "hammock sketch comparison", "hammock sketch comparison (+IE)")
+      levels = c("BEDTools total", "hammock total", "hammock sketch comparison")
     )
   )
 
@@ -212,6 +210,8 @@ pair_labels <- format(
   trim = TRUE
 )
 largest <- synthetic %>% slice_max(num_files, n = 1, with_ties = FALSE)
+
+speedup_label <- sprintf("%.1f× faster", largest$speedup)
 
 panel_a <- ggplot(
   synthetic_long,
@@ -241,30 +241,28 @@ panel_a <- ggplot(
     "label",
     x = largest$num_files / 1.18,
     y = sqrt(largest$wall_time_hammock * largest$wall_time_bedtools),
-    label = sprintf("%.1f× faster", largest$speedup),
+    label = speedup_label,
     size = 3,
     linewidth = 0,
     fill = alpha("white", 0.9),
     color = COL_TEXT,
-    hjust = 1
+    hjust = 1,
+    lineheight = 0.95
   ) +
   scale_color_manual(values = c(
     "BEDTools total" = COL_BEDTOOLS,
     "hammock total" = COL_HAMMOCK,
-    "hammock sketch comparison" = COL_COMPARE,
-    "hammock sketch comparison (+IE)" = COL_COMPARE_IE
+    "hammock sketch comparison" = COL_COMPARE
   ), drop = FALSE) +
   scale_linetype_manual(values = c(
     "BEDTools total" = "solid",
     "hammock total" = "solid",
-    "hammock sketch comparison" = "22",
-    "hammock sketch comparison (+IE)" = "42"
+    "hammock sketch comparison" = "22"
   ), drop = FALSE) +
   scale_shape_manual(values = c(
     "BEDTools total" = 16,
     "hammock total" = 17,
-    "hammock sketch comparison" = 15,
-    "hammock sketch comparison (+IE)" = 18
+    "hammock sketch comparison" = 15
   ), drop = FALSE) +
   scale_x_continuous(
     trans = log2_trans(),
@@ -296,9 +294,9 @@ panel_a <- ggplot(
     y = "Wall time (seconds, log scale)"
   ) +
   guides(
-    color = guide_legend(nrow = 2, byrow = TRUE),
-    linetype = guide_legend(nrow = 2, byrow = TRUE),
-    shape = guide_legend(nrow = 2, byrow = TRUE)
+    color = guide_legend(nrow = 1, byrow = TRUE),
+    linetype = guide_legend(nrow = 1, byrow = TRUE),
+    shape = guide_legend(nrow = 1, byrow = TRUE)
   ) +
   theme_paper() +
   theme(
@@ -311,15 +309,15 @@ panel_a <- ggplot(
   )
 
 # Panel B: Maurano real-data benchmark ----------------------------------------
-maurano_summary <- read_csv(maurano_summary_csv, show_col_types = FALSE)
 maurano_bedtools <- read_csv(maurano_bedtools_csv, show_col_types = FALSE)
+maurano_ie_summary <- read_csv(maurano_ie_summary_csv, show_col_types = FALSE)
 
-required_summary <- c("method", "subB", "wall_median", "mae")
-missing_summary <- setdiff(required_summary, names(maurano_summary))
-if (length(missing_summary) > 0) {
+required_ie <- c("subB", "wall_median", "mae_ie_vs_bedtools")
+missing_ie <- setdiff(required_ie, names(maurano_ie_summary))
+if (length(missing_ie) > 0) {
   stop(
-    "Maurano summary lacks columns: ",
-    paste(missing_summary, collapse = ", "),
+    "Maurano +IE summary lacks columns: ",
+    paste(missing_ie, collapse = ", "),
     call. = FALSE
   )
 }
@@ -330,14 +328,21 @@ if (!all(c("rep", "run_id", "wall_time") %in% names(maurano_bedtools))) {
 bt_runs <- maurano_bedtools %>% distinct(rep, run_id, wall_time)
 bt_wall <- median(bt_runs$wall_time, na.rm = TRUE)
 
-mixed_stride <- maurano_summary %>%
-  filter(method == "mixed-stride", subB %in% c(1, 0.1, 0.01)) %>%
-  arrange(match(subB, c(1, 0.1, 0.01)))
-
-if (nrow(mixed_stride) != 3) {
-  stop("Expected mixed-stride rows for subB = 1, 0.1, and 0.01.", call. = FALSE)
+if (nrow(maurano_ie_summary) != 3) {
+  stop("Expected +IE summary rows for subB = 1, 0.1, and 0.01.", call. = FALSE)
 }
 
+condition_of <- function(subb) case_when(
+  subb == 1 ~ "no\nsubsampling",
+  subb == 0.1 ~ "subB = 0.1",
+  subb == 0.01 ~ "subB = 0.01"
+)
+
+# One bar per condition: BEDTools, then hammock at the +IE arm (full metrics
+# block) for each subB level -- in place of register-equality, same
+# rationale as Panel A. Wall time here is the +IE arm's, costlier than the
+# register-equality (--no-metrics) timing this panel plotted before
+# 2026-08-10; see plot_pairwise_scaling_supplement.R for that comparison.
 bars <- bind_rows(
   tibble(
     condition = "BEDTools",
@@ -345,38 +350,33 @@ bars <- bind_rows(
     wall = bt_wall,
     mae = NA_real_
   ),
-  mixed_stride %>% transmute(
-    condition = case_when(
-      subB == 1 ~ "hammock\nno subsampling",
-      subB == 0.1 ~ "hammock\nsubB = 0.1",
-      subB == 0.01 ~ "hammock\nsubB = 0.01"
-    ),
-    tool = "hammock",
+  maurano_ie_summary %>% transmute(
+    condition = condition_of(subB),
+    tool = "hammock (+IE)",
     wall = wall_median,
-    mae
+    mae = mae_ie_vs_bedtools
   )
 ) %>%
   mutate(
-    condition = factor(condition, levels = condition),
-    tool = factor(tool, levels = c("BEDTools", "hammock")),
+    condition = factor(
+      condition,
+      levels = c("BEDTools", "no\nsubsampling", "subB = 0.1", "subB = 0.01")
+    ),
+    tool = factor(tool, levels = c("BEDTools", "hammock (+IE)")),
     speedup = bt_wall / wall,
-    # "mean |ΔJ|", not "ΔJ": mae is mean(abs(j - j_truth)) over the 950
-    # pair-by-replicate comparisons, so it carries magnitude but no direction.
-    # And subB = 1.0 IS the baseline it is measured against, so its zero is true
-    # by construction -- printing a bare "0" beside the speed ratio reads as
-    # "agrees exactly with BEDTools", which is false by ~0.14 here (the
-    # register-equality chance floor, see CLAUDE.md divergence #2).
-    # Never hardcode "faster". Against the corrected BEDTools baseline the
-    # subB=1.0 bar is 0.90x, and "0.90x faster" is not a slower way of saying
-    # slower -- it reads as a speedup to anyone skimming. Word it from the sign.
+    # Never hardcode "faster" -- word it from the sign: the corrected
+    # BEDTools baseline makes the unsubsampled bar a genuine slowdown, and
+    # "0.90x faster" would read as a speedup to anyone skimming.
     ratio_txt = ifelse(speedup >= 1,
                        sprintf("%.2f× faster", speedup),
                        sprintf("%.2f× slower", 1 / speedup)),
+    # Two lines, not three: a 3-line label on the rightmost bar (subB=0.01)
+    # ran its longest line past the panel's right edge. "(vs bedtools)" moves
+    # to the panel subtitle/caption instead of repeating on every bar.
     label = case_when(
       tool == "BEDTools" ~ sprintf("%.1f s\nspeed reference", wall),
-      mae == 0 ~ sprintf("%.1f s\n%s\nΔJ baseline", wall, ratio_txt),
       TRUE ~ sprintf(
-        "%.1f s\n%s\nmean |ΔJ| = %s",
+        "%.1f s (%s)\nMAE %s",
         wall, ratio_txt, formatC(mae, format = "e", digits = 1)
       )
     )
@@ -386,14 +386,14 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
   geom_col(width = 0.68) +
   geom_text(
     aes(label = label),
-    vjust = -0.28,
-    size = 3.05,
+    vjust = -0.22,
+    size = 2.9,
     lineheight = 0.95,
     color = COL_TEXT
   ) +
   scale_fill_manual(values = c(
     "BEDTools" = COL_BEDTOOLS,
-    "hammock" = COL_HAMMOCK
+    "hammock (+IE)" = COL_HAMMOCK
   )) +
   scale_y_continuous(
     labels = label_number(accuracy = 1),
@@ -402,7 +402,10 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
   labs(
     title = "B  Subsampling further reduces runtime",
     x = NULL,
-    y = "Wall time (seconds)"
+    # Deliberately not "per pairwise comparison": each bar is the median
+    # TOTAL wall time to sketch all 20 files and run all 400 pairwise
+    # comparisons in one benchmark invocation, not divided by pair count.
+    y = "Wall time, 20-file corpus (s)"
   ) +
   theme_paper() +
   theme(
@@ -416,8 +419,8 @@ figure <- panel_a + panel_b +
   plot_annotation(
     title = "Hammock expands feasible all-pairs comparison as interval collections grow",
     subtitle = paste0(
-      "Reusable sketches reduce repeated full-file processing; optional subsampling ",
-      "further lowers sketch-construction time with little change in estimated similarity."
+      "Reusable sketches reduce repeated full-file processing; subsampling further lowers ",
+      "sketch-construction time. Panel B accuracy is MAE against exact BEDTools."
     ),
     theme = theme(
       plot.title = element_text(

@@ -1,0 +1,4 @@
+method,precision,threads,subB,n_pairs,mae_re_vs_bedtools,max_err_re_vs_bedtools
+mixed-stride,18,8,1.0,190,1.379103e-01,1.575445e-01
+mixed-stride,18,8,0.1,190,1.376130e-01,1.571515e-01
+mixed-stride,18,8,0.01,190,1.370068e-01,1.564145e-01

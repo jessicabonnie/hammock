@@ -20,13 +20,18 @@
 #     pool), reading each input file once.
 #   * bedtools has no batch mode, so a pairwise workflow is N^2 independent
 #     process launches under a GNU parallel wrapper, re-reading each file N
-#     times. On these nodes process creation caps near 123 exec/s and does not
-#     scale with cores -- measured, and NOT specific to bedtools: md5sum on
-#     node-local files is 0.46x at 16-way, and xargs -P16 hits the same ceiling.
+#     times.
 #
-# So "bedtools at t=16" can mean "bedtools at t~1.5". This sweep measures that
-# directly instead of asserting it, and it is the evidence behind the
-# efficiency caveat now attached to every speedup in the paper.
+# The previous version of this comment attributed the resulting slowdown to a
+# "~123 exec/s process creation cap" and cited an md5sum control as
+# independent confirmation. RETRACTED 2026-08-09: that control ran in the same
+# polluted environment as the bug it was meant to rule out (the bedtools
+# module's LD_LIBRARY_PATH carries 13 unused, GPFS-hosted directories that
+# ld.so searched on every exec -- docs/bedtools-baseline-retraction.md), so it
+# confirmed nothing. This run uses the now-fixed sweep.py (imports the patched
+# run_bedtools(), which resolves a minimal LD_LIBRARY_PATH once) and is what
+# actually measures bedtools' achieved parallelism rather than asserting a
+# mechanism for it. Read the result; do not assume the old number.
 #
 # The threads axis is self-calibrating: t=1 is one of its own points, so
 # efficiency is speedup(t)/t computed entirely within one allocation. No

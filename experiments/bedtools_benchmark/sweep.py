@@ -26,7 +26,9 @@ import numpy as np  # type: ignore
 from benchmark_cpp_vs_bedtools import (
     BEDTOOLS_SCRIPT,
     FIGURES_DIR,
+    IE_ARM_TOOL,
     RESULTS_DIR,
+    _rotate,
     find_hammock_cpp,
     generate_bed_file,
     get_system_info,
@@ -484,8 +486,30 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
 
 
 def sweep_threads(binary, thread_list, precision, num_files, num_intervals, num_runs,
-                  sub_b_list, provenance=None):
+                  sub_b_list, metrics_arm=False, provenance=None):
+    """metrics_arm adds a fourth-arm row per thread count, at subB=1.0, run
+    WITH the full metrics block (--metrics, not --no-metrics). Mirrors the
+    `--metrics-arm` option in benchmark_cpp_vs_bedtools.py (see IE_ARM_TOOL's
+    docstring there): tagged "hammock_ie_B" specifically because it fails the
+    "^hammock_cpp_B" prefix every plot_axis()/downstream consumer here filters
+    on, so these rows land in the CSV but are invisible to existing plots
+    until deliberately read out -- this axis never measured the +IE
+    configuration at all before, so there was no plot to preserve.
+
+    The per-point arm order (bedtools, each sub_b, the IE arm if present) is
+    rotated by run_i via _rotate(), same helper and same convention as
+    benchmark_cpp_vs_bedtools.py's own arm rotation. Before this, bedtools ran
+    first and the IE arm ran last in EVERY replicate here -- exactly the
+    position-vs-cache/thermal-state confound docs/bedtools-baseline-retraction.md
+    already documents as unfixed on this axis ("sweep.py never rotates
+    bedtools -- it runs first in all three sweeps"). Rotated once per run_i,
+    reused across every t in this replicate (not re-rotated per t), matching
+    where the sibling file rotates (per replicate, not per swept value).
+    """
     rows = []
+    leg = [("bedtools", None, False)] + \
+          [(tool_name_for_subb(s), s, False) for s in sub_b_list] + \
+          ([(IE_ARM_TOOL, 1.0, True)] if metrics_arm else [])
     for run_i in range(num_runs):
         with tempfile.TemporaryDirectory() as tmp_dir:
             sort_workers = max(thread_list)
@@ -494,34 +518,45 @@ def sweep_threads(binary, thread_list, precision, num_files, num_intervals, num_
             print(f"  sort:    {sort_time:.2f}s wall (parallel, {sort_workers} workers; pre-sort, not in tool wall below)")
 
             for t in thread_list:
-                print(f"  t={t} bedtools...", end=" ", flush=True)
-                bt = run_bedtools(f1, f2, t)
-                bt["sort_time"] = sort_time
-                print(f"{bt['wall_time']:.2f}s wall")
-                rows.append(_row("threads", "bedtools",
-                                 precision=None, threads=t,
-                                 num_files=num_files, num_intervals=num_intervals,
-                                 run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"],
-                                 provenance=provenance))
-
-                for sub_b in sub_b_list:
-                    print(f"  t={t} hammock-cpp p={precision} subB={sub_b:g}...", end=" ", flush=True)
-                    hm = run_hammock(binary, f1, f2, precision, t, sub_b=sub_b)
-                    hm["sort_time"] = sort_time
-                    print(f"{hm['wall_time']:.2f}s wall")
-                    rows.append(_row("threads", tool_name_for_subb(sub_b),
-                                     precision=precision, threads=t,
-                                     num_files=num_files, num_intervals=num_intervals,
-                                     run_id=run_i, result=hm,
-                                     keys=HAMMOCK_KEYS + ["sort_time"], sub_b=sub_b,
-                                     provenance=provenance))
+                for tool, sub_b, use_metrics in _rotate(leg, run_i):
+                    if tool == "bedtools":
+                        print(f"  t={t} bedtools...", end=" ", flush=True)
+                        bt = run_bedtools(f1, f2, t)
+                        bt["sort_time"] = sort_time
+                        print(f"{bt['wall_time']:.2f}s wall")
+                        rows.append(_row("threads", "bedtools",
+                                         precision=None, threads=t,
+                                         num_files=num_files, num_intervals=num_intervals,
+                                         run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"],
+                                         provenance=provenance))
+                    else:
+                        shown = f"subB={sub_b:g}" + (" +IE" if use_metrics else "")
+                        print(f"  t={t} hammock-cpp p={precision} {shown}...", end=" ", flush=True)
+                        hm = run_hammock(binary, f1, f2, precision, t, sub_b=sub_b, metrics=use_metrics)
+                        hm["sort_time"] = sort_time
+                        print(f"{hm['wall_time']:.2f}s wall")
+                        rows.append(_row("threads", tool,
+                                         precision=precision, threads=t,
+                                         num_files=num_files, num_intervals=num_intervals,
+                                         run_id=run_i, result=hm,
+                                         keys=HAMMOCK_KEYS + ["sort_time"], sub_b=sub_b,
+                                         provenance=provenance))
     return rows
 
 
 def sweep_intervals(binary, intervals_list, precision, num_threads, num_files, num_runs,
-                    sub_b_list, provenance=None):
-    """Regenerates data per intervals point — file size is the swept variable."""
+                    sub_b_list, metrics_arm=False, provenance=None):
+    """Regenerates data per intervals point — file size is the swept variable.
+
+    metrics_arm: see sweep_threads' docstring — same fourth arm, same
+    IE_ARM_TOOL tag, same invisibility to plot_axis() until read out on
+    purpose. Arm order is rotated by run_i the same way — see sweep_threads'
+    docstring for why.
+    """
     rows = []
+    leg = [("bedtools", None, False)] + \
+          [(tool_name_for_subb(s), s, False) for s in sub_b_list] + \
+          ([(IE_ARM_TOOL, 1.0, True)] if metrics_arm else [])
     for ni in intervals_list:
         for run_i in range(num_runs):
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -529,27 +564,29 @@ def sweep_intervals(binary, intervals_list, precision, num_threads, num_files, n
                 f1, f2, sort_time = make_data(num_files, ni, tmp_dir, num_sort_workers=num_threads)
                 print(f"  sort:    {sort_time:.2f}s wall (parallel, {num_threads} workers; pre-sort, not in tool wall below)")
 
-                print("  bedtools...", end=" ", flush=True)
-                bt = run_bedtools(f1, f2, num_threads)
-                bt["sort_time"] = sort_time
-                print(f"{bt['wall_time']:.2f}s wall")
-                rows.append(_row("intervals", "bedtools",
-                                 precision=None, threads=num_threads,
-                                 num_files=num_files, num_intervals=ni,
-                                 run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"],
-                                 provenance=provenance))
-
-                for sub_b in sub_b_list:
-                    print(f"  hammock-cpp subB={sub_b:g}...", end=" ", flush=True)
-                    hm = run_hammock(binary, f1, f2, precision, num_threads, sub_b=sub_b)
-                    hm["sort_time"] = sort_time
-                    print(f"{hm['wall_time']:.2f}s wall")
-                    rows.append(_row("intervals", tool_name_for_subb(sub_b),
-                                     precision=precision, threads=num_threads,
-                                     num_files=num_files, num_intervals=ni,
-                                     run_id=run_i, result=hm,
-                                     keys=HAMMOCK_KEYS + ["sort_time"], sub_b=sub_b,
-                                     provenance=provenance))
+                for tool, sub_b, use_metrics in _rotate(leg, run_i):
+                    if tool == "bedtools":
+                        print("  bedtools...", end=" ", flush=True)
+                        bt = run_bedtools(f1, f2, num_threads)
+                        bt["sort_time"] = sort_time
+                        print(f"{bt['wall_time']:.2f}s wall")
+                        rows.append(_row("intervals", "bedtools",
+                                         precision=None, threads=num_threads,
+                                         num_files=num_files, num_intervals=ni,
+                                         run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"],
+                                         provenance=provenance))
+                    else:
+                        shown = f"subB={sub_b:g}" + (" +IE" if use_metrics else "")
+                        print(f"  hammock-cpp {shown}...", end=" ", flush=True)
+                        hm = run_hammock(binary, f1, f2, precision, num_threads, sub_b=sub_b, metrics=use_metrics)
+                        hm["sort_time"] = sort_time
+                        print(f"{hm['wall_time']:.2f}s wall")
+                        rows.append(_row("intervals", tool,
+                                         precision=precision, threads=num_threads,
+                                         num_files=num_files, num_intervals=ni,
+                                         run_id=run_i, result=hm,
+                                         keys=HAMMOCK_KEYS + ["sort_time"], sub_b=sub_b,
+                                         provenance=provenance))
     return rows
 
 
@@ -819,6 +856,35 @@ def main():
                              "columns; it re-sketches every input, so it "
                              "roughly DOUBLES the axis's wall time. Recorded "
                              "timings come only from the first pass either way.")
+    parser.add_argument("--metrics-arm", action="store_true",
+                        help="Threads/intervals axes only (the precision axis "
+                             "always measures both via --no-ie/--ie above). "
+                             "Adds ONE extra hammock invocation per point, at "
+                             "subB=1.0, run WITH the full --metrics block "
+                             "instead of --no-metrics -- tagged hammock_ie_B, "
+                             "same convention as benchmark_cpp_vs_bedtools.py's "
+                             "own --metrics-arm. Cost: NOT the --no-ie flag's "
+                             "'roughly doubles' above (that flag adds an IE "
+                             "twin to EVERY hammock arm; this adds ONE, "
+                             "regardless of len(sub_b_list)) -- but also NOT "
+                             "reliably 'less than CLAUDE.md's 1.6-1.8x "
+                             "pairwise-phase number' either; an earlier draft "
+                             "of this help text claimed that and it does not "
+                             "hold in general (that 1.6-1.8x is the cost "
+                             "INSIDE one hammock run's comparison phase, not "
+                             "what a whole extra run costs relative to the "
+                             "point). Budget it as one more hammock-cpp "
+                             "invocation per point and sum across your "
+                             "--thread-list/--intervals-list. How much that "
+                             "adds to axis TOTAL wall time is point-dependent "
+                             "-- proportionally largest where hammock's own "
+                             "cost is comparable to bedtools' (low thread "
+                             "counts), smallest where bedtools dominates the "
+                             "point. Measured on one config, p=18, default "
+                             "--thread-list (docs/data/sweep_threads_p18.csv): "
+                             "per-point ratio ranged 1.41x (t=48) to 1.66x "
+                             "(t=1), axis-total sum 1.60x -- do not assume "
+                             "this is cheap. Ignored on --axis precision.")
 
     args = parser.parse_args()
     sub_b_list = [float(x) for x in args.sub_b_list.split(",") if x.strip()]
@@ -904,6 +970,7 @@ def main():
               f"intervals={args.num_intervals}, subB ∈ {sub_b_list}")
         rows = sweep_threads(binary, thread_list, args.precision, nf,
                              args.num_intervals, args.runs, sub_b_list,
+                             metrics_arm=args.metrics_arm,
                              provenance=provenance)
         suffix = f"(p={args.precision}, files={nf}, intervals={args.num_intervals}, subB={subb_tag})"
     else:
@@ -912,7 +979,9 @@ def main():
         print(f"[intervals] N ∈ {intervals_list}, p={args.precision}, t={args.threads}, "
               f"files={nf}, subB ∈ {sub_b_list}")
         rows = sweep_intervals(binary, intervals_list, args.precision, args.threads,
-                               nf, args.runs, sub_b_list, provenance=provenance)
+                               nf, args.runs, sub_b_list,
+                               metrics_arm=args.metrics_arm,
+                               provenance=provenance)
         suffix = f"(p={args.precision}, t={args.threads}, files={nf}, subB={subb_tag})"
 
     stem = f"sweep_{args.axis}_{timestamp}"

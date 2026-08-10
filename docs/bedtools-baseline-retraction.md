@@ -89,7 +89,15 @@ None of these are "be more careful"; all are mechanical.
 - **The timed configuration is not the recommended one.** Headlines run
   `--no-metrics`; `jaccard_similarity_ie`, the column the paper tells users to
   read, costs 8.5% more at N=512 and rising.
-- **`sweep.py` never rotates bedtools** — it runs first in all three sweeps.
+- **`sweep.py`'s `sweep_precision` never rotates bedtools** — it runs first,
+  once per replicate, before the per-precision loop. (Corrected: this used to
+  say "in all three sweeps." `sweep_threads` and `sweep_intervals` were fixed
+  2026-08-09 — bedtools and every hammock arm, including the `--metrics-arm`
+  IE arm, now rotate via `_rotate(leg, run_i)`, the same helper and convention
+  `benchmark_cpp_vs_bedtools.py` already used. `sweep_precision`'s structure
+  is different — bedtools' cost doesn't depend on precision, so it runs once
+  outside the swept loop rather than once per point — and rotating it needs
+  its own fix, not yet done.)
 - **`run_bedtools_maurano.py` bypasses the fixed `run_bedtools` wrapper**, so
   the Maurano baseline re-measured on 2026-08-09 (job 29652709) still carries
   defects 3 and 4.
@@ -102,14 +110,39 @@ None of these are "be more careful"; all are mechanical.
 
 ## Re-measured and gated
 
-**Figure 3 Panel A (synthetic N-scaling, p=18, t=16).** Job 29656140, node
-c531, `docs/data/cpp_vs_bedtools_t16_p18.csv`. N=512: bedtools 714.77 s,
-hammock 70.32 s, **10.17×** (was wrongly 27.61×). hammock's own N=512 wall is
-unchanged by the fix (71.65 s → 70.32 s) — the control confirming only the
-bedtools arm moved. Gate 1 (monotonicity): passes at every N except N=2→N=4,
-which is genuine n=3 noise on a ~15 ms/pair cell (CV 102%), not a new defect —
-see `docs/seed-benchmark-methodology.md` item 6. Gates 2–6 not yet run as
-automated checks (done by hand for this rerun); still worth building as code.
+**Figure 3 Panel A (synthetic N-scaling, p=18, t=16).** Job **29671317**, node
+**c529**, `docs/data/cpp_vs_bedtools_t16_p18.csv` (one exclusive allocation,
+two passes: N∈{2,4,8,16,32} at 20 replicates, N∈{64,128,256,512} at 3).
+N=512: bedtools 653.41 s, hammock 70.97 s, **9.21×**. hammock's own N=512 wall
+has moved under 1% across the whole chain of reruns (71.65 s → 70.32 s →
+70.97 s) — the control confirming only the bedtools arm's correction is doing
+the work. Gate 1 (monotonicity): now passes at **every** N, including N=2→N=4
+— see "small-N cells corrected" below for why that's new. Gates 2–6 not yet
+run as automated checks (done by hand for this rerun); still worth building as
+code.
+
+**Small-N cells corrected (superseding the entry below this one).** This job
+supersedes an intermediate rerun, job 29656140/node c531, which fixed the
+LD_LIBRARY_PATH bug (moving N=512 from 27.61× to 10.17×) but whose own N=2/N=4
+cells were noise-corrupted at n=3 — one bad bedtools replicate made the table
+read an impossible cost *drop* from N=2 to N=4 (0.50 s → 0.18 s). A 20-rep,
+single-node recheck (job 29670970, node c431) found bedtools winning 20/20 at
+N=2, the opposite sign, with a properly monotonic cost curve — but that job's
+node differed from 29656140's (c431 vs c531), and their one overlapping cell
+(N=32) disagreed by 28%, too much to safely splice. Job 29671317 was designed
+as a single-node, two-pass rerun specifically to fix this without introducing
+a new node confound. Result: bedtools wins reliably (monotonic, tight spread
+— e.g. N=32 spans 2.52–2.63 s across 20 reps, CV ~1%) at every N ≤ 32; the
+crossover falls between N=32 (0.67×) and N=64 (1.28×). N=512 also moved
+slightly in this rerun (714.77 s → 653.41 s bedtools, 10.17× → 9.21×) — a
+normal amount of n=3 run-to-run noise on the unchanged high-N pass, not a
+further correction.
+
+**The `hammock total (+IE)` curve is no longer TEMPORARY.** It was added to
+Figure 3A pending validation against this job; validation is done. At N=512
+it reads **8.4×** faster than bedtools against **9.2×** for the default
+column (comparison-phase cost 1.64–1.94× at N≥64, rising to 14.1% of total
+wall by N=512).
 
 **Figure 3 Panel B (Maurano, subB sweep, t=8).** `run_bedtools_maurano.py`
 ported to call the fixed `run_bedtools()` wrapper instead of `run_with_time`
@@ -123,7 +156,47 @@ the bar-chart title and per-bar labels were hardcoded to "faster" and have
 been changed to derive from the data's sign (same defect, different file,
 as the one already fixed in `plot_pairwise_scaling.R`).
 
-**Still not re-measured**: Figs S6/S7/S8 (`sweep.py` path), `RESULTS.md` in
-both experiment directories, and the bedtools-own-optimum (t=8) reframing
-that used to accompany the Panel A table. Do not quote any of these until
-they go through `run_bedtools()` and get an entry here.
+**Supplementary Fig S6 (threading, `paper/figures/threading_supplement.png`).**
+Job 29670792, node c531, `docs/data/sweep_threads_p18.csv` (p=18, 64
+files/side, 10k intervals, means of 3; replaces the pre-fix `sweep_threads_p18.csv`
+generated 17:53, before the LD_LIBRARY_PATH commit at 22:26:45). BEDTools
+plateaus by t=8 (4.22× speedup vs its own t=1, 6.4 of 16 cores) and stays flat
+through t=48 (4.20×, no further gain, no strong regression); hammock keeps
+improving to t=32 (12.11×, 24.0 of 32 cores busy) then eases back slightly at
+t=48 (11.59×, 28.1 of 48), consistent with the oversubscription concern in
+`docs/seed-mode-d-threading.md`'s sibling note for interval-mode pools.
+BEDTools's achieved parallelism plateaus far below its thread count (6.5 of
+16-48 cores), matching this doc's "process-creation-bound" finding, though
+the mechanism is BEDTools' N² per-pair process model saturating, not a
+literal 123 exec/s ceiling (that framing is separately retracted above).
+
+**Supplementary Fig S8 (precision frontier, `paper/figures/precision_frontier.png`).**
+Job 29670793, node c432, `docs/data/sweep_precision_maurano_p18_t16.csv` +
+`..._t8.csv` (Maurano, 380 ordered pairs, subB=1.0; replaces the pre-fix pair
+generated 18:00, job 29651773). At the CLI default p=18, t=16: hammock 6.41 s
+vs bedtools 4.40 s reference (**0.69×**, i.e. slower — N=20 is below the N≈64
+crossover, consistent with Panel B); at t=8, 0.81×. hammock does not beat
+BEDTools at any precision in this sweep (0.08×–0.77× across p=12–24) — the
+near-parity an earlier, pre-fix draft of this figure showed was itself an
+artifact of the same LD_LIBRARY_PATH bug. `jaccard_similarity_ie` MAE falls
+monotonically 0.0088 (p=12) → 0.00015 (p=24), a 57× improvement, while
+register-equality `jaccard_similarity` MAE stays flat at ≈0.138 across the
+whole range (chance-agreement floor, not sampling noise — precision cannot
+fix it, hence why the frontier's x-axis is the IE column). Cross-checked
+bit-identical against the t=8 CSV's own accuracy columns (max |ΔMAE| = 0, as
+it must be — accuracy doesn't depend on thread count).
+
+**Supplementary Fig S7 (catalog scale, `paper/figures/largeN_supplement.png`)**
+re-rendered against the corrected `cpp_vs_bedtools_t16_p18.csv`, now job
+29671317; projected bedtools at N=2048 fell further, 30,093 s/72.1× (original,
+pre-LD_LIBRARY_PATH-fix) → 10,463 s/25.1× (job 29656140, before its small-N
+fix) → **10,294 s/24.7×** (current). The N=512 overlap check between this
+figure's two source CSVs now reads 70.97 s vs 71.73 s (1.1%, was 0.1% against
+the superseded job) — still within this cluster's documented node-to-node
+spread. No further action needed here.
+
+All three supplementary figures are now on the fixed harness, and Figure 3
+Panel A's small-N cells are corrected (see above). **Still open**: `RESULTS.md`
+in both experiment directories (prose, not regenerated), and the
+bedtools-own-optimum (t=8) reframing that used to accompany the Panel A
+table.
