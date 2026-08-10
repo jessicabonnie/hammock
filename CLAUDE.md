@@ -3,6 +3,28 @@
 Guidance for Claude Code working in this repository. Internal notes — keep
 divergences and unimplemented-feature info here, not in README.md.
 
+## ⛔ Bedtools-relative performance numbers are retracted (2026-08-09)
+
+Four harness defects, all inflating the bedtools baseline, all in our favour.
+The largest: the bedtools module exports `LD_LIBRARY_PATH` with 17 directories
+of which 4 are used, and `ld.so` searches the other 13 (on GPFS) on **every one
+of N² execs** — worth 2.4–2.8×. N=512 bedtools 1978 s → 716 s; the headline
+falls 27.61× → ~10.2×, itself provisional.
+
+Also retracted: the "~123 exec/s process-creation cap" (measured 364 exec/s
+clean), and the `md5sum` control that appeared to confirm it — that control ran
+in the same polluted environment.
+
+**Do not quote any speedup-over-bedtools number from this file or any other
+until it is listed under "Re-measured and gated" in
+`docs/bedtools-baseline-retraction.md`.** Hammock-internal ratios (mixed-stride
+vs hash-threshold, precision sweeps, the fused-pass A/B, Mode D threading) are
+unaffected — they divide two hammock numbers from one run.
+
+The recurring failure was **verifying mechanisms without verifying magnitudes**:
+a 0.7 s floor was accepted as the explanation for a 1262 s gap. Check a fix
+against the size of the thing it claims to explain.
+
 ## What this is
 
 A Python + C++ refactor of [`hammock`](https://github.com/jessicabonnie/hammock).

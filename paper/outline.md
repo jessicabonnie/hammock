@@ -1,3 +1,32 @@
+> # ⛔ EVERY BEDTOOLS-RELATIVE NUMBER BELOW IS SUPERSEDED (2026-08-09)
+>
+> **Do not quote any speedup-over-bedtools figure from this file.** Four defects
+> were found in the benchmark harness in one day, **all inflating the bedtools
+> baseline, i.e. all in hammock's favour**:
+>
+> 1. `bedtools.sh` ran three processes per pair instead of one (~2.1×).
+> 2. bedtools was pinned to 2.27.1, whose jaccard union is order-dependent.
+> 3. `ml` module loads ran inside the timed region.
+> 4. **The bedtools module exports `LD_LIBRARY_PATH` with 17 directories, of
+>    which bedtools uses 4. The dynamic linker searches the other 13 — on GPFS —
+>    on every `execve`, and a pairwise workflow is N² execs.** This alone
+>    inflated bedtools 2.4–2.8×.
+>
+> Measured effect at N=512: bedtools 1978 s → 716 s. **The headline speedup falls
+> from 27.61× to roughly 10.2×**, and that replacement is itself provisional —
+> it rests on a single job and has not been through the checks below.
+>
+> Also retracted: the "process creation caps near **123 exec/s** and does not
+> scale with cores" mechanism. Measured 16-way: **364 exec/s** clean, 196 slow.
+> The `md5sum` control that appeared to confirm it ran in the same polluted
+> environment, so it confirmed nothing.
+>
+> **What survives:** anything hammock-internal — mixed-stride vs hash-threshold,
+> the precision sweeps, the fused-pass A/B, Mode D threading. Those divide two
+> hammock numbers measured in one run and are unaffected.
+>
+> Status and worklist: `docs/bedtools-baseline-retraction.md`.
+
 ## Thesis
 
 Modern interval collections are limited by two boundaries: the computational cost of comparing every dataset and the coordinate dependence that prevents comparison across references. Hammock creates reusable sketches of either interval coordinates or interval-derived sequences, expanding comparison within and across those boundaries while preserving useful biological structure.
