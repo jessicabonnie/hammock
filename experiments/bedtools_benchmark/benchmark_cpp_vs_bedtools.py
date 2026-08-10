@@ -269,12 +269,15 @@ def run_bedtools(file1_list: str, file2_list: str, num_threads: int) -> Dict[str
     binary = _resolve_bedtools()
     if binary:
         env["HAMMOCK_BEDTOOLS_BIN"] = binary
+        if _BEDTOOLS_LDPATH:
+            env["LD_LIBRARY_PATH"] = _BEDTOOLS_LDPATH
     env["HAMMOCK_BEDTOOLS_QUIET"] = "1"
     return run_with_time(
         ["bash", BEDTOOLS_SCRIPT, file1_list, file2_list, str(num_threads)], env=env)
 
 
 _BEDTOOLS_BIN: Any = "unset"
+_BEDTOOLS_LDPATH: Any = None
 
 
 def _resolve_bedtools():
@@ -284,20 +287,115 @@ def _resolve_bedtools():
     which is 60x the thing being measured -- doing that per rep is what made the
     first version of the calibration meaningless.
     """
-    global _BEDTOOLS_BIN
+    global _BEDTOOLS_BIN, _BEDTOOLS_LDPATH
     if _BEDTOOLS_BIN != "unset":
         return _BEDTOOLS_BIN
     _BEDTOOLS_BIN = None
     module = os.environ.get("HAMMOCK_BEDTOOLS_MODULE", "bedtools/2.30.0")
-    probe = f"ml {module} 2>/dev/null; command -v bedtools" if module else "command -v bedtools"
+    probe = (f"ml {module} 2>/dev/null; command -v bedtools; echo '---'; "
+             f"ldd $(command -v bedtools) 2>/dev/null") if module else \
+            "command -v bedtools; echo '---'; ldd $(command -v bedtools) 2>/dev/null"
     try:
         r = subprocess.run(["bash", "-lc", probe], capture_output=True, text=True, timeout=120)
-        path = (r.stdout or "").strip().splitlines()[-1] if (r.stdout or "").strip() else ""
+        out = (r.stdout or "")
+        head, _, tail = out.partition("---")
+        path = head.strip().splitlines()[-1] if head.strip() else ""
         if path and os.path.exists(path):
             _BEDTOOLS_BIN = path
+            # MINIMAL library path, derived from what ldd actually resolved.
+            #
+            # This is a correctness fix AND the single largest timing fix in this
+            # harness. The bedtools module exports an LD_LIBRARY_PATH of 17
+            # directories, of which bedtools uses 4; the other 13 are searched
+            # fruitlessly by the dynamic linker on EVERY exec, and they live on
+            # GPFS. A pairwise workflow is N^2 execs, so that tax is multiplied
+            # by 262,144 at N=512: measured 9.13 s vs 3.80 s on 1024 pairs, and
+            # 1978 s vs 716 s at N=512. It inflated bedtools by 2.4-2.8x.
+            #
+            # Passing only the resolved directories is faster, produces
+            # byte-identical jaccards (gated below in the benchmark), and unlike
+            # relying on the ambient environment it cannot fail with
+            # "libbz2.so.1.0: cannot open shared object file" on a node whose
+            # login environment happens not to supply a compatible libbz2.
+            dirs = []
+            for line in tail.splitlines():
+                parts = line.split("=>")
+                if len(parts) == 2:
+                    lib = parts[1].strip().split(" ")[0]
+                    if lib.startswith("/"):
+                        d = os.path.dirname(lib)
+                        if d not in dirs:
+                            dirs.append(d)
+            _BEDTOOLS_LDPATH = ":".join(dirs) if dirs else None
     except (OSError, subprocess.SubprocessError, IndexError):
         pass
     return _BEDTOOLS_BIN
+
+
+def harness_floor_ms(binary: str, precision: int, num_threads: int, reps: int = 5):
+    """Zero-work cost of each arm: what a run costs when there is nothing to compute.
+
+    WHY THIS EXISTS. Panel A once reported hammock 3.40x faster at N=2 when
+    bedtools was in fact faster, because bedtools.sh ran `ml bedtools` (0.28 s),
+    `ml parallel` and two `--version` execs INSIDE the timed region while the
+    hammock arm was a bare exec of the binary. A fixed ~0.83 s charged to one arm
+    only is 0.04% of the N=512 cell and 99% of the N=2 cell, so it inverted the
+    small-N comparison while leaving the headline untouched -- the worst possible
+    shape for a bug, because the number everyone checks stays right.
+
+    The tell was in the data the whole time and was not read: the bedtools curve
+    DROPPED from N=2 to N=4. Cost cannot fall while work quadruples, so a flat
+    floor was the only explanation. Measuring the floor directly turns that from
+    something a reader has to notice into a number in the CSV.
+
+    Returns (hammock_floor_ms, bedtools_floor_ms), each the median of `reps` runs
+    on a 1x1 list of a single-interval BED -- as close to zero work as the
+    interfaces allow. Compare each against the cell it is a component of; when
+    the floor is a large fraction of a cell, that cell is measuring startup and
+    no speedup should be quoted from it.
+    """
+    tmpdir = tempfile.mkdtemp(prefix="floor_")
+    try:
+        bed = os.path.join(tmpdir, "one.bed")
+        with open(bed, "w") as f:
+            f.write("chr1\t100\t150\n")
+        lst = os.path.join(tmpdir, "one.txt")
+        with open(lst, "w") as f:
+            f.write(bed + "\n")
+        out = os.path.join(tmpdir, "o")
+
+        def med(fn):
+            xs = []
+            for _ in range(reps + 1):          # +1 warm-up, discarded
+                t0 = time.time()
+                try:
+                    fn()
+                except Exception:
+                    return None
+                xs.append((time.time() - t0) * 1000.0)
+            if not xs[1:]:
+                return None      # never let np.median([]) hand back a silent nan
+            return float(np.median(xs[1:]))
+
+        hm = med(lambda: subprocess.run(
+            [binary, lst, lst, "--mode", "B", "-p", str(precision), "-o", out,
+             "--threads", str(num_threads), "--no-metrics"],
+            capture_output=True, check=True))
+
+        env = dict(os.environ)
+        b = _resolve_bedtools()
+        if b:
+            env["HAMMOCK_BEDTOOLS_BIN"] = b
+            if _BEDTOOLS_LDPATH:
+                env["LD_LIBRARY_PATH"] = _BEDTOOLS_LDPATH
+        env["HAMMOCK_BEDTOOLS_QUIET"] = "1"
+        bt = med(lambda: subprocess.run(
+            ["bash", BEDTOOLS_SCRIPT, lst, lst, str(num_threads)],
+            capture_output=True, check=True, env=env))
+        return hm, bt
+    finally:
+        import shutil
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def bedtools_serial_ms(file1_list: str, file2_list: str, reps: int = 5):
