@@ -478,7 +478,10 @@ already flags as where `sd_RE ≈ √(c(1−c)/m)` is 4.7× off. That is the lik
 reconciliation, and it is a limit of the closed form, not of the measurement.
 
 MAE favours inclusion–exclusion in **every** stratum at **every** precision, by
-20–1700×. No disagreement there.
+**12–388×** (recomputed directly from `results/estimator_compare_full.csv`:
+per-(stratum, precision)-cell MAE ratios range from 11.9× at p=12, J≥0.05 to
+387.7× at p=24, J<0.05 — corrects an earlier "20–1700×" figure that did not
+reproduce from this file). No disagreement there.
 
 ### 9.2 Answer to Q2 — yes, retire it, but name where the exception lives
 

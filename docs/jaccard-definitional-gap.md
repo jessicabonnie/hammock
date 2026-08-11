@@ -224,7 +224,11 @@ J ≈ a few/√m (p=14 → J ≲ 0.02; p=20 → J ≲ 0.002).
 transform of set Jaccard, monotone only at fixed cardinality ratio;
 `jaccard_similarity_ie` is near-unbiased but noisier and censored at 0. The
 earlier framing "neither dominates, report both" overstated the symmetry:
-inclusion–exclusion wins on magnitude everywhere by 20–1700×, and the
+inclusion–exclusion wins on magnitude everywhere by 12–388× (recomputed
+directly from `experiments/bedtools_benchmark/results/estimator_compare_full.csv`:
+per-(stratum, precision)-cell MAE ratios range from 11.9× at p=12, J≥0.05 to
+387.7× at p=24, J<0.05; corrects an earlier "20–1700×" figure that did not
+reproduce from this file), and the
 register-equality advantage is confined to *ranking*, below J ≈ 0.05, at
 p ≤ 20, among pairs of comparable size. Since precision is a knob the user sets
 and true J is not knowable in advance, state it as a reading rule:
