@@ -60,15 +60,29 @@
 # exact-match filter) / hammock_ie_B_subB0.1 / hammock_ie_B_subB0.01 (both fail
 # every existing R consumer's filter, so this cannot corrupt an existing
 # figure's data even if a script were pointed at this CSV by mistake).
+#
+# BINARY PINNING (added after job 29758041 was contaminated mid-run 2026-08-11
+# by a concurrent rebuild of the shared site-packages hammock-cpp -- see
+# docs/seed-hammock-cpp-file-dispatch.md). This job copies the live binary to
+# a job-local, node-scratch path ONCE at start and points HAMMOCK_CPP_BIN
+# there, so nothing outside this job can mutate the binary this run measures,
+# no matter how long the sweep takes or what else touches the shared env
+# meanwhile.
 
 set -euo pipefail
 cd /home/jbonnie1/interval_sketch/hammock_claude
 mkdir -p experiments/bedtools_benchmark/logs
 
 PYTHON=/home/jbonnie1/.conda/envs/hammock/bin/python3
-export HAMMOCK_CPP_BIN=/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/python3.10/site-packages/bin/hammock-cpp
+LIVE_BIN=/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/python3.10/site-packages/bin/hammock-cpp
+PINNED_DIR="${TMPDIR:-/tmp}/subB_nsweep_${SLURM_JOB_ID:-$$}"
+mkdir -p "$PINNED_DIR"
+cp "$LIVE_BIN" "$PINNED_DIR/hammock-cpp"
+chmod +x "$PINNED_DIR/hammock-cpp"
+export HAMMOCK_CPP_BIN="$PINNED_DIR/hammock-cpp"
 
 echo "node: $(hostname)  cpu: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | xargs)  cores: $(nproc)"
+echo "pinned binary: $HAMMOCK_CPP_BIN (copied from $LIVE_BIN at job start, git HEAD $(git rev-parse HEAD))"
 "$HAMMOCK_CPP_BIN" --version
 
 "$PYTHON" experiments/bedtools_benchmark/benchmark_cpp_vs_bedtools.py \

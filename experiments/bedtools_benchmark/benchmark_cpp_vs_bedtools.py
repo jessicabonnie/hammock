@@ -29,7 +29,7 @@ import sys
 import tempfile
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np  # type: ignore
 
@@ -675,6 +675,7 @@ def run_benchmark(
     metrics_all: bool = False,
     corpus_seed: Optional[int] = None,
     with_bedtools: bool = True,
+    checkpoint_cb: Optional[Callable[[List[Dict[str, Any]]], None]] = None,
 ) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
     print("\nBenchmark configuration:")
@@ -816,6 +817,16 @@ def run_benchmark(
         for tool, runs_for in runs_by_tool.items():
             entry[tool] = aggregate(runs_for, hammock_keys)
         results.append(entry)
+
+        # Checkpoint after every num_files block, not just at the very end.
+        # A long sweep (hours, many N values) previously kept everything in
+        # memory and wrote nothing until the whole list finished -- an
+        # interruption anywhere (timeout, scancel, node failure) lost the
+        # entire run, including N values that had already completed cleanly.
+        # See docs/seed-hammock-cpp-file-dispatch.md: job 29758041 lost all
+        # of N=2..1024 this way when it was cancelled partway into N=2048.
+        if checkpoint_cb is not None:
+            checkpoint_cb(results)
 
     return results
 
@@ -1161,6 +1172,23 @@ def main() -> int:
             print(f"subB values must lie in (0, 1.0]; got {s}", file=sys.stderr)
             return 1
 
+    # Built before run_benchmark so the checkpoint callback below can write a
+    # complete, correctly-provenanced CSV/report after every num_files block,
+    # not just once at the end (see run_benchmark's checkpoint_cb docstring
+    # note).
+    prov = get_system_info()
+    prov["binary_version"] = binary_version
+    # Empty, not the string "unseeded": the column is otherwise an integer, and a
+    # mixed character/numeric column makes a seeded and an unseeded CSV fail to
+    # bind_rows in R. Empty reads as NA in both R and pandas.
+    prov["corpus_seed"] = args.corpus_seed if args.corpus_seed is not None else ""
+    runs_csv_path = re.sub(r"\.csv$", "_runs.csv", csv_path)
+
+    def _checkpoint(partial_results: List[Dict[str, Any]]) -> None:
+        write_text_report(partial_results, txt_path)
+        write_csv(partial_results, csv_path, prov)
+        write_runs_csv(partial_results, runs_csv_path, prov)
+
     results = run_benchmark(
         binary=binary,
         num_files_list=num_files_list,
@@ -1173,17 +1201,15 @@ def main() -> int:
         metrics_all=args.metrics_all,
         corpus_seed=args.corpus_seed,
         with_bedtools=args.with_bedtools,
+        checkpoint_cb=_checkpoint,
     )
 
+    # Final write is not redundant with the last checkpoint: it's identical in
+    # content (same results list) but guarantees a write happened even if
+    # num_files_list were ever empty, and keeps this call site independent of
+    # checkpointing being wired up correctly above.
     write_text_report(results, txt_path)
-    prov = get_system_info()
-    prov["binary_version"] = binary_version
-    # Empty, not the string "unseeded": the column is otherwise an integer, and a
-    # mixed character/numeric column makes a seeded and an unseeded CSV fail to
-    # bind_rows in R. Empty reads as NA in both R and pandas.
-    prov["corpus_seed"] = args.corpus_seed if args.corpus_seed is not None else ""
     write_csv(results, csv_path, prov)
-    runs_csv_path = re.sub(r"\.csv$", "_runs.csv", csv_path)
     write_runs_csv(results, runs_csv_path, prov)
     plot(results, png_path)
     print(f"\nReports: {txt_path}\n         {csv_path}\n         {runs_csv_path} (raw per-replicate rows)\nFigure:  {png_path}")
