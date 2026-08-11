@@ -25,6 +25,15 @@
 
 namespace {
 
+// Three output shapes -- docs/seed-metrics-column-restructure.md. Mirrors
+// runner.py's `args.metrics_mode` ("ie"/"re"/"full"); Ie is the default
+// because it is the column this repo recommends reading (CLAUDE.md
+// divergence #2) -- comparable to bedtools, unlike register-equality
+// jaccard_similarity. RegisterEquality is the one shape that must stay
+// cheap: it is the timing arm every benchmark harness in this repo uses,
+// and it must not compute the union/containment pass.
+enum class MetricsMode { Ie, RegisterEquality, Full };
+
 struct Args {
     std::string filepaths_file;
     std::string primary_file;
@@ -40,7 +49,7 @@ struct Args {
     uint32_t gate_seed = 31337;
     int threads = 0;
     bool verbose = false;
-    bool metrics = true;
+    MetricsMode metrics_mode = MetricsMode::Ie;
 };
 
 // Mirror of runner.py's _jaccard_ie_from_containments. Kept expression-for-
@@ -128,12 +137,23 @@ void print_help(const char* prog) {
         "                          hashed (default: tab). This is not the output\n"
         "                          delimiter; changing it changes every sketch and breaks\n"
         "                          comparability with the Python CLI.\n"
-        "  --metrics               Accepted for compatibility; this is now the default.\n"
-        "  --no-metrics            Emit only query/reference/jaccard_similarity, and\n"
-        "                          tag the output filename '_j3'. Skips a union plus\n"
-        "                          two cardinality estimates per pair -- use it for\n"
-        "                          timing runs that must stay comparable with results\n"
-        "                          published before 0.7.0.\n"
+        "  --metrics               Emit the full 8-column block: jaccard_similarity,\n"
+        "                          jaccard_similarity_ie, containment_AB, containment_BA,\n"
+        "                          cosketch_geom, cosketch_arith, cosketch_max,\n"
+        "                          register_equality_similarity (the last a literal\n"
+        "                          duplicate of jaccard_similarity). Tags the output\n"
+        "                          filename '_full'. Mutually exclusive with\n"
+        "                          --register-equality/--re.\n"
+        "  --register-equality,    Emit jaccard_similarity and register_equality_\n"
+        "  --re                    similarity (a literal duplicate of it) -- the cheap\n"
+        "                          register-equality-only arm, skipping the union/\n"
+        "                          containment pass entirely. Tags the output filename\n"
+        "                          '_re'. Mutually exclusive with --metrics.\n"
+        "                          Default (neither flag given): emit jaccard_similarity_ie\n"
+        "                          alone, tagged '_ie'. This needs the same union pass as\n"
+        "                          --metrics (not the cheap arm) -- it is the column this\n"
+        "                          project recommends reading by default, comparable to\n"
+        "                          bedtools, unlike jaccard_similarity.\n"
         "  --output, -o <prefix>   Output filename prefix (default: hammock); --outprefix\n"
         "                          is accepted as an alias. Suffixes are appended, see\n"
         "                          Output below.\n"
@@ -146,17 +166,26 @@ void print_help(const char* prog) {
         "  --version               Print the version and exit\n\n"
         "Output:\n"
         "  A TAB-delimited file (despite the .csv extension) named\n"
-        "    <prefix>_hll_p<precision>_jacc<MODE>[_expA<e>|_A<subA>][_B<subB>][_j3].csv\n"
-        "  with columns query, reference, jaccard_similarity, jaccard_similarity_ie,\n"
-        "  containment_AB, containment_BA, cosketch_geom, cosketch_arith, cosketch_max\n"
-        "  (only the first three under --no-metrics). Inputs are always named by\n"
-        "  basename; there is no --full-paths here. Note the metric columns match the\n"
-        "  Python CLI bit-for-bit, but the row layout does not: the Python CSV is\n"
-        "  comma-delimited and carries extra metadata columns.\n";
+        "    <prefix>_hll_p<precision>_jacc<MODE>[_expA<e>|_A<subA>][_B<subB>]_<shape>.csv\n"
+        "  where <shape> is exactly one of ie (default), re (--register-equality/--re), or\n"
+        "  full (--metrics) -- every run is tagged, none stays bare. Columns by shape:\n"
+        "    ie:   query, reference, jaccard_similarity_ie\n"
+        "    re:   query, reference, jaccard_similarity, register_equality_similarity\n"
+        "    full: query, reference, jaccard_similarity, jaccard_similarity_ie,\n"
+        "          containment_AB, containment_BA, cosketch_geom, cosketch_arith,\n"
+        "          cosketch_max, register_equality_similarity\n"
+        "  Inputs are always named by basename; there is no --full-paths here. Note the\n"
+        "  metric columns match the Python CLI bit-for-bit, but the row layout does not:\n"
+        "  the Python CSV is comma-delimited and carries extra metadata columns.\n";
 }
 
 bool parse_args(int argc, char** argv, Args& out) {
     std::vector<std::string> positional;
+    // Tracked separately from out.metrics_mode so both can be diagnosed after
+    // the loop -- Args only has room for one winner, but mutual exclusivity
+    // needs to know both flags were seen, not just which one landed last.
+    bool saw_metrics = false;
+    bool saw_register_equality = false;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "--help" || a == "-h") {
@@ -200,9 +229,14 @@ bool parse_args(int argc, char** argv, Args& out) {
         } else if ((a == "--threads" || a == "-t") && i + 1 < argc) {
             if (!parse_num("--threads", argv[++i], out.threads)) return false;
         } else if (a == "--metrics") {
-            out.metrics = true;
-        } else if (a == "--no-metrics") {
-            out.metrics = false;
+            saw_metrics = true;
+            out.metrics_mode = MetricsMode::Full;
+        } else if (a == "--register-equality" || a == "--re") {
+            saw_register_equality = true;
+            out.metrics_mode = MetricsMode::RegisterEquality;
+        // No --no-metrics case: removed, not aliased (matches the
+        // --peak-height precedent) -- it falls through to the generic
+        // unknown-argument error below.
         } else if (!a.empty() && a[0] != '-') {
             positional.push_back(a);
         } else {
@@ -231,6 +265,14 @@ bool parse_args(int argc, char** argv, Args& out) {
     }
     if (out.precision < 4 || out.precision > 24) {
         std::cerr << "Error: --precision must be in [4, 24]\n";
+        return false;
+    }
+    // Mirrors the Python CLI's argparse mutually_exclusive_group (cli.py) so
+    // the two front-ends agree on this error rather than one silently
+    // letting the last flag win.
+    if (saw_metrics && saw_register_equality) {
+        std::cerr << "Error: --metrics is mutually exclusive with "
+                     "--register-equality/--re\n";
         return false;
     }
     return true;
@@ -278,11 +320,16 @@ std::string outprefix_with_suffix(const Args& a) {
         out += "_B";
         out += buf;
     }
-    // Tag the *reduced* shape, so filename <-> column count stays one-to-one
-    // while the default output keeps the path it has always had. Every reader
-    // of this file parses by header name, so the tag is provenance for humans,
-    // not a parsing hook.
-    if (!a.metrics) out += "_j3";
+    // Every shape is tagged now, including the default -- an untagged name
+    // would collide with the pre-restructure contract, where "untagged" meant
+    // the old always-full 9-column block (no register_equality_similarity).
+    // Every reader of this file parses by header name, so the tag is
+    // provenance for humans, not a parsing hook.
+    switch (a.metrics_mode) {
+        case MetricsMode::Full:             out += "_full"; break;
+        case MetricsMode::RegisterEquality: out += "_re";   break;
+        case MetricsMode::Ie:               out += "_ie";   break;
+    }
     return out + ".csv";
 }
 
@@ -357,25 +404,43 @@ int main(int argc, char** argv) {
         std::cerr << "Error: could not open '" << out_path << "' for writing\n";
         return 1;
     }
-    if (args.metrics) {
-        std::fprintf(fp, "query\treference\tjaccard_similarity\tjaccard_similarity_ie"
-                         "\tcontainment_AB\tcontainment_BA"
-                         "\tcosketch_geom\tcosketch_arith\tcosketch_max\n");
-    } else {
-        std::fprintf(fp, "query\treference\tjaccard_similarity\n");
+    // Header + stride vary 3 ways: Ie (1 col: jaccard_similarity_ie), Full
+    // (8 cols: the containment/cosketch block plus a register_equality_
+    // similarity duplicate), RegisterEquality (2 cols: jaccard_similarity
+    // and its literal duplicate). Order and names must match runner.py's
+    // _metrics_shape bit-for-bit -- see tests/test_hammock_cpp_metrics.py.
+    switch (args.metrics_mode) {
+        case MetricsMode::Full:
+            std::fprintf(fp, "query\treference\tjaccard_similarity\tjaccard_similarity_ie"
+                             "\tcontainment_AB\tcontainment_BA"
+                             "\tcosketch_geom\tcosketch_arith\tcosketch_max"
+                             "\tregister_equality_similarity\n");
+            break;
+        case MetricsMode::RegisterEquality:
+            std::fprintf(fp, "query\treference\tjaccard_similarity\tregister_equality_similarity\n");
+            break;
+        case MetricsMode::Ie:
+            std::fprintf(fp, "query\treference\tjaccard_similarity_ie\n");
+            break;
     }
 
     const size_t n = queries.size();
     const size_t m = refs.size();
-    const size_t stride = args.metrics ? 7 : 1;
+    const size_t stride = (args.metrics_mode == MetricsMode::Full) ? 8
+                         : (args.metrics_mode == MetricsMode::RegisterEquality) ? 2 : 1;
     std::vector<double> matrix(n * m * stride);
+
+    // Ie and Full both need the union pass (Ie derives jaccard_similarity_ie
+    // from containments, which need a union); RegisterEquality is the one
+    // shape that must skip it entirely to stay the cheap timing arm.
+    const bool need_union = (args.metrics_mode != MetricsMode::RegisterEquality);
 
     // Cardinalities are pair-invariant, so hoist them: calling
     // intersection_size() per pair would recompute both operands' Ertl
-    // estimates every time. Only done under --metrics -- an unconditional
-    // hoist would add n+m register passes to the default path.
+    // estimates every time. Skipped for RegisterEquality -- an unconditional
+    // hoist would add n+m register passes to the cheap path.
     std::vector<double> qcard, rcard;
-    if (args.metrics) {
+    if (need_union) {
         qcard.resize(n);
         rcard.resize(m);
 #pragma omp parallel for schedule(static)
@@ -389,7 +454,7 @@ int main(int argc, char** argv) {
     // AbstractSketch implementation, so this always succeeds; if a second
     // backend ever lands, a null entry falls back to the virtual route.
     std::vector<const HLLSketch*> qh(n, nullptr), rh(m, nullptr);
-    if (args.metrics) {
+    if (need_union) {
         for (size_t i = 0; i < n; i++) qh[i] = dynamic_cast<const HLLSketch*>(qsk[i].get());
         for (size_t j = 0; j < m; j++) rh[j] = dynamic_cast<const HLLSketch*>(rsk[j].get());
     }
@@ -408,28 +473,45 @@ int main(int argc, char** argv) {
             if (failed.load(std::memory_order_relaxed)) continue;
             try {
                 double* cell = &matrix[(i * m + j) * stride];
-                if (!args.metrics) {
-                    cell[0] = qsk[i]->jaccard_similarity(*rsk[j]);
+                if (args.metrics_mode == MetricsMode::RegisterEquality) {
+                    // Cheap arm: one register-equality pass, no union, no
+                    // cardinality estimate. Must stay this way -- see the
+                    // MetricsMode comment above.
+                    cell[0] = cell[1] = qsk[i]->jaccard_similarity(*rsk[j]);
                     continue;
                 }
-                double u;
+                // reg_jac is register-equality jaccard_similarity, a side
+                // effect of the fused union pass. Ie discards it (its column
+                // is derived from containments below); Full writes it to both
+                // cell[0] and cell[7] (register_equality_similarity), reusing
+                // the one computed value so the two are bit-identical, not
+                // merely equal-by-value -- matching runner._metrics_row_values'
+                // j_val reuse.
+                double reg_jac, u;
                 if (qh[i] && rh[j]) {
-                    qh[i]->jaccard_and_union_cardinality(*rh[j], cell[0], u);
+                    qh[i]->jaccard_and_union_cardinality(*rh[j], reg_jac, u);
                 } else {
-                    cell[0] = qsk[i]->jaccard_similarity(*rsk[j]);
+                    reg_jac = qsk[i]->jaccard_similarity(*rsk[j]);
                     u = qsk[i]->union_with(*rsk[j])->cardinality();
                 }
                 const double inter = std::max(0.0, qcard[i] + rcard[j] - u);
                 const double c_ab = (qcard[i] > 0.0) ? inter / qcard[i] : 0.0;
                 const double c_ba = (rcard[j] > 0.0) ? inter / rcard[j] : 0.0;
-                cell[1] = jaccard_ie_from_containments(c_ab, c_ba);
-                cell[2] = c_ab;
-                cell[3] = c_ba;
-                // Cosketches use the *unclamped* containments, matching
-                // runner._cosketch_from_containments.
-                cell[4] = std::sqrt(std::max(c_ab * c_ba, 0.0));
-                cell[5] = 0.5 * (c_ab + c_ba);
-                cell[6] = std::max(c_ab, c_ba);
+                const double jac_ie = jaccard_ie_from_containments(c_ab, c_ba);
+                if (args.metrics_mode == MetricsMode::Ie) {
+                    cell[0] = jac_ie;
+                } else {  // Full
+                    cell[0] = reg_jac;
+                    cell[1] = jac_ie;
+                    cell[2] = c_ab;
+                    cell[3] = c_ba;
+                    // Cosketches use the *unclamped* containments, matching
+                    // runner._cosketch_from_containments.
+                    cell[4] = std::sqrt(std::max(c_ab * c_ba, 0.0));
+                    cell[5] = 0.5 * (c_ab + c_ba);
+                    cell[6] = std::max(c_ab, c_ba);
+                    cell[7] = reg_jac;
+                }
             } catch (const std::exception& e) {
 #pragma omp critical
                 {
@@ -459,8 +541,9 @@ int main(int argc, char** argv) {
 
     // Split the pairwise phase from the serial write. The write loop below is
     // single-threaded fprintf whose cost scales with the *column count*, so
-    // folding it into one number would charge --metrics' six extra %.17g fields
-    // to the estimator arithmetic. At low precision that formatting dominates.
+    // folding it into one number would charge --metrics' seven extra %.17g
+    // fields to the estimator arithmetic. At low precision that formatting
+    // dominates.
     auto t_w0 = std::chrono::steady_clock::now();
 
     for (size_t i = 0; i < n; i++) {
