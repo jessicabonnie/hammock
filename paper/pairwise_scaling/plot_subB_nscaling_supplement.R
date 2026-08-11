@@ -123,13 +123,24 @@ if (!all(present)) {
        call. = FALSE)
 }
 
-subb_label <- function(sub_b) paste0("subB=", format(sub_b, trim = TRUE))
+# Mapped off `tool` (exact strings, already validated above), not reformatted
+# from the numeric `sub_b` column: format() applied to a whole vector pads
+# every element to a common width, so format(c(1, 0.1, 0.01), trim=TRUE)
+# gives "1.00"/"0.10"/"0.01", not "1.0"/"0.1"/"0.01" -- only the last matched
+# the intended factor level, silently turning the other two rows' subb into
+# NA (found when pivot_wider warned about non-uniquely-identified values and
+# the overlap check reported "no N=512 row" despite both CSVs having one).
+tool_to_label <- c(
+  "hammock_ie_B" = "subB=1.0",
+  "hammock_ie_B_subB0.1" = "subB=0.1",
+  "hammock_ie_B_subB0.01" = "subB=0.01"
+)
 
 d <- raw %>%
   filter(tool %in% expected_tools) %>%
   transmute(
     num_files, threads = num_threads, precision, sub_b,
-    subb = factor(subb_label(sub_b), levels = c("subB=1.0", "subB=0.1", "subB=0.01")),
+    subb = factor(unname(tool_to_label[tool]), levels = c("subB=1.0", "subB=0.1", "subB=0.01")),
     wall_time = mean_wall_time, wall_sd = std_wall_time,
     sketch_time = mean_sketch_creation_time,
     comparison_time = mean_comparison_time,
