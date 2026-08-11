@@ -594,13 +594,41 @@ IE_ARM_TOOL = "hammock_ie_B"
 BEDTOOLS_TOOL = "bedtools"
 
 
-def arms_for(sub_b_list: List[float], metrics_arm: bool):
+def ie_tool_name_for_subb(sub_b: float) -> str:
+    """Tool-column identifier for a --metrics (jaccard_similarity_ie) hammock
+    run at a given subB, for the --metrics-all sweep mode (every subB arm run
+    with --metrics, not just a single extra subB=1.0 arm).
+
+    subB == 1.0 reuses IE_ARM_TOOL exactly ("hammock_ie_B") -- byte-compatible
+    with every archived CSV and every consumer that does `tool ==
+    "hammock_ie_B"` (plot_pairwise_scaling.R:146, plot_pairwise_scaling_supplement.R:169,232).
+    subB < 1.0 gets a distinct "hammock_ie_B_subB<val>" label: it fails those
+    exact-match filters (so it can't silently fan out a join that assumes one
+    hammock_ie_B row per (num_files, threads, precision), the guard at
+    plot_pairwise_scaling_supplement.R:185) and fails the
+    `grepl("^hammock_cpp_B", tool)` prefix the no-metrics consumers use, for
+    the same reason IE_ARM_TOOL does.
+    """
+    if sub_b >= 1.0:
+        return IE_ARM_TOOL
+    return f"hammock_ie_B_subB{sub_b:g}"
+
+
+def arms_for(sub_b_list: List[float], metrics_arm: bool, metrics_all: bool = False):
     """(tool_label, sub_b, use_metrics) per hammock arm in a run.
 
     Replaces sub_b_list as the anchor for "which hammock runs happened": the
     metrics arm shares subB=1.0 with the baseline arm, so keying downstream
     consumers on sub_b alone can no longer distinguish them.
+
+    metrics_all takes precedence over metrics_arm: every subB value in
+    sub_b_list gets its own --metrics arm (ie_tool_name_for_subb), instead of
+    the default no-metrics arm plus one extra fixed subB=1.0 metrics arm. Use
+    this when the figure being built needs jaccard_similarity_ie wall times
+    at subB < 1.0, which metrics_arm alone cannot produce.
     """
+    if metrics_all:
+        return [(ie_tool_name_for_subb(s), s, True) for s in sub_b_list]
     arms = [(tool_name_for_subb(s), s, False) for s in sub_b_list]
     if metrics_arm:
         arms.append((IE_ARM_TOOL, 1.0, True))
@@ -620,7 +648,7 @@ def arms_of(entry: Dict[str, Any]):
 
 
 def arm_legend(label: str, sub_b: float) -> str:
-    if label == IE_ARM_TOOL:
+    if label == IE_ARM_TOOL or label.startswith("hammock_ie_B_subB"):
         return f"hammock-cpp subB={sub_b:g} +IE"
     return f"hammock-cpp subB={sub_b:g}"
 
@@ -644,6 +672,7 @@ def run_benchmark(
     precision: int,
     sub_b_list: List[float],
     metrics_arm: bool = False,
+    metrics_all: bool = False,
     corpus_seed: Optional[int] = None,
     with_bedtools: bool = True,
 ) -> List[Dict[str, Any]]:
@@ -658,6 +687,7 @@ def run_benchmark(
     print(f"  HLL precision:      {precision}")
     print(f"  subB values:        {sub_b_list}")
     print(f"  metrics arm:        {metrics_arm}")
+    print(f"  metrics all arms:   {metrics_all}")
     print(f"  system:             {get_system_info()}")
 
     metric_keys = ["wall_time", "cpu_time", "max_rss_mb", "sort_time"]
@@ -674,7 +704,7 @@ def run_benchmark(
     for num_files in num_files_list:
         print(f"\n{'=' * 60}\n{num_files} files × {num_intervals} intervals\n{'=' * 60}")
         bedtools_runs: List[Dict[str, Any]] = []
-        arms = arms_for(sub_b_list, metrics_arm)
+        arms = arms_for(sub_b_list, metrics_arm, metrics_all=metrics_all)
         runs_by_tool: Dict[str, List[Dict[str, Any]]] = {label: [] for label, _, _ in arms}
 
         for run_i in range(num_runs):
@@ -808,7 +838,7 @@ def write_text_report(results: List[Dict[str, Any]], path: str) -> None:
                 f.write("bedtools: not run (--no-bedtools)\n")
                 for tool, sub_b in arms_of(r):
                     hm = r[tool]
-                    ie = ", +IE columns" if tool == IE_ARM_TOOL else ""
+                    ie = ", +IE columns" if (tool == IE_ARM_TOOL or tool.startswith("hammock_ie_B_subB")) else ""
                     f.write(f"hammock-cpp Mode B [subB={sub_b:g}, mixed-stride{ie}]:\n")
                     f.write(f"  wall:    {hm['mean_wall_time']:.3f} +/- {hm['std_wall_time']:.3f} s\n")
                     f.write(f"  cpu:     {hm['mean_cpu_time']:.3f} s\n")
@@ -832,7 +862,7 @@ def write_text_report(results: List[Dict[str, Any]], path: str) -> None:
                         f"(pre-sort, not in wall above; bedtools-workflow wall = wall + sort)\n")
             for tool, sub_b in arms_of(r):
                 hm = r[tool]
-                ie = ", +IE columns" if tool == IE_ARM_TOOL else ""
+                ie = ", +IE columns" if (tool == IE_ARM_TOOL or tool.startswith("hammock_ie_B_subB")) else ""
                 f.write(f"hammock-cpp Mode B [subB={sub_b:g}, mixed-stride{ie}]:\n")
                 f.write(f"  wall:    {hm['mean_wall_time']:.3f} ± {hm['std_wall_time']:.3f} s\n")
                 f.write(f"  cpu:     {hm['mean_cpu_time']:.3f} ± {hm['std_cpu_time']:.3f} s\n")
@@ -1049,7 +1079,18 @@ def main() -> int:
                              "i.e. emitting jaccard_similarity_ie and the containment/cosketch "
                              f"block. Labelled '{IE_ARM_TOOL}' so it fails the "
                              "'^hammock_cpp_B' filter the R consumers use, and cannot double "
-                             "rows in their joins.")
+                             "rows in their joins. Ignored if --metrics-all is also given.")
+    parser.add_argument("--metrics-all", action="store_true",
+                        help="Run EVERY arm in --subB-list with --metrics instead of "
+                             "--no-metrics (replaces the default no-metrics arms, rather than "
+                             "adding one extra arm the way --metrics-arm does). Use this when "
+                             "the figure needs jaccard_similarity_ie wall times at subB < 1.0, "
+                             "e.g. a subB-vs-N line plot -- --metrics-arm alone can only give "
+                             "that column at subB=1.0. Labels via ie_tool_name_for_subb(): "
+                             "'hammock_ie_B' at subB=1.0 (byte-compatible with --metrics-arm's "
+                             "label), 'hammock_ie_B_subB<val>' otherwise -- both fail every "
+                             "existing R consumer's filter, so this cannot corrupt an existing "
+                             "figure's data even if pointed at the same results/ directory.")
     parser.add_argument("--no-bedtools", dest="with_bedtools", action="store_false",
                         default=True,
                         help="Skip the bedtools arm entirely. For extending the N axis past "
@@ -1129,6 +1170,7 @@ def main() -> int:
         precision=args.precision,
         sub_b_list=sub_b_list,
         metrics_arm=args.metrics_arm,
+        metrics_all=args.metrics_all,
         corpus_seed=args.corpus_seed,
         with_bedtools=args.with_bedtools,
     )

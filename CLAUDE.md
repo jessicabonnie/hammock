@@ -193,6 +193,26 @@ tables: `docs/metrics-by-default.md` (still carries superseded numbers).
 None is a decision; each is evidence gathered plus what still needs
 establishing. Read the seed before re-litigating the question.
 
+- `docs/seed-subsampling-synthetic-supplement.md` — the outline/draft's
+  synthetic-corpus subB speedup claim ("4.21× at p=14") didn't trace to any
+  CSV in the repo at any precision; the paired Maurano number ("1.83×") was
+  real but from a superseded register-equality-era run (current is 1.87×,
+  `docs/data/maurano_subB_ie_summary.csv`). Both fixed in the paper text.
+  Still open: a p=18, `jaccard_similarity_ie`-era synthetic-corpus
+  measurement to restore the corpus-dependence claim with real numbers.
+- `docs/seed-hammock-cpp-file-dispatch.md` — two claims at different
+  confidence levels. **Confirmed, to be fixed**: the Python CLI's
+  `--threads` does not bound sketching-phase parallelism at all (verified by
+  code read — dispositive, no thread parameter exists to carry the flag
+  through — corroborated by a replicated isolation test where `--threads 2`
+  used ~11.5 cores and CPU usage didn't track `--threads` at all);
+  `hammock-cpp` correctly bounds it. **Not yet confirmed**: a related
+  observation that the CLI is faster than `hammock-cpp` at N≥32 files/side,
+  which would mean the headline benchmark figures (all timed on
+  `hammock-cpp`) understate hammock's real throughput — direction is
+  code-consistent but magnitude was never checked against the observed
+  effect size, so don't treat it as settled or re-derive any figure from it.
+
 - `docs/seed-benchmark-methodology.md` — **read this before quoting or
   generating any performance number.** Comparing one benchmark run to another in
   this repo is confounded by an unmeasured machine factor of up to 1.5×: the
