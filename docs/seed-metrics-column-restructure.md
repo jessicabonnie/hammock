@@ -521,17 +521,28 @@ Part 9.
 - `docs/submittability-concerns.md`: line ~54 ("Figure 3's headline runs
   `--no-metrics`, i.e. the register-equality...") needs the flag name
   updated to `--register-equality`/`--re`.
-- `pyproject.toml`: bump `version` (currently `0.7.1`) and note the bump in
-  a `CLAUDE.md` changelog-style entry, per this repo's own convention for a
-  CLI-contract change of this size (v0.6.0/v0.6.1/v0.7.0/v0.7.1 all cited
-  for comparable changes) — `--version` on both front-ends is load-bearing,
-  not cosmetic: the benchmark harnesses probe it and refuse anything older
-  than the version they expect.
+- `pyproject.toml`: bump `version` from `0.7.1` to **`0.8.0`** — a minor
+  bump, not a patch. This repo's own version history draws that line
+  consistently: minor bumps mark CLI-contract/default changes (v0.4.0 added
+  a column, v0.5.0 added `jaccard_similarity_ie`, v0.6.0 removed the
+  `_with_ends` column family, v0.7.0 changed `hammock-cpp`'s defaults —
+  `git log --oneline` on each shows exactly one minor-version commit per
+  behavior change), while patch bumps are reserved for fixes to already-shipped
+  behavior with no contract change (v0.6.1 changed Mode D's *default thread
+  count*, not its output; v0.7.1 bounded `--threads`, not its output). This
+  seed changes what every invocation without special flags outputs and
+  removes a flag outright — squarely the v0.7.0-class change, not the
+  v0.6.1/v0.7.1-class one. Note the bump in a `CLAUDE.md` changelog-style
+  entry alongside the rest of Part 7's doc updates. `--version` on both
+  front-ends is load-bearing, not cosmetic: the benchmark harnesses probe it
+  and refuse anything older than the version they expect, so a future
+  harness gating on "≥ 0.8.0" is meaningful only if this bump actually
+  happens as part of the merge, not deferred to some later commit.
 
 Done when: `grep -rln -- '9-column\|--no-metrics'` across `README.md`,
 `CLAUDE.md`, `docs/metrics-by-default.md`, `docs/submittability-concerns.md`
 returns nothing describing the old contract as current; `docs/metrics-by-default.md`
-carries a superseded banner; `pyproject.toml`'s version is bumped.
+carries a superseded banner; `pyproject.toml`'s version reads `0.8.0`.
 
 ### Part 8 — Merge
 
