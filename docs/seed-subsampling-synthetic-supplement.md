@@ -1,5 +1,16 @@
 # Seed: synthetic-corpus subB speedup for the mixed-stride paragraph
 
+**CLOSED 2026-08-11.** Real p=18, `jaccard_similarity_ie`-era numbers landed
+as Supplementary Figure S10 (`paper/figures/subB_nscaling_supplement.png`,
+`paper/pairwise_scaling/plot_subB_nscaling_supplement.R`, data from job
+29761450). Both `paper/outline.md` and `paper/draft.md` TODOs replaced with
+real numbers: synthetic-corpus 10-fold speedup 2.12× at N=512 (vs Maurano's
+1.87×), narrowing from 2.62× at N=16 to 1.57× at N=2048 as the
+subB-invariant pairwise-comparison phase (43.4% of wall time by N=2048, up
+from <1% at N≤32) comes to dominate. The narrowing prediction stated in the
+figure script's header comment before measuring was confirmed by the data.
+See CLAUDE.md's Open Seeds entry for the compact summary.
+
 ## Question
 
 `paper/outline.md`/`draft.md` claimed "a 10-fold subsample buys 4.21× on the

@@ -193,13 +193,23 @@ tables: `docs/metrics-by-default.md` (still carries superseded numbers).
 None is a decision; each is evidence gathered plus what still needs
 establishing. Read the seed before re-litigating the question.
 
-- `docs/seed-subsampling-synthetic-supplement.md` — the outline/draft's
-  synthetic-corpus subB speedup claim ("4.21× at p=14") didn't trace to any
-  CSV in the repo at any precision; the paired Maurano number ("1.83×") was
-  real but from a superseded register-equality-era run (current is 1.87×,
-  `docs/data/maurano_subB_ie_summary.csv`). Both fixed in the paper text.
-  Still open: a p=18, `jaccard_similarity_ie`-era synthetic-corpus
-  measurement to restore the corpus-dependence claim with real numbers.
+- `docs/seed-subsampling-synthetic-supplement.md` — **CLOSED 2026-08-11.** The
+  outline/draft's synthetic-corpus subB speedup claim ("4.21× at p=14") never
+  traced to any CSV in the repo at any precision; the paired Maurano number
+  ("1.83×") was real but from a superseded register-equality-era run (current
+  is 1.87×, `docs/data/maurano_subB_ie_summary.csv`). Both replaced with real,
+  p=18, `jaccard_similarity_ie`-era numbers: a synthetic-corpus N-sweep (job
+  29761450, three subB lines vs N to 2048) landed as Supplementary Figure S10
+  — 2.12× at N=512 (vs Maurano's 1.87×, both real 10-fold subsamples),
+  narrowing from 2.62× at N=16 to 1.57× at N=2048 as the subB-invariant
+  pairwise phase comes to dominate wall time. The seed doc also records a
+  harness-hardening lesson worth keeping in mind for other long jobs: job
+  29758041 (the first attempt) was silently contaminated mid-run by a
+  concurrent rebuild of the shared `hammock-cpp` binary, and cancelling it
+  lost the *entire* dataset because the harness only wrote output once, at
+  the very end — both gaps (binary pinning, per-N checkpointing with atomic
+  writes) are now fixed in `benchmark_cpp_vs_bedtools.py` /
+  `sbatch_subB_nsweep.sh` for future long sweeps.
 - `docs/seed-hammock-cpp-file-dispatch.md` — two claims at different
   confidence levels. **Part 1 FIXED in v0.7.1 (2026-08-11)**: the Python
   CLI's `--threads` did not bound sketching-phase parallelism at all
