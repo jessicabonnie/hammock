@@ -1,35 +1,3 @@
-> # ⛔ EVERY BEDTOOLS-RELATIVE NUMBER BELOW IS SUPERSEDED (2026-08-09)
->
-> **Do not quote any speedup-over-bedtools figure from this file.** Four defects
-> were found in the benchmark harness in one day, **all inflating the bedtools
-> baseline, i.e. all in hammock's favour**:
->
-> 1. `bedtools.sh` ran three processes per pair instead of one (~2.1×).
-> 2. bedtools was pinned to 2.27.1, whose jaccard union is order-dependent.
-> 3. `ml` module loads ran inside the timed region.
-> 4. **The bedtools module exports `LD_LIBRARY_PATH` with 17 directories, of
->    which bedtools uses 4. The dynamic linker searches the other 13 — on GPFS —
->    on every `execve`, and a pairwise workflow is N² execs.** This alone
->    inflated bedtools 2.4–2.8×.
->
-> Measured effect at N=512: bedtools 1978 s → 716 s. **The headline speedup falls
-> from 27.61× to roughly 10.2×.** That number was itself provisional and has
-> since moved again: a small-N noise bug in the same rerun was found and fixed,
-> landing at **9.21× at N=512**, current as of the Update note below.
->
-> Also retracted: the "process creation caps near **123 exec/s** and does not
-> scale with cores" mechanism. Measured 16-way: **364 exec/s** clean, 196 slow.
-> The `md5sum` control that appeared to confirm it ran in the same polluted
-> environment, so it confirmed nothing.
->
-> **What survives:** anything hammock-internal — mixed-stride vs hash-threshold,
-> the precision sweeps, the fused-pass A/B, Mode D threading. Those divide two
-> hammock numbers measured in one run and are unaffected.
->
-> Status and worklist: `docs/bedtools-baseline-retraction.md`.
-
-> **Update, 2026-08-10 00:30:** Figure 3 (both panels) has been re-measured on the fully-fixed harness and its numbers in this file are now current — **9.21× at N=512** (corrected from 10.17× after a small-N noise bug in the first rerun was found and fixed, job 29671317), 1.16× slower/1.58×/2.49× on Maurano. Supplementary Figs S6, S7, and S8 have also all been re-measured on the fixed `sweep.py`/`run_bedtools()` path and are current. Only the `RESULTS.md` prose files (not regenerated) remain outdated. See `docs/bedtools-baseline-retraction.md` for the ledger.
-
 # Paper outline: hammock — fast, accurate, biology-preserving interval-set sketching
 
 **Working title (placeholder):** *hammock: HLL-sketch similarity for genomic intervals — faster than bedtools, with biological signal preserved*
@@ -112,23 +80,12 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 | hammock (subB = 0.1, high) | 4.47 | 1.58× | 9.4×10⁻⁴ |
 | hammock (subB = 0.01, max) | 2.84 | 2.49× | 1.5×10⁻³ |
 
-> **Re-measured 2026-08-09 22:51 on the fully fixed harness**
-> (`run_bedtools_maurano.py`, which previously called `run_with_time` directly
-> and bypassed the LD_LIBRARY_PATH fix below). bedtools moves 7.34 s → 7.07 s
-> — a small further correction, consistent in direction with Panel A's larger
-> one but diluted here because a Maurano pair (~150 ms real work) is ~30× more
-> expensive than a synthetic pair, so the per-exec linker tax is a smaller
-> fraction of it. Full chain from the original number: 11.08 s (3 processes per
-> pair) → 7.34 s (1 process per pair) → 7.07 s (minimal `LD_LIBRARY_PATH`).
->
-> **hammock does not beat bedtools at subB = 1.0 on this corpus — 1.16× slower,
-> not 1.12×.** Consistent with the precision sweep's independent cross-check,
-> now re-measured on the fixed harness too (job 29670793, node c432,
-> `docs/data/sweep_precision_maurano_p18_t8.csv`): 0.81× at t=8, p=18 — updated
-> from an earlier 0.92× figure that predated the LD_LIBRARY_PATH fix and was
-> only ever a lower bound on how slow. Expected: N = 20 is well below the
-> N ≈ 64 crossover in Panel A below. Subsampling is what makes hammock win on a
-> corpus this small; scale is what makes it win without subsampling.
+> hammock does not beat bedtools at subB = 1.0 on this corpus — 1.16× slower.
+> Consistent with the precision sweep's independent cross-check
+> (`docs/data/sweep_precision_maurano_p18_t8.csv`): 0.81× at t=8, p=18.
+> Expected: N = 20 is well below the N ≈ 64 crossover in the synthetic table
+> below. Subsampling is what makes hammock win on a corpus this small; scale
+> is what makes it win without subsampling.
 
 **Synthetic scaling (10k intervals/file, p=18 — the CLI default — 16 threads for both tools; hammock `-t 16`, bedtools 16-way GNU parallel), subB=1.0:**
 
@@ -144,33 +101,13 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 | 256 | 160.54 s | 33.06 s | 4.86× | 5.0 of 16 | 3 |
 | **512** | **653.41 s** | **70.97 s** | **9.21×** | **5.0 of 16** | 3 |
 
-> **Source: `docs/data/cpp_vs_bedtools_t16_p18.csv`, job 29671317, node c529,
-> 2026-08-09 23:22 — 2026-08-10 00:28, per `sacct` (1h06m), one exclusive
-> allocation, two passes: N≤32 at 20 replicates, N≥64 at 3. Supersedes job
-> 29656140 (node c531), whose N=2/N=4 draw was noise-corrupted at n=3 — its
-> three replicates at N=2 spanned 0.14–1.22 s (CV 102%) and, by chance, one bad
-> bedtools replicate at N=4 made the table read N=2→N=4 wall time DROPPING
-> (0.50 s → 0.18 s), which is physically impossible (more work cannot cost
-> less). That table's small-N cells were retracted rather than trusted, hence
-> this rerun.**
+> **Source: `docs/data/cpp_vs_bedtools_t16_p18.csv`**, one exclusive node
+> allocation, two passes: N≤32 at 20 replicates, N≥64 at 3.
 >
-> **Corrected picture: bedtools wins at every N ≤ 32, monotonically, with
-> tight replicate spread (e.g. N=32 spans 2.52–2.63 s across 20 reps, CV ~1%).**
-> The crossover is between N=32 (0.67×, bedtools still faster) and N=64
-> (1.28×, hammock faster) — narrower than the "somewhere in N≈32–64" hedge an
-> earlier draft of this note used before the recheck existed. This directly
-> answers a question raised mid-session ("why are we still faster than
-> bedtools at N=2 — that should definitely not be true"): the earlier n=3 draw
-> was wrong, not the underlying mechanism.
->
-> This table replaces one that read 27.61× at N=512 before the
-> `LD_LIBRARY_PATH` fix (`docs/bedtools-baseline-retraction.md`) and a second,
-> intermediate one (job 29656140) that read 10.17× at N=512 but had the
-> small-N bug above; N=512 moved again on this rerun, 70.32 s → 70.97 s
-> hammock and 714.77 s → 653.41 s bedtools (**10.17× → 9.21×**) — a normal
-> amount of run-to-run noise at n=3, not a further correction, confirmed by
-> both runs sharing the fixed harness and by hammock's own N=512 time moving
-> by under 1%.
+> **bedtools wins at every N ≤ 32, monotonically, with tight replicate spread**
+> (e.g. N=32 spans 2.52–2.63 s across 20 reps, CV ~1%). The crossover is
+> between N=32 (0.67×, bedtools still faster) and N=64 (1.28×, hammock
+> faster).
 >
 > **The `subB=0.1` arm is deliberately absent** — no p=18 measurement of it
 > exists at this scale; Figure 3 Panel A plots subB=1.0, subsampling is Panel
@@ -178,21 +115,16 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 >
 > The last column is why the speedup at large N is a real effect and not an
 > artifact of a hobbled baseline: bedtools converts more of its 16 cores as N
-> grows (0.4 → 5.1 of 16), plateauing well short of saturated by N≈64. The
-> bedtools-own-optimum reframing (t=8) from an earlier draft of this table
-> (16.1×) is superseded by Supplementary Fig S6 (job 29670792, now on the
-> fixed `sweep.py` path — see `docs/bedtools-baseline-retraction.md`), which
-> should be the source for that number rather than this table.
+> grows (0.4 → 5.1 of 16), plateauing well short of saturated by N≈64.
+> Supplementary Fig S6 gives bedtools' own thread-scaling optimum.
 
 Two things to communicate in this section:
-1. **The advantage is a crossover, not a constant, and now measured (not merely
-   hedged) on both sides of it.** hammock's cost is dominated by sketching,
-   which is Θ(N); bedtools re-reads every file for every pair, which is Θ(N²).
-   Below N = 32 bedtools wins, reliably (20 replicates, monotonic); the
-   crossover falls between N=32 and N=64; from there the gap opens
-   monotonically to **9.2× at N=512** (job 29671317, fixed harness and fixed
-   small-N cells — Supplementary Fig S7's projected N=2048 number has been
-   recomputed against this same CSV, see its own section below).
+1. **The advantage is a crossover, not a constant.** hammock's cost is
+   dominated by sketching, which is Θ(N); bedtools re-reads every file for
+   every pair, which is Θ(N²). Below N = 32 bedtools wins, reliably (20
+   replicates, monotonic); the crossover falls between N=32 and N=64; from
+   there the gap opens monotonically to **9.2× at N=512** (Supplementary
+   Fig S7 projects this same curve out to N=2048).
    **Do not write "faster at every scale tested"** — hammock is slower than
    bedtools below N≈64 on synthetic data, and slower on Maurano without
    subsampling regardless of N (1.16× slower at t=8, see table above) since
@@ -414,46 +346,21 @@ being compared, and is large at catalog scale — but it is *not* present at eve
 scale. Every timing result in §4.1 is Mode B, and no sequence-mode speed
 comparison has been run.
 
-> **This caveat block predates the 2026-08-09/10 harness fix and is
-> superseded — see the top-of-file retraction banner and §4.1/S6/S7 for the
-> current numbers (9.21× at N=512, measured crossover between N=32 and
-> N=64).** Kept for the historical record of what "faster at every scale"
-> originally got wrong; do not quote either number below.
->
-> 1. **"Faster at every scale" was false in our own published data.**
->    ~~In `results/cpp_vs_bedtools_t16_20260808_190441.csv` (p=14, t=16)
->    hammock is *slower* than bedtools at N = 8, 16 and 32 files (0.71×,
->    0.69×, 0.87×), crossing over around N ≈ 64 and reaching 12.35× only at
->    N = 512.~~ That source CSV no longer exists in the repo. The underlying
->    claim — bedtools wins below the crossover — is still true and is now
->    established with 20 replicates per N and a *measured*, not hedged,
->    crossover between N=32 (0.67×, bedtools still faster) and N=64 (1.28×,
->    hammock faster), reaching **9.21× at N=512** (job 29671317; §4.1).
-> 2. **The bedtools baseline is partly measuring process creation, not
->    bedtools.** `bedtools jaccard` has no batch mode, so a pairwise workflow
->    launches one process per pair — N² of them — wrapped in GNU `parallel`.
->    ~~On Rockfish `parallel`-partition nodes that dispatch is capped at
->    roughly 123 exec/s and does not scale with cores... `md5sum` on local
->    files measures 0.46× (slower at 16-way than serial)...~~ The "~123
->    exec/s, doesn't scale with cores" mechanism and its `md5sum` control are
->    retracted (`docs/bedtools-baseline-retraction.md`): the control ran in
->    the same `LD_LIBRARY_PATH`-polluted environment it was meant to
->    validate, and a clean re-measurement reads **364 exec/s**, not 123. What
->    survives: bedtools' lack of batch mode is real and costs it measured
->    parallel efficiency — **41% of 16 cores at t=16** (Supplementary Fig S6)
->    — a structural consequence of N² re-reads, not a hard process-creation
->    ceiling.
->
-> Consequence: "bedtools at t=16" can silently mean "bedtools at t≈6.5" (41%
-> efficiency, Supplementary Fig S6), not the full 16 cores a naive reading
-> would assume. Any headline ratio must state the
-> parallel efficiency bedtools actually achieved in that run, and the fraction
-> of its per-pair cost that is process startup (~8 ms of ~11-16 ms at 10k
-> intervals/file). Note this is still a real workflow difference — hammock
-> launches one process and reads each file once, bedtools launches N² and reads
-> each file N times — but it must be attributed to batch-mode absence rather
-> than to sketching, and it must not be reported as if bedtools had been given
-> 16 working cores. See `docs/bedtools-parallelism-caveat.md`. (A sequence-mode "faster than bedtools" claim would also need care: for BED input, sequence mode *invokes* `bedtools getfasta`, so extraction cost belongs inside any such comparison.) The same sequence mode sketches recover tissue clustering at ARI = 0.91 directly from peak FASTAs and are robust to reference-genome choice within a species. The combination — speed *plus* near-exact agreement *plus* preserved biology *plus* reference-build invariance — positions sketching as a viable default for large-scale epigenome comparison.
+`bedtools jaccard` has no batch mode, so a pairwise workflow launches N²
+processes, re-reading each file N times; hammock launches one process and
+reads each file once. That structural difference is why bedtools' achieved
+parallel efficiency lags well behind hammock's at any fixed thread count
+(41% of 16 cores at t=16 vs hammock's much higher utilization — Supplementary
+Fig S6), rather than being a property of sketching. Any headline speedup
+should be read alongside the parallel efficiency bedtools actually achieved
+in that run — see `docs/bedtools-parallelism-caveat.md`. (A sequence-mode
+"faster than bedtools" claim would also need care: for BED input, sequence
+mode invokes `bedtools getfasta`, so extraction cost belongs inside any such
+comparison.) The same sequence mode sketches recover tissue clustering at
+ARI = 0.91 directly from peak FASTAs and are robust to reference-genome
+choice within a species. The combination — speed *plus* near-exact agreement
+*plus* preserved biology *plus* reference-build invariance — positions
+sketching as a viable default for large-scale epigenome comparison.
 
 ---
 
@@ -504,13 +411,9 @@ comparison has been run.
 ### Supplementary Figure S6 — Thread scaling (`paper/figures/threading_supplement.png`)
 
 Generated by `paper/pairwise_scaling/plot_threading_supplement.R` from
-`docs/data/sweep_threads_p18.csv` (job 29670792, node c531, one exclusive
-allocation; synthetic corpus, 64 files/side, 10k intervals/file, p=18,
-subB=1.0, 3 replicates, means). **Rewritten 2026-08-09/10** — the previous
-version of this section (job 29652415/node c707) predated the
-`LD_LIBRARY_PATH` fix and its "123 exec/s process-creation cap" mechanism has
-since been retracted (`docs/bedtools-baseline-retraction.md`); do not reuse
-its numbers or its regression narrative.
+`docs/data/sweep_threads_p18.csv` (one exclusive node allocation; synthetic
+corpus, 64 files/side, 10k intervals/file, p=18, subB=1.0, 3 replicates,
+means).
 
 **Separate from Figure 3 on purpose.** Figure 3 is about how cost scales with
 the number of files; this is about what each tool does with the cores it is
@@ -530,20 +433,17 @@ given. They answer different questions and share no axis.
 | hammock cores busy | 1.0 | 1.8 | 3.5 | 7.2 | 14.9 | **24.0** | 28.1 |
 
 - **BEDTools plateaus by t=8 (4.22×) and stays flat through t=48 (4.20×)** —
-  no further gain, but also no strong regression the way an earlier,
-  pre-fix draft of this table claimed. hammock keeps improving to t=32
+  no further gain, but also no regression. hammock keeps improving to t=32
   (12.11×, 24.0 of 32 cores busy) then eases back slightly at t=48 (11.59×,
   28.1 of 48 — an oversubscription effect worth cross-referencing against
   `docs/seed-mode-d-threading.md`'s sibling finding for interval-mode pools,
   not a new mechanism specific to this figure).
-- **The mechanism is real but smaller than the retracted version claimed.**
-  `bedtools jaccard` has no batch mode, so a pairwise workflow is N² process
-  launches under a GNU `parallel` wrapper, re-reading each file N times;
-  hammock is one process reading each file once. That structural difference
-  is why BEDTools saturates its achieved parallelism (6.5 of 16-48 cores) far
-  below hammock's, not a literal process-creation rate ceiling — the "~123
-  exec/s, doesn't scale with cores" framing in the pre-fix version of this
-  section is retracted (`docs/bedtools-baseline-retraction.md`).
+- **The mechanism:** `bedtools jaccard` has no batch mode, so a pairwise
+  workflow is N² process launches under a GNU `parallel` wrapper, re-reading
+  each file N times; hammock is one process reading each file once. That
+  structural difference is why BEDTools saturates its achieved parallelism
+  (6.5 of 16-48 cores) far below hammock's — a consequence of batch-mode
+  absence, not a process-creation rate ceiling.
 - **Why this figure has to exist.** Any speedup quoted at a fixed thread count
   assumes both tools converted cores into throughput. At *t* = 16 BEDTools
   converts 6.5 of 16 cores (41%). Every BEDTools row in the benchmark CSVs now
@@ -558,12 +458,10 @@ given. They answer different questions and share no axis.
 ### Supplementary Figure S7 — Catalog scale (`paper/figures/largeN_supplement.png`)
 
 Generated by `paper/pairwise_scaling/plot_largeN_supplement.R` from
-`docs/data/cpp_vs_bedtools_t16_p18.csv` (job 29671317, node c529 — updated
-2026-08-10 after Panel A's small-N cells were corrected, see the Figure 3
-generation note; previously job 29656140/c531) joined to
-`docs/data/cpp_vs_bedtools_t16_p18_largeN.csv` (job 29652432, node c594) —
-hammock-only, N ∈ {512, 1024, 2048}, p=18, t=16, same synthetic corpus
-generator and seed schedule as Figure 3A.
+`docs/data/cpp_vs_bedtools_t16_p18.csv` joined to
+`docs/data/cpp_vs_bedtools_t16_p18_largeN.csv` — hammock-only, N ∈ {512,
+1024, 2048}, p=18, t=16, same synthetic corpus generator and seed schedule
+as Figure 3A.
 
 **Separate from Figure 3 on purpose.** Figure 3 plots two *measured* curves.
 This one plots a measured hammock curve against a **projected** BEDTools curve,
@@ -572,8 +470,7 @@ how a projection ends up quoted later as if it had been run. The projected
 segment is dashed, grey, drawn with open points, and annotated on the panel.
 
 - **Why project.** BEDTools measures ~4.0× per doubling (fitted exponent 2.000
-  below), **653 s per replicate at N=512** (job 29671317, not the retracted
-  1978 s pre-`LD_LIBRARY_PATH`-fix figure), so one replicate is ~0.7 h at
+  below), **653 s per replicate at N=512**, so one replicate is ~0.7 h at
   N=1024 and ~2.9 h at N=2048 — ~11 h of node time for three replicates at
   each, to extend a comparison already decided by N=256. hammock at p=18 is
   sketching-dominated and near-linear, so measuring
@@ -586,19 +483,15 @@ segment is dashed, grey, drawn with open points, and annotated on the panel.
 | BEDTools | 653.4 (measured) | 2574 (proj.) | 10294 (proj.) |
 | speedup | 9.2× | 15.6× (proj.) | 24.7× (proj.) |
 
-**Superseded 2026-08-10** (was 27.6×/46.5×/72.1×, from job 29652408 — the
-original pre-`LD_LIBRARY_PATH`-fix run, same defect as the original 27.61×
-Figure 3 headline; see the top-of-file retraction banner and the Figure 3
-generation note). The *shape* is unchanged — hammock
-crosses over and pulls ahead as N grows, projected to ~25× by N=2048 — but the
-magnitude at every N is smaller than the retracted table claimed.
+hammock crosses over and pulls ahead as N grows, projected to ~25× by
+N=2048.
 
 - **Two checks the script runs and prints, and fails loudly on.** (i) N=512 is
-  measured by *both* jobs, on different nodes: 70.97 s vs 71.73 s, **1.1%**
-  (was 0.1% against the previous, now-superseded Panel A job — still well
-  within this cluster's documented node-to-node spread). That is the only
-  thing making the cross-allocation join checkable, and this cluster does not
-  guarantee two allocations are comparable. (ii) The BEDTools exponent is
+  measured by *both* source CSVs, on different nodes: 70.97 s vs 71.73 s,
+  **1.1%** — well within this cluster's documented node-to-node spread. That
+  is the only thing making the cross-allocation join checkable, and this
+  cluster does not guarantee two allocations are comparable. (ii) The
+  BEDTools exponent is
   *fitted*, not assumed: **2.000** (theory 2.0), R² = 0.9999, on N ≥ 32 only —
   below that the run is dominated by fixed process/module startup that does
   not scale with pair count, and including it would bias the projection in
@@ -616,12 +509,10 @@ magnitude at every N is smaller than the retracted table claimed.
 ### Supplementary Figure S8 — Precision frontier (`paper/figures/precision_frontier.png`)
 
 Generated by `paper/pairwise_scaling/plot_precision_frontier.R` from
-`docs/data/sweep_precision_maurano_p18_t16.csv` (job 29670793, node c432 —
-updated 2026-08-09, replacing the pre-`LD_LIBRARY_PATH`-fix job 29651773;
-20 Maurano DHS files, 380 ordered pairs after self-pair exclusion, subB=1.0,
-p ∈ {12,14,16,18,20,22,24}, 3 replicates, means). The t=8 companion from the
-same job (`sweep_precision_maurano_p18_t8.csv`) is the cross-check, not a
-second series.
+`docs/data/sweep_precision_maurano_p18_t16.csv` (20 Maurano DHS files, 380
+ordered pairs after self-pair exclusion, subB=1.0, p ∈ {12,14,16,18,20,22,24},
+3 replicates, means). The t=8 companion (`sweep_precision_maurano_p18_t8.csv`)
+is the cross-check, not a second series.
 
 **x = MAE of `jaccard_similarity_ie` vs exact BEDTools (log), y = speedup vs
 BEDTools (log), one point per p.** Deliberately *not* twin y-axes against p:
@@ -635,13 +526,7 @@ vertical line and "slower than BEDTools" is the shaded region below y=1.
 | speedup vs BEDTools (t=16) | 0.77× | 0.77× | 0.74× | **0.69×** | 0.45× | 0.22× | 0.08× |
 | MAE of *J*<sub>IE</sub> | 8.8e-3 | 4.0e-3 | 2.7e-3 | **1.15e-3** | 5.9e-4 | 2.8e-4 | 1.5e-4 |
 
-**Superseded 2026-08-09** (speedup row was 1.11×/1.10×/1.05×/0.98×/0.74×/0.42×/0.17×,
-from job 29651773 before the `LD_LIBRARY_PATH` fix — that bug inflated the
-bedtools reference wall time this whole row divides by, so every speedup
-number moved down; the MAE row is bedtools-independent and unchanged). At no
-precision in this sweep does hammock beat BEDTools on this corpus — the
-near-parity around p=16–18 the old table showed was an artifact of the same
-bug Figure 3 Panel A had.
+At no precision in this sweep does hammock beat BEDTools on this corpus.
 - **Accuracy costs steeply and buys a lot.** MAE improves **57×** from p=12 to
   p=24 while speed falls ~10×. There is no accuracy/speed "knee" to trade off
   toward on this corpus — speed only gets worse with precision, so the choice
