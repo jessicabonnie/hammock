@@ -34,13 +34,13 @@
 
 **Working title (placeholder):** *hammock: HLL-sketch similarity for genomic intervals — faster than bedtools, with biological signal preserved*
 
-**Thesis (one sentence):** hammock — a Python+C++ HyperLogLog-backed interval-set sketcher — ranks pairwise interval-Jaccard in close agreement with bedtools (interval mode, off-diagonal Pearson r = 0.997, Kendall τ = 0.951; its register-equality estimator is *near*-affine in bedtools' set-Jaccard, order-preserving within a fixed cardinality ratio but inverting 2.5% of pairs across ratios, all at ΔJ_bedtools < 0.031) while its inclusion–exclusion column `jaccard_similarity_ie` reproduces bedtools' values outright (MAE 4.3 × 10⁻⁴, r = 0.99999, τ = 0.9947 at p = 21; §3.3), and at high k/w its sequence mode additionally reproduces bedtools' values to four decimals (r ≈ 0.9996, MAE ≈ 0.006), with **interval mode**'s advantage over bedtools *growing with the number of files* — large at catalog scale, but with a crossover below which exact pairwise computation is competitive or faster (all §4.1 timings are Mode B; no sequence-mode speed comparison has been run; see the speed caveat below); the same sketches independently recover tissue clustering (ARI = 0.91) and are robust to reference-genome choice — so the speed gain comes with, not at the cost of, biological fidelity; hammock extends beyond bedtools capabilities by enabling interval comparisons across references.
+**Thesis (one sentence):** hammock — a Python+C++ HyperLogLog-backed interval-set sketcher — ranks pairwise interval-Jaccard in close agreement with bedtools (interval mode, off-diagonal Pearson r = 0.997, Kendall τ = 0.951; its register-equality estimator is *near*-affine in bedtools' set-Jaccard, order-preserving within a fixed cardinality ratio but inverting 2.5% of pairs across ratios, all at ΔJ_bedtools ≤ 0.025) while its inclusion–exclusion column `jaccard_similarity_ie` reproduces bedtools' values outright (MAE 2.0 × 10⁻⁴, r = 0.999997, τ = 0.9968 at its p = 23 optimum — 4.3 × 10⁻⁴ / 0.99999 / 0.9947 at the p = 21 used elsewhere for cross-row comparability; §3.3), and at high k/w its sequence mode additionally reproduces bedtools' values to four decimals (r ≈ 0.9996, MAE ≈ 0.006), with **interval mode**'s advantage over bedtools *growing with the number of files* — large at catalog scale, but with a crossover below which exact pairwise computation is competitive or faster (all §4.1 timings are Mode B; no sequence-mode speed comparison has been run; see the speed caveat below); the same sketches independently recover tissue clustering (ARI = 0.91) and are robust to reference-genome choice — so the speed gain comes with, not at the cost of, biological fidelity; hammock extends beyond bedtools capabilities by enabling interval comparisons across references.
 
 ---
 
 ## 1. Abstract
 
-hammock provides two complementary similarity primitives over genomic interval sets, both backed by HyperLogLog sketches. The **interval mode** reproduces `bedtools jaccard` with substantially faster wall time and orders of magnitude lower cost at large catalog size. It emits two similarity columns, and the distinction matters: `jaccard_similarity_ie` is an inclusion–exclusion estimate that reproduces bedtools' *values* (off-diagonal r = 0.99999, MAE = 4.3 × 10⁻⁴ at p = 21), while `jaccard_similarity` is a register-equality statistic that reproduces its *ordering* (r = 0.9972, τ = 0.951) but sits above it by an offset c·(1 − J). That offset is not a constant to be subtracted: c is set by the sketch load factor and by the cardinality ratio |A|/|B|, so register-equality is order-preserving only among pairs of comparable size — on the Maurano corpus (ratio ≤ 2.2) it inverts 2.45% of comparisons, all at ΔJ_bedtools ≤ 0.025. The **sequence mode** compares the nucleotide content of intervals — a similarity primitive bedtools does not offer — recovering tissue identity from fetal DHS peak FASTAs at ARI = 0.91 / NMI = 0.96 on the 10-tissue Maurano label set, and remaining robust across human reference builds (peaks aligned to GRCh37, GRCh38, and CHM13 cluster by tissue, not by reference genome). At high k/w, sequence mode additionally closes the absolute gap, reproducing bedtools' interval-Jaccard values to four decimals (r = 0.9996, MAE = 0.0061) on Maurano DHS.
+hammock provides two complementary similarity primitives over genomic interval sets, both backed by HyperLogLog sketches. The **interval mode** reproduces `bedtools jaccard` with substantially faster wall time and orders of magnitude lower cost at large catalog size. It emits two similarity columns, and the distinction matters: `jaccard_similarity_ie` is an inclusion–exclusion estimate that reproduces bedtools' *values* (off-diagonal r = 0.999997, MAE = 2.0 × 10⁻⁴ at its p = 23 optimum; 0.99999 / 4.3 × 10⁻⁴ at the p = 21 used below for comparison against the other estimator), while `jaccard_similarity` is a register-equality statistic that reproduces its *ordering* (r = 0.9972, τ = 0.951) but sits above it by an offset c·(1 − J). That offset is not a constant to be subtracted: c is set by the sketch load factor and by the cardinality ratio |A|/|B|, so register-equality is order-preserving only among pairs of comparable size — on the Maurano corpus (ratio ≤ 2.2) it inverts 2.45% of comparisons, all at ΔJ_bedtools ≤ 0.025. The **sequence mode** compares the nucleotide content of intervals — a similarity primitive bedtools does not offer — recovering tissue identity from fetal DHS peak FASTAs at ARI = 0.91 / NMI = 0.96 on the 10-tissue Maurano label set, and remaining robust across human reference builds (peaks aligned to GRCh37, GRCh38, and CHM13 cluster by tissue, not by reference genome). At high k/w, sequence mode additionally closes the absolute gap, reproducing bedtools' interval-Jaccard values to four decimals (r = 0.9996, MAE = 0.0061) on Maurano DHS.
 
 Since its release in [YEAR], bedtools has been "the Swiss Army knife" of bioinformatics, relied on to quickly calculate overlap and similarity between genomic regions within the same reference. The calculation of all-vs-all jaccard comparisons between region files is one process where bedtools' approach to pairwise comparison of BED files can be improved. Bedtools' all-pairs cost couples the number of files with the per-file size (O(N²M)), thus every additional file costs another full sweep against every other file. Our interval set sketcher, hammock, utilizes hyperloglog sketching to preserves accuracy while reducing cost by reading in each bedfile only once $(O(N^2 +NM ))$. 
 
@@ -86,7 +86,7 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 - Two load-bearing consequences (used in §4.2): (i) near-affine ⇒ order-preserving **at a fixed cardinality ratio |A|/|B|**, but a *different* transform per ratio, so ranking across a size-heterogeneous corpus is faithful only down to a resolution ΔJ set by the corpus's ratio spread; (ii) offset `J_re − J ≈ c·(1 − J)` is largest at low J, vanishes as J→1. The residual from the affine fit is not noise: ±0.025 (>10σ), peaking at J ≈ 0.5, and it correlates at −0.885 with `|log(|A|/|B|)|` (residual taken against `c + (1 − c)·J` with `c` the OLS intercept; the correlation moves to −0.83 under a constrained-LS `c` and −0.90 under a free-slope fit, so the residual definition must be stated — see `paper/interval_accuracy/plot_interval_accuracy.R`).
 - `c` is not a universal constant. It is a step in the load factor λ = n/m (flat 0.1699 for λ ≳ 5, collapsing below: 0.118 at λ=1, 0.016 at λ=0.1) *and* a decreasing function of the cardinality ratio (0.1699 at 1:1, 0.147 at 2.2:1, 0.058 at 10:1). Any quoted offset is specific to a corpus, a precision, and a size regime.
 - Since v0.5.0 every row also carries `jaccard_similarity_ie`, an inclusion–exclusion estimate of set-Jaccard with no chance floor — near-unbiased and directly comparable to bedtools magnitudes, at the cost of higher variance and censoring at 0.
-- Intercept `c` = chance-tie rate of registers set by different elements. Exactly `c = Σ_k p_k²` with `p_k = e^(−λ2^(−k)) − e^(−λ2^(−(k−1)))` at load factor `λ = n/m`; the often-quoted `Σ_k(2⁻ᵏ)² = 1/3` is a loose upper bound not approached at any realistic λ. Measured/predicted `c ≈ 0.17` for λ ≳ 20, collapsing toward 0 as λ → 0. An estimator property, so it does not close with subsampling — but it *is* a function of λ and of the cardinality ratio `|A|/|B|`, so it is not a single constant that can be calibrated away.
+- Intercept `c` = chance-tie rate of registers set by different elements. Exactly `c = Σ_{k≥1} p_k² / (1 − p_0²)` with `p_k = e^(−λ2^(−k)) − e^(−λ2^(−(k−1)))` at load factor `λ = n/m`; the `1 − p_0²` denominator conditions on the same "at least one side active" event that `matching/active` does, and the `k ≥ 1` sum excludes both-empty registers — dropping the normalization gives values up to 5× off at low λ (e.g. 4.53, not a probability, if summed from k=0 at λ=0.1). The often-quoted `Σ_k(2⁻ᵏ)² = 1/3` is a *different* conditional (both registers hold exactly one element) and is a loose upper bound not approached at any realistic λ. Measured/predicted `c ≈ 0.17` for λ ≳ 20, collapsing toward 0 as λ → 0. An estimator property, so it does not close with subsampling — but it *is* a function of λ and of the cardinality ratio `|A|/|B|`, so it is not a single constant that can be calibrated away.
 
 ### 3.4 Minimizers for sequence sketching
 
@@ -213,15 +213,15 @@ Two things to communicate in this section:
 
 > **Source:** `experiments/maurano_dhs_validation/RESULTS.md`.
 
-Two distinct claims, which we are careful to keep separate. Interval mode's `jaccard_similarity` is **rank-faithful up to a stated resolution**, not exactly: it tracks bedtools at off-diagonal Pearson r = 0.997 / Spearman ρ = 0.994 / Kendall τ = 0.951, i.e. 439 of 17,955 comparisons (2.45%) invert, all of them at ΔJ_bedtools < 0.031. (The often-quoted r = 0.998 is computed over the full square matrix including 20 self-pairs pinned at (1,1); off-diagonal it is 0.9972. Fig 4 excludes self-pairs and should be read as the 0.9972 figure.) It reports the register-equality statistic, approximately an affine transform `J_re ≈ c + (1 − c)·J` of the exact base-pair Jaccard (§3.3) — order-preserving **at fixed (|A|,|B|)**, but with a different `c` for each cardinality ratio, which is what the inversions are: they are systematic (correlating at −0.885 with `|log(|A|/|B|)|` under the OLS-intercept residual, and reproducing at r = 0.994 between p = 18 and p = 21 sketch sets), not HLL noise. The offset `c·(1 − J)` is ≈ 0.16 on these low-J pairs and shrinks to zero as similarity rises; it does not close with subsampling, and it is a function of the load factor `n/m` — flat while `m ≪ n` (`c` = 0.180 at p = 12/16/20 on a synthetic 90-pair spread) and collapsing to 0.045 at p = 24 where `m > n`. Quoted offsets are therefore specific to a corpus, a precision, *and* a size regime. Where a bedtools-comparable magnitude is wanted, the `jaccard_similarity_ie` column (v0.5.0+) supplies it directly. Sequence mode, at high k/w, is by contrast **value-identical** to four decimals.
+Two distinct claims, which we are careful to keep separate. Interval mode's `jaccard_similarity` is **rank-faithful up to a stated resolution**, not exactly: it tracks bedtools at off-diagonal Pearson r = 0.997 / Spearman ρ = 0.994 / Kendall τ = 0.951, i.e. 439 of 17,955 comparisons (2.45%) invert, all of them at ΔJ_bedtools ≤ 0.025. (The often-quoted r = 0.998 is computed over the full square matrix including 20 self-pairs pinned at (1,1); off-diagonal it is 0.9972. Fig 4 excludes self-pairs and should be read as the 0.9972 figure.) It reports the register-equality statistic, approximately an affine transform `J_re ≈ c + (1 − c)·J` of the exact base-pair Jaccard (§3.3) — order-preserving **at fixed (|A|,|B|)**, but with a different `c` for each cardinality ratio, which is what the inversions are: they are systematic (correlating at −0.885 with `|log(|A|/|B|)|` under the OLS-intercept residual, and reproducing at r = 0.994 between p = 18 and p = 21 sketch sets), not HLL noise. The offset `c·(1 − J)` is ≈ 0.16 on these low-J pairs and shrinks to zero as similarity rises; it does not close with subsampling, and it is a function of the load factor `n/m` — flat while `m ≪ n` (`c` = 0.180 at p = 12/16/20 on a synthetic 90-pair spread) and collapsing to 0.045 at p = 24 where `m > n`. Quoted offsets are therefore specific to a corpus, a precision, *and* a size regime. Where a bedtools-comparable magnitude is wanted, the `jaccard_similarity_ie` column (v0.5.0+) supplies it directly. Sequence mode, at high k/w, is by contrast **value-identical** to four decimals.
 
 Across Maurano's 400 sample pairs:
 
 | mode | best r vs bedtools | best MAE | claim |
 |---|---|---|---|
 | **interval**, `jaccard_similarity` | **0.9972** (off-diagonal) | 0.1378; near-affine offset c·(1−J), §3.3 | rank-faithful to ΔJ ≤ 0.025 at p=21 (≤ 0.030 over p=18–23); τ = 0.951 |
-| **interval**, `jaccard_similarity_ie` | **0.99999** | **0.00043** | τ = 0.9947; 48/17,955 inverted (0.27%) |
-| **sequence** (k=20, w=100, p=24) | **0.9996** | **0.0061** | value-identical |
+| **interval**, `jaccard_similarity_ie` | **0.999997** (p=23) | **0.00020** (p=23) | τ = 0.9968; 29/17,955 inverted (0.16%) at p=23 (0.99999/0.00043/τ=0.9947, 48/17,955 (0.27%) at p=21 — used elsewhere in this section for cross-row comparability with `jaccard_similarity`, which does not improve with precision) |
+| **sequence** (k=25, w=100, p=24) | **0.9996** | **0.0061** | value-identical |
 
 Sequence mode's numerical agreement with bedtools peaks at r = 0.9996 / MAE = 0.0061 — four-decimal-place agreement, i.e. it closes the absolute gap that interval mode leaves open. The high-correlation ridge in the (k, w) Pearson heatmap runs along the high-k / high-w edge of the sweep, indicating that sequence mode's near-perfect agreement is unlocked at long minimizer windows where interior coverage is richest. (Caveat: agreement is not monotonic in w — at the very largest windows it falls back off saturation, e.g. at k = 15, p = 24 Pearson drops from ≈ 1.0 to 0.937 at w = 500 as interior minimizers grow too sparse — so the ridge peaks at high-k / moderate-w rather than at the extreme corner.)
 
@@ -238,7 +238,7 @@ Sequence mode's numerical agreement with bedtools peaks at r = 0.9996 / MAE = 0.
 
 > **Source:** `experiments/maurano_dhs_validation/RESULTS.md`.
 
-Sequence mode's best-ARI cell is **k = 10, w = 30**, with **ARI = 0.910, NMI = 0.961** on the 10-tissue-label set (with the three muscle subtypes — arm/back/leg — counted as distinct labels) holding across **all precisions p ≥ 12** — the clustering signal is precision-cheap once the (k, w) cell is right [INCLUDE FIGURE ILLUSTRATING SETTINGS]. Hammock successfully separates and groups the tissues. In fact, sequence mode is able to group and differentiate different muscle tissue types, while bedtools jaccard struggles.
+Sequence mode's best-ARI cell is **k = 10, w = 30**, with **ARI = 0.910, NMI = 0.961** on the 10-tissue-label set (with the three muscle subtypes — arm/back/leg — counted as distinct labels) holding across **all precisions p ≥ 12** — the clustering signal is precision-cheap once the (k, w) cell is right [INCLUDE FIGURE ILLUSTRATING SETTINGS]. Hammock successfully separates and groups the tissues, reproducing the same overall dendrogram structure as the bedtools reference (Fig 5b), including its one imperfect split: one fMuscle_back sample lands with the two fMuscle_leg samples rather than getting its own cluster, in **both** dendrograms — hammock is not resolving a muscle-subtype confusion that bedtools has, it is reproducing it (`experiments/maurano_dhs_validation/RESULTS.md`: "Bedtools' own dendrogram cuts the same way for most tissues ... modulo the same ... muscle_back/leg lumping"). fMuscle_arm does land in its own cluster under both tools.
 
 At the ARI-best config, sequence mode's predicted Jaccards sit on the y = x diagonal versus bedtools (and versus interval mode) — the sketch is numerically calibrated against the bedtools reference, not just rank-correlated.
 
@@ -259,9 +259,11 @@ At the ARI-best config, sequence mode's predicted Jaccards sit on the y = x diag
 
 3 H3K27ac samples (heart, liver, lung) × 3 references (GRCh37/GRCh38/CHM13), 9 sample×ref combinations. Across the (k, w) sweep, same-tissue cross-reference Jaccard is significantly higher than different-tissue Jaccard at every cell with k ≥ 8 (Wilcoxon p ≤ 10⁻⁵), and at **k ≥ 15 the two groups are *fully separated*** — the minimum same-tissue cross-reference similarity exceeds the maximum different-tissue similarity. This is a stronger statement than significant: no overlap.
 
-**Best lead cell: k = 15, w = 15.** On broad peaks, Δmedian = **0.398** (median same-tissue cross-ref = 0.783, median different-tissue = 0.385; Wilcoxon p = 1.35 × 10⁻¹⁰, the test floor at n=18/54). Narrow peaks: Δmedian = 0.387 (0.729 vs 0.342). k=20, w=20 reaches an even larger Δ (0.413 broad) but at slightly suppressed medians.
+> **"k = 15, w = 15 is the lead cell" does not survive rescoring on the columns hammock actually ships, and is retained below only as the historical basis for Fig 7's dendrogram.** The Δmedian numbers immediately below (0.398/0.387, and the regime table) were computed on `jaccard_similarity_with_ends`, deleted in v0.6.0 (CLAUDE.md divergence #8). Recomputed across all 20 (k, w) cells on the surviving columns (2026-08-08, `experiments/ref-comparison/estimator_ie_crossref.py`; see `experiments/ref-comparison/docs/exp_a_results.md` §"Recomputed on `jaccard_similarity_ie`"), k=15, w=15 ranks **fifth of twenty** on broad peaks — Δ = 0.483 (`jaccard_similarity`) / 0.510 (`jaccard_similarity_ie`) — behind **k20_w30** (0.540 / **0.561**, the actual top cell), k20_w20 (0.533 / 0.563), k15_w30 (0.494 / 0.508), and k15_w20 (0.488 / 0.510). The top five sit within 0.06 of each other and the top two within 0.008, so no single cell is meaningfully best — read this as "the k ≥ 15 plateau separates," not as an argmax. Full separation also stops discriminating cells on the surviving column: it now holds even at k=10, w=10 (broad min(xref) 0.988 > max(diff) 0.935; narrow 0.985 > 0.927) — only on the deleted `_with_ends` column did k=10 fail to separate.
 
-The sweep partitions into three regimes:
+**Best lead cell (historical, `_with_ends` column): k = 15, w = 15.** On broad peaks, Δmedian = **0.398** (median same-tissue cross-ref = 0.783, median different-tissue = 0.385; Wilcoxon p = 1.35 × 10⁻¹⁰, the test floor at n=18/54). Narrow peaks: Δmedian = 0.387 (0.729 vs 0.342). k=20, w=20 reaches an even larger Δ (0.413 broad) but at slightly suppressed medians.
+
+The sweep partitions into three regimes (also computed on the deleted `_with_ends` column; not re-run cell-by-cell on the surviving columns beyond the k=15/k=10 spot-check above):
 
 | Regime | Cells | Behavior |
 |---|---|---|
@@ -269,11 +271,11 @@ The sweep partitions into three regimes:
 | Interpretable mid | k = 10, w ≥ 10 | Medians ≈ 0.55–0.65; Δ ≈ 0.09; groups overlap |
 | **Interpretable + fully separated** | **k ≥ 15 (any valid w)** | **Δ ≈ 0.32–0.45; min(xref) > max(diff-tissue)** |
 
-**Fig 7:** UPGMA dendrogram at the new headline cell (k=15, w=15) — each tissue's three references form a tight monophyletic clade with deep separation between tissues; broad and narrow peak calls give the same structure.
+**Fig 7:** UPGMA dendrogram at k=15, w=15 — a representative cell from the k ≥ 15 plateau, not the argmax (see above) — each tissue's three references form a tight monophyletic clade with deep separation between tissues; broad and narrow peak calls give the same structure.
 
 ![Fig 7 — cross-reference dendrogram, k=15, w=15](../experiments/ref-comparison/figures/cross_ref_dendrogram_k15_w15.png)
 
-**Fig 8:** (k × w) effect-size heatmap for broad peaks; the three regimes are immediately visible, with k ∈ {15, 20} as a uniformly high-effect block.
+**Fig 8:** (k × w) effect-size heatmap for broad peaks; the three regimes are immediately visible, with k ∈ {15, 20} as a uniformly high-effect block (on this heatmap's `_with_ends` column, k20_w30/k20_w20 read as the darkest cells, consistent with their leading the current-column ranking above).
 
 ![Fig 8 — cross-ref effect-size sweep, broad](../experiments/ref-comparison/figures/sweep_effect_size_broad.png)
 
@@ -283,7 +285,7 @@ The sweep partitions into three regimes:
 
 Practical interpretation: when peaks are aligned to a different human reference than expected, the sketch still produces the same biological neighborhood. At k ≥ 15 the separation is large enough that reference choice is unambiguously a smaller source of variance than tissue identity. This is the property that lets hammock be deployed against heterogeneous catalogs (ENCODE/Roadmap mixtures) without first re-aligning everything.
 
-This is a proof-of-concept on a deliberately small panel (3 tissues × 3 references = 9 samples; n = 18 same-tissue cross-reference pairs vs 54 different-tissue pairs), and the Wilcoxon test is at its p-floor at that n — so the result establishes that the separation is large and consistent on these tissues, not that it generalizes across the full diversity of cell types, assays, or reference builds. See §6.3.
+This is a proof-of-concept on a deliberately small panel (3 tissues × 3 references = 9 samples; n = 18 same-tissue cross-reference pairs vs 54 different-tissue pairs), and the Wilcoxon test is at its p-floor at that n — so the result establishes that the separation is large and consistent on these tissues, not that it generalizes across the full diversity of cell types, assays, or reference builds. **n = 18/54 are *ordered* pairs, not independent units** — every unordered comparison is counted twice (`exp_a_results.md`), so the true independent-unit count is 9 cross-reference and 27 different-tissue comparisons over 9 files that themselves share samples. The medians reported above are unaffected by the doubling, but the Wilcoxon p-values should be read as indicative of consistency, not taken at face value as a properly-powered significance test. See §6.3.
 
 ### 4.5 Methodological notes: choosing sequence mode's flanking column
 
@@ -357,7 +359,7 @@ The asymptotic relative standard error is ≈ 1.04 / √(2^p). For the CLI defau
 
 ### 5.5 Minimizers (sequence mode)
 
-Sequence mode reduces each FASTA sequence to its set of (k, w)-minimizers [@Roberts2004; @Schleimer2003]: in every length-`w` sliding window over the sequence, the k-mer with the smallest selector-hash value is retained. Window scanning is delegated to the VeryAmazed `digest` library [@digest], and each unique selector hash is ingested directly into the per-sequence HLL of §5.4 via `add_hash64`. The similarity column `jaccard_similarity` compares these minimizer HLLs. (Through v0.5.0 a second HLL also held per-record boundary k-mers, giving a `jaccard_similarity_with_ends` column; v0.6.0 removed it — see §4.5 and `docs/mode-d-ends-removal.md`. Note the description previously given here was inaccurate: hammock did not canonicalize the two flanking k-mers individually, it canonicalized their 2k *concatenation* and then hashed all k+1 sliding k-mers of it, so k−1 of the inserted elements spanned an artificial splice.) CLI defaults are `k = 8`, `w = 40`; the production-cited configurations are `k = 20, w = 100` (§4.2, numerical agreement with bedtools) and `k = 10, w = 30` (§4.3, tissue clustering).
+Sequence mode reduces each FASTA sequence to its set of (k, w)-minimizers [@Roberts2004; @Schleimer2003]: in every length-`w` sliding window over the sequence, the k-mer with the smallest selector-hash value is retained. Window scanning is delegated to the VeryAmazed `digest` library [@digest], and each unique selector hash is ingested directly into the per-sequence HLL of §5.4 via `add_hash64`. The similarity column `jaccard_similarity` compares these minimizer HLLs. (Through v0.5.0 a second HLL also held per-record boundary k-mers, giving a `jaccard_similarity_with_ends` column; v0.6.0 removed it — see §4.5 and `docs/mode-d-ends-removal.md`. Note the description previously given here was inaccurate: hammock did not canonicalize the two flanking k-mers individually, it canonicalized their 2k *concatenation* and then hashed all k+1 sliding k-mers of it, so k−1 of the inserted elements spanned an artificial splice.) CLI defaults are `k = 8`, `w = 40`; the production-cited configurations are `k = 25, w = 100` (§4.2, numerical agreement with bedtools) and `k = 10, w = 30` (§4.3, tissue clustering).
 
 ### 5.6 Mixed-stride subsampling (`--subB-method mixed-stride`)
 
@@ -367,7 +369,7 @@ hammock introduces **mixed-stride** subsampling as a deterministic, hash-free al
 
 Three properties matter for downstream use:
 
-1. **Performance scaling.** At `subB = 0.1`, mixed-stride is 3–4× faster than hash-threshold on synthetic data and 1.8–2.4× faster than hash-threshold on real DHS. The advantage compounds: at `subB = 0.01` on 1M-interval synthetic files, mixed-stride hits 14× while hash-threshold caps at ~1.4×.
+1. **Performance scaling.** At `subB = 0.1`, mixed-stride is **2.6–3.5×** faster than hash-threshold on synthetic data (corrected — the earlier "3–4×" figure was the vs-no-subsample statistic, not vs-hash-threshold) and **1.73×** faster than hash-threshold on real DHS (recomputed from `docs/data/maurano_subB_summary.csv`: 7.72 s vs 4.47 s median wall). The Maurano mixed-stride/hash-threshold ratio never exceeds **2.02×** across the subB levels tested (0.01–0.5), rising as subB shrinks. The advantage compounds further at scale: at `subB = 0.01` on 1M-interval synthetic files, mixed-stride hits 14× while hash-threshold caps at ~1.4×.
 2. **Accuracy.** Per-pair MAE vs the no-subsample reference is statistically indistinguishable across the three subB methods (hash-threshold, mixed-stride, single-hash). Mixed-stride does not buy speed by losing accuracy.
 3. **Determinism and reproducibility.** Output is exactly reproducible given the chr-stride seed (`--gate-seed`, default 31337). The same files at the same subB produce byte-identical HLLs across runs and machines.
 
@@ -379,14 +381,14 @@ This subsampling refinement is what makes the Section 4.1 speed numbers attainab
 
 ### 6.1 Definitional gap vs bedtools
 
-The estimator-vs-exact gap is characterized in §3.3: interval mode's register-equality Jaccard is *approximately* an affine transform c + (1 − c)·J of the exact base-pair Jaccard — rank-faithful at off-diagonal r = 0.9972 / τ = 0.951, with absolute values carrying an offset c·(1 − J) of ~0.16 at low J on the synthetic benchmark, shrinking to zero as similarity rises. The approximation is not exact: residuals reach ±0.025 (>10σ), and because `c` depends on the cardinality ratio as well as the load factor, 2.45% of Maurano comparisons invert bedtools' ordering (all at ΔJ_bedtools < 0.031). Because these are estimator properties rather than statistical noise they do not close with subsampling; the precision-flatness holds only *while the sketch stays saturated* (`m ≪ n`), collapsing once `m` exceeds `n` (0.180 at p = 12/16/20 vs 0.045 at p = 24 on the ~5 Mbp-coverage synthetic benchmark — the Maurano files cover 63–139 Mbp). The practical consequence: interval-mode `jaccard_similarity` should be read as a ranking within comparably-sized files; for a bedtools magnitude, read `jaccard_similarity_ie`.
+The estimator-vs-exact gap is characterized in §3.3: interval mode's register-equality Jaccard is *approximately* an affine transform c + (1 − c)·J of the exact base-pair Jaccard — rank-faithful at off-diagonal r = 0.9972 / τ = 0.951, with absolute values carrying an offset c·(1 − J) of ~0.16 at low J on the synthetic benchmark, shrinking to zero as similarity rises. The approximation is not exact: residuals reach ±0.025 (>10σ), and because `c` depends on the cardinality ratio as well as the load factor, 2.45% of Maurano comparisons invert bedtools' ordering (all at ΔJ_bedtools ≤ 0.025). Because these are estimator properties rather than statistical noise they do not close with subsampling; the precision-flatness holds only *while the sketch stays saturated* (`m ≪ n`), collapsing once `m` exceeds `n` (0.180 at p = 12/16/20 vs 0.045 at p = 24 on the ~5 Mbp-coverage synthetic benchmark — the Maurano files cover 63–139 Mbp). The practical consequence: interval-mode `jaccard_similarity` should be read as a ranking within comparably-sized files; for a bedtools magnitude, read `jaccard_similarity_ie`.
 
 Two routes recover absolute magnitude. (1) **Sequence mode** at the optimal high-k/high-w cell brings MAE against bedtools down to 0.006. (2) Within interval mode, the **containment columns already estimate the true set quantities** by inclusion–exclusion (§5.4), so a set-Jaccard estimate is recoverable from existing output with no rerun: `J = 1/(1/C_AB + 1/C_BA − 1)`. Because both containments derive from a single shared intersection estimate, this recovers the inclusion–exclusion estimator exactly rather than approximating it. On the synthetic spread it tracks bedtools at MAE 5×10⁻⁴ (p = 20) and 1×10⁻⁴ (p = 24), versus 0.15 for the reported `jaccard_similarity`.
 
 **The trade-off is real but narrow, and the paper should scope it rather than call it a wash.** MAE scores calibration, not resolution, so resolution is measured separately by Kendall τ against exact bedtools truth — a rank statistic, chosen because it is invariant under any monotone transform of the estimator and so cannot be inflated by the register-equality column's own bias (an earlier sd-based version of this comparison could be, and is retracted; see `docs/jaccard-definitional-gap.md`).
 - Below J = 0.05, τ runs register-equality 0.335 / 0.658 / 0.905 / 0.907 against inclusion–exclusion 0.289 / 0.562 / 0.794 / 0.967 at p = 12 / 16 / 20 / 24. So register-equality ranks better up to p = 20 and loses at p = 24.
 - Above J = 0.05 both reach τ = 1.0000 by p = 20 on the synthetic corpus (register-equality is 0.9804 at p = 16 in the J ≥ 0.2 stratum — 1 discordant pair out of 102 — so p = 16 is not the convergence point, though the cell turns on a single comparison); those strata resolve nothing and no winner should be read out of them.
-- MAE favours inclusion–exclusion in every stratum at every precision, by 20–1700×.
+- MAE favours inclusion–exclusion in every stratum at every precision, by **12–388×** (recomputed directly from `experiments/bedtools_benchmark/results/estimator_compare_full.csv`: per-(stratum, precision)-cell MAE ratios range from 11.9× at p=12, J≥0.05 to 387.7× at p=24, J<0.05 — the previously quoted "20–1700×" did not reproduce from this file and is corrected here; `docs/jaccard-definitional-gap.md` and `docs/estimator-analysis-findings.md` §9.1 carry the old figure and should be updated to match).
 - Inclusion–exclusion is censored: the `≥ 0` clamp fires on 25/90 pairs at p = 12, all at low J, so conditional on being non-zero it is biased upward near J = 0, and its relative error `≈ 0.6/(J√m)` makes it uninformative below J ≈ a few/√m. Nothing is clamped anywhere on the Maurano corpus.
 - Net, as a reading rule rather than a computation rule (the CLI emits both columns unconditionally): **read `jaccard_similarity_ie`; if the corpus is low-J and the task is ranking rather than measurement, raise `-p` to 24 rather than switching columns.** Register-equality is preferable only for ranking, only below J ≈ 0.05, only at p ≤ 20, and only among pairs of comparable set size.
 - Downstream: no published Mode D or cross-species headline changes under either column; at k = 20 on the primate H3K4me3 corpus inclusion–exclusion recovers one additional true clade (Laurasiatheria). Details in `docs/estimator-analysis-findings.md` §9.
@@ -398,11 +400,11 @@ The five auxiliary similarity columns (containment_AB, containment_BA, cosketch_
 
 ### 6.3 Reference-robustness is shown on a small panel
 
-The reference-genome invariance result (§4.4) is established on 9 samples — 3 tissues (heart/liver/lung H3K27ac) × 3 references (GRCh37/GRCh38/CHM13), giving n = 18 same-tissue cross-reference pairs and 54 different-tissue pairs. The separation at k ≥ 15 is large (Δmedian ≈ 0.4, full separation of the two groups), but with this n the Wilcoxon statistic is pinned at its floor, so the p-values quantify consistency on these tissues rather than generalization. We read the experiment as a proof-of-concept that reference build is a smaller variance source than tissue identity for these marks — not as a survey across cell types, assays, or assemblies. Extending the panel (more tissues, more assays, additional assemblies) is the obvious next step before the invariance claim is relied on for heterogeneous-catalog deployment.
+The reference-genome invariance result (§4.4) is established on 9 samples — 3 tissues (heart/liver/lung H3K27ac) × 3 references (GRCh37/GRCh38/CHM13), giving n = 18 same-tissue cross-reference pairs and 54 different-tissue pairs (ordered pairs — see the §4.4 caveat; the independent-unit count is smaller). The separation at k ≥ 15 is large (Δmedian ≈ 0.4, full separation of the two groups), but with this n the Wilcoxon statistic is pinned at its floor, so the p-values quantify consistency on these tissues rather than generalization. We read the experiment as a proof-of-concept that reference build is a smaller variance source than tissue identity for these marks — not as a survey across cell types, assays, or assemblies. Extending the panel (more tissues, more assays, additional assemblies) is the obvious next step before the invariance claim is relied on for heterogeneous-catalog deployment.
 
 ## 7. Discussion
 
-- **Practical recipe.** Interval mode for fast bedtools-equivalent interval-Jaccard with optional subsampling for further speedup at no accuracy cost. Sequence mode at large k and w (k=20, w=100, p=24) for the closest numerical match to bedtools (r = 0.9996, MAE = 0.006). Sequence mode at k=10, w=30, p ≥ 12 for tissue clustering (ARI = 0.91, NMI = 0.96). Use `jaccard_similarity` for ranking and `jaccard_similarity_ie` for magnitude. (The former `jaccard_similarity_with_ends` fallback is gone as of v0.6.0 — §4.5.)
+- **Practical recipe.** Interval mode for fast bedtools-equivalent interval-Jaccard with optional subsampling for further speedup at no accuracy cost. Sequence mode at large k and w (k=25, w=100, p=24) for the closest numerical match to bedtools (r = 0.9996, MAE = 0.006). Sequence mode at k=10, w=30, p ≥ 12 for tissue clustering (ARI = 0.91, NMI = 0.96). Use `jaccard_similarity` for ranking and `jaccard_similarity_ie` for magnitude. (The former `jaccard_similarity_with_ends` fallback is gone as of v0.6.0 — §4.5.)
 - **The sketch carries more than bedtools captures.** Sequence mode recovers tissue clustering directly from peak FASTAs — independently from bedtools' interval overlap — at ARI = 0.91. Sketch similarity ≈ biological similarity, even when the two estimators don't agree numerically.
 
 ## 8. Conclusion
@@ -412,27 +414,39 @@ being compared, and is large at catalog scale — but it is *not* present at eve
 scale. Every timing result in §4.1 is Mode B, and no sequence-mode speed
 comparison has been run.
 
-> **Speed claims are under re-measurement (2026-08-09); do not quote a number
-> from this section yet.** Two problems, both established by measurement:
+> **This caveat block predates the 2026-08-09/10 harness fix and is
+> superseded — see the top-of-file retraction banner and §4.1/S6/S7 for the
+> current numbers (9.21× at N=512, measured crossover between N=32 and
+> N=64).** Kept for the historical record of what "faster at every scale"
+> originally got wrong; do not quote either number below.
 >
-> 1. **"Faster at every scale" was false in our own published data.** In
->    `results/cpp_vs_bedtools_t16_20260808_190441.csv` (p=14, t=16) hammock is
->    *slower* than bedtools at N = 8, 16 and 32 files (0.71×, 0.69×, 0.87×),
->    crossing over around N ≈ 64 and reaching 12.35× only at N = 512.
+> 1. **"Faster at every scale" was false in our own published data.**
+>    ~~In `results/cpp_vs_bedtools_t16_20260808_190441.csv` (p=14, t=16)
+>    hammock is *slower* than bedtools at N = 8, 16 and 32 files (0.71×,
+>    0.69×, 0.87×), crossing over around N ≈ 64 and reaching 12.35× only at
+>    N = 512.~~ That source CSV no longer exists in the repo. The underlying
+>    claim — bedtools wins below the crossover — is still true and is now
+>    established with 20 replicates per N and a *measured*, not hedged,
+>    crossover between N=32 (0.67×, bedtools still faster) and N=64 (1.28×,
+>    hammock faster), reaching **9.21× at N=512** (job 29671317; §4.1).
 > 2. **The bedtools baseline is partly measuring process creation, not
 >    bedtools.** `bedtools jaccard` has no batch mode, so a pairwise workflow
 >    launches one process per pair — N² of them — wrapped in GNU `parallel`.
->    On Rockfish `parallel`-partition nodes that dispatch is capped at roughly
->    123 exec/s and does not scale with cores: 1024 pairs at `--jobs 16` take
->    the same wall time as at `--jobs 1` (16.6 s vs 16.6 s). The cap is not
->    specific to bedtools or to GNU parallel — `md5sum` on local files measures
->    **0.46×** (slower at 16-way than serial), `xargs -P16` hits the same
->    ceiling, and copying the binary from GPFS to local NVMe changes nothing
->    (1.46× vs 1.48×). An archived run reached ~7× on the same code, so the
->    number is node- and load-dependent rather than a property of either tool.
+>    ~~On Rockfish `parallel`-partition nodes that dispatch is capped at
+>    roughly 123 exec/s and does not scale with cores... `md5sum` on local
+>    files measures 0.46× (slower at 16-way than serial)...~~ The "~123
+>    exec/s, doesn't scale with cores" mechanism and its `md5sum` control are
+>    retracted (`docs/bedtools-baseline-retraction.md`): the control ran in
+>    the same `LD_LIBRARY_PATH`-polluted environment it was meant to
+>    validate, and a clean re-measurement reads **364 exec/s**, not 123. What
+>    survives: bedtools' lack of batch mode is real and costs it measured
+>    parallel efficiency — **41% of 16 cores at t=16** (Supplementary Fig S6)
+>    — a structural consequence of N² re-reads, not a hard process-creation
+>    ceiling.
 >
-> Consequence: "bedtools at t=16" can silently mean "bedtools at t≈1.5", which
-> inflates the reported speedup by up to ~6×. Any headline ratio must state the
+> Consequence: "bedtools at t=16" can silently mean "bedtools at t≈6.5" (41%
+> efficiency, Supplementary Fig S6), not the full 16 cores a naive reading
+> would assume. Any headline ratio must state the
 > parallel efficiency bedtools actually achieved in that run, and the fraction
 > of its per-pair cost that is process startup (~8 ms of ~11-16 ms at 10k
 > intervals/file). Note this is still a real workflow difference — hammock
@@ -557,10 +571,12 @@ and putting an extrapolation in the same panel as two measurements is exactly
 how a projection ends up quoted later as if it had been run. The projected
 segment is dashed, grey, drawn with open points, and annotated on the panel.
 
-- **Why project.** BEDTools measures 3.97× per doubling, 1978 s per replicate at
-  N=512, so one replicate is ~2.1 h at N=1024 and ~8.4 h at N=2048 — over a day
-  of node time for three replicates, to extend a comparison already decided by
-  N=256. hammock at p=18 is sketching-dominated and near-linear, so measuring
+- **Why project.** BEDTools measures ~4.0× per doubling (fitted exponent 2.000
+  below), **653 s per replicate at N=512** (job 29671317, not the retracted
+  1978 s pre-`LD_LIBRARY_PATH`-fix figure), so one replicate is ~0.7 h at
+  N=1024 and ~2.9 h at N=2048 — ~11 h of node time for three replicates at
+  each, to extend a comparison already decided by N=256. hammock at p=18 is
+  sketching-dominated and near-linear, so measuring
   *it* at catalog scale costs minutes. N≈2048 is a real corpus size, not a round
   number: the ChIP-Atlas manifest holds 2,206 verified hg38 CTCF files.
 
@@ -570,10 +586,10 @@ segment is dashed, grey, drawn with open points, and annotated on the panel.
 | BEDTools | 653.4 (measured) | 2574 (proj.) | 10294 (proj.) |
 | speedup | 9.2× | 15.6× (proj.) | 24.7× (proj.) |
 
-**Superseded 2026-08-10** (was 27.6×/46.5×/72.1×, from job 29656140 before its
-small-N noise bug was found and fixed — see the Figure 3 generation note; N=512
-itself moved 714.77 s → 653.41 s bedtools between the two jobs, ordinary n=3
-run-to-run noise, not a further correction). The *shape* is unchanged — hammock
+**Superseded 2026-08-10** (was 27.6×/46.5×/72.1×, from job 29652408 — the
+original pre-`LD_LIBRARY_PATH`-fix run, same defect as the original 27.61×
+Figure 3 headline; see the top-of-file retraction banner and the Figure 3
+generation note). The *shape* is unchanged — hammock
 crosses over and pulls ahead as N grows, projected to ~25× by N=2048 — but the
 magnitude at every N is smaller than the retracted table claimed.
 
@@ -647,4 +663,11 @@ bug Figure 3 Panel A had.
   threads change only how fast a deterministic sketch is built. Measured
   max |ΔMAE| = 0, exactly.
 - Caveat for the caption: one corpus, one node, subB=1.0 throughout. The p=18
-  point is the same measurement as Figure 3's Maurano bar; they must agree.
+  point is the same accuracy/methodology as Figure 3 Panel B's Maurano bar
+  (`jaccard_similarity_ie` metrics-block arm) but **not the same thread
+  count** — this sweep is t=16 (`sweep_precision_maurano_p18_t16.csv`) while
+  Figure 3 Panel B runs at t=8, so their wall times are not expected to
+  match exactly (recomputed: 6.42 s at t=16 here vs 9.40 s at t=8 in
+  `docs/data/maurano_subB_ie_summary.csv`). The t=8 companion
+  (`sweep_precision_maurano_p18_t8.csv`) is the cell that should actually
+  agree with Figure 3 Panel B, and does.
