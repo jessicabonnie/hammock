@@ -442,27 +442,46 @@ For each file in the inventory under `experiments/` and `paper/`:
    `tests/test_hammock_cpp_metrics.py`'s `_run_cpp_path` already does) need
    the glob/construction updated to `_re`/`_full`/`_ie`. Grep each file for
    `_j3` specifically, not just the flag names.
-4. **Separately, and easy to miss: audit for Python-CLI (`hammock`, not
-   `hammock-cpp`) invocations that pass *no* metrics flag at all.** The
-   `--no-metrics`/`--metrics` grep this Part's inventory was built from is
-   blind to these by construction — the Python CLI has never had the flag
-   (see "Current state," above), so every existing Python-CLI caller relies
-   implicitly on today's always-full-block default, and none of them
-   contain either string. At minimum, audit and fix:
-   `experiments/maurano_dhs_validation/run_sweep_abc.py` and
-   `run_sweep_d.py` (invoked by `sbatch_sweep.sh`/`sbatch_fill_highk_w.sh`;
+4. **Separately, and easy to miss: audit for invocations of either
+   front-end that pass *no* metrics flag at all** — not just Python-CLI
+   callers. The `--no-metrics`/`--metrics` grep this Part's inventory was
+   built from is structurally blind to these: the Python CLI has never had
+   the flag (see "Current state," above), so every existing Python-CLI
+   caller relies implicitly on today's always-full-block default and
+   contains neither string; and any pre-v0.7.0 or otherwise-unflagged
+   `hammock-cpp` call site relies the same way, since `--metrics` is
+   currently the (already-full) default there too — Part 4 changes that
+   default for both front-ends identically, so a bare invocation of *either*
+   binary is equally exposed.
+
+   **Default policy for every no-flag call site found this way: add
+   `--metrics` explicitly, to preserve exactly the columns it already
+   depends on — unless the script's purpose is specifically
+   benchmarking/timing, in which case apply item 1/2's logic instead** (pick
+   the flag that matches what it's actually timing, which may be the new
+   bare default or `--register-equality`, not necessarily `--metrics`).
+   Most call sites are the former case: something downstream reads named
+   columns and has no interest in which arm produced them, so the
+   column-preserving default is `--metrics`, not a case-by-case guess at
+   which of the 8 columns is actually used. Reserve the timing-arm judgment
+   call for scripts that are unambiguously about wall time (live under
+   `experiments/bedtools_benchmark/`, `experiments/subB_mixed_stride/`, or
+   otherwise report timings, not similarity values).
+
+   At minimum, audit and fix: `experiments/maurano_dhs_validation/run_sweep_abc.py`
+   and `run_sweep_d.py` (invoked by `sbatch_sweep.sh`/`sbatch_fill_highk_w.sh`;
    their output feeds `experiments/maurano_dhs_validation/analyze.R`, which
    reads `jaccard_similarity`, `containment_AB`, `containment_BA`,
    `cosketch_geom`/`arith`/`max` — all of which vanish from the bare default
-   in Part 2, silently breaking the R script's column lookups on the next
-   sweep), `experiments/primate-phylogeny/scripts/precision_probe.sh`, and
+   in Part 2/4, silently breaking the R script's column lookups on the next
+   sweep — none of this is a timing script, so `--metrics` per the policy
+   above), `experiments/primate-phylogeny/scripts/precision_probe.sh`, and
    `experiments/modeD_flanking/run_sweep_synthetic.py` (archival, lower
-   priority, but non-Mode-D scripts under `experiments/` were not all swept
-   by this Part's original grep-based inventory — re-grep for bare `hammock`
-   invocations across `experiments/` rather than trusting that list as
-   exhaustive). Add `--metrics` explicitly at each live one, to preserve
-   current behavior — same rule as item 2, just for a call site the
-   flag-string grep can't see.
+   priority). These three are a starting list, not a complete one — this
+   Part's original grep-based inventory can't see no-flag call sites by
+   construction, so re-grep for bare `hammock`/`hammock-cpp` invocations
+   across `experiments/` (and any other directory that shells out to either
+   binary) rather than trusting that list as exhaustive.
 
 Suggested split if a fresh session wants a smaller unit: 6a
 `experiments/bedtools_benchmark/*`, 6b `experiments/subB_mixed_stride/*`,
@@ -473,10 +492,12 @@ Part 9's job, deliberately deferred).
 
 Done when: `grep -rn -- '--no-metrics'` returns nothing outside
 `docs/seed-*.md` (historical, left alone per "Current state" above); every
-live `experiments/`/`paper/` script that needs the old full-block behavior
-either passes `--metrics` explicitly (Python CLI callers) or already did
-(hammock-cpp callers); `grep -rn 'PART9:'` shows one marker per call site
-flagged for Part 9.
+live `experiments/`/`paper/` script that reads named similarity/containment
+columns (not just timings) passes `--metrics` explicitly, on whichever
+front-end it calls, per item 4's default policy; every script that's
+genuinely about timing carries the flag matching what it actually measures;
+`grep -rn 'PART9:'` shows one marker per `--metrics` call site flagged for
+Part 9.
 
 ### Part 7 — Docs: README, CLAUDE.md, live design docs
 
