@@ -189,74 +189,67 @@ At the ARI-best config, sequence mode's predicted Jaccards sit on the y = x diag
 
 > **Source:** `experiments/ref-comparison/docs/exp_a_results.md`.
 
-3 H3K27ac samples (heart, liver, lung) × 3 references (GRCh37/GRCh38/CHM13), 9 sample×ref combinations. Across the (k, w) sweep, same-tissue cross-reference Jaccard is significantly higher than different-tissue Jaccard at every cell with k ≥ 8 (Wilcoxon p ≤ 10⁻⁵), and at **k ≥ 15 the two groups are *fully separated*** — the minimum same-tissue cross-reference similarity exceeds the maximum different-tissue similarity. This is a stronger statement than significant: no overlap.
+3 H3K27ac samples (heart, liver, lung) × 3 references (GRCh37/GRCh38/CHM13), 9 sample×ref combinations. Across the (k, w) sweep, same-tissue cross-reference Jaccard is significantly higher than different-tissue Jaccard at every cell with k ≥ 8 (Wilcoxon p ≤ 10⁻⁵), and by **k = 10 the two groups are *fully separated*** — the minimum same-tissue cross-reference similarity exceeds the maximum different-tissue similarity. This is a stronger statement than significant: no overlap.
 
-> **"k = 15, w = 15 is the lead cell" does not survive rescoring on the columns hammock actually ships, and is retained below only as the historical basis for Fig 7's dendrogram.** The Δmedian numbers immediately below (0.398/0.387, and the regime table) were computed on `jaccard_similarity_with_ends`, deleted in v0.6.0 (CLAUDE.md divergence #8). Recomputed across all 20 (k, w) cells on the surviving columns (2026-08-08, `experiments/ref-comparison/estimator_ie_crossref.py`; see `experiments/ref-comparison/docs/exp_a_results.md` §"Recomputed on `jaccard_similarity_ie`"), k=15, w=15 ranks **fifth of twenty** on broad peaks — Δ = 0.483 (`jaccard_similarity`) / 0.510 (`jaccard_similarity_ie`) — behind **k20_w30** (0.540 / **0.561**, the actual top cell), k20_w20 (0.533 / 0.563), k15_w30 (0.494 / 0.508), and k15_w20 (0.488 / 0.510). The top five sit within 0.06 of each other and the top two within 0.008, so no single cell is meaningfully best — read this as "the k ≥ 15 plateau separates," not as an argmax. Full separation also stops discriminating cells on the surviving column: it now holds even at k=10, w=10 (broad min(xref) 0.988 > max(diff) 0.935; narrow 0.985 > 0.927) — only on the deleted `_with_ends` column did k=10 fail to separate.
-
-**Best lead cell (historical, `_with_ends` column): k = 15, w = 15.** On broad peaks, Δmedian = **0.398** (median same-tissue cross-ref = 0.783, median different-tissue = 0.385; Wilcoxon p = 1.35 × 10⁻¹⁰, the test floor at n=18/54). Narrow peaks: Δmedian = 0.387 (0.729 vs 0.342). k=20, w=20 reaches an even larger Δ (0.413 broad) but at slightly suppressed medians.
-
-The sweep partitions into three regimes (also computed on the deleted `_with_ends` column; not re-run cell-by-cell on the surviving columns beyond the k=15/k=10 spot-check above):
+Ranked by effect size (Δ = median same-tissue cross-reference − median
+different-tissue) on `jaccard_similarity_ie` across all 20 (k, w) cells,
+broad peaks: **k20_w30 leads** (Δ = 0.561), closely followed by k20_w20
+(0.563), k15_w30 (0.508), k15_w20 (0.510), and k15_w15 (0.510). The top five
+sit within 0.06 of each other, so this reads as a **k ≥ 15 plateau** rather
+than a single best cell — full separation (min(same-tissue) > max
+(different-tissue)) holds throughout it, and by k = 10 it already holds too
+(broad min(xref) 0.988 > max(diff) 0.935; narrow 0.985 > 0.927).
 
 | Regime | Cells | Behavior |
 |---|---|---|
 | Saturated high | k ≤ 8 (any w) | Both groups ≈ 0.95–0.99; Δ ≤ 0.02 |
-| Interpretable mid | k = 10, w ≥ 10 | Medians ≈ 0.55–0.65; Δ ≈ 0.09; groups overlap |
-| **Interpretable + fully separated** | **k ≥ 15 (any valid w)** | **Δ ≈ 0.32–0.45; min(xref) > max(diff-tissue)** |
+| Interpretable, fully separated | k = 10, w ≥ 10 | Medians ≈ 0.55–0.65 same-tissue vs overlapping-to-separated different-tissue |
+| Interpretable, fully separated | k ≥ 15 (any valid w) | Δ ≈ 0.32–0.45; the clearest margin between the two groups |
 
-**Fig 7:** UPGMA dendrogram at k=15, w=15 — a representative cell from the k ≥ 15 plateau, not the argmax (see above) — each tissue's three references form a tight monophyletic clade with deep separation between tissues; broad and narrow peak calls give the same structure.
+**Fig 7:** UPGMA dendrogram at k=15, w=15, a representative cell from the
+k ≥ 15 plateau — each tissue's three references form a tight monophyletic
+clade with deep separation between tissues; broad and narrow peak calls give
+the same structure.
 
 ![Fig 7 — cross-reference dendrogram, k=15, w=15](../experiments/ref-comparison/figures/cross_ref_dendrogram_k15_w15.png)
 
-**Fig 8:** (k × w) effect-size heatmap for broad peaks; the three regimes are immediately visible, with k ∈ {15, 20} as a uniformly high-effect block (on this heatmap's `_with_ends` column, k20_w30/k20_w20 read as the darkest cells, consistent with their leading the current-column ranking above).
+**Fig 8:** (k × w) effect-size heatmap for broad peaks; k ≥ 15 reads as a
+uniformly high-effect block.
 
 ![Fig 8 — cross-ref effect-size sweep, broad](../experiments/ref-comparison/figures/sweep_effect_size_broad.png)
-
-**Metric choice at k=10, w=10 — WITHDRAWN (2026-07-31).** This ranked metrics by Δmedian, which rewards de-saturation rather than discrimination. On the scale-free statistic, `jaccard_similarity` achieves AUC = 1.0000 on both broad and narrow (full separation) against 0.9012/0.8889 for `jaccard_similarity_with_ends` — the opposite conclusion. Two further caveats found while checking it: that AUC is one biological sample deep (every leave-one-sample-out refit restores 1.0000 for `_with_ends`), and a *content-free* size statistic `−|log(C_BA/C_AB)|` scores AUC 0.9918/1.0000 on the same task, so Exp A cannot support a comparative metric claim in either direction. The `_with_ends` columns no longer exist (divergence #8). Original text follows for the record: of the 12 emitted similarity columns, `jaccard_similarity_with_ends` remains the right default — best Δ/saturation trade-off (broad Δ = 0.086, p = 2.0 × 10⁻⁷). `cosketch_geom_with_ends` is a near-tie (Δ = 0.065). All minimizer-only metrics hit the Wilcoxon p-floor but operate near saturation (medians ≈ 0.99 vs 0.92), so absolute Δ is small. `cosketch_max_with_ends` collapses on narrow (Δ ≈ 0, p ≈ 0.49) — the worst metric in both flavors and not recommended. (The full 12-metric comparison is **Fig S1**, in the Supplementary figures section.) These 12 are the columns emitted at the time of the run; v0.5.0 adds `jaccard_similarity_ie` and its `_with_ends` twin, bringing the emitted total to 14. The comparison has not been re-run, so Fig S1 and every count in this section describe the 12-column schema.
-
-(Note: at k=15, w=15 the minimizer-only signal is already fully separated, so the choice of with-ends vs no-ends matters less; a future replication at the new headline cell would confirm that observation — on the current 7-column v0.6.0 schema, since the with-ends half no longer exists.)
 
 Practical interpretation: when peaks are aligned to a different human reference than expected, the sketch still produces the same biological neighborhood. At k ≥ 15 the separation is large enough that reference choice is unambiguously a smaller source of variance than tissue identity. This is the property that lets hammock be deployed against heterogeneous catalogs (ENCODE/Roadmap mixtures) without first re-aligning everything.
 
 This is a proof-of-concept on a deliberately small panel (3 tissues × 3 references = 9 samples; n = 18 same-tissue cross-reference pairs vs 54 different-tissue pairs), and the Wilcoxon test is at its p-floor at that n — so the result establishes that the separation is large and consistent on these tissues, not that it generalizes across the full diversity of cell types, assays, or reference builds. **n = 18/54 are *ordered* pairs, not independent units** — every unordered comparison is counted twice (`exp_a_results.md`), so the true independent-unit count is 9 cross-reference and 27 different-tissue comparisons over 9 files that themselves share samples. The medians reported above are unaffected by the doubling, but the Wilcoxon p-values should be read as indicative of consistency, not taken at face value as a properly-powered significance test. See §6.3.
 
-### 4.5 Methodological notes: choosing sequence mode's flanking column
+### 4.5 Methodological note: sequence mode's removed flanking column
 
-> **Status (2026-07-31): RESOLVED — the column was removed, so this section becomes a methods note, not a choice.** hammock v0.6.0 deletes all seven `_with_ends` columns (`CLAUDE.md` divergence #8; full evidence in `docs/mode-d-ends-removal.md`). The merged sketch was an algebraic blend `(1−φ)·J_minimizer + φ·J_flank` at a weight φ set by (k, w, record count, length) and never by the user; k−1 of its k+1 per-record elements were chimeric junction k-mers; and the flank term is an exact-boundary-identity indicator that 1 bp of jitter destroys (J_flank 1.000 → 0.130) — on real DHS data only 0.01% of intervals match exactly. Its stated rationale (rescuing short records) was false: the no-minimizer fallback fed both HLLs, so the two columns were bit-identical there.
->
-> **Everything below this banner is superseded** and retained only as the record of how the decision was reached. Two specific corrections: φ as printed below is **wrong** (the code inserts k+1 per record, not 2(k−1)), and the "fallback for sparse-minimizer regimes" recommendation is **withdrawn** — built explicitly, that regime shows the flank term taking over rather than helping.
+Sequence mode originally emitted a second Jaccard column,
+`jaccard_similarity_with_ends`, computed on a minimizer sketch merged with a
+second sketch of each record's boundary k-mers. hammock v0.6.0 removed it
+(`CLAUDE.md` divergence #8; full evidence in `docs/mode-d-ends-removal.md`).
+Three reasons, each measured:
 
-> **Status (2026-05-21):** Section being reworked. All §4.5 figures are hidden from the rendered outline pending replacement — none are currently shown. The hidden PNGs are still on disk at `experiments/modeD_flanking/figures/` for reference.
+- The merged score was an algebraic blend `(1−φ)·J_minimizer + φ·J_flank` at
+  a weight φ set by (k, w, record count, length) and never by the user.
+- k−1 of the flank sketch's k+1 per-record elements were chimeric k-mers
+  spanning an artificial start/end splice, not real sequence content.
+- The flank term is an exact-boundary-identity indicator: 1 bp of jitter
+  destroys it (J_flank 1.000 → 0.130), and on real DHS data only 0.01% of
+  intervals match exactly at their boundaries.
 
-> **Source:** `experiments/modeD_flanking/` Parts 1 (Maurano re-analysis) and 2 (synthetic FASTA pairs with exact k-mer Jaccard truth).
+Its stated rationale — rescuing records too short to yield minimizers —
+didn't hold either: the no-minimizer fallback fed the whole sequence into
+both HLLs, so the two columns were bit-identical exactly where the flank
+column was supposed to help.
 
-Sequence mode emits two Jaccard columns: minimizer-only (`jaccard_similarity`) and minimizer-plus-flanks (`jaccard_similarity_with_ends`). Two corpora characterize when each column is preferred:
-
-- **Part 1 (Maurano, real DHS):** at high-precision configs, `no_ends` is the clear winner — at k=20, w=100, p=24, r_no_ends = 0.9996 vs r_with_ends = 0.888. The advantage flips only at the smallest (k, w) cells (k ≤ 10, w ≤ 10), where interior minimizers are sparse and the flanking k-mers carry the signal.
-- **Part 2 (synthetic, 192 FASTA pairs across an n_intervals × mean_len × dist × mutation grid, each sketched at 66 valid (k, w, p) cells — ~12,700 measurements total; exact k-mer Jaccard as truth):** `with_ends` has systematically *larger* MAE than `no_ends` against the k-mer truth (mean Δmae_r ≈ −0.015 across all k); the gap widens with φ, the flanking-fraction predictor we defined.
-
-The flanking-fraction φ ≈ 2(k−1)·n_intervals / (total_length / w) predicts the regime: large φ → `_with_ends` over-weights boundary k-mers; small φ → either column works.
-
-**Recommendation (superseded — see banner):** minimizer-only (`jaccard_similarity`) is the right default for ChIP/DHS-shaped corpora at any reasonable parameter choice; `_with_ends` is a fallback for short-sequence, sparse-minimizer regimes. **The fallback clause no longer holds:** constructed properly (records just above the `L = k+w−1` dropout threshold, so minimizers/record → 1 at *zero* dropout), the flank term does not rescue the estimate — at w=400, L=429 it pulls J from 0.556 down to 0.352, converging on record identity rather than sequence content.
-
-<!-- Fig 9 (hidden 2026-05-21, pending rework — file still on disk):
-**Fig 9:** Part 1 (Maurano real DHS) — sign of (no_ends − with_ends) flips with w.
-
-![Fig 9 — Maurano Δr(no_ends − with_ends) vs w](../experiments/modeD_flanking/figures/maurano_delta_r_vs_w.png)
--->
-
-<!-- Fig 10 (hidden 2026-06-03, pending rework — file still on disk):
-**Fig 10:** Part 2 (synthetic) — φ × mutation phase plane.
-
-![Fig 10a — synthetic Δ vs φ](../experiments/modeD_flanking/figures/synthetic_delta_vs_phi.png)
-
-![Fig 10 — synthetic φ × mutation phase diagram](../experiments/modeD_flanking/figures/synthetic_phase_diagram.png)
--->
-
-<!-- Fig 11 (hidden 2026-05-21, pending rework — file still on disk):
-**Fig 11:** Empirical agreement with the analytical φ-prediction — independent validation of the flanking-fraction model.
-
-![Fig 11 — empirical vs analytical φ](../experiments/modeD_flanking/figures/synthetic_empirical_vs_analytical.png)
--->
+On the corpora that motivated the comparison, minimizer-only
+(`jaccard_similarity`) was already the stronger column at any reasonable
+(k, w): on Maurano real DHS at k=20, w=100, p=24, r_no_ends = 0.9996 vs
+r_with_ends = 0.888; on a synthetic grid of 192 FASTA pairs sketched at 66
+(k, w, p) cells each against exact k-mer-Jaccard ground truth, `with_ends`
+carried systematically larger MAE (mean Δmae_r ≈ −0.015 across all k).
+Sequence mode now emits exactly one similarity block, on the minimizer HLL.
 
 ## 5. Methods
 
@@ -317,7 +310,7 @@ The estimator-vs-exact gap is characterized in §3.3: interval mode's register-e
 
 Two routes recover absolute magnitude. (1) **Sequence mode** at the optimal high-k/high-w cell brings MAE against bedtools down to 0.006. (2) Within interval mode, the **containment columns already estimate the true set quantities** by inclusion–exclusion (§5.4), so a set-Jaccard estimate is recoverable from existing output with no rerun: `J = 1/(1/C_AB + 1/C_BA − 1)`. Because both containments derive from a single shared intersection estimate, this recovers the inclusion–exclusion estimator exactly rather than approximating it. On the synthetic spread it tracks bedtools at MAE 5×10⁻⁴ (p = 20) and 1×10⁻⁴ (p = 24), versus 0.15 for the reported `jaccard_similarity`.
 
-**The trade-off is real but narrow, and the paper should scope it rather than call it a wash.** MAE scores calibration, not resolution, so resolution is measured separately by Kendall τ against exact bedtools truth — a rank statistic, chosen because it is invariant under any monotone transform of the estimator and so cannot be inflated by the register-equality column's own bias (an earlier sd-based version of this comparison could be, and is retracted; see `docs/jaccard-definitional-gap.md`).
+**The trade-off is real but narrow, and the paper should scope it rather than call it a wash.** MAE scores calibration, not resolution, so resolution is measured separately by Kendall τ against exact bedtools truth — a rank statistic, chosen because it is invariant under any monotone transform of the estimator and so cannot be inflated by the register-equality column's own bias, unlike a raw standard-deviation comparison (`docs/jaccard-definitional-gap.md`).
 - Below J = 0.05, τ runs register-equality 0.335 / 0.658 / 0.905 / 0.907 against inclusion–exclusion 0.289 / 0.562 / 0.794 / 0.967 at p = 12 / 16 / 20 / 24. So register-equality ranks better up to p = 20 and loses at p = 24.
 - Above J = 0.05 both reach τ = 1.0000 by p = 20 on the synthetic corpus (register-equality is 0.9804 at p = 16 in the J ≥ 0.2 stratum — 1 discordant pair out of 102 — so p = 16 is not the convergence point, though the cell turns on a single comparison); those strata resolve nothing and no winner should be read out of them.
 - MAE favours inclusion–exclusion in every stratum at every precision, by **12–388×** (recomputed directly from `experiments/bedtools_benchmark/results/estimator_compare_full.csv`: per-(stratum, precision)-cell MAE ratios range from 11.9× at p=12, J≥0.05 to 387.7× at p=24, J<0.05 — the previously quoted "20–1700×" did not reproduce from this file and is corrected here; `docs/jaccard-definitional-gap.md` and `docs/estimator-analysis-findings.md` §9.1 carry the old figure and should be updated to match).
@@ -376,9 +369,6 @@ sketching as a viable default for large-scale epigenome comparison.
 | 6 | `docs/figures/mode_d_metric_tradeoff.png` (data: `docs/data/mode_d_summary.csv`, script: `docs/scripts/mode_d_metric_tradeoff.R`) | Pearson-best ≠ ARI-best |
 | 7 | `ref-comparison/figures/cross_ref_dendrogram_k15_w15.png` | within-tissue clades across refs (headline cell) |
 | 8 | `ref-comparison/figures/sweep_effect_size_broad.png` | cross-ref effect-size heatmap, broad |
-| 9 | *(hidden — pending rework; PNG on disk: `modeD_flanking/figures/maurano_delta_r_vs_w.png`)* | flanking column choice on real data |
-| 10 | *(hidden — pending rework; PNG on disk: `modeD_flanking/figures/synthetic_phase_diagram.png`)* | flanking on synthetic, φ × mutation phase plane |
-| 11 | *(hidden — pending rework; PNG on disk: `modeD_flanking/figures/synthetic_empirical_vs_analytical.png`)* | analytical φ-prediction validated |
 | S1 (supp) | `ref-comparison/figures/metric_comparison_broad_k10_w10.png` | 12-metric Wilcoxon comparison at k=10, w=10 (pre-v0.5.0 schema) |
 | S2 (supp) | `maurano_dhs_validation/figures/mode_d_pearson_heatmap.png` | full Pearson heatmap grid across precision × column flavor (faceted) |
 | S3 (supp) | `maurano_dhs_validation/figures/mode_d_clustering_ari.png` | full ARI heatmap grid across precision × column flavor (faceted) |
