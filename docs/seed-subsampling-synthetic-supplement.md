@@ -81,9 +81,55 @@ survived a source check (2026-08-11).
   plan (methodology + `--metrics`-per-subB-arm feasibility in the existing
   script) before it's executed.
 
+## N-sweep job 29758041 lost to a concurrent rebuild, harness hardened (2026-08-11)
+
+The N-sweep plan above (three subB lines, hammock-only, N to 2048) was
+submitted as job 29758041. ~62 minutes in, a concurrent session's build of
+the same shared `hammock-cpp` binary (`claude-ref-comparison` site-packages;
+the fix that became `672e831`, v0.7.0→v0.7.1) landed mid-run —
+`HAMMOCK_CPP_BIN` pointed at a live, shared path, so every subsequent call
+silently started running against unreviewed, in-progress code instead of the
+stable binary the run was supposed to measure. Caught by comparing the
+binary's mtime (15:40:54) against `scontrol show job`'s start time and the
+job's own logged progress; the swap landed right around the N=1024→N=2048
+boundary. The job was cancelled (`scancel 29758041`) rather than let it keep
+producing contaminated data at the most expensive remaining N.
+
+Cancelling then surfaced a second, worse problem: `run_benchmark` only wrote
+`write_csv`/`write_text_report` once, at the very end of the whole
+`num_files_list` loop, so killing the job lost **the entire dataset** —
+including the clean N=2..1024 results computed before the contamination —
+not just the tainted tail. No CSV was ever written to disk.
+
+Both gaps fixed in `4f288d3` before resubmitting:
+
+- `sbatch_subB_nsweep.sh` now copies the live binary to a job-local scratch
+  path (`${TMPDIR:-/tmp}/subB_nsweep_$SLURM_JOB_ID/hammock-cpp`) once at job
+  start and points `HAMMOCK_CPP_BIN` there, so a concurrent rebuild elsewhere
+  can no longer affect an in-flight run.
+- `benchmark_cpp_vs_bedtools.py`'s `run_benchmark` gained a `checkpoint_cb`,
+  called after every `num_files` block completes (not mid-block); `main()`
+  uses it to rewrite the CSV/text-report/runs-CSV after each N rather than
+  only at the end. Writes go through a new `_atomic_open_write` helper
+  (temp file + `os.replace`) so a kill mid-checkpoint-write can't truncate
+  the previous good checkpoint in place — an interruption now costs at most
+  the in-progress N, never the whole run.
+
+Re-submitted as job 29761450 against the now-landed, committed fix
+(`672e831`) with both protections in place.
+
 ## Lesson
 
 Same shape as the bedtools-baseline retraction: a plausible-looking number
 sitting next to real data was never checked against the CSV it claimed to
 summarize. Trace every quoted number to its exact source cell before it goes
 in the outline, not just once at figure-build time.
+
+A second, independent lesson from the same investigation: a long-running job
+sharing a mutable resource (a live binary path, in this case) with a
+concurrently-edited codebase needs to pin/copy that resource at start, and a
+harness that can run for hours needs to persist partial results incrementally
+— "verify mechanisms without verifying magnitudes" has a sibling failure
+mode here: a fix (checkpointing) can be present in name but not actually
+survive the failure mode it claims to, if the writes themselves aren't atomic
+(caught by review before job 29761450 was submitted, not after).

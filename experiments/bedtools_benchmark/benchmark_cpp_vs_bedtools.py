@@ -17,6 +17,7 @@ hammock_claude refactor. Differences from the original:
 
 import argparse
 import concurrent.futures
+import contextlib
 import csv
 import glob
 import os
@@ -823,16 +824,58 @@ def run_benchmark(
         # memory and wrote nothing until the whole list finished -- an
         # interruption anywhere (timeout, scancel, node failure) lost the
         # entire run, including N values that had already completed cleanly.
-        # See docs/seed-hammock-cpp-file-dispatch.md: job 29758041 lost all
-        # of N=2..1024 this way when it was cancelled partway into N=2048.
+        # See docs/seed-subsampling-synthetic-supplement.md: job 29758041 lost
+        # all of N=2..1024 this way when it was cancelled partway into N=2048.
         if checkpoint_cb is not None:
             checkpoint_cb(results)
 
     return results
 
 
+# os.umask() has no read-only form -- setting and immediately restoring it is
+# the standard idiom to read the process umask without a side effect.
+_UMASK = os.umask(0)
+os.umask(_UMASK)
+
+
+@contextlib.contextmanager
+def _atomic_open_write(path: str, **open_kwargs):
+    """Like open(path, "w", ...) but the target file is only ever replaced by
+    a complete write. Writes to a sibling temp file in the same directory
+    (same filesystem, so os.replace is atomic) and renames it onto `path`
+    only after the `with` block exits cleanly.
+
+    Exists because write_text_report/write_csv/write_runs_csv are now called
+    once per num_files block (see run_benchmark's checkpoint_cb) specifically
+    so an interrupted long sweep still leaves usable output on disk. A plain
+    open(path, "w") truncates the file up front, so a kill (SLURM timeout,
+    scancel, node failure -- the exact events checkpointing exists to survive)
+    landing mid-write destroys the last good checkpoint instead of just
+    failing to add a new one. Confirmed missing by review after job 29758041's
+    incident writeup (docs/seed-subsampling-synthetic-supplement.md).
+    """
+    fd, tmp_path = tempfile.mkstemp(
+        dir=os.path.dirname(os.path.abspath(path)) or ".",
+        prefix=os.path.basename(path) + ".tmp")
+    try:
+        # mkstemp always creates the file mode 0600, unlike open(path, "w")
+        # which follows the umask (0644 under the standard 022) -- match that
+        # so checkpointed results stay group-readable on shared storage like
+        # every other file this script writes.
+        os.chmod(tmp_path, 0o666 & ~_UMASK)
+        with os.fdopen(fd, "w", **open_kwargs) as f:
+            yield f
+        os.replace(tmp_path, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 def write_text_report(results: List[Dict[str, Any]], path: str) -> None:
-    with open(path, "w") as f:
+    with _atomic_open_write(path) as f:
         f.write("hammock-cpp (Mode B) vs bedtools\n")
         f.write("=" * 80 + "\n\n")
         if results:
@@ -936,7 +979,7 @@ def write_csv(results: List[Dict[str, Any]], path: str,
     ]
     metric_cols = cols[5:]          # resolved from the aggregate dict
     cols = cols + PROVENANCE_COLS   # resolved from provenance, not from `d`
-    with open(path, "w", newline="") as f:
+    with _atomic_open_write(path, newline="") as f:
         w = csv.writer(f)
         w.writerow(cols)
         for r in results:
@@ -974,7 +1017,7 @@ def write_runs_csv(results: List[Dict[str, Any]], path: str,
     prov_row = [provenance.get(c, "unknown") for c in PROVENANCE_COLS]
     cols = (["num_files", "num_threads", "precision", "sub_b", "tool", "run_index"]
             + RUNS_METRIC_COLS + PROVENANCE_COLS)
-    with open(path, "w", newline="") as f:
+    with _atomic_open_write(path, newline="") as f:
         w = csv.writer(f)
         w.writerow(cols)
         for r in results:

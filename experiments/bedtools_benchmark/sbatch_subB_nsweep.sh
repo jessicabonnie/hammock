@@ -63,7 +63,7 @@
 #
 # BINARY PINNING (added after job 29758041 was contaminated mid-run 2026-08-11
 # by a concurrent rebuild of the shared site-packages hammock-cpp -- see
-# docs/seed-hammock-cpp-file-dispatch.md). This job copies the live binary to
+# docs/seed-subsampling-synthetic-supplement.md). This job copies the live binary to
 # a job-local, node-scratch path ONCE at start and points HAMMOCK_CPP_BIN
 # there, so nothing outside this job can mutate the binary this run measures,
 # no matter how long the sweep takes or what else touches the shared env
@@ -77,6 +77,7 @@ PYTHON=/home/jbonnie1/.conda/envs/hammock/bin/python3
 LIVE_BIN=/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/python3.10/site-packages/bin/hammock-cpp
 PINNED_DIR="${TMPDIR:-/tmp}/subB_nsweep_${SLURM_JOB_ID:-$$}"
 mkdir -p "$PINNED_DIR"
+trap 'rm -rf "$PINNED_DIR"' EXIT
 cp "$LIVE_BIN" "$PINNED_DIR/hammock-cpp"
 chmod +x "$PINNED_DIR/hammock-cpp"
 export HAMMOCK_CPP_BIN="$PINNED_DIR/hammock-cpp"
