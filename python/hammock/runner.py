@@ -217,10 +217,12 @@ def _label(path: str, full_paths: bool) -> str:
     return os.path.normpath(path) if full_paths else os.path.basename(path)
 
 
-def _sketch_one_file(path: str, args):
+def _sketch_one_file(path: str, args, sketch_threads: int = 0):
     if args.mode == "D":
         # Mode D's sketch_type is labelled "minimizer" (orig parity) but the
-        # backing storage is still our HLL — see modes/sequence.py.
+        # backing storage is still our HLL — see modes/sequence.py. Mode D
+        # doesn't sketch via sketch_bed_file_hll, so sketch_threads (A/B/C
+        # only) doesn't apply here.
         if args.sketch_type not in ("minimizer", "hyperloglog"):
             raise NotImplementedError(
                 f"Mode D doesn't support sketch_type '{args.sketch_type}' yet."
@@ -242,6 +244,7 @@ def _sketch_one_file(path: str, args):
         seed=args.seed,
         gate_seed=args.gate_seed,
         verbose=args.verbose,
+        threads=sketch_threads,
     )
 
 
@@ -264,6 +267,30 @@ def _parallel_map(n: int, fn, threads: int) -> list:
     return results
 
 
+def _split_thread_budget(total_threads: int, n: int) -> tuple:
+    """Split a `--threads` budget between `_sketch_many`'s outer file-dispatch
+    pool and the inner OMP team each file's sketch phase gets.
+
+    Returns `(outer_workers, sketch_threads)`. `outer_workers` mirrors
+    `_parallel_map`'s own branch condition (`threads <= 1 or n <= 1`, else a
+    pool of `max_workers=threads`) — it must be called with the same
+    `total_threads` that gets passed into `_parallel_map`, and the two are
+    kept in sync by construction, not an enforced contract, so update both if
+    either changes.
+
+    `sketch_threads` is `total_threads` floor-divided by `outer_workers`, so
+    the product is always `<= total_threads` — it can only *under*-use the
+    budget when `n` doesn't divide evenly (e.g. threads=8, n=3 gives 3*2=6,
+    not 8), never over-use it — floored at 1 so a large `n` never starves an
+    individual file's sketch phase down to 0 threads (a `num_threads(0)`
+    clause is invalid). See `_sketch_many`'s docstring for why this split
+    needs to exist at all.
+    """
+    outer_workers = min(total_threads, n) if (total_threads > 1 and n > 1) else 1
+    sketch_threads = max(1, total_threads // outer_workers)
+    return outer_workers, sketch_threads
+
+
 def _sketch_many(paths: List[str], args, label: str) -> list:
     """Sketch each path; parallelize with threads if --threads > 1.
 
@@ -273,14 +300,27 @@ def _sketch_many(paths: List[str], args, label: str) -> list:
 
     When `args.verbose` is set, prints `[i/N] <basename> (<elapsed>s)` to
     stderr as each file finishes (results stay in original order regardless).
+
+    **Divides `--threads` between this outer file-dispatch pool and the inner
+    OMP team** (A/B/C only; Mode D's per-file cost is single-threaded Python +
+    digest, not OMP) via `_split_thread_budget` — see its docstring for the
+    split itself. Before this, `sketch_bed_file_hll` had no thread parameter
+    at all, so every pool worker spawned an *unclamped* OMP team at OpenMP's
+    ambient default (all cores) — `--threads 4` on a 4-CPU cgroup could use
+    ~12 cores concurrently. See docs/seed-hammock-cpp-file-dispatch.md Part 1:
+    confirmed by code inspection (no code path carried `--threads` into the
+    sketching region) and corroborated empirically (single-file isolation
+    measured up to 1459% CPU at requested `--threads` values of 2-16).
     """
     n = len(paths)
+    total_threads = args.threads or 1
+    _outer_workers, sketch_threads = _split_thread_budget(total_threads, n)
     progress_lock = threading.Lock()
     done = [0]
     t0 = time.monotonic()
 
     def _one(i: int):
-        s = _sketch_one_file(paths[i], args)
+        s = _sketch_one_file(paths[i], args, sketch_threads)
         if args.verbose:
             with progress_lock:
                 done[0] += 1

@@ -26,13 +26,21 @@ size_t process_bed_file_mode_a(const std::string& filepath, AbstractSketch& sket
                                const std::string& separator = "\t",
                                bool verbose = false);
 
+// `threads` bounds the OMP team size for the parallel sketching region below
+// (num_threads() clause); <=0 leaves it at OpenMP's ambient default -- see
+// docs/seed-hammock-cpp-file-dispatch.md Part 1. hammock_cli.cpp relies on
+// that default (it sets the ambient team size once, globally, via
+// omp_set_num_threads() before its per-file loop) so it can pass 0 here
+// unchanged; the Python binding passes an explicit value it has already
+// clamped against its own thread pool's concurrency.
 size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sketch,
                                uint64_t hll_seed = 42,
                                const std::string& separator = "\t",
                                double subB = 1.0,
                                SubBMethod method = SubBMethod::MixedStride,
                                uint32_t gate_seed = 31337,
-                               bool verbose = false);
+                               bool verbose = false,
+                               int threads = 0);
 
 size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sketch,
                                uint64_t hll_seed = 42,
@@ -42,6 +50,7 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
                                double expA = 0.0,
                                SubBMethod method = SubBMethod::MixedStride,
                                uint32_t gate_seed = 31337,
-                               bool verbose = false);
+                               bool verbose = false,
+                               int threads = 0);
 
 #endif

@@ -4,4 +4,4 @@ from hammock import _core
 from hammock._core import HLLSketch
 
 __all__ = ["HLLSketch", "_core"]
-__version__ = "0.7.0"
+__version__ = "0.7.1"

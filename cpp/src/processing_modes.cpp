@@ -1,6 +1,7 @@
 #include "hammock/processing_modes.hpp"
 #include "hammock/bed_parser.hpp"
 #include "hammock/hll_sketch.hpp"
+#include "hammock/omp_util.hpp"
 #include "hammock/stride.hpp"
 #include "hammock/xxhash.hpp"
 #include <algorithm>
@@ -113,11 +114,13 @@ size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sket
                                double subB,
                                SubBMethod method,
                                uint32_t gate_seed,
-                               bool verbose) {
+                               bool verbose,
+                               int threads) {
     const std::vector<Interval> intervals = read_intervals(filepath);
 
     size_t total_points = 0;
     size_t sampled_points = 0;
+    const int nt = omp_team_size(threads);
 
     // Parallelize via thread-local HLL accumulators that merge at the end.
     // The previous design parallelized straight into the shared sketch with
@@ -131,7 +134,7 @@ size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sket
         const size_t precision = main_hll->precision();
         const size_t hash_size = main_hll->hash_size_bits();
 
-#pragma omp parallel reduction(+:total_points,sampled_points)
+#pragma omp parallel reduction(+:total_points,sampled_points) num_threads(nt)
         {
             // precision/hash_size were read off main_hll, whose ctor already
             // validated them, so validated_precision() cannot throw here. Keep
@@ -183,7 +186,9 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
                                double expA,
                                SubBMethod method,
                                uint32_t gate_seed,
-                               bool verbose) {
+                               bool verbose,
+                               int threads) {
+    const int nt = omp_team_size(threads);
     const size_t mult = (expA > 0)
                             ? std::max<size_t>(1, static_cast<size_t>(std::pow(10.0, expA)))
                             : 1;
@@ -238,7 +243,7 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
         const size_t precision = main_hll->precision();
         const size_t hash_size = main_hll->hash_size_bits();
 
-#pragma omp parallel reduction(+:total_interval_elements,kept_intervals,total_points,sampled_points)
+#pragma omp parallel reduction(+:total_interval_elements,kept_intervals,total_points,sampled_points) num_threads(nt)
         {
             // precision/hash_size were read off main_hll, whose ctor already
             // validated them, so validated_precision() cannot throw here. Keep

@@ -1,6 +1,7 @@
 #include "hammock/abstract_sketch.hpp"
 #include "hammock/bed_parser.hpp"
 #include "hammock/hll_sketch.hpp"
+#include "hammock/omp_util.hpp"
 #include "hammock/processing_modes.hpp"
 #include "hammock/xxhash.hpp"
 
@@ -36,6 +37,20 @@ SubBMethod parse_subB_method(const std::string& s) {
 }
 
 // Build an HLLSketch from one BED file in the chosen mode.
+//
+// `threads` bounds the OMP team inside process_bed_file_mode_b/c's sketching
+// region (mode A has no parallel region) -- passed through unresolved, same
+// convention hammock_cli.cpp uses for its own calls: process_bed_file_mode_b/c
+// resolve it via omp_team_size() themselves exactly once, so this function
+// deliberately does *not* pre-resolve it here too (an earlier version did,
+// which meant a raw request got clamped twice through two copies of the same
+// formula -- harmless while they agreed, but a latent drift hazard). Callers
+// dispatching multiple files concurrently via their own thread pool (runner.py's
+// `_sketch_many`) are expected to divide their overall thread budget across
+// that pool's actual concurrency before calling in here, so the *total*
+// concurrent OS threads stays bounded by the user's `--threads` -- see
+// docs/seed-hammock-cpp-file-dispatch.md Part 1. threads<=0 leaves the team
+// size at OpenMP's ambient default, same convention as the pairwise loops.
 HLLSketch sketch_bed_file_hll(const std::string& path,
                               const std::string& mode,
                               size_t precision,
@@ -46,17 +61,18 @@ HLLSketch sketch_bed_file_hll(const std::string& path,
                               const std::string& subB_method,
                               uint64_t seed,
                               uint32_t gate_seed,
-                              bool verbose) {
+                              bool verbose,
+                              int threads) {
     const SubBMethod method = parse_subB_method(subB_method);
     HLLSketch sketch(precision);
     if (mode == "A") {
         process_bed_file_mode_a(path, sketch, seed, separator, verbose);
     } else if (mode == "B") {
         process_bed_file_mode_b(path, sketch, seed, separator, sub_b, method,
-                                gate_seed, verbose);
+                                gate_seed, verbose, threads);
     } else if (mode == "C") {
         process_bed_file_mode_c(path, sketch, seed, separator, sub_a, sub_b, exp_a,
-                                method, gate_seed, verbose);
+                                method, gate_seed, verbose, threads);
     } else {
         throw std::invalid_argument("Mode must be one of A, B, C (got '" + mode + "')");
     }
@@ -99,30 +115,6 @@ void require_uniform_precision(const std::vector<const HLLSketch*>& a,
             }
         }
     }
-}
-
-// Team size for the pairwise loops. `threads <= 0` means "whatever OpenMP would
-// have picked", so passing omp_get_max_threads() back in is a no-op.
-//
-// Without this the pairwise phase ignored --threads entirely: omp_set_num_threads
-// appears only in hammock_cli.cpp, so `hammock --threads 4` inside a 4-CPU cgroup
-// still ran this loop on every core on the node. Applied as a num_threads()
-// clause rather than omp_set_num_threads() so it cannot leak into unrelated
-// regions -- notably the sketching loops in processing_modes.cpp, which are
-// nested inside a Python thread pool and would compound rather than clamp.
-int pairwise_team_size(int threads) {
-#ifdef _OPENMP
-    // Clamp rather than trust: --threads is an unvalidated `type=int` on the
-    // CLI, and since it began driving num_threads() a fat-fingered --threads
-    // 100000 would ask libgomp for 100000 threads instead of merely oversizing
-    // a Python pool. 4x the machine's max is well past any real use.
-    const int cap = 4 * omp_get_num_procs();
-    if (threads > cap) return cap;
-    return (threads > 0) ? threads : omp_get_max_threads();
-#else
-    (void)threads;
-    return 1;
-#endif
 }
 
 // Captures the first exception thrown inside a parallel region so it can be
@@ -203,7 +195,7 @@ py::array_t<double> pairwise_jaccard_hll(const py::sequence& a_seq,
     borrow_sketches(a_seq, "a", a_keep, a);
     borrow_sketches(b_seq, "b", b_keep, b);
     require_uniform_precision(a, b);
-    const int nt = pairwise_team_size(threads);
+    const int nt = omp_team_size(threads);
     const py::ssize_t n = static_cast<py::ssize_t>(a.size());
     const py::ssize_t m = static_cast<py::ssize_t>(b.size());
     py::array_t<double> out({n, m});
@@ -242,7 +234,7 @@ pairwise_metrics_hll(const py::sequence& a_seq,
     borrow_sketches(a_seq, "a", a_keep, a);
     borrow_sketches(b_seq, "b", b_keep, b);
     require_uniform_precision(a, b);
-    const int nt = pairwise_team_size(threads);
+    const int nt = omp_team_size(threads);
     const py::ssize_t n = static_cast<py::ssize_t>(a.size());
     const py::ssize_t m = static_cast<py::ssize_t>(b.size());
     py::array_t<double> jaccard({n, m});
@@ -363,8 +355,14 @@ PYBIND11_MODULE(_core, m) {
           py::arg("seed") = 42,
           py::arg("gate_seed") = 31337,
           py::arg("verbose") = false,
+          py::arg("threads") = 0,
           py::call_guard<py::gil_scoped_release>(),
-          "Build an HLL sketch from one BED file in mode A, B, or C.");
+          "Build an HLL sketch from one BED file in mode A, B, or C.\n"
+          "threads bounds the sketching-phase OMP team (modes B/C only); "
+          "threads<=0 (default) leaves it at OpenMP's ambient default. "
+          "Callers dispatching many files concurrently via their own thread "
+          "pool should divide their overall thread budget by that pool's "
+          "actual concurrency before passing it in here.");
 
     m.def("pairwise_jaccard_hll", &pairwise_jaccard_hll,
           py::arg("a"), py::arg("b"), py::arg("threads") = 0,

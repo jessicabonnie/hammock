@@ -6,10 +6,48 @@ direction-only observation that does not yet meet this repo's own bar for
 "confirmed" (see `CLAUDE.md`'s retraction section: "verifying mechanisms
 without verifying magnitudes was the recurring failure").
 
-## Part 1 — CONFIRMED BUG, TO BE FIXED: the Python CLI's `--threads` does not bound sketching-phase parallelism
+## Part 1 — FIXED in v0.7.1 (2026-08-11): the Python CLI's `--threads` did not bound sketching-phase parallelism
 
-**To fix.** This is bad independent of any wall-time benefit it happens to
-produce: a user who passes `--threads 4` — e.g. because that's their actual
+**Fixed.** `sketch_bed_file_hll` (`bindings/_core.cpp`) gained a `threads`
+parameter, passed through unresolved into `process_bed_file_mode_b/c`
+(`cpp/src/processing_modes.cpp`), which now attach a `num_threads()` clause to
+their `#pragma omp parallel` sketching regions via a shared
+`omp_team_size()` helper (`cpp/include/hammock/omp_util.hpp` — hoisted out of
+`bindings/_core.cpp`, which already had its own copy for the pairwise loops,
+so both front ends' clamp formula can't drift apart). `runner._sketch_many`
+computes the per-call split (`runner._split_thread_budget`): `outer_workers`
+is the concurrency its own `ThreadPoolExecutor`-based file dispatch will
+actually use (`min(threads, n)`, or 1 below the threshold where it falls back
+to serial), and each dispatched file's inner OMP team gets
+`max(1, total_threads // outer_workers)` — floor division, so the product is
+always `<= total_threads` (never exceeds the budget; can under-use it by a few
+threads when `n` doesn't divide evenly, a documented, accepted trade-off).
+`hammock_cli.cpp`'s call sites are unchanged (they still pass no `threads`
+arg, defaulting to 0/"ambient", which is correct since that binary already
+calls `omp_set_num_threads(args.threads)` globally up front). Verified
+empirically post-fix (temporary instrumentation, since reverted): for
+`n=1` (single file per side, the isolation-test shape below), the OMP
+region's actual `omp_get_num_threads()` matched the requested `--threads`
+exactly at 1, 2, and 16; for `n=3, --threads 8` it correctly resolved to a
+team size of 2 per file (`8 // 3`); a large synthetic workload (5M intervals)
+showed CPU% now tracking `--threads` monotonically (144% → 183% → 272% at
+threads 1/2/16) instead of the pre-fix ~11–14 cores regardless of the flag.
+Full test suite (`pytest tests/`, including new `tests/test_sketch_threads.py`
+covering the split arithmetic and the binding's `threads=` argument) passes,
+244 passed / 8 skipped.
+
+Note for anyone re-running the isolation script below post-fix: at the
+script's default small workload (200k intervals, sub-second wall time), the
+"Percent of CPU" metric is dominated by numpy/BLAS thread-pool spin-up at
+Python import time, not by the sketch-phase OMP team — this confounds the
+metric enough to mask the fix's effect entirely at that scale. Use a larger
+`--num-intervals` (millions) or time the sketch phase in isolation
+(`--verbose` on both front-ends) to see the bound take effect; don't conclude
+the fix didn't work from a small-workload CPU% reading alone.
+
+**Original bug report, preserved for context — this is bad independent of any
+wall-time benefit it happened to produce:** a user who passes `--threads 4` —
+e.g. because that's their actual
 core allocation on a shared cluster node — should get *at most* 4 threads of
 CPU usage, not an unbounded number decided by whatever OpenMP's ambient
 default happens to be. Silently using far more than requested can starve
@@ -22,12 +60,15 @@ metrics-block-cost notes) isn't actually responding to the flag.
 
 **Verified two ways, at two different evidentiary strengths — kept separate
 below rather than bundled under one "verified" claim, per the same
-magnitude-checking standard Part 2 is held to:**
+magnitude-checking standard Part 2 is held to. Pre-fix state, preserved for
+context; line numbers below are as of the pre-fix code and no longer point at
+the right spot post-fix (`sketch_bed_file_hll` moved and grew a `threads`
+param) — see "Fixed" above for current locations:**
 
 1. **The mechanism is proven by code inspection alone — dispositive, not
    statistical.** The pybind11 binding for sketching, `sketch_bed_file_hll`
-   (`bindings/_core.cpp:354-367`), takes no thread argument at all — it only
-   wraps the call in `py::call_guard<py::gil_scoped_release>()`.
+   (`bindings/_core.cpp:354-367` pre-fix), took no thread argument at all — it
+   only wrapped the call in `py::call_guard<py::gil_scoped_release>()`.
    `process_bed_file_mode_b`'s internal `#pragma omp parallel`
    (`cpp/src/processing_modes.cpp:134`) has no `num_threads()` clause, so it
    always uses OpenMP's ambient default team size. Nothing on the Python side
@@ -69,16 +110,14 @@ magnitude-checking standard Part 2 is held to:**
    percentages as illustrative of scale (an order of magnitude beyond what
    was requested), not as precise measurements.
 
-**Fix direction (not started).** Thread the CLI's `threads` budget into the
-sketching phase the same way `omp_threads` already reaches the pairwise
-phase: either give `sketch_bed_file_hll` a thread-count parameter that
-becomes a `num_threads()` clause inside `process_bed_file_mode_b`'s pragma, or
-call `omp_set_num_threads` once from Python before sketching starts (matching
-what `hammock-cpp` already does). Needs a decision on how this interacts with
-the outer `ThreadPoolExecutor` — see Part 2's mechanism, since naively
-clamping the inner team to `threads` while the outer pool is *also* sized to
-`threads` would change the wall-time behavior investigated there, not just
-fix the resource-accounting bug.
+**Fix direction — DONE, see "Fixed" above.** Chose the `sketch_bed_file_hll`
+thread-count-parameter route (not the `omp_set_num_threads` route), and did
+resolve the outer-pool interaction called out below: rather than naively
+clamping the inner team to the full `threads` value while the outer pool is
+*also* sized to `threads` (which would have reproduced the old
+unbounded-oversubscription bug, just at the file level instead of the OMP
+level), `runner._split_thread_budget` divides the budget between the two so
+their product is bounded.
 
 ## Part 2 — LESS CERTAIN: does this (or something related) explain a hammock-cpp-vs-CLI wall-time crossover?
 
@@ -215,16 +254,16 @@ unexplained residual (see above). Do not re-derive or restate any existing
 figure's numbers from this seed alone — it identifies a question, not a
 correction.
 
-## Next steps (not started)
+## Next steps
 
-1. **Fix Part 1** (the confirmed `--threads` bug) — see "Fix direction" above.
-   Note this will *change* Part 2's mechanism once shipped (the sketching
-   phase's oversubscription goes away), so re-measure the crossover after
-   fixing, not just before.
-2. Re-run Part 2's N=2/8/32/128 comparison on `--exclusive`, and extend to
-   N=512/1024/2048 (where the paper's real claims live) and to the
-   `--no-metrics` arm (what the figures actually use) — see the
-   falsification criteria above for what a negative result would look like.
+1. ~~**Fix Part 1**~~ — **done, v0.7.1 (2026-08-11).** The sketch phase's
+   oversubscription is gone; Part 2's proposed mechanism no longer applies as
+   stated and step 2 below is now live, not hypothetical.
+2. **Not yet started.** Re-run Part 2's N=2/8/32/128 comparison on
+   `--exclusive`, and extend to N=512/1024/2048 (where the paper's real
+   claims live) and to the `--no-metrics` arm (what the figures actually
+   use) — see the falsification criteria above for what a negative result
+   would look like. This is now the natural next seed to pick up.
 3. If the crossover survives all of the above: prototype parallelizing
    hammock-cpp's per-file sketch loop and re-measure against bedtools. Real
    potential improvement to the paper's headline numbers if so — but new

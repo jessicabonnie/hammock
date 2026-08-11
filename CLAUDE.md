@@ -201,17 +201,27 @@ establishing. Read the seed before re-litigating the question.
   Still open: a p=18, `jaccard_similarity_ie`-era synthetic-corpus
   measurement to restore the corpus-dependence claim with real numbers.
 - `docs/seed-hammock-cpp-file-dispatch.md` — two claims at different
-  confidence levels. **Confirmed, to be fixed**: the Python CLI's
-  `--threads` does not bound sketching-phase parallelism at all (verified by
-  code read — dispositive, no thread parameter exists to carry the flag
-  through — corroborated by a replicated isolation test where `--threads 2`
-  used ~11.5 cores and CPU usage didn't track `--threads` at all);
-  `hammock-cpp` correctly bounds it. **Not yet confirmed**: a related
-  observation that the CLI is faster than `hammock-cpp` at N≥32 files/side,
-  which would mean the headline benchmark figures (all timed on
-  `hammock-cpp`) understate hammock's real throughput — direction is
-  code-consistent but magnitude was never checked against the observed
-  effect size, so don't treat it as settled or re-derive any figure from it.
+  confidence levels. **Part 1 FIXED in v0.7.1 (2026-08-11)**: the Python
+  CLI's `--threads` did not bound sketching-phase parallelism at all
+  (verified by code read — dispositive, no thread parameter existed to carry
+  the flag through — corroborated by a replicated isolation test where
+  `--threads 2` used ~11.5 cores and CPU usage didn't track `--threads` at
+  all). Fix: `sketch_bed_file_hll` gained a `threads` parameter threaded into
+  `process_bed_file_mode_b/c`'s `num_threads()` clause (shared
+  `cpp/include/hammock/omp_util.hpp::omp_team_size` helper, also used by the
+  pairwise loops); `runner._sketch_many` (`_split_thread_budget`) divides
+  `--threads` between its outer file-dispatch pool and each file's inner OMP
+  team so the product stays bounded by the user's request.
+  `hammock-cpp` was already correct (unaffected). **Part 2 not yet
+  confirmed, and now needs re-measurement**: a related observation that the
+  CLI was faster than `hammock-cpp` at N≥32 files/side, which would mean the
+  headline benchmark figures (all timed on `hammock-cpp`) understate
+  hammock's real throughput — direction was code-consistent but magnitude
+  was never checked against the observed effect size, so don't treat it as
+  settled or re-derive any figure from it. The Part 1 fix removes the
+  sketch-phase oversubscription Part 2's candidate mechanism depended on, so
+  the crossover must be re-measured post-fix, not assumed to still hold —
+  see the seed doc's "Next steps."
 
 - `docs/seed-benchmark-methodology.md` — **read this before quoting or
   generating any performance number.** Comparing one benchmark run to another in
