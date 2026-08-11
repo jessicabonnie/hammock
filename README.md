@@ -1,6 +1,6 @@
 # hammock
 
-Pairwise Jaccard similarity for BED intervals and FASTA sequences, via
+Pairwise sketch similarity and estimated set Jaccard for BED intervals and FASTA sequences, via
 HyperLogLog sketches. A clean Python + C++ refactor of the original
 [`hammock`](https://github.com/jessicabonnie/hammock); same CLI, faster
 sketching, byte-equal `jaccard_similarity` for modes A/B/C on the
@@ -20,7 +20,7 @@ ref.bed
 ```
 
 `hammock queries.txt refs.txt` produces a **comma-separated** CSV of all
-pairwise Jaccard estimates (BED input → interval mode by default):
+pairwise similarity summaries (BED input → interval mode by default):
 
 ```
 file1,file2,sketch_type,mode,precision,num_hashes,kmer_size,window_size,jaccard_similarity,jaccard_similarity_ie,containment_AB,containment_BA,cosketch_geom,cosketch_arith,cosketch_max
@@ -34,12 +34,12 @@ interval runs, where they're unused; `num_hashes` is always `NA`.)
 
 ### Output columns
 
-Every row ends with **two Jaccard estimates** plus a containment/cosketch
+Every row ends with **two similarity statistics** plus a containment/cosketch
 block, all in `[0, 1]`:
 
 | Column | Meaning |
 |--------|---------|
-| `jaccard_similarity` | **Register-equality** statistic: the fraction of active HLL registers holding equal values. This is *not* set Jaccard — it is biased upward, and the bias depends on how loaded the sketches are **and** on `\|A\|/\|B\|`. Kept for parity with the original `hammock`. |
+| `jaccard_similarity` | **Legacy register-equality similarity**: the fraction of active HLL registers holding equal values. Despite the column name, this is *not* set Jaccard — it is biased upward, and the bias depends on how loaded the sketches are **and** on `\|A\|/\|B\|`. The name is retained for output-schema compatibility with the original `hammock` and existing downstream workflows. |
 | `jaccard_similarity_ie` | **Set Jaccard** via inclusion-exclusion, `\|A ∩ B\| / \|A ∪ B\|` with `\|A ∩ B\| = \|A\| + \|B\| − \|A ∪ B\|`. Comparable to `bedtools jaccard`. Noisier than the column above at low precision *and* low similarity, and censored at 0 (an exact `0.0` means "estimated ≤ 0", not "measured zero"). |
 | `containment_AB` | `\|A ∩ B\| / \|A\|` — fraction of side A (file1/LIST1) covered by B |
 | `containment_BA` | `\|A ∩ B\| / \|B\|` — fraction of side B (file2/LIST2) covered by A |
@@ -97,7 +97,7 @@ two lists are treated as BED files, converted to FASTA with `bedtools getfasta`
 against the given reference(s), then compared as sequences. This enables
 cross-reference comparisons (e.g. hg38-derived vs mm10-derived peak sequences).
 See [Installation](#installation) for the `bedtools`/`samtools` requirements and
-[CLI](#cli) for the flags. Note: cross-species Mode D Jaccard reflects shared
+[CLI](#cli) for the flags. Note: cross-species Mode D similarity reflects shared
 k-mer content (repeat/low-complexity-driven), not homology — prefer a larger
 `-k` than the default for cross-species runs.
 
@@ -342,7 +342,7 @@ pytest tests/
 
 The test suite covers:
 
-- **Parity vs orig (modes A/B/C):** byte-equal Jaccard column against
+- **Parity vs orig (modes A/B/C):** byte-equal legacy `jaccard_similarity` column against
   `hammock-orig` (the upstream `hammock`, installed via pipx under that name).
 - **Structural parity vs orig (mode D):** matching structural columns and
   well-formed similarity values against the conda-env `hammock` (Python 3.12 +
@@ -354,7 +354,7 @@ The test suite covers:
 - **Functional regressions:** mode B `--subB` actually subsamples, and
   `--subB-method mixed-stride` (the default) is deterministic across runs.
 - **Mode D unit tests:** exact CSV header, empty-minimizer fallback,
-  determinism, self-Jaccard = 1.0.
+  determinism, self-similarity = 1.0.
 
 Parity tests skip automatically if their respective `hammock` binary isn't
 on disk.
