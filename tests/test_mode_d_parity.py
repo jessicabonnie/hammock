@@ -86,7 +86,14 @@ def test_mode_d_structural_parity(tmp_path: Path, k: int, w: int, p: int) -> Non
     common = [str(files), str(files), "--mode", "D",
               "-p", str(p), "-k", str(k), "-w", str(w)]
     _run([str(CONDA_ORIG), *common, "-o", str(tmp_path / "orig")], tmp_path)
-    _run([OURS, *common, "-o", str(tmp_path / "ours")], tmp_path)
+    # --metrics: `sim_cols`/`sym_cols` below dynamically scan ours_csv's
+    # header for jaccard_similarity*/containment*/cosketch* columns to check
+    # well-formedness/symmetry across all of them. Under the new bare default
+    # (docs/seed-metrics-column-restructure.md Part 2) that scan would still
+    # find jaccard_similarity_ie and pass, just silently covering 1 column
+    # instead of 7 -- OURS-only, since CONDA_ORIG (a separate upstream
+    # install) has no such flag.
+    _run([OURS, *common, "--metrics", "-o", str(tmp_path / "ours")], tmp_path)
 
     orig_csv = next(tmp_path.glob("orig*.csv")).read_text()
     ours_csv = next(tmp_path.glob("ours*.csv")).read_text()

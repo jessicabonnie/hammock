@@ -68,6 +68,11 @@ _PROJECTED_OUT = {
     # counterpart, so there is nothing to be unfaithful to. The column that
     # must stay byte-equal -- jaccard_similarity -- is still compared.
     "jaccard_similarity_ie",
+    # Same reasoning: register_equality_similarity (added by --register-equality
+    # / --metrics, docs/seed-metrics-column-restructure.md Part 2) is a literal
+    # duplicate of jaccard_similarity written under a second name. Orig has no
+    # counterpart column; jaccard_similarity itself is still compared byte-equal.
+    "register_equality_similarity",
 }
 
 
@@ -127,7 +132,12 @@ def test_jaccard_byte_equal(tmp_path: Path, mode: str, extra: list[str]) -> None
         orig_extra.append(a)
     common = [str(files), str(files), "--mode", mode, "-p", "14"]
     _run([ORIG, *common, *orig_extra, "-o", str(tmp_path / "orig")], tmp_path)
-    _run([OURS, *common, *extra, "-o", str(tmp_path / "ours")], tmp_path)
+    # --register-equality restores the jaccard_similarity column this test
+    # compares (docs/seed-metrics-column-restructure.md Part 2 made the bare
+    # default jaccard_similarity_ie-only). OURS-only -- hammock-orig has no
+    # such flag, so it must not land in `common`/`extra`, which are shared
+    # with the ORIG invocation above.
+    _run([OURS, *common, *extra, "--register-equality", "-o", str(tmp_path / "ours")], tmp_path)
 
     orig_csvs = list(tmp_path.glob("orig*.csv"))
     ours_csvs = list(tmp_path.glob("ours*.csv"))
@@ -152,7 +162,11 @@ def test_mode_b_subB_actually_subsamples(tmp_path: Path) -> None:
     Jaccard with subB=0.25 differs meaningfully from subB=1.0 — i.e. the
     flag is doing something."""
     files = _files_list(tmp_path)
-    common = [str(files), str(files), "--mode", "B", "-p", "14"]
+    # --register-equality restores the jaccard_similarity column read below
+    # (docs/seed-metrics-column-restructure.md Part 2: bare default is now
+    # jaccard_similarity_ie-only). Both invocations are OURS-only, so it's
+    # safe to put on the shared `common` list.
+    common = [str(files), str(files), "--mode", "B", "-p", "14", "--register-equality"]
     _run([OURS, *common, "-o", str(tmp_path / "full")], tmp_path)
     _run([OURS, *common, "--subB", "0.25", "-o", str(tmp_path / "sub")], tmp_path)
 

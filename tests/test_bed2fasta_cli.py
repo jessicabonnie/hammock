@@ -60,8 +60,11 @@ def test_bed2fasta_end_to_end(tmp_path: Path) -> None:
 @pytest.mark.skipif(not HAS_BEDTOOLS, reason="bedtools not on PATH")
 def test_bed2fasta_self_comparison_is_one(tmp_path: Path) -> None:
     ref, l1, _ = _setup(tmp_path)
+    # --register-equality restores the jaccard_similarity column read below
+    # (docs/seed-metrics-column-restructure.md Part 2 dropped it from the
+    # bare default).
     r = _run([OURS, str(l1), str(l1), "--ref", str(ref),
-              "-p", "14", "-o", str(tmp_path / "self")], tmp_path)
+              "-p", "14", "--register-equality", "-o", str(tmp_path / "self")], tmp_path)
     assert r.returncode == 0, r.stderr
     csv = next(tmp_path.glob("self*.csv")).read_text().splitlines()
     header = csv[0].split(",")

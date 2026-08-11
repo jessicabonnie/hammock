@@ -39,9 +39,12 @@ def _run(cmd: list[str], cwd: Path) -> None:
 
 
 def test_mode_d_runs_and_self_jaccard_is_one(tmp_path: Path) -> None:
+    # --metrics: this test pins the exact full-block header (containment/
+    # cosketch columns included), which is no longer the bare default
+    # (docs/seed-metrics-column-restructure.md Part 2).
     files = _files_list(tmp_path, "tiny.fa")
     _run([OURS, str(files), str(files), "--mode", "D",
-          "-p", "14", "-k", "8", "-w", "40",
+          "-p", "14", "-k", "8", "-w", "40", "--metrics",
           "-o", str(tmp_path / "out")], tmp_path)
     csv = next(tmp_path.glob("out*.csv")).read_text().splitlines()
     cont_block = ["containment_AB", "containment_BA",
@@ -50,6 +53,10 @@ def test_mode_d_runs_and_self_jaccard_is_one(tmp_path: Path) -> None:
         "file1", "file2", "sketch_type", "mode",
         "precision", "num_hashes", "kmer_size", "window_size",
         "jaccard_similarity", "jaccard_similarity_ie", *cont_block,
+        # register_equality_similarity is the full shape's trailing column
+        # (a literal duplicate of jaccard_similarity), appended before the
+        # Mode-D-specific ref1/ref2 trailer.
+        "register_equality_similarity",
         "ref1", "ref2",
     ]
     # self-pair must be Jaccard = 1.0 (and containment = 1.0).
@@ -63,7 +70,8 @@ def test_mode_d_runs_and_self_jaccard_is_one(tmp_path: Path) -> None:
     # identical registers the union estimate equals both cardinalities
     # bitwise, so inter = 2c - c = c exactly and 1/(1 + 1 - 1) == 1.0.
     for name in ("jaccard_similarity", "jaccard_similarity_ie",
-                 "containment_AB", "containment_BA", "cosketch_geom"):
+                 "containment_AB", "containment_BA", "cosketch_geom",
+                 "register_equality_similarity"):
         assert float(self_row[header.index(name)]) == 1.0, name
 
 
@@ -95,8 +103,11 @@ def test_mode_d_distinct_files_have_nontrivial_jaccard(tmp_path: Path) -> None:
     files1 = _files_list(tmp_path, "tiny.fa")
     files2 = tmp_path / "primary.txt"
     files2.write_text(str(DATA / "tiny2.fa") + "\n")
+    # --register-equality restores the jaccard_similarity column read below
+    # (docs/seed-metrics-column-restructure.md Part 2 dropped it from the
+    # bare default).
     _run([OURS, str(files1), str(files2), "--mode", "D",
-          "-p", "14", "-k", "8", "-w", "40",
+          "-p", "14", "-k", "8", "-w", "40", "--register-equality",
           "-o", str(tmp_path / "cross")], tmp_path)
     lines = next(tmp_path.glob("cross*.csv")).read_text().splitlines()
     header = lines[0].split(",")

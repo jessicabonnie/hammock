@@ -225,9 +225,13 @@ def test_csv_has_both_columns_and_they_agree_at_high_overlap(tmp_path: Path):
     lst_a.write_text(f"{a}\n")
     lst_b.write_text(f"{b}\n")
 
+    # --metrics: this test reads jaccard_similarity AND jaccard_similarity_ie
+    # from the same row, which only the full-block shape carries together
+    # (docs/seed-metrics-column-restructure.md Part 2 -- the bare default
+    # dropped to jaccard_similarity_ie alone).
     subprocess.run(
         [sys.executable, "-m", "hammock.cli", str(lst_a), str(lst_b),
-         "--mode", "B", "-p", "20", "-o", str(tmp_path / "out")],
+         "--mode", "B", "-p", "20", "--metrics", "-o", str(tmp_path / "out")],
         check=True, capture_output=True, text=True, timeout=300)
 
     rows = list(csv.DictReader(next(tmp_path.glob("out*.csv")).read_text().splitlines()))
