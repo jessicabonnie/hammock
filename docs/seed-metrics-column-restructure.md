@@ -450,9 +450,10 @@ For each file in the inventory under `experiments/` and `paper/`:
    caller relies implicitly on today's always-full-block default and
    contains neither string; and any pre-v0.7.0 or otherwise-unflagged
    `hammock-cpp` call site relies the same way, since `--metrics` is
-   currently the (already-full) default there too — Part 4 changes that
-   default for both front-ends identically, so a bare invocation of *either*
-   binary is equally exposed.
+   currently the (already-full) default there too — Part 2 flips the
+   Python CLI's implicit default and Part 4 flips `hammock-cpp`'s explicit
+   one, so a bare invocation of *either* binary is equally exposed once both
+   land.
 
    **Default policy for every no-flag call site found this way: add
    `--metrics` explicitly, to preserve exactly the columns it already
@@ -463,10 +464,22 @@ For each file in the inventory under `experiments/` and `paper/`:
    Most call sites are the former case: something downstream reads named
    columns and has no interest in which arm produced them, so the
    column-preserving default is `--metrics`, not a case-by-case guess at
-   which of the 8 columns is actually used. Reserve the timing-arm judgment
-   call for scripts that are unambiguously about wall time (live under
-   `experiments/bedtools_benchmark/`, `experiments/subB_mixed_stride/`, or
-   otherwise report timings, not similarity values).
+   which of the 8 columns is actually used.
+
+   **Judge this by what each script actually logs/reads downstream, not by
+   its directory** — `experiments/bedtools_benchmark/` and
+   `experiments/subB_mixed_stride/` each contain a mix of genuine timing
+   scripts (`measure_cli_overhead.py`, `measure_threads_isolation.py`) *and*
+   accuracy/analysis scripts that happen to live in the same directory:
+   `experiments/bedtools_benchmark/estimator_compare.py` compares
+   `jaccard_similarity` against `jaccard_similarity_ie` against `bedtools`
+   truth (reads `containment_AB`/`containment_BA` as data, never logs wall
+   time — needs `--metrics`, item-2 treatment, despite the directory) and
+   `experiments/subB_mixed_stride/run_ie_subb.py` asks whether subsampling
+   degrades `jaccard_similarity_ie` (an accuracy question, also needs
+   `--metrics`, also in a directory that sounds timing-related). Directory
+   is a weak prior at best; open the script and see what it does with its
+   output before deciding.
 
    At minimum, audit and fix: `experiments/maurano_dhs_validation/run_sweep_abc.py`
    and `run_sweep_d.py` (invoked by `sbatch_sweep.sh`/`sbatch_fill_highk_w.sh`;
