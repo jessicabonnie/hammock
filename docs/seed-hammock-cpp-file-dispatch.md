@@ -1,10 +1,16 @@
-# Seed: CLI's `--threads` doesn't bound sketching parallelism, and a related, less-certain hammock-cpp-vs-CLI wall-time crossover (found 2026-08-11)
+# Seed: CLI's `--threads` doesn't bound sketching parallelism, and a related hammock-cpp-vs-CLI wall-time crossover (found 2026-08-11, re-measured 2026-08-11)
 
-This seed carries two claims at very different confidence levels. Keep them
-separate — the first is a confirmed bug with a planned fix; the second is a
-direction-only observation that does not yet meet this repo's own bar for
+This seed carries two claims at different confidence levels. Keep them
+separate — the first is a confirmed bug, fixed. The second started as a
+direction-only observation that didn't meet this repo's own bar for
 "confirmed" (see `CLAUDE.md`'s retraction section: "verifying mechanisms
-without verifying magnitudes was the recurring failure").
+without verifying magnitudes was the recurring failure"); as of the "Part 2
+update" section below it is measured, controlled (`--exclusive`), reproduced
+on two node/CPU configurations, and turns out to be a **non-monotonic hump**
+rather than the simple one-directional crossover first suspected — real in
+the N≈8-1024 band, reversed by N=2048. Still job-level n=1 (one allocation
+each) and one proposed mechanism (pairwise-phase dilution) is plausible but
+not yet checked against its own magnitude — see "Still open" below.
 
 ## Part 1 — FIXED in v0.7.1 (2026-08-11): the Python CLI's `--threads` did not bound sketching-phase parallelism
 
@@ -254,20 +260,124 @@ unexplained residual (see above). Do not re-derive or restate any existing
 figure's numbers from this seed alone — it identifies a question, not a
 correction.
 
+## Part 2 update (2026-08-11): re-measured on --exclusive, extended to N=2048, both arms — job 29763124
+
+**Next step 2, below, is done.** `sbatch_cli_overhead.sh` / `measure_cli_overhead.py`
+now run two arms back-to-back in one `--exclusive` allocation: Arm B
+(`--metrics`, N=2/8/32/128, otherwise reproducing job 29758101's config
+exactly) to test the falsification criterion on the same arm it was
+calibrated against, and Arm A (`--no-metrics`, N=2..2048, the arm the
+headline figures actually use). Node c192 (Xeon Gold 6248R), 6 replicates
+per cell, alternated tool order, checkpointed after every N block. Data:
+`experiments/bedtools_benchmark/results/cli_overhead_metrics_exclusive_29763124.csv`,
+`experiments/bedtools_benchmark/results/cli_overhead_nometrics_exclusive_29763124.csv`.
+
+| N | Arm B (`--metrics`) cli/cpp | Arm A (`--no-metrics`) cli/cpp |
+|---|---|---|
+| 2 | 1.562 | 1.539 |
+| 8 | 0.926 | 0.949 |
+| 32 | 0.722 | 0.723 |
+| 128 | 0.706 | 0.728 |
+| 512 | -- | 0.859 |
+| 1024 | -- | 0.959 |
+| 2048 | -- | **1.127** |
+
+**1. The "Important scope note" arm-mismatch gap is closed.** Arm A and Arm B
+agree closely everywhere they overlap (N=2/8/32/128) -- the crossover is not
+an artifact of the `--metrics` arm job 29758101 happened to use; it
+reproduces on `--no-metrics`, the arm every headline figure actually runs.
+
+**2. The falsification criterion FAILS to close Part 2 as a false lead.** The
+criterion (above): if `--exclusive` brings N=32/128 to within ±2-4% of 1.0,
+it's shared-partition contention. Instead both ratios moved *further* from
+1.0 than job 29758101's original shared-partition numbers (0.864→0.722 at
+N=32, 0.807→0.706 at N=128) -- the opposite of what the contention hypothesis
+predicts. **One real, unresolved confound**: this job landed on a different
+CPU model (c192, Xeon Gold 6248R) than job 29758101 (sr15, Xeon Gold 6448Y),
+so the *magnitude* of the shift cannot be cleanly attributed to exclusivity
+alone -- CLAUDE.md already documents `cpu_model` as load-bearing given
+`-march=native`. But the *qualitative* result (a real crossover exists, and
+now: it reverses at N=2048, see below) does not depend on resolving that
+confound, since job 29758101 already established the same-direction effect
+on a third node/CPU (sr15/6448Y, shared partition) and this job adds a
+second, different node/CPU (c192/6248R, exclusive) -- two different physical
+configurations agreeing on the qualitative shape is stronger than either
+alone, even with the magnitude still uncertain.
+
+**3. New finding the original seed did not anticipate: the effect is a hump,
+not monotonic.** CLI is faster from N≈8 through N≈1024 (peak relative
+advantage around N=32-128, ratio ~0.72), converges back to near-parity by
+N=1024 (0.959), and **reverses by N=2048 -- hammock-cpp is ~13% faster
+(ratio 1.127)**. N=2048 is the point closest to what the paper's real
+headline figures (N up to 2048, see `sbatch_fig3_largeN.sh`) actually
+measure. Candidate mechanism, not yet verified against the observed
+magnitude the same way Part 2's original mechanism claim was flagged as
+unverified: the pairwise-comparison phase is literal shared C++ code between
+both front-ends (`HLLSketch::jaccard_and_union_cardinality`, already
+parallelized identically via OpenMP on both sides -- confirmed by reading
+`hammock_cli.cpp:405` and `_core.cpp:206/275`, both
+`#pragma omp parallel for collapse(2)`), grows ~quadratically with N, and
+costs both tools the same wall-clock regardless of dispatch strategy. As it
+becomes a larger share of total wall time, it dilutes -- and past some N,
+overwhelms -- a per-file dispatch-strategy difference that only lives in the
+sketch phase. Consistent with, but not proof of: the seed doc's own earlier
+note that pairwise+write was ~1.1% of wall at N=32 (1024 pairs) and grows
+from there.
+
+**4. Consequence, updated from the original "Nothing currently published is
+known to be wrong."** Still true, and now on firmer ground specifically
+*because* N=2048 reverses: the headline figures time hammock-cpp at
+N=512/1024/2048, and at N=2048 -- the point measured here closest to that
+regime -- hammock-cpp is faster than the CLI, not slower. So the original
+worry (headline figures might be *understating* achievable throughput by
+timing the "wrong" tool) does not hold at the N the figures actually use.
+It does hold, newly and concretely, in the N≈8-1024 band -- real, reproduced
+on two node/CPU configurations, but not the regime any current figure
+targets.
+
+**5. Provenance: one benign drift event, verified by hand.** The detector
+fired at N=1024 run 3 (`git_head` changed mid-job). Traced by hand: commit
+`256931c` ("Clarify legacy register-equality similarity naming") touched
+only `README.md` and `paper/outline.md` -- neither `python/hammock/`, `cpp/`,
+nor `bindings/` -- so it did not affect either tool's measured behavior. Full
+run otherwise clean (no other warnings, no errors).
+
+**Still open**: job-level n=1 on `--exclusive` (one allocation, one node);
+the CPU-model confound on the N=32/128 *magnitude* shift specifically; and
+the N=1024→2048 reversal mechanism above is a plausible, code-consistent
+candidate, not a checked one -- nobody has yet timed the sketch phase and
+pairwise phase separately at N=2048 on both tools to confirm the pairwise
+share is actually large enough to explain an 11-13-percentage-point swing.
+
 ## Next steps
 
-1. ~~**Fix Part 1**~~ — **done, v0.7.1 (2026-08-11).** The sketch phase's
-   oversubscription is gone; Part 2's proposed mechanism no longer applies as
-   stated and step 2 below is now live, not hypothetical.
-2. **Not yet started.** Re-run Part 2's N=2/8/32/128 comparison on
-   `--exclusive`, and extend to N=512/1024/2048 (where the paper's real
-   claims live) and to the `--no-metrics` arm (what the figures actually
-   use) — see the falsification criteria above for what a negative result
-   would look like. This is now the natural next seed to pick up.
-3. If the crossover survives all of the above: prototype parallelizing
-   hammock-cpp's per-file sketch loop and re-measure against bedtools. Real
-   potential improvement to the paper's headline numbers if so — but new
-   scope, not something to fold into the current session.
+1. ~~**Fix Part 1**~~ — **done, v0.7.1 (2026-08-11).**
+2. ~~**Re-run Part 2 on `--exclusive`, extend to N=2048, `--no-metrics`
+   arm**~~ — **done, job 29763124 (2026-08-11), see update above.**
+3. If the N≈8-1024 crossover is judged worth chasing on its own: prototype
+   parallelizing hammock-cpp's per-file sketch loop and re-measure against
+   bedtools. Would need to also explain/survive the N=2048 reversal (item 4
+   below) to be worth doing -- porting the CLI's dispatch strategy into
+   hammock-cpp only helps if the sketch phase is still the bottleneck at the
+   N where it would be applied.
+4. **Do NOT add the Python CLI as a competing timed arm in
+   `benchmark_cpp_vs_bedtools.py`** (the idea behind this update). Considered
+   and rejected on the strength of the N=2048 data above: the headline
+   figures' regime (N up to 2048) is exactly where hammock-cpp remains
+   faster, so a CLI arm would not beat hammock-cpp where it matters, only in
+   a band (N≈8-1024) none of the current figures target. Revisit only if a
+   future figure specifically needs that N band.
+5. **Not yet started.** Confirm or refute the pairwise-phase-dilution
+   mechanism (item 3 above) by timing the sketch phase and pairwise phase
+   separately at N=1024 and N=2048 on both tools (`--verbose` on
+   `hammock-cpp`; the Python CLI would need an equivalent breakdown added, or
+   time `_sketch_many` vs the pairwise call directly). This is the check the
+   mechanism claim is missing -- don't treat item 4's "hammock-cpp is faster
+   at N=2048" as mechanistically understood, only as measured.
+6. **Not yet started.** Replicate Arm B (or a smaller N=32/128-only rerun) on
+   a second `--exclusive` allocation to separate the CPU-model confound from
+   exclusivity itself, if the N=32/128 *magnitude* (as opposed to direction)
+   ever becomes load-bearing for a claim.
 
 ## Reproducing the measurements above
 
@@ -289,19 +399,31 @@ python3 experiments/bedtools_benchmark/measure_cli_overhead.py \
     --num-files 2,8,32,128 --num-intervals 10000 \
     --precision 18 --threads 16 --runs 5 --corpus-seed 20260811
 ```
-For next step 2 (re-run on `--exclusive`, extend N, switch to `--no-metrics`
-for the cpp side to match what the headline figures actually use): add
-`--exclusive` to `sbatch_cli_overhead.sh`'s header and widen `--num-files` to
-`2,8,32,128,512,1024,2048`. Note `measure_cli_overhead.py` currently hardcodes
-`--metrics` on the cpp side (see "Important scope note" above) — switching
-that to `--no-metrics` needs a small script edit, not just a flag change.
+Part 2's re-measurement (done, job 29763124 -- see "Part 2 update" above) --
+`sbatch_cli_overhead.sh` as checked in now runs both arms; to reproduce
+directly:
+```bash
+sbatch experiments/bedtools_benchmark/sbatch_cli_overhead.sh
+```
+or invoke `measure_cli_overhead.py` directly per-arm, e.g. Arm A:
+```bash
+python3 experiments/bedtools_benchmark/measure_cli_overhead.py \
+    --num-files 2,8,32,128,512,1024,2048 --num-intervals 10000 \
+    --precision 18 --threads 16 --runs 6 --corpus-seed 20260811 \
+    --cpp-metrics-arm no-metrics
+```
 
 ## Related
 
-- A limitations-section sentence about the CLI-vs-hammock-cpp gap was blocked
-  on this seed rather than written, since a simple "CLI is ~1.5x slower"
-  claim would be actively misleading given the sign flip in Part 2.
-- `docs/seed-benchmark-methodology.md` — the shared-partition noise floor
-  Part 2's magnitude hasn't been checked against yet, and the model for what
-  "independently reproduced" should actually require in this repo (a
-  committed artifact, not prose).
+- A limitations-section sentence about the CLI-vs-hammock-cpp gap can now be
+  written with real numbers instead of being blocked: hammock-cpp is the
+  right speed-ceiling choice at the N the headline figures actually use
+  (N=2048: hammock-cpp ~13% faster), but the Python CLI is genuinely faster
+  in a middle band (N≈8-1024, up to ~28% faster around N=32-128) that no
+  current figure targets. A flat "CLI is ~1.5x slower" or "CLI is faster"
+  would both be wrong depending on N -- the "Part 2 update" table above is
+  the citable source.
+- `docs/seed-benchmark-methodology.md` — the shared-partition noise floor;
+  Part 2's N=32/128 *magnitude* (as opposed to direction) still hasn't been
+  checked against it independently of the CPU-model confound (see "Still
+  open" above).

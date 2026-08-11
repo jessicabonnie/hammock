@@ -222,16 +222,23 @@ establishing. Read the seed before re-litigating the question.
   pairwise loops); `runner._sketch_many` (`_split_thread_budget`) divides
   `--threads` between its outer file-dispatch pool and each file's inner OMP
   team so the product stays bounded by the user's request.
-  `hammock-cpp` was already correct (unaffected). **Part 2 not yet
-  confirmed, and now needs re-measurement**: a related observation that the
-  CLI was faster than `hammock-cpp` at N≥32 files/side, which would mean the
-  headline benchmark figures (all timed on `hammock-cpp`) understate
-  hammock's real throughput — direction was code-consistent but magnitude
-  was never checked against the observed effect size, so don't treat it as
-  settled or re-derive any figure from it. The Part 1 fix removes the
-  sketch-phase oversubscription Part 2's candidate mechanism depended on, so
-  the crossover must be re-measured post-fix, not assumed to still hold —
-  see the seed doc's "Next steps."
+  `hammock-cpp` was already correct (unaffected). **Part 2 re-measured
+  post-fix, 2026-08-11 (job 29763124, `--exclusive`, both `--metrics` and
+  `--no-metrics` arms, N up to 2048)**: not a simple one-directional
+  crossover after all — a **non-monotonic hump**. The CLI is genuinely
+  faster than `hammock-cpp` in a middle band, N≈8–1024 (peak ~28% faster
+  around N=32–128), but the ratio converges back through parity by N=1024 and
+  **reverses by N=2048 — hammock-cpp is ~13% faster there**, which is the N
+  closest to what the headline figures (N up to 2048) actually use. So the
+  headline figures are **not** shown to understate hammock's throughput at
+  the N that matters; that concern is resolved for now. The N≈8–1024 result
+  is real (reproduced on two different node/CPU configurations) but doesn't
+  affect any currently published number, since nothing targets that band.
+  One residual confound (different CPU model between the original and
+  re-measurement jobs, affecting only the *magnitude* of the N=32/128 shift,
+  not its direction) and one unverified mechanism (pairwise-phase dilution
+  as the candidate explanation for the N=2048 reversal) remain open — see
+  the seed doc's "Part 2 update" section and "Still open."
 
 - `docs/seed-benchmark-methodology.md` — **read this before quoting or
   generating any performance number.** Comparing one benchmark run to another in
