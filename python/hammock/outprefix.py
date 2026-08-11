@@ -10,7 +10,8 @@ def get_new_prefix(outprefix: str,
                    subB: Optional[float] = None,
                    expA: Optional[float] = None,
                    kmer_size: Optional[int] = None,
-                   window_size: Optional[int] = None) -> str:
+                   window_size: Optional[int] = None,
+                   metrics_tag: Optional[str] = None) -> str:
     if sketch_type == "minhash":
         outprefix = f"{outprefix}_mh_n{num_hashes}_jacc{mode}"
     elif sketch_type == "hyperloglog":
@@ -35,5 +36,13 @@ def get_new_prefix(outprefix: str,
 
     if mode == "D" and kmer_size is not None and window_size is not None:
         outprefix = f"{outprefix}_k{kmer_size}_w{window_size}"
+
+    # Output-shape tag ("ie"/"re"/"full", see cli.py's --metrics/
+    # --register-equality), appended last -- the position `_j3` occupied on
+    # the hammock-cpp side pre-restructure. Both runner.py call sites always
+    # pass one of the three values; `None` is only a signature-safety default
+    # for any caller that doesn't care about metrics tagging.
+    if metrics_tag:
+        outprefix = f"{outprefix}_{metrics_tag}"
 
     return outprefix
