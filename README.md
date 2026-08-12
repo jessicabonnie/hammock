@@ -20,40 +20,53 @@ ref.bed
 ```
 
 `hammock queries.txt refs.txt` produces a **comma-separated** CSV of all
-pairwise similarity summaries (BED input → interval mode by default):
+pairwise similarity summaries (BED input → interval mode by default). The bare
+invocation writes the `_ie` shape — just the set-Jaccard column (see
+[Output shapes and columns](#output-shapes-and-columns) below):
 
 ```
-file1,file2,sketch_type,mode,precision,num_hashes,kmer_size,window_size,jaccard_similarity,jaccard_similarity_ie,containment_AB,containment_BA,cosketch_geom,cosketch_arith,cosketch_max
-sample1.bed,ref.bed,hyperloglog,B,18,NA,8,40,0.7111,0.6190,0.7650,0.7643,0.7647,0.7647,0.7650
-sample2.bed,ref.bed,hyperloglog,B,18,NA,8,40,0.2481,0.1210,0.3827,0.1503,0.2398,0.2665,0.3827
+file1,file2,sketch_type,mode,precision,num_hashes,kmer_size,window_size,jaccard_similarity_ie
+sample1.bed,ref.bed,hyperloglog,B,18,NA,8,40,0.6190
+sample2.bed,ref.bed,hyperloglog,B,18,NA,8,40,0.1210
 ```
 
 (Values rounded for display; the CSV writes full precision.
 `kmer_size`/`window_size` show the sequence-mode defaults `8`/`40` even for
 interval runs, where they're unused; `num_hashes` is always `NA`.)
 
-### Output columns
+### Output shapes and columns
 
-Every row ends with **two similarity statistics** plus a containment/cosketch
-block, all in `[0, 1]`:
+Every invocation writes exactly one of **three mutually exclusive shapes**,
+selected by flag, and the output filename is tagged to match so the three
+never collide on one path (see [CLI](#cli)):
+
+| Flag | Filename tag | Columns written | Cost |
+|------|--------------|------------------|------|
+| *(none — default)* | `_ie` | `jaccard_similarity_ie` | needs the same fused union pass as `--metrics` — **not** the cheap arm |
+| `--register-equality` / `--re` | `_re` | `jaccard_similarity`, `register_equality_similarity` (a literal duplicate) | the cheap arm on `hammock-cpp` (skips the union/containment pass entirely); on the Python CLI it is **not** cheaper than `--metrics` — the Python binding always computes the fused pass regardless of shape |
+| `--metrics` | `_full` | `jaccard_similarity`, `jaccard_similarity_ie`, `containment_AB`, `containment_BA`, `cosketch_geom`, `cosketch_arith`, `cosketch_max`, `register_equality_similarity` (8 columns; the last duplicates the first) | full cost, plus one more formatted field for the duplicate |
+
+All values are in `[0, 1]`. Column meanings:
 
 | Column | Meaning |
 |--------|---------|
-| `jaccard_similarity` | **Legacy register-equality similarity**: the fraction of active HLL registers holding equal values. Despite the column name, this is *not* set Jaccard — it is biased upward, and the bias depends on how loaded the sketches are **and** on `\|A\|/\|B\|`. The name is retained for output-schema compatibility with the original `hammock` and existing downstream workflows. |
+| `jaccard_similarity` / `register_equality_similarity` | **Legacy register-equality similarity** (the two names are byte-identical — `register_equality_similarity` exists so `--metrics`/`--re` output is self-describing without relying on column position): the fraction of active HLL registers holding equal values. Despite the `jaccard_similarity` name, this is *not* set Jaccard — it is biased upward, and the bias depends on how loaded the sketches are **and** on `\|A\|/\|B\|`. The name is retained for output-schema compatibility with the original `hammock` and existing downstream workflows. |
 | `jaccard_similarity_ie` | **Set Jaccard** via inclusion-exclusion, `\|A ∩ B\| / \|A ∪ B\|` with `\|A ∩ B\| = \|A\| + \|B\| − \|A ∪ B\|`. Comparable to `bedtools jaccard`. Noisier than the column above at low precision *and* low similarity, and censored at 0 (an exact `0.0` means "estimated ≤ 0", not "measured zero"). |
 | `containment_AB` | `\|A ∩ B\| / \|A\|` — fraction of side A (file1/LIST1) covered by B |
 | `containment_BA` | `\|A ∩ B\| / \|B\|` — fraction of side B (file2/LIST2) covered by A |
 | `cosketch_geom` / `cosketch_arith` / `cosketch_max` | geometric / arithmetic / max mean of the two containments |
 
-Which to use: `jaccard_similarity_ie` when you want a value comparable to an
-exact tool or to other corpora; `jaccard_similarity` only to rank pairs of
-similar size against each other. See
+Which to use: `jaccard_similarity_ie` (the bare default) when you want a value
+comparable to an exact tool or to other corpora; `jaccard_similarity`/
+`register_equality_similarity` only to rank pairs of similar size against
+each other. See
 [`docs/jaccard-definitional-gap.md`](docs/jaccard-definitional-gap.md).
 
 **Interval-hybrid (C)** inserts three parameter columns — `subA`,`subB`,`expA` —
-between `window_size` and `jaccard_similarity`; modes A and B do not.
+between `window_size` and the similarity columns, regardless of shape; modes A
+and B do not.
 
-**Sequence mode (D)** emits the same block, computed on the FASTA's window
+**Sequence mode (D)** emits the same shape, computed on the FASTA's window
 minimizers. Every Mode D row also ends with trailing **`ref1`,`ref2`** columns
 (the reference each list was extracted against; `NA` for plain-FASTA runs).
 
@@ -193,6 +206,16 @@ hammock <queries.txt> <refs.txt> [--mode MODE] [options]
                             explicit --threads > 1 there is honored but usually slower
   --full-paths              Write normalized input paths in the CSV file1/file2 columns
                             instead of basenames
+  --metrics                 Emit the full 8-column block (jaccard_similarity,
+                            jaccard_similarity_ie, containment_AB/BA, cosketch_*,
+                            register_equality_similarity); tags the output _full.
+                            Mutually exclusive with --register-equality/--re.
+  --register-equality, --re Emit only jaccard_similarity and register_equality_similarity
+                            (a literal duplicate) — the cheap register-equality-only arm
+                            on hammock-cpp (not on the Python CLI, see Output shapes);
+                            tags the output _re. Mutually exclusive with --metrics.
+                            Default (neither flag): emit jaccard_similarity_ie alone,
+                            tagged _ie.
   -o, --outprefix PREFIX    Output prefix (default "hammock")
   --memory-limit-gb F       Soft memory cap in GiB (default 0 = disabled)
   --verbose                 Per-file sketching progress on stderr
@@ -218,13 +241,17 @@ and `--ref2`); combining a reference flag with an interval `--mode` is an error.
 Requires `bedtools` — see [Installation](#installation).
 
 The output filename embeds the parameters so runs with different settings don't
-collide — e.g. `-o out` gives `out_hll_p18_jaccB.csv` (interval), or
-`out_hll_p18_jaccC_expA0.50_B0.30.csv` with hybrid subsampling. Sequence-mode
-outputs also embed `_k<k>_w<w>` (`out_mnmzr_p18_jaccD_k8_w40.csv`), and BED→FASTA
-runs insert `_<ref1>-vs-<ref2>` right after your prefix, so cross-reference runs
-to the same `-o` don't overwrite each other
-(`out_hg38-vs-mm10_mnmzr_p18_jaccD_k8_w40.csv`). Run with `--verbose` to print
-the exact path.
+collide — e.g. `-o out` gives `out_hll_p18_jaccB_ie.csv` (interval, bare
+default), or `out_hll_p18_jaccC_expA0.50_B0.30_ie.csv` with hybrid subsampling.
+Sequence-mode outputs also embed `_k<k>_w<w>`
+(`out_mnmzr_p18_jaccD_k8_w40_ie.csv`), and BED→FASTA runs insert
+`_<ref1>-vs-<ref2>` right after your prefix, so cross-reference runs to the
+same `-o` don't overwrite each other
+(`out_hg38-vs-mm10_mnmzr_p18_jaccD_k8_w40_ie.csv`). The trailing `_ie`/`_re`/
+`_full` always names the output shape (see
+[Output shapes and columns](#output-shapes-and-columns)) — `--register-equality`/
+`--re` gives `..._re.csv`, `--metrics` gives `..._full.csv`. Run with
+`--verbose` to print the exact path.
 
 ## Examples
 
@@ -254,6 +281,9 @@ hammock fetch-ref hg38 --ref-cache-dir /shared/refs
 
 # Quiet sequential run (e.g. inside a Snakemake job):
 hammock queries.txt refs.txt --mode interval --threads 1
+
+# Full metrics block (containment + cosketch columns), not just jaccard_similarity_ie:
+hammock queries.txt refs.txt --metrics -o results   # -> results_hll_p18_jaccB_full.csv
 ```
 
 ## Troubleshooting
@@ -307,32 +337,49 @@ Mode B throughput. It writes a **tab**-separated file.
 after a local build, or `<site-packages>/bin/hammock-cpp` from an installed
 wheel.
 
-Since **0.7.0** its defaults match the Python CLI's: mode **B** for BED input,
-and the full similarity block — `jaccard_similarity`, `jaccard_similarity_ie`,
-`containment_AB`/`containment_BA`, and the three `cosketch_*` columns.
+Since **0.7.0** its mode default matches the Python CLI's: mode **B** for BED
+input. Since **0.8.0** it also matches the Python CLI's output-shape contract
+(see [Output shapes and columns](#output-shapes-and-columns)) — three mutually
+exclusive shapes, tagged filenames, none bare:
 
 ```bash
-hammock-cpp queries.txt refs.txt -p 20 -o out      # -> out_hll_p20_jaccB.csv
+hammock-cpp queries.txt refs.txt -p 20 -o out      # -> out_hll_p20_jaccB_ie.csv (default: jaccard_similarity_ie only)
 ```
 
-Those values are **bit-for-bit identical** to the Python CLI's on the same input
-(`tests/test_hammock_cpp_metrics.py` asserts exact equality).
+Those values are **bit-for-bit identical** to the Python CLI's on the same input,
+for every shape (`tests/test_hammock_cpp_metrics.py` asserts exact equality).
 
-Pass **`--no-metrics`** for timing runs. It emits only `query`, `reference`,
-`jaccard_similarity` and tags the file `_j3`, so the two shapes never collide.
-The block costs a union plus two cardinality estimates per pair — worth skipping
-when you are measuring throughput, not similarity:
+Pass **`--register-equality`**/**`--re`** for timing runs. It emits only
+`query`, `reference`, `jaccard_similarity`, `register_equality_similarity` and
+tags the file `_re`. Unlike the default/`--metrics` shapes, this one **skips
+the union pass entirely on `hammock-cpp`** — it is the cheap arm, worth using
+when you are measuring throughput, not similarity. (On the Python CLI the
+same flag is **not** cheaper: the binding always computes the fused union
+pass regardless of shape, so `--re` there saves output columns, not compute.)
 
 ```bash
-hammock-cpp queries.txt refs.txt -p 20 --no-metrics -o out   # -> out_hll_p20_jaccB_j3.csv
+hammock-cpp queries.txt refs.txt -p 20 --register-equality -o out   # -> out_hll_p20_jaccB_re.csv
 ```
 
-`--metrics` is still accepted, and is now a no-op. `--version` prints the
-version to stdout.
+Pass **`--metrics`** for the full 8-column block — `jaccard_similarity`,
+`jaccard_similarity_ie`, `containment_AB`/`containment_BA`, the three
+`cosketch_*` columns, and `register_equality_similarity` — tagged `_full`:
+
+```bash
+hammock-cpp queries.txt refs.txt -p 20 --metrics -o out   # -> out_hll_p20_jaccB_full.csv
+```
+
+`--no-metrics` was removed in v0.8.0, not aliased — pass `--register-equality`/
+`--re` instead. `--version` prints the version to stdout.
 
 Upgrading from ≤ 0.6.x: a bare invocation used to mean mode A with 3 columns.
 Pass `--mode A` if you relied on that, and note that `--peak-height` and its
 BagMinHash backend were removed — they were never wired into either CLI.
+Upgrading from 0.7.x: a bare invocation used to mean mode B with the full
+7-column block (untagged, no `register_equality_similarity`); it now means
+mode B with `jaccard_similarity_ie` alone, tagged `_ie`. Pass `--metrics` for
+the closest equivalent to the old shape — now 8 columns, tagged `_full`, since
+it also gained `register_equality_similarity`.
 
 ## Testing
 

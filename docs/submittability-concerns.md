@@ -51,8 +51,9 @@ zero.
 
 ## 3. The timed configuration isn't the recommended one
 
-Figure 3's headline runs `--no-metrics`, i.e. the register-equality
-`jaccard_similarity` column. The paper's own guidance is to read
+Figure 3's headline runs `--register-equality`/`--re` (named `--no-metrics`
+before the v0.8.0 metrics-restructure; same reduced shape, renamed flag), i.e.
+the register-equality `jaccard_similarity` column. The paper's own guidance is to read
 `jaccard_similarity_ie` for anything that matters — and that column costs
 8.5% more wall time at N=512, rising with N. The speed number shown is for a
 column the paper tells readers not to trust.
@@ -62,13 +63,25 @@ column the paper tells readers not to trust.
 
 ## 4. `jaccard_similarity` is shipped as the default column, and isn't set Jaccard
 
-It's column 1, unrenamed, no runtime warning unless `--verbose` is passed. It
-carries a chance-agreement floor (~0.17, not constant — varies with size
-ratio) and isn't rank-faithful across differently-sized pairs. Documented
-internally as frozen for backward compatibility with the original tool's
-values, not as a scientific choice. Figure 6's headline clustering result
-(ARI=0.91) uses this column, against the paper's own stated rule to use the
-calibrated one for anything that matters.
+**Partially resolved by the v0.8.0 metrics-restructure (2026-08-11), not yet
+by the paper.** A bare CLI invocation no longer ships `jaccard_similarity` by
+default at all — the default shape is `jaccard_similarity_ie` alone (getting
+`jaccard_similarity` now requires `--register-equality`/`--re` or `--metrics`,
+both explicit). So the "silently reaches users by default" half of this
+concern is gone going forward. What's unchanged: Figure 6's headline
+clustering result (ARI=0.91) was already generated, under the old default,
+using `jaccard_similarity` — that figure doesn't regenerate itself just
+because the CLI's default changed, and the concern below (about that specific
+figure) still stands until it's rerun on `_ie`.
+
+It's column 1 of the pre-restructure default, unrenamed, no runtime warning
+unless `--verbose` is passed. It carries a chance-agreement floor (~0.17, not
+constant — varies with size ratio) and isn't rank-faithful across
+differently-sized pairs. Documented internally as frozen for backward
+compatibility with the original tool's values, not as a scientific choice.
+Figure 6's headline clustering result (ARI=0.91) uses this column, against
+the paper's own stated rule to use the calibrated one for anything that
+matters.
 
 **Cost to fix:** the frozen constraint is on the *values*, not the *label* —
 renaming the CLI flag/column is cheap. Recomputing Figure 6 on `_ie` and

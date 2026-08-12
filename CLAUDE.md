@@ -82,35 +82,82 @@ benchmarking, no Python in the loop. The wheel does install it (to
 so invoke it by full path — `build/<wheel-tag>/hammock-cpp` after a local
 build, or the site-packages copy.
 
-**Since v0.7.0 it emits the full 9-column block by default** — `query`,
-`reference`, `jaccard_similarity`, `jaccard_similarity_ie`,
-`containment_AB/BA`, `cosketch_*` — matching the Python CLI **bit-for-bit** (the
-IE derivation is written the same way in both — see
+**Since v0.8.0, both front-ends share a three-shape output contract** —
+mutually exclusive flags, every shape tagged, none bare
+(`docs/seed-metrics-column-restructure.md`; landed on the
+`metrics-restructure` branch 2026-08-11, not yet merged to `main` at time of
+writing — see that seed's Part 8. Add a dated "SHIPPED" note here, matching
+divergence #9's framing, once the merge lands):
+
+| Shape | Flag | Columns | Filename tag |
+|---|---|---|---|
+| default | *(none)* | `jaccard_similarity_ie` alone | `_ie` |
+| register-equality | `--register-equality`/`--re` | `jaccard_similarity`, `register_equality_similarity` (literal duplicate) | `_re` |
+| full | `--metrics` | `jaccard_similarity`, `jaccard_similarity_ie`, `containment_AB/BA`, `cosketch_*`, `register_equality_similarity` (8 cols; last duplicates the first) | `_full` |
+
+The IE derivation is written the same way in both front-ends — see
 `jaccard_ie_from_containments` in `hammock_cli.cpp` and
 `runner._jaccard_ie_from_containments`; keep them in sync or
-`tests/test_hammock_cpp_metrics.py` fails on `==`). `--metrics` is still
-accepted and is now a no-op.
+`tests/test_hammock_cpp_metrics.py` fails on `==`, now for all three shapes.
 
-**Pass `--no-metrics` for timing runs.** It drops back to the 3 columns and
-tags the output `_j3`. The block costs one extra cardinality estimate per pair
-(the union histogram is accumulated inside the Jaccard pass — see the fused-pass
-note under Open seeds), so a timed run with it on is not comparable to the
-numbers in `experiments/bedtools_benchmark/RESULTS.md`, which are all
-`--no-metrics`. The benchmark harnesses pass the flag explicitly in both
-directions, so the shape of a timed run no longer depends on a default.
+**`--no-metrics` is removed, not aliased** (`memory/project_no_external_api_consumers.md`'s
+"delete rather than shim" precedent) — pass `--register-equality`/`--re` for the
+old cheap timing arm. This is the first time the *Python* CLI has any of these
+flags at all; before v0.8.0 it unconditionally wrote the full 7-column block
+(`jaccard_similarity`, `jaccard_similarity_ie` + the five containment/cosketch
+columns, no `register_equality_similarity`, no filename tag) with no opt-out.
+
+`pyproject.toml`'s `version` is bumped `0.7.1` → `0.8.0` (minor, not patch) as
+part of this restructure — it changes what a no-flag invocation of either
+front-end outputs and removes a flag outright, the same class of change v0.7.0
+was bumped for (divergence #9), not the v0.6.1/v0.7.1-class "default changed,
+output didn't." `--version` on both front-ends is load-bearing (benchmark
+harnesses gate on it), so the bump has to land in the same commit as the
+behavior change, not be deferred.
+
+**`--register-equality`/`--re` is the cheap arm only on `hammock-cpp`.** It
+skips the union/containment pass entirely there — `Args::MetricsMode::
+RegisterEquality` branches before the fused pass runs. On the **Python** CLI
+it is *not* cheaper than `--metrics`: `_core.pairwise_metrics_hll` always
+computes the fused union pass as a side effect regardless of `metrics_mode`
+(no binding change was made to skip it), so `--re` there saves output columns
+and `fprintf`/write time, not compute. Don't assume parity in cost
+characteristics between the two front-ends for this flag — only the column
+contract is guaranteed to match bit-for-bit, not the cost profile.
+
+Pass **`--register-equality`/`--re`** on `hammock-cpp` for timing runs. It
+drops to 2 columns and tags the output `_re` (**not** `_j3` — that tag is
+gone). The default (bare) shape is **not** the cheap arm either — it needs the
+same fused union pass `--metrics` does, just fewer output columns — so a timed
+run comparing default vs. `--metrics` measures write cost, not estimator cost;
+comparing `--re` vs. either of the other two measures the union pass itself.
+`experiments/bedtools_benchmark/RESULTS.md`'s existing numbers were all
+generated under the pre-v0.8.0 two-shape contract (`--no-metrics`, now
+`--register-equality`) — re-verify which flag a given archived number used
+before treating a new run as comparable to it (see
+`docs/seed-metrics-column-restructure.md` Part 9, deliberately deferred).
 
 **Measured cost of the metrics block, settled 2026-08-09** (job 29628907,
 `docs/data/fusion_ab_20260808_232422.csv`; sr09, 16 reserved cores, N=64/side,
-10k intervals, seeded corpus, 5 replicates, arm order permuted per replicate):
+10k intervals, seeded corpus, 5 replicates, arm order permuted per replicate).
+Predates the v0.8.0 restructure — the table's `metrics`/`no_metrics` columns
+are the *old* two-shape contract (`--metrics` = the old always-full block,
+`--no-metrics` = the old 3-column reduced shape) — but the numbers themselves
+are unaffected, since the restructure only changed which flag reaches which
+shape, not the cost of computing the union pass or writing the extra columns.
+`--no-metrics` there maps to today's `--register-equality`/`--re`; the old
+`--metrics` maps closest to today's `--metrics` (today's block additionally
+writes one more `%.17g` field for `register_equality_similarity`, not
+separately measured here):
 
 | p | 12 | 14 | 16 | 18 | 20 | 22 | 24 |
 |---|---|---|---|---|---|---|---|
 | block cost, `pair_time` (metrics ÷ no_metrics) | 1.79× | 1.62× | 1.61× | 1.59× | 1.64× | 1.67× | 1.67× |
 | what the fusion bought (pre ÷ post, metrics arm) | 1.60× | 1.63× | 1.66× | 1.67× | 1.72× | 1.77× | 1.78× |
 
-The **control** — the same two binaries on `--no-metrics`, which is
-byte-identical code — reads 0.96–1.02, so ±2–4% is this experiment's
-measurement error.
+The **control** — the same two binaries on `--no-metrics` (today:
+`--register-equality`/`--re`), which is byte-identical code — reads
+0.96–1.02, so ±2–4% is this experiment's measurement error.
 
 **Do not compare absolute timings across benchmark runs.** The earlier version
 of this section reported a "flat ≈2.5×" multiplier and a 2.09× fusion speedup by
@@ -661,6 +708,11 @@ These are deliberate; parity tests that touch them are skipped or projected.
      the default path where every pre-0.7.0 default run already wrote. Note the
      C++ suffix grammar therefore has a `_j3` component with **no Python
      counterpart** — do not "restore parity" by deleting it.
+     **Superseded 2026-08-11**: this whole bullet describes the v0.7.0
+     two-shape contract, since replaced by the three-shape one in the "Build /
+     test" section above (`--no-metrics` is gone, not renamed; `_j3` is gone,
+     not carried forward) — kept here only as the historical record of what
+     v0.7.0 actually shipped, not as current guidance. Do not "restore" `_j3`.
    - **`--peak-height` and `BagMinHashSketch` are deleted**, including
      `hammock.BagMinHashSketch`, `_core.BagMinHashSketch` and
      `_core.sketch_bed_file_bmh`. The flag selected the BagMinHash backend on
