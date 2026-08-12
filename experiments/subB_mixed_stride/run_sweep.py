@@ -148,24 +148,33 @@ def parse_hammock_csv(path: str) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     with open(path) as fh:
         reader = csv.DictReader(fh, delimiter="\t")
+        # Resolve the "jaccard" field's source column ONCE from the header,
+        # by presence (`in fieldnames`), not per-row truthiness -- a per-row
+        # `r.get(...)` truthy check would treat a present-but-blank field
+        # (e.g. an empty string for one malformed row) as "absent" and
+        # silently fall through to a different estimator for just that row,
+        # while every other row in the same file used the preferred column.
+        # Resolving once from the header keeps one candidate for the whole
+        # file, matching the "resolve once, log once" pattern the rest of
+        # this rename uses everywhere else (docs/seed-jaccard-reg-eq-rename.md
+        # Step 2's post-implementation review).
+        fieldnames = reader.fieldnames or []
+        for candidate in ("reg_eq_similarity", "jaccard_similarity", "jaccard",
+                           "jaccard_similarity_ie"):
+            if candidate in fieldnames:
+                break
+        else:
+            candidate = None
+        if candidate is not None and candidate != "reg_eq_similarity" \
+                and not _REG_EQ_CANDIDATE_LOGGED:
+            print(f"run_sweep.py: 'reg_eq_similarity' column not used for "
+                  f"the 'jaccard' field in {path}; resolved via fallback "
+                  f"candidate '{candidate}' instead.", file=sys.stderr)
+            _REG_EQ_CANDIDATE_LOGGED = True
         for r in reader:
-            if r.get("reg_eq_similarity"):
-                j, candidate = r["reg_eq_similarity"], "reg_eq_similarity"
-            elif r.get("jaccard_similarity"):
-                j, candidate = r["jaccard_similarity"], "jaccard_similarity"
-            elif r.get("jaccard"):
-                j, candidate = r["jaccard"], "jaccard"
-            elif r.get("jaccard_similarity_ie"):
-                j, candidate = r["jaccard_similarity_ie"], "jaccard_similarity_ie"
-            else:
-                j, candidate = None, None
-            if j is None:
+            j = r.get(candidate) if candidate is not None else None
+            if j is None or j == "":
                 continue
-            if candidate != "reg_eq_similarity" and not _REG_EQ_CANDIDATE_LOGGED:
-                print(f"run_sweep.py: 'reg_eq_similarity' column not used for "
-                      f"the 'jaccard' field in {path}; resolved via fallback "
-                      f"candidate '{candidate}' instead.", file=sys.stderr)
-                _REG_EQ_CANDIDATE_LOGGED = True
             # Capturing the IE column is the entire point of this script's own
             # --metrics arm. Absent (register-equality shape) these stay None
             # and reach the CSV empty.

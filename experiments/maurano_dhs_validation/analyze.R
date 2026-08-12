@@ -603,7 +603,7 @@ if (nrow(d) > 0) {
   save_png(file.path(figures_dir, "mode_d_clustering_nmi.png"),
            p_nmi, width = max(10, 1.6 * n_p), height = 6)
 
-  # ── Best configs per criterion (reference=bedtools, jaccard_similarity) ──
+  # ── Best configs per criterion (reference=bedtools, reg_eq_similarity) ──
   pick_best <- function(df, col_name, descending = TRUE) {
     z <- df %>% filter(!is.na(.data[[col_name]]))
     if (descending) z <- z %>% arrange(desc(.data[[col_name]]))
@@ -611,7 +611,7 @@ if (nrow(d) > 0) {
     z %>% slice(1)
   }
   b_pool <- d_bedtools %>% filter(column %in% REG_EQ_VALUES)
-  cat("\nBest Mode D configs (column=jaccard_similarity, ref=bedtools):\n")
+  cat(sprintf("\nBest Mode D configs (column=%s, ref=bedtools):\n", REG_EQ_COL))
   for (m in c("pearson", "spearman", "ari", "nmi")) {
     b <- pick_best(b_pool, m, descending = TRUE)
     cat(sprintf("  by %-9s : k=%2d w=%3d p=%2d  -> %s=%.4f  (r_pearson=%.3f, ari=%.3f)\n",
@@ -625,20 +625,20 @@ if (nrow(d) > 0) {
 
   # ── Per-column optimum, read-only ────────────────────────────────────────
   # The selection above drives every published Mode D figure and deliberately
-  # stays on jaccard_similarity. This block answers the separate question of
-  # which cell each estimator would pick, and writes it to its own file --- it
-  # must not feed the scatter, dendrogram or contingency outputs below, which
-  # write to fixed filenames (mode_d_best_dendrogram.png is Fig 5a in
-  # docs/paper_outline.md).
+  # stays on reg_eq_similarity (REG_EQ_VALUES). This block answers the
+  # separate question of which cell each estimator would pick, and writes it
+  # to its own file --- it must not feed the scatter, dendrogram or
+  # contingency outputs below, which write to fixed filenames
+  # (mode_d_best_dendrogram.png is Fig 5a in docs/paper_outline.md).
   #
   # Sourced from d_out, not b_pool: b_pool descends from d_plot, which is
-  # already filtered to jaccard_similarity, so re-filtering it is a no-op.
+  # already filtered to REG_EQ_VALUES, so re-filtering it is a no-op.
   #
   # Ties are recorded rather than broken. pick_best resolves them via dplyr's
   # stable arrange over a frame sorted by (column, precision, k, w), so under
   # jaccard_similarity_ie the ARI optimum lands on p=12 k=10 w=20 --- a
   # sort artifact, not a preference. That tie is 9-way across precisions, and
-  # the jaccard_similarity one is already 8-way, so an arbitrary tie-break over
+  # the reg_eq_similarity one is already 8-way, so an arbitrary tie-break over
   # precision is not new to the IE arm.
   maximise <- c(pearson = TRUE, spearman = TRUE, ari = TRUE, nmi = TRUE,
                 mae = FALSE)
