@@ -1891,7 +1891,71 @@ Then re-reviewed by 3 fresh adversarial subagents against the **actual
 landed diff** (correctness line-by-line, blast radius/scope, and
 verification-gap hunting) — same pattern as Steps 1/1b/1c's
 post-implementation rounds, run at the user's explicit request for this
-Step too.
+Step too. **All three came back clean — no blocking findings.**
+
+- **Blast radius/scope: fully clean.** Independently confirmed the diff
+  touches exactly the 22 planned files, each commit's contents match its
+  own stated scope, `jaccard_similarity_ie` is untouched everywhere, no
+  tracked output file was regenerated, nothing on the "explicitly out of
+  scope" list was touched, and a fresh repo-wide sweep found no in-scope
+  site the diff missed.
+- **Correctness: no blocking bugs.** Fallback logic verified live (via
+  extracted-logic toy tests, not just reading) to correctly prefer
+  `reg_eq_similarity` and fall back only when genuinely absent; log-once
+  guards fire exactly once even across multi-file/multi-iteration loops;
+  the coupled `analyze.R` (5 sites) and `plot_sequence_tissue_clustering.R`
+  (6 sites) groups consistently reuse one resolved value throughout; the
+  Snakemake `script:`-directive fixes correctly treat the injected literal
+  as a fallback-only default. Three non-blocking findings, all fixed in a
+  follow-up commit (see below).
+- **Verification-gap hunting: no blocking gaps.** Independently re-ran 5+
+  files across all four commits against real data in both branches and
+  reproduced every claimed result; cross-checked the two Snakemake
+  `script:`-directive stubs against the real `Snakefile` rule definitions
+  line-by-line and confirmed the stub approach was genuinely equivalent
+  (both scripts' `snakemake@...` reads matched what the real rules pass,
+  with a live `snakemake -n` dry-run cross-check); confirmed via `git log
+  -1` on sampled tracked figures/CSVs that none were touched. Three
+  non-blocking findings, all addressed below.
+
+**Fixed as a follow-up commit, `0ba31e9`** (mirroring Step 1c's own
+one-line follow-up, `6cce6d3`), covering the three non-blocking findings
+from the correctness and verification-gap-hunting passes (the blast-radius
+pass had none):
+- `analyze.R:606,614,628,635,641` — five stale `jaccard_similarity`
+  mentions in a comment header, a printed `cat()` diagnostic, and three
+  block comments, left behind describing code this Step had already
+  renamed. The printed diagnostic now interpolates `REG_EQ_COL` directly
+  rather than hardcoding a name. Prose/print-string-only — the underlying
+  computed values were already correct, confirmed by the review's own
+  mixed-header re-run.
+- `run_sweep.py`'s `parse_hammock_csv` OR-chain used per-row truthy checks
+  (`if r.get("reg_eq_similarity"):`), inconsistent with every other Python
+  file this rename touched (which use presence checks) and, in principle,
+  able to treat a present-but-blank field as absent and silently
+  substitute a different estimator for just that one row — reproduced live
+  by the review, not just theorized. Restructured to resolve the candidate
+  column once from the CSV header, before the row loop, matching the
+  "resolve once, log once" pattern used everywhere else in this Step; a
+  blank value for the resolved column now correctly skips that malformed
+  row instead of silently falling through. Verified live against three
+  synthetic cases (reg_eq present, legacy-only, reg_eq-present-but-blank),
+  all producing correct behavior.
+- A stray gitignored `Rplots.pdf`, left at the worktree root by the
+  cross-species Snakemake-stub verification runs (R's default PDF device
+  firing despite explicit `CairoPNG()` calls elsewhere) — harmless, never
+  tracked, but cleaned up rather than left.
+
+**Not fixed, judged non-blocking and out of scope, recorded rather than
+silently dropped:** the verification-gap pass's finding that `analyze.R`'s
+`short_col` table's second recode key is technically unreachable given the
+script's own data flow (harmless dead code, not a correctness bug — the
+stated justification for keeping it still holds for the key that *is*
+reachable); and commit `1154644`'s message overstating that no real
+archived CSV existed to verify `estimator_compare.py`'s fallback branch
+end-to-end (a real one did exist and the reviewer built and ran it,
+confirming already-correct behavior — a commit-message accuracy note, not
+a code defect).
 
 **Then stop.** Report and wait for the user's go-ahead before starting
 Step 3. Do not continue automatically.
