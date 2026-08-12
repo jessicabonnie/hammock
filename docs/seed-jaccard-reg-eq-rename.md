@@ -2537,6 +2537,135 @@ further Step to hold off on — but still stop here and report the final
 state (the "Done when" checklist, results) to the user rather than treating
 merge-to-main as a silent, self-closing action.
 
+**Step 4 executed, 2026-08-12, on explicit user go-ahead following Step 3's
+clean re-review.** Landed as three commits on the worktree branch —
+`0b08929` (column removal: both `cell[]` sites in `hammock_cli.cpp`, the
+`runner.py`/`cli.py` duplicate-reuse removal, the row-length-assertion test,
+6 test files' count/slice fixes including one pre-existing hardcoded-slice
+bug the count change exposed) verified with a fresh rebuild, `cpp/tests/`
+21/22 (same pre-existing unrelated failure), `pytest tests/
+--HAMMOCK_REQUIRE_CPP=1` 264 passed/8 skipped, and a thread-count stress
+check (`--metrics`/`--register-equality` at `OMP_NUM_THREADS` 1/4/16 on a
+24-file/576-pair synthetic corpus, byte-identical every time); `e956603`
+(closeout: CLAUDE.md's dated SHIPPED note — which also fixed the still-
+unresolved v0.8.0 restructure's own promised note, the exact stale-promise
+failure mode this doc's Motivation section warned against repeating —
+README.md, the four other live docs, three manuscript files, one
+superseded-pointer line in `docs/seed-metrics-column-restructure.md`,
+version bump to 0.9.0 including a second hardcoded copy in
+`python/hammock/__init__.py` cli.py imports directly); `888adc0` (follow-up
+fixing the review gate's findings, below).
+
+**Review gate run against the actual diff (`0b08929`+`e956603`), per this
+Step's own requirement and the user's explicit instruction, 3 parallel
+adversarial passes — correctness, blast-radius/verification-gap hunting,
+doc-staleness/scope:**
+
+- **Correctness: clean.** Independently rebuilt from scratch, reproduced
+  264 passed/8 skipped and the `cpp/tests/` 21/22 baseline exactly, traced
+  both `cell[]` sites and the header/stride/help-text changes line by line,
+  ran an independent thread-safety stress check (own synthetic corpus, 3
+  thread counts) with no race found, and confirmed the new
+  `test_shape_row_length_matches_header` test genuinely exercises raw-line
+  parsing rather than `csv.DictReader`'s silent-tolerance failure mode. One
+  cosmetic-only finding (a mid-sentence markdown line-wrap artifact from the
+  CLAUDE.md find-and-replace) — not fixed, purely cosmetic.
+- **Blast-radius/verification-gap hunting: clean on the column removal
+  itself** (own larger stress test — 30 files/900 pairs at thread counts up
+  to 64, oversubscribed — byte-identical every time; no positional/index-
+  based hammock-CSV column consumer found anywhere outside the correctly-
+  updated sites). **Two findings, both investigated and correctly
+  attributed to Step 2's own prior, already-in-writing scope decisions, not
+  a Step 4 gap:** `experiments/subB_mixed_stride/{run_ie_subb.py,
+  analyze_ie_subb.py}` and the four `docs/scripts/mode_d_*.R` files will
+  read/filter on the legacy `jaccard_similarity` name against any future
+  regeneration of their inputs — but these are exactly the files Step 2's
+  two correction rounds explicitly reverted/excluded as "not provably tied
+  to a live manuscript figure" (recorded in writing in that Step's
+  section), so their continued bare `jaccard_similarity` reads are accepted
+  residual risk carried forward from that decision, not something this Step
+  introduced or should have closed.
+- **Doc-staleness/scope: two real, low-severity findings, both fixed in
+  `888adc0`.** (1) `python/hammock/cli.py`'s module docstring still said
+  "full 8-column block" — `0b08929` updated the file's `--metrics` argparse
+  help string a few lines down but missed its own top-of-file docstring.
+  (2) The closeout commit's word-boundary find-and-replace over
+  `paper/draft.md`, `paper/outline.md`, and `docs/paper_outline.md`
+  correctly renamed conceptual mentions of the column but overreached into
+  specific figure-provenance sentences asserting which *literal* column a
+  particular archived CSV was read from — Figure 6's and Figure 7's
+  sources predate this rename and were never regenerated (by design; Step
+  3 was verification-only), so they still literally carry the legacy
+  `jaccard_similarity` name, read via the fallback Step 2 added, not
+  literally `reg_eq_similarity` as the closeout's blind substitution had
+  asserted. Fixed to describe the fallback explicitly, matching the more
+  careful language `docs/submittability-concerns.md`'s own Step-4 update
+  already used; Figure 5's source (one of Step 1's 5 renamed archived
+  files) is unaffected and correctly still says it carries
+  `reg_eq_similarity` literally. Also fixed as the same class of finding:
+  two `experiments/bedtools_benchmark/` docstrings (not in Setup's
+  original inventory) describing `--metrics` as emitting a column called
+  `jaccard_similarity` in prose only (confirmed no data read by that name).
+  This reviewer also confirmed the CLAUDE.md dated note is genuinely
+  present (quoted it directly) and correctly distinct from an "Open seeds"
+  bullet, and that `docs/seed-metrics-column-restructure.md`'s historical
+  body was left unrewritten.
+
+Per "Review process"'s re-run rule, these were text/prose corrections with
+no logic or scope change — the same "purely mechanical" class Steps 1b/1c's
+own comment-sweep findings qualified for — so no fourth review round was
+run before proceeding.
+
+**Rebased, re-verified, and merged.** `git rebase main` replayed all 18
+Step commits cleanly onto `main` (`84f7336`, unmoved since Setup) with zero
+conflicts, since seed-doc edits never touched the worktree branch (Commit
+discipline). Rebuilt from scratch and re-ran `pytest tests/
+--HAMMOCK_REQUIRE_CPP=1` (264 passed/8 skipped) and `cpp/tests/` (21/22, same
+pre-existing failure) on the rebased branch before merging. Merged to `main`
+with `git merge --no-ff` (commit `df38dec`) — not squash — so all 18 Step
+commits stay individually visible in `main`'s history, per Commit
+discipline. Rebuilt and re-ran the full suite a third time on `main` itself
+post-merge with identical results. Worktree removed
+(`git worktree remove`), branch deleted.
+
+**Done when, checked against the actual post-merge state of `main`:**
+- `pytest tests/` green on `main` post-merge: **264 passed, 8 skipped.** ✅
+- `cpp/tests/` green: **21/22** — the one failure is the same pre-existing,
+  rename-unrelated "Mode A: chr/non-chr prefixes normalize identically"
+  failure documented since Step 1b's post-implementation review; confirmed
+  via `git log -S` (by the correctness reviewer) to trace to the initial
+  commit, predating this whole seed. ✅ (with that caveat)
+- `pyproject.toml` reads `0.9.0`; `python/hammock/__init__.py.__version__`
+  and both front-ends' `--version` all confirmed `0.9.0` too. ✅
+- `git worktree list` no longer shows the rename worktree. ✅
+- CLAUDE.md carries a dated SHIPPED note (quoted and confirmed by the
+  doc-staleness reviewer), not an Open Seeds bullet. ✅
+- `grep -rn 'jaccard_similarity\b' | grep -v '_ie'` on `main` post-merge:
+  every remaining hit falls into the doc's named exception categories
+  (a)-(d), **plus one residual category the doc's own enumeration didn't
+  spell out file-by-file but which follows the identical "not provably in
+  scope, decided in writing" standard Step 2 already applied throughout**:
+  the specific files Step 2's two correction rounds reverted to their
+  pre-Step-2 bare state (`experiments/mus-homo/*`,
+  `experiments/primate-phylogeny/{estimator_ie_topology.py,
+  scripts/build_phylogeny.R}`, three `experiments/ref-comparison/scripts/
+  exp_a_*.R` files, `experiments/bedtools_benchmark/estimator_compare.py`,
+  `paper/estimator_crossover/plot_estimator_crossover.R`, the four
+  `docs/scripts/mode_d_*.R` files, `plot_parameter_objective_tradeoff.R`
+  non-`_estimators` sibling), plus every per-experiment status doc
+  (`README.md`/`RESULTS.md`/`docs/experiment_design.md`/
+  `PLOT_GENERATION.md`) and unread `config.yaml` `primary_sim_col` keys
+  already established out-of-scope by Setup's Scope F or Step 2's own
+  review rounds. `grep -rn 'jaccard_similarity(' cpp/ bindings/` (the
+  call-syntax form): **zero hits.** ✅
+
+All items satisfied, with the two caveats stated inline (the pre-existing
+`cpp/tests/` failure; the broader-than-enumerated but same-standard residual
+category in the grep bar) rather than glossed over.
+
+**Then stop and report — done.** Reported to the user in the same session;
+this write-up is that report's on-disk record, not a substitute for it.
+
 ## Decisions made (resolved with the user, 2026-08-12 — no longer open)
 
 All six items below were open questions in an earlier draft of this doc.
