@@ -5,17 +5,21 @@ inventory completeness, risk/safety, process/convention fit) plus one
 follow-up direct-verification pass after the user pointed at the per-figure
 "provenance" statements in `paper/` and `docs/` as an under-used scoping
 source — that pass found a whole missed directory (`docs/scripts/`), folded
-in below alongside the first round's findings; implementation not started.**
-This is an implementation
+in below alongside the first round's findings. All six Open Questions
+resolved with the user 2026-08-12 (see "Decisions made," below); one of
+those resolutions (rename the C++ method too) added a new Step 1b.
+Implementation not started.** This is an implementation
 plan in the same mold as `docs/seed-metrics-column-restructure.md`,
 restructured to match the user's own four-step framing rather than
 inventing extra process scaffolding: one ungated Setup preamble (worktree +
-inventory, read-only, low risk) followed by exactly four gated Steps, one
-per item in the user's original request. Each Step is gated by independent
-review of *that Step's* plan before its edits land — see "Review process"
-below for what that means operationally. Work happens on a worktree (Setup)
-per explicit user instruction, overriding the default work-on-main
-convention (`memory/feedback_work_on_main.md`) for this task only.
+inventory, read-only, low risk) followed by five gated Steps — the four
+items in the user's original request, plus Step 1b, added by explicit
+decision (see below) for the C++ method rename. Each Step is gated by
+independent review of *that Step's* plan before its edits land — see
+"Review process" below for what that means operationally. Work happens on a
+worktree (Setup) per explicit user instruction, overriding the default
+work-on-main convention (`memory/feedback_work_on_main.md`) for this task
+only.
 
 ## Motivation (user request, 2026-08-12)
 
@@ -159,17 +163,26 @@ live on the worktree branch until Step 4's merge.
   draft of this doc named only the `cell[7]` site, missing the
   `RegisterEquality` one; both are the same class of bug if left stale).
 
-**Out of scope, flag for reviewers (Open Question 1):** `cpp/src/hll_sketch.cpp`,
-`cpp/include/hammock/hll_sketch.hpp`, `cpp/include/hammock/abstract_sketch.hpp`
-define the C++ **method** `HLLSketch::jaccard_similarity()` — an internal
-API name, not an output column. `bindings/_core.cpp` exposes it to Python
-under the same name. The user's ask is specifically about "column headers of
-outputs," and renaming a method ripples into every `.cpp`/`.hpp` file,
-`cpp/tests/*.cpp`, and the pybind11-exposed method name (a real API break for
-anyone constructing sketches directly via `_core`, however unlikely given
-"no external consumers"). Leaning **out of scope** — but it leaves the odd
-asymmetry that `.jaccard_similarity()` populates a column called
-`reg_eq_similarity`. Decide explicitly, don't default silently.
+**In scope — resolved 2026-08-12, see "Decisions made" below (Step 1b):**
+`cpp/src/hll_sketch.cpp`, `cpp/include/hammock/hll_sketch.hpp`,
+`cpp/include/hammock/abstract_sketch.hpp` define the C++ **method**
+`HLLSketch::jaccard_similarity()` — an internal API name, not an output
+column. **Correction to an earlier draft of this doc:** `bindings/_core.cpp`
+does **not** expose it to Python under the same name — it's wrapped in a
+lambda and exposed as `estimate_jaccard` (`bindings/_core.cpp:321-325`),
+already a different name. So there is no Python-facing name to keep in sync;
+the rename's blast radius is C++-only: the method declaration/definition in
+the three files above, its ~9 call sites (`cpp/tests/test_modes.cpp:28,44`;
+`cpp/tests/test_hll_sketch.cpp:20,31,43,111,135`;
+`cpp/app/hammock_cli.cpp:480,494`; `bindings/_core.cpp:211,323`, the last
+two being C++-side calls *inside* the binding, not the exposed name itself).
+The repo is public on GitHub (`origin` is `jessicabonnie/hammock`, `main`
+already synced there — confirmed by checking `git remote -v` and
+`git rev-parse origin/main`, not assumed), so "no external consumers"
+(`memory/project_no_external_api_consumers.md`) is an empirical claim
+("not currently observed"), not a "the code is private" one — a real if
+narrow risk for a hypothetical direct C++/pybind11 caller, accepted by the
+user with that context in hand. See Step 1b for the concrete work.
 
 **B. Archived CSVs checked into git that feed paper figures/stats and carry
 a bare `jaccard_similarity` header today** (comma-delimited — Python-writer
@@ -378,10 +391,11 @@ let this seed's closeout note slip the same way; it's part of Step 4's
 
 ## The plan
 
-Four gated Steps, matching the user's own numbering (1: rename headers, 2:
-update consuming code, 3: prove parity, 4: drop the duplicate column), each
-preceded by independent review of *that Step's* plan per "Review process"
-above. One ungated Setup preamble first.
+Five gated Steps: the user's own four (1: rename headers, 2: update
+consuming code, 3: prove parity, 4: drop the duplicate column), plus Step 1b
+(rename the C++ method and Python binding too, added by decision — see
+"Decisions made"), each preceded by independent review of *that Step's*
+plan per "Review process" above. One ungated Setup preamble first.
 
 ### Setup — worktree + inventory (ungated, read-only)
 
@@ -513,7 +527,96 @@ change.
 
 **Then stop.** Per "Review process" above: report what landed and the
 subagent reviewers' findings, and wait for the user's own go-ahead before
-starting Step 2. Do not continue automatically.
+starting Step 1b. Do not continue automatically.
+
+### Step 1b — Rename the C++ method AND the Python-facing binding, too
+
+Added 2026-08-12 by explicit user decision (Open Question 1, resolved — see
+"Decisions made" below), then **expanded the same day** after the user's
+actual goal was stated directly: *"make sure the register equality
+calculation isn't named jaccard misleadingly on anything someone might be
+using."* That's broader than just the CSV column, and broader than just the
+internal C++ method — it includes `bindings/_core.cpp`'s pybind11-exposed
+Python method **`estimate_jaccard`**, found only by checking (an earlier
+draft of this doc wrongly assumed it shared the C++ method's name; it
+doesn't — it's already a separately-chosen name, `.def("estimate_jaccard",
+...)` at `bindings/_core.cpp:321`, wrapping a call to
+`self.jaccard_similarity(other)`). This is the one name in the whole
+codebase someone would actually call from Python directly, without ever
+touching a CSV — and it's used for real, right now, by 8 call sites in
+`tests/test_sequence_invariants.py:33` and `tests/test_containment_estimator.py`
+(`:79,119,143,207,238,257,498`). Both renames are independent of Step 1's
+CSV-header rename functionally (neither a method caller nor a binding
+caller ever sees a CSV column name) but grouped here under the same
+"fix the misleading name everywhere it appears" theme, on a disjoint set of
+files from Step 1.
+
+**Part 1 — the C++ method.** New name: `reg_eq_similarity()`, matching the
+renamed column exactly (not `register_equality_similarity()` — keep it
+short, matching the CSV name is the point). Rename it everywhere it's
+declared, defined, or called:
+- `cpp/include/hammock/abstract_sketch.hpp:12` — the pure-virtual
+  declaration (`virtual double jaccard_similarity(...) const = 0;`).
+- `cpp/include/hammock/hll_sketch.hpp:48` — the override declaration.
+- `cpp/src/hll_sketch.cpp:49` — the definition
+  (`double HLLSketch::jaccard_similarity(...)`).
+- `cpp/tests/test_modes.cpp:28,44` and
+  `cpp/tests/test_hll_sketch.cpp:20,31,43,111,135` — 7 call sites across the
+  two test files; rename the call, not the test's own logic or assertions.
+- `bindings/_core.cpp:211,323` — two C++-side calls (`a[i]->jaccard_similarity(*b[j])`
+  in the batch-matrix path, `self.jaccard_similarity(other)` inside the
+  `estimate_jaccard` lambda, which Part 2 below also touches for its own
+  reason — expect both parts to edit line 323's neighborhood).
+- `cpp/app/hammock_cli.cpp:480,494` — **the same two call sites Step 4 later
+  touches for the stride/duplicate-column shrink** (`cell[0] = cell[1] =
+  qsk[i]->jaccard_similarity(*rsk[j]);` and
+  `reg_jac = qsk[i]->jaccard_similarity(*rsk[j]);`). This Part only renames
+  the call (`->jaccard_similarity(` → `->reg_eq_similarity(`); Step 4 later
+  edits the surrounding `cell[]` assignment structure at the same lines —
+  same overlap pattern as Step 1 vs. Step 4 on the header rename, not a
+  conflict, just something for whoever implements to expect.
+
+**Part 2 — the Python-facing binding.** New name:
+**`estimate_reg_eq_similarity`** (the user's explicit preference, over the
+alternative of matching the original hammock's `estimate_jaccard_registers`
+— chosen because it fully removes "jaccard" from the name, matching the
+stated goal exactly, and keeps one consistent `reg_eq_similarity` root
+across the CSV column, the C++ method, and this binding, rather than two
+different naming schemes for the same computation). Rename:
+- `bindings/_core.cpp:321` — the `.def("estimate_jaccard", ...)` string
+  literal itself → `.def("estimate_reg_eq_similarity", ...)`.
+- `tests/test_sequence_invariants.py:33` — 1 call site.
+- `tests/test_containment_estimator.py:79,119,143,207,238,257,498` — 7 call
+  sites.
+
+**Leave `estimate_intersection` alone** — it's the IE-path sibling
+(`bindings/_core.cpp:331`, wrapping `intersection_size`) and is already
+correctly named for what it computes; nothing about this rename touches it.
+
+No behavior change anywhere in either Part — pure identifier renames,
+verified by the fact that every call site is either a test assertion
+(unaffected by what the method/binding is called) or a value read into a
+variable independent of the name.
+
+**Review gate:** 3 reviewers confirm every declaration/definition/call site
+in both Parts was renamed consistently (a leftover mismatched name in Part
+1 is a compile error; in Part 2, `estimate_jaccard` vs.
+`estimate_reg_eq_similarity` mismatches would surface as an `AttributeError`
+at test time — so this is a cheap, high-confidence check: if the C++ side
+compiles, the Python extension rebuilds, and `cpp/tests/` + `pytest tests/`
+are all green, both renames are complete by construction) and that
+`estimate_intersection` was correctly left untouched.
+
+**Commit:** two — (1) the C++ method rename (Part 1, all
+declaration/definition/call sites), (2) the Python-facing binding rename
+(Part 2: the `.def(...)` registration plus its 8 test call sites) — kept
+separate since Part 2 is the one with any (small, in-repo-only) API-surface
+implication, worth its own reviewable diff. Each commit's message records a
+green `cpp/tests/`/`pytest tests/` run as evidence it compiles and behaves
+identically.
+
+**Then stop.** Report and wait for the user's go-ahead before starting
+Step 2. Do not continue automatically.
 
 ### Step 2 — Update paper/experiments code to read `reg_eq_similarity`, with fallback
 
@@ -750,49 +853,63 @@ review and, if needed, revert independently. Then rebase, re-run
 two commits — and Steps 1-2's four — all stay individually visible in
 `main`'s history, per "Commit discipline" above.
 
-**Done when:** `pytest tests/` is green on `main` post-merge;
-`pyproject.toml` reads `0.9.0`; `git worktree list` no longer shows the
-rename worktree; CLAUDE.md carries a dated note of this change (not just an
-Open Seeds bullet); `grep -rn 'jaccard_similarity\b' | grep -v '_ie'` across
-the repo returns only (a) `test_parity_against_original.py`'s orig-comparison
-logic, (b) historical seed/CLAUDE.md entries explicitly marked as
-superseded/historical, and (c) nothing else describing it as the current
-column name.
+**Done when:** `pytest tests/` is green on `main` post-merge; `cpp/tests/`
+green; `pyproject.toml` reads `0.9.0`; `git worktree list` no longer shows
+the rename worktree; CLAUDE.md carries a dated note of this change (not just
+an Open Seeds bullet); `grep -rn 'jaccard_similarity\b' | grep -v '_ie'`
+across the repo returns only: (a) `test_parity_against_original.py`'s
+orig-comparison logic (frozen external tool, always emits this name); (b)
+Step 2's backward-compat fallback string literals in paper/experiments code
+(`else "jaccard_similarity"` and equivalents — these are *supposed* to
+survive, they're what makes old archived CSVs still parse); (c) historical
+seed/CLAUDE.md/memory entries explicitly marked as superseded/historical;
+and (d) nothing else describing it as the current column *or method or
+binding* name — after Step 1b, `grep -rn 'jaccard_similarity(' cpp/
+bindings/` (the call-syntax form, not the CSV-string form) should return
+nothing at all, since that Step removes the identifier everywhere it was a
+name rather than a string.
 
 **Then stop and report.** Step 4 ends in a merge to `main`, so there's no
 further Step to hold off on — but still stop here and report the final
 state (the "Done when" checklist, results) to the user rather than treating
 merge-to-main as a silent, self-closing action.
 
-## Open questions for reviewers (flag explicitly at the relevant Step, don't resolve unilaterally)
+## Decisions made (resolved with the user, 2026-08-12 — no longer open)
 
-1. **(Step 1)** Rename the C++ method `HLLSketch::jaccard_similarity()` /
-   its pybind11 exposure too, for consistency with the column rename? See
-   "Scope A — out of scope" above for the tradeoff. Leaning out of scope;
-   confirm.
-2. **(Step 1/2)** Confirm the intended fix shape for
-   `test_parity_against_original.py` (see Scope E caveat) — it must keep
-   comparing against orig's `jaccard_similarity` output without expecting
-   orig itself to ever emit `reg_eq_similarity`.
-3. **(Setup)** Archived CSVs beyond the 5-file header snapshot — Setup must
-   re-sweep with both comma and tab delimiters and across
-   `experiments/*/results/` (only the tracked-in-git ones), **and** the
-   data-value sweep (category B2) must be confirmed complete, not just the
-   header sweep.
-4. **(Step 4)** Confirm 0.8.0 → 0.9.0 as the version bump target rather than
-   a patch bump — reasoning given above (and the disruptiveness-vs-precedent
-   asymmetry flagged there), but confirm rather than assert, per this seed's
-   own review-gate policy.
-5. **(Setup)** Confirm Setup should stay ungated. The reasoning (read-only,
-   low-risk, Step 1's reviewers absorb it) is stated in "The plan" above as
-   a judgment call, but — found by review — it was asserted in prose rather
-   than listed here as one of the doc's own flagged judgment calls, which is
-   inconsistent with this doc's stated policy of not deciding such things
-   unilaterally. Flagging it explicitly now; confirm or override.
-6. **(Step 2/3)** Confirm the category-B2 handling (update generating code
-   in Step 2, regenerate + diff in Step 3, never hand-edit the derived CSV)
-   is the right approach for `docs/data/mode_d_summary.csv` and the three
-   `paper/*_stats.csv` files, rather than some other treatment (e.g. a
-   scripted find-and-replace on the data files themselves, which would be
-   faster but reintroduces the same "prove nothing else changed" burden
-   Step 3 already carries, without actually saving Step 3 any work).
+All six items below were open questions in an earlier draft of this doc.
+Resolved directly with the user via explicit choice, before Step 1 starts,
+per the same "don't resolve unilaterally" policy that flagged them in the
+first place. Kept here as the record of *why*, matching this doc's own
+stated "resolved in writing" requirement — not a template to re-litigate.
+
+1. **Rename the C++ method `HLLSketch::jaccard_similarity()` too?**
+   **Resolved: yes.** Initial leaning was out-of-scope (bigger blast radius
+   for a purely internal name); reversed once it was established the repo
+   is public on GitHub (`origin` = `jessicabonnie/hammock`, `main` already
+   synced there — checked, not assumed) and the CSV rename doesn't actually
+   decide this either way (a direct C++/pybind11 caller never sees the CSV
+   column name). Given that, and the user's actual stated goal being broader
+   than the CSV ("make sure the register equality calculation isn't named
+   jaccard misleadingly on anything someone might be using"), this expanded
+   further mid-resolution to also cover the Python-facing
+   `estimate_jaccard` binding — see Step 1b for both parts. New names:
+   `reg_eq_similarity()` (C++ method), `estimate_reg_eq_similarity` (Python
+   binding, the user's explicit preference over matching orig's
+   `estimate_jaccard_registers`).
+2. **`test_parity_against_original.py`'s fix shape.** Not re-opened as a
+   choice — the doc's existing plan (Scope E caveat: map by column
+   *position*, not name, since orig is frozen and will always emit
+   `jaccard_similarity`) stands as the approach. Step 1's review gate is
+   where this actually gets checked for real, not this list.
+3. **Archived-CSV sweep completeness (delimiters, `experiments/*/results/`,
+   the data-value sweep).** Not a decision, an instruction already actionable
+   in Setup's body text — no user choice needed here, just confirmed as part
+   of Setup's scope rather than carried as a separate open item.
+4. **Version bump.** **Resolved: minor, 0.8.0 → 0.9.0**, as the doc's
+   original leaning — user confirmed directly, no change to Step 4's plan.
+5. **Setup gating.** **Resolved: stays ungated**, as the doc's original
+   leaning — user confirmed directly, no change to "Review process."
+6. **Category-B2 handling** (`docs/data/mode_d_summary.csv` and the three
+   `paper/*_stats.csv` files). **Resolved: update generating code in Step 2,
+   regenerate + diff in Step 3**, as the doc's original leaning — user
+   confirmed directly, no change to Steps 2/3's plan.
