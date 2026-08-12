@@ -1292,7 +1292,13 @@ automatically.
 ### Step 2 — Update paper/experiments code to read `reg_eq_similarity`, with fallback
 
 Covers the user's step 2. Every in-scope script from Setup's table,
-categories (b) and (d):
+categories (b) and (d) — **substantially expanded by this Step's own
+pre-implementation review gate, below.** Setup correctly identified the
+in-scope *directories* but its per-file/per-line coverage of `experiments/`
+and `docs/scripts/` was materially incomplete going into this Step; the gaps
+were found and closed here, before implementation, matching the pattern
+Step 1's own round 1 already established for this doc (find, fold in,
+re-verify).
 
 **Reading (category b):** prefer `reg_eq_similarity` if present in the CSV,
 else fall back to `jaccard_similarity` (covers any archived file Step 1
@@ -1316,26 +1322,217 @@ writing the old name" (e.g. a partial merge that reverted `runner.py`'s
 rename but not `hammock_cli.cpp`'s, breaking Step 1's required cross-
 front-end sync). A visible log line makes a fresh run hitting the fallback
 path show up in run output instead of looking identical to expected legacy
-handling.
+handling. **For loop-heavy read sites** (below), this means hoisting the
+presence check out of the loop and logging once at the top of the run — not
+once per row or per file processed inside it.
 
-`paper/sequence_tissue_clustering/plot_sequence_tissue_clustering.R:271,286`:
-edit as **one unit** sharing a single resolved column-name variable, not two
-independent literal replacements — see the Scope C caveat for exactly what
-breaks (a silent `NA` degradation, not an error) if only one line is
-updated.
+**Two files resolve their column name via `DEFAULT_SIM_COL`, *before* the
+CSV load — the generic pattern above cannot be dropped in verbatim, found by
+this Step's review gate (scope-completeness and risk/safety passes,
+independently):**
+- `paper/sequence_tissue_clustering/plot_sequence_tissue_clustering.R:59`
+  (`DEFAULT_SIM_COL <- "jaccard_similarity"`) → `sim_col` at `:75`, consumed
+  at `:217` (presence check) and, the file's actual **primary** read —
+  bigger than the `:271/:286` diagnostic block already known to this Step —
+  `:248` (`similarity_matrix(raw, sim_col)`, the dendrogram's real data
+  source). `sim_col` is resolved at `:75`, before `raw <- read_csv(...)` at
+  `:213/:216`, so the fallback check has to move to *after* the load. Treat
+  `:59/:75/:217/:248` and `:271/:286` as **one** coupled unit sharing a
+  single resolved variable — five sites, one file, not two independent
+  edits (the original plan text named only `:271/:286`).
+- `paper/cross_reference_identity/plot_cross_reference_identity.R:42`
+  (`DEFAULT_SIM_COL <- "jaccard_similarity"`) → `SIM_COL` at `:50`, same
+  before-the-load ordering problem relative to `raw <- read_csv(peaks_csv,
+  ...)` (~`:100`). Same fix shape: move resolution after the load.
 
-**Re-emitting (category d, and the category-B2 CSVs it produces):**
-`experiments/maurano_dhs_validation/analyze.R`'s literal `jaccard_similarity`
-data-value writes (the `column = "jaccard_similarity"` assignments, the
-`short_col` lookup table) and the equivalent label constants in
-`paper/estimator_crossover/plot_estimator_crossover.R`,
-`paper/interval_accuracy/plot_interval_accuracy.R:91`, and
-`paper/sequence_tissue_clustering/plot_sequence_tissue_clustering.R` (its
-own label text, separate from the coupled 271/286 read-logic above) — update
-these to emit `reg_eq_similarity` as the value they write into
-`docs/data/mode_d_summary.csv` and the three `paper/*_stats.csv` files.
-These four generated files are **not** hand-edited (Step 1 explicitly
-excluded them); Step 3 regenerates and diffs them instead.
+**`plot_interval_accuracy.R:154,171` needs restructuring, not a drop-in
+substitution, found by review:** `:154`'s `required_hammock <- c(...,
+"jaccard_similarity", "jaccard_similarity_ie")` is an AND-style `setdiff()`-
+gated required-columns check, not an OR/fallback branch — loosen it to
+accept either name. `:171`'s `` `Register-equality (jaccard_similarity)` =
+jaccard_similarity `` inside `transmute()` is a bare NSE symbol reference,
+not a string-driven lookup — resolve `sim_col` once, upstream of both sites,
+then use `.data[[sim_col]]`.
+
+**Re-emitting (category d) — `experiments/maurano_dhs_validation/analyze.R`,
+corrected and substantially expanded by this Step's review gate; the
+original plan text's "the `column = "jaccard_similarity"` assignments, the
+`short_col` lookup table" undersold this file's real edit surface — found
+independently by all three review-gate passes:**
+
+There is no literal `column = "jaccard_similarity"` assignment anywhere in
+the file; that description was wrong. The actual sites:
+- `d_metric_order`/`metric_available()` (`:327-348`) — a **discovery gate**,
+  not an assignment: a metric name only survives into `d_metrics` if it's
+  present in *every* scanned file's header (`all(vapply(d_headers, ...))`).
+  Once Step 1's rename lands, this silently drops the register-equality
+  metric from discovery on any freshly regenerated Mode D CSV — no error, no
+  `stop()`. Fix: accept either name per-file, mapping both to one canonical
+  label, not a literal match against `"jaccard_similarity"` alone.
+- `scan_dir()`'s `jcols` parameter defaults to `"jaccard_similarity"`
+  (`:160`, `read_hammock_csv()`) and is exercised live — the ABC scan call at
+  `:282` doesn't override it. `:147`'s `j_truth = as.numeric(jaccard_similarity)`
+  is a bare NSE read against `raw_abc/hammock_hll_p21_jaccB_full.csv` (not
+  one of Step 1's 5 rewritten CSVs).
+- Five downstream `filter(column == "jaccard_similarity", ...)` sites, not
+  just the `short_col` table: `:373` (`d_plot`, load-bearing), `:471`
+  (`refs_wide`, independently filters `d_out`, load-bearing), `:454,492,550`
+  (re-filters of already-filtered frames). All five need the same
+  value-comparison fallback (`column %in% c("reg_eq_similarity",
+  "jaccard_similarity")`) already specified below for the six B2 consumers —
+  `analyze.R` is effectively a seventh, more heavily-touched
+  consumer/generator hybrid.
+- `:754`'s `sub("jaccard_similarity", "no_ends", best_d_col)` — cosmetic
+  label substitution in a plot title; degrades silently (wrong wording, not
+  a crash) if left.
+- The `short_col` lookup table (`:364-367`, the one site the original plan
+  text did name correctly) maps `jaccard_similarity = "register_equality"` —
+  update this key to match the new name, per Setup's own earlier flag.
+
+**New site, found by review, absent from Setup's inventory and the original
+Step 2 plan entirely: `experiments/bedtools_benchmark/estimator_compare.py:258`**
+(`j_re = float(r["jaccard_similarity"])`) — reads the globally-installed
+`hammock --metrics` output (not the worktree build) via `csv.DictReader`; a
+bare dict-key lookup, hard `KeyError` if unfixed. Feeds
+`results/estimator_compare_full.csv` (untracked, regenerated), the actual
+input to `paper/estimator_crossover/plot_estimator_crossover.R`
+(`docs/paper_outline.md:320` cites `paper/figures/estimator_crossover.png`)
+and `estimator_rank_by_precision.py` (backs CLAUDE.md's rank-fidelity
+table). Setup's own "check for other `analyze*.R`/`.py` scripts" instruction
+should have caught this and didn't — the provenance trace stopped one hop
+short, at the R script rather than the Python script that produces its
+input. Fix: `r.get("reg_eq_similarity") or r["jaccard_similarity"]`, logged
+on fallback.
+
+**A second new site in the same directory, found by review:
+`experiments/bedtools_benchmark/sweep.py`** — `parse_hammock_csv(path,
+column="jaccard_similarity")` (`:127` default, `:415` call site) already
+raises a deliberate, explicit `KeyError` with rich context (`:151`) if the
+column is missing — a pre-existing anti-silent-failure design; extend rather
+than replace it. In scope: `docs/paper_outline.md:502-547,379` cites
+`sweep_precision_maurano_p18_t16.csv`/`_t8.csv` by exact filename as this
+script's own output, feeding Figure 3B's cross-check and Figure S8 (via
+`plot_precision_frontier.R`). Fix: try `reg_eq_similarity` first inside
+`parse_hammock_csv`, fall back to `column`, keep the hard-fail behavior when
+*neither* name is present, log the fallback.
+
+**New group, found by review: `experiments/ref-comparison/`'s other 3 files
+(of its 4), missed by Setup's original per-file characterization** (Setup
+correctly flagged the directory as in-scope via `paper/draft.md:101,273`/
+`paper/outline.md:74` for `estimator_ie_crossref.py`'s own output, but never
+walked its sibling files):
+- `estimator_ie_crossref.py:84` (`reg = float(row["jaccard_similarity"])`) —
+  hard `KeyError`, directly in scope (Table S5 provenance, confirmed).
+- `scripts/exp_a_dendrogram.R:51` (`sim[mat$key_a[i], mat$key_b[i]] <-
+  mat$jaccard_similarity[i]`) — hard error (`"replacement has length
+  zero"`). In scope only via `docs/paper_outline.md:214` ("Fig 7") — not
+  cited in `paper/outline.md`/`paper/draft.md`, but a `docs/paper_outline.md`
+  citation is already this doc's established in-scope standard (the same
+  standard that found `docs/scripts/` during Setup) — treat as in scope on
+  that basis. The figure-numbering scheme there looks superseded relative to
+  the live manuscript; noted as a residual observation, not a reason to skip
+  the fix.
+- `scripts/exp_a_metric_comparison.R:38,84,100` (`metric_groups` tribble →
+  `pull(.data[[metric]])` → `write_tsv`) — **silent degradation, not a
+  crash**: the file already filters to present columns and prints a generic
+  "skipping" message, so the row just vanishes with no distinguishing
+  signal. In scope via `docs/paper_outline.md:372,389` ("Fig S1"), same
+  standard as above.
+- `scripts/exp_a_validate_plot.R` — **no code fix needed in this file
+  itself.** Its `sim_col` is fully parameterized
+  (`snakemake@params[["sim_col"]]`, `:34`); the hardcoded literal actually
+  lives in `workflow/Snakefile:180` (`sim_col = "jaccard_similarity"`, a
+  `params:` block), one file outside this directory's originally-assigned
+  4-file list. Fix belongs in the Snakefile: resolve to a
+  `reg_eq_similarity`-preferred value there instead. In scope via
+  `docs/paper_outline.md:69,148` ("Fig 3"), same standard.
+
+**`experiments/subB_mixed_stride/run_sweep.py:130-131` already has a
+name-tolerance OR-chain with its own silent-degradation bug, found by
+review, pre-existing but exposed by this rename:**
+`r.get("jaccard_similarity") or r.get("jaccard") or
+r.get("jaccard_similarity_ie")` — once `jaccard_similarity` is renamed, this
+falls through *silently, with no log line*, to the IE estimator's value in
+the full/`--metrics` shape (where both `jaccard_similarity` and
+`jaccard_similarity_ie` are present in one row), quietly substituting a
+different estimator into a field every downstream consumer treats as
+register-equality. In scope directly — `paper/draft.md:282` cites this
+script's own output (`sweep_maurano_ie_20260809_200658.csv`) for Figure S9.
+Fix: extend the chain to `r.get("reg_eq_similarity") or
+r.get("jaccard_similarity") or r.get("jaccard") or
+r.get("jaccard_similarity_ie")`, and — since this bug predates the rename —
+add the log line the chain never had, distinguishing which candidate
+resolved.
+
+**New cross-species group, found by review, resting on a two-hop citation
+chain already established elsewhere in this doc
+(`docs/paper_outline.md:319` → `docs/estimator-analysis-findings.md` §9.6,
+which names both scripts and their numbers directly) —
+`experiments/primate-phylogeny/` and `experiments/mus-homo/`:**
+- `primate-phylogeny/estimator_ie_topology.py:67`
+  (`re_j[(a,b)] = float(row["jaccard_similarity"])`) — hard `KeyError`.
+- `primate-phylogeny/scripts/build_phylogeny.R:82`
+  (`intersect(all_metrics, names(mat_long))`) — silent degradation (row
+  quietly drops from `metric_spreads.tsv`).
+- `primate-phylogeny/scripts/build_phylogeny.R:110-118,160`
+  (`build_and_plot("jaccard_similarity", ...)`, hardcoded call-site
+  literal) — silent degradation, the worse of the two: on a missing column
+  it writes an empty Newick/dist file and a placeholder PNG, and the
+  Snakemake rule still reports success. This is the file behind the
+  primate-clade-recovery headline the citation chain rests on. Fix: resolve
+  `sim_col` once (preferred `reg_eq_similarity`, logged fallback) before the
+  `build_and_plot` call, rather than hardcoding the literal at the call
+  site.
+- `mus-homo/estimator_ie_tissue.py:59` — hard `KeyError`, same pattern as
+  the primate-phylogeny sibling.
+- `mus-homo/scripts/cluster_plot.R:34,48`, reached only through
+  `workflow/Snakefile:155` → `config/config.yaml:26`'s `primary_sim_col` —
+  **invisible to a literal grep of the R script itself**, found only by
+  tracing the Snakemake param chain. Hard error (`!!sym()` subset on a
+  missing column). This is the live generator behind the mus-homo "0/20
+  tissue-dominant" ARI headline. Fix in `cluster_plot.R`: resolve the live
+  column name from `mat_long` directly (prefer `reg_eq_similarity`), rather
+  than trusting the Snakemake-passed literal — the config value can stay as
+  a legacy default.
+
+**Explicitly out of scope, found by review, recorded here rather than
+silently skipped (same "not provably in scope" standard the rest of this
+doc already applies):**
+- `experiments/subB_mixed_stride/run_ie_subb.py` and `analyze_ie_subb.py` —
+  coupled read/re-emit pair, zero citations found in `paper/outline.md`,
+  `paper/draft.md`, or `docs/paper_outline.md`; their sole consumer is
+  `experiments/subB_mixed_stride/RESULTS.md`'s own internal write-up, not a
+  manuscript artifact.
+- `experiments/subB_mixed_stride/sbatch_synthetic_ie.sh` — its one real run
+  was deliberately cancelled and superseded
+  (`docs/seed-subsampling-synthetic-supplement.md:62-89`); Figure S10 comes
+  from a different job/script.
+- `experiments/synthetic_evolution/code/analyze.R` — the original Setup
+  snapshot never claimed this file was "provably in scope" the way it did
+  for `ref-comparison/`/`subB_mixed_stride/` (re-read: "The first two are
+  provably in scope..." — `synthetic_evolution`'s status was left
+  unstated). This Step's review independently searched all three provenance
+  documents for all five of its output figure names and found zero
+  citations. It already has partial tolerance
+  (`intersect(c("jaccard_similarity","jaccard"), cols)[1]`) that would need
+  extending if this file is ever brought into scope later — not now.
+- `experiments/primate-phylogeny/scripts/precision_probe.sh:106` — found by
+  review, has the single worst failure mode in this whole sweep (awk's
+  `h["jaccard_similarity"]` resolving to `""` on a missing key silently
+  aliases `$jcol` to `$0`, corrupting every reported value with no error at
+  all) but is confirmed not wired into any Snakemake rule, not cited by any
+  provenance document, and produces only ephemeral stdout under `/vast`, not
+  a tracked artifact. Left unfixed per the "not provably in scope"
+  standard — flagged here, in writing, so a future toucher of this file
+  knows the hazard exists rather than discovering it fresh.
+- `experiments/mus-homo/scripts/compute_column_comparison.{R,py}` — already
+  broken by the earlier, unrelated `_with_ends` column removal
+  (self-documented "OBSOLETE... DOES NOT RUN on current output"), same
+  dead-code class as `modeD_flanking/`, already excluded by this doc's
+  precedent.
+- `experiments/primate-phylogeny/config/config.yaml:36`'s `primary_sim_col`
+  value — confirmed by grep that nothing in that experiment tree actually
+  reads this key; no functional fix needed.
 
 **Reading `mode_d_summary.csv`'s `column` field (category B2), specifically:**
 **six consumers, not five** (corrected 2026-08-12 by Step 1's round-1 risk/
@@ -1359,17 +1556,144 @@ here is a value comparison — `filter(column %in% c("reg_eq_similarity",
 Check whether `paper/` already has a shared sourced-R-utility file before
 inventing one just for this helper — if 3+ scripts need it, factor it once;
 if not, inline is fine and matches this repo's existing per-script style.
+**Checked by review: no `source(`-based shared helper exists anywhere under
+`paper/` or `docs/scripts/` today, and this Step's expanded scope now has
+10+ distinct scripts needing the same fallback-resolution logic — past the
+doc's own "3+" threshold.** Left as an implementer's call at diff time
+(inline duplication is not blocking), but flagged so it isn't an
+accidental miss of the doc's own stated rule.
+
+**Verification methodology, added by this Step's review gate — R/Python
+scripts have no pytest/`cpp/tests`-equivalent safety net, so "the review
+gate confirms the pattern was applied" is not sufficient on its own, found
+by review:** before this Step's commits can be called verified, run every
+edited script at least once against a real input in each of its two
+fallback branches where feasible (against one of Step 1's already-renamed
+archived CSVs for the "prefers `reg_eq_similarity`" branch, and against an
+unmodified older archived CSV or a synthetic pre-rename-header fixture for
+the "falls back to `jaccard_similarity`" branch), confirming non-empty,
+non-`NA` output and the expected log line in each case — not deferring this
+entirely to Step 3's expensive full regenerate-and-diff pass, which is a
+correctness *proof*, not a cheap syntax/logic check. Record per-file
+pass/fail in the commit message(s).
+
+**Accepted residual risk, recorded in writing per this doc's own rule,
+found by review:** Step 2 updates several generating scripts (`analyze.R`,
+`estimator_compare.py`, `sweep.py`, the `ref-comparison`/cross-species
+scripts) to emit `reg_eq_similarity`-preferring output, but does **not**
+regenerate the tracked CSVs those scripts produce (`docs/data/mode_d_summary.csv`,
+the three `paper/*_stats.csv` files, `results/exp_a_estimator_delta.csv`,
+etc. — Step 3 does that). Between Step 2 landing and Step 3 regenerating,
+anyone who runs one of these updated generators against a mix of pre- and
+post-Step-1 raw hammock CSVs on this worktree branch could silently produce
+a locally-regenerated file that diverges from what's checked in. Same class
+of risk Step 1's review gate already accepted in writing for
+`plot_interval_accuracy.R`/`plot_cross_reference_identity.R`'s transient-
+breakage window; accepted here on the same grounds — nothing in this plan
+runs these generators during that window, the worktree branch never touches
+`main` before Step 4's merge, and Step 3's regenerate-and-diff is
+specifically designed to catch exactly this class of drift before it could
+reach `main`.
 
 **Review gate:** 3 reviewers confirm the fallback pattern (with logging) is
-applied consistently, that the coupled tissue-clustering lines were edited
-together, that the category-B2 generating-code updates are complete against
-Setup's table, and that no script was missed.
+applied consistently, that every coupled site-group above was edited
+together (not partially), that the category-B2 and `analyze.R` generating-
+code updates are complete, that the newly-scoped `experiments/` and
+cross-species sites are correctly included/excluded per the citations
+above, and that no script was missed.
 
-**Commit:** one, once the review gate clears — all in-scope
-`paper/`/`experiments/`/`docs/scripts/` consuming-code edits from this Step
-together, since they're one coherent "teach the readers about the new name"
-change and splitting it further wouldn't add independent verifiability the
-way Step 1's code/data split did.
+**Review gate round 1, run 2026-08-12 (3 parallel subagent passes — scope
+completeness, risk/safety, process/convention fit — against the plan text as
+it originally stood, i.e. the version committed before this paragraph's own
+edits; followed by 2 further investigative sweeps to close a scope gap all
+three lens-reviews converged on):**
+
+- **Process/convention fit:** repo state (`main` at `81fba4a`, worktree at
+  `6cce6d3`, both clean) confirmed directly. One blocking finding:
+  `analyze.R`'s original description ("the `column = "jaccard_similarity"`
+  assignments, the `short_col` lookup table") doesn't correspond to any
+  actual literal assignment in the file and misses the `d_metric_order`/
+  `metric_available` discovery-gate mechanism and five downstream filter
+  sites — folded in above. One non-blocking observation: the original
+  "Commit: one" rationale was thinner than Steps 1/1b/1c's stated split
+  rationales, given several files mix category (b) and (d) in the same
+  file — addressed by the revised 4-commit split above.
+- **Risk/safety:** four blocking findings, all folded in above — the
+  logging requirement wasn't concrete for loop-heavy read sites (now
+  addressed with an explicit per-file granularity note);
+  `plot_sequence_tissue_clustering.R:59`'s `DEFAULT_SIM_COL` site was
+  missing from the coupled-edit instruction; the Step-2-created transient
+  inconsistency window (updated generators vs. not-yet-regenerated tracked
+  CSVs) had no accepted-residual-risk note (now added); and `analyze.R`'s
+  actual re-emit mechanism (the discovery gate, not a flat per-CSV
+  fallback) fails silently, independently confirmed by this pass too.
+- **Scope completeness:** five blocking findings, the largest-impact round —
+  two structurally-identical `DEFAULT_SIM_COL`-before-load sites
+  (`plot_sequence_tissue_clustering.R:59`, `plot_cross_reference_identity.R:42`)
+  the plan never mentioned; `analyze.R`'s reading logic (not just its
+  re-emit side) left unaddressed; one entire generator script,
+  `experiments/bedtools_benchmark/estimator_compare.py`, missing from the
+  inventory outright; and `plot_interval_accuracy.R:154,171`'s actual code
+  shape (an AND-style required-columns check and a bare NSE reference)
+  not fitting the plan's proposed drop-in pattern. All five folded in
+  above.
+- **Follow-up investigative sweeps** (launched to close the scope-
+  completeness finding that Step 2's text never enumerated concrete sites
+  in `experiments/ref-comparison/`, `subB_mixed_stride/`,
+  `synthetic_evolution/`, the rest of `bedtools_benchmark/`,
+  `primate-phylogeny/`, or `mus-homo/`, despite Setup declaring those
+  directories in-scope): found `experiments/bedtools_benchmark/sweep.py`
+  (a second missed generator, in scope via `docs/paper_outline.md`'s
+  Figure 3B/S8 provenance), all 3 remaining `ref-comparison/` files (in
+  scope via `docs/paper_outline.md` citations — the same citation standard
+  already used to find `docs/scripts/` during Setup), a pre-existing
+  silent-degradation bug in `run_sweep.py`'s already-present OR-chain
+  fallback, and — resting on the same two-hop `docs/paper_outline.md` →
+  `docs/estimator-analysis-findings.md` §9.6 citation chain this doc already
+  relies on elsewhere — two new in-scope cross-species scripts,
+  `primate-phylogeny/estimator_ie_topology.py` +
+  `primate-phylogeny/scripts/build_phylogeny.R`, and
+  `mus-homo/estimator_ie_tissue.py` + `mus-homo/scripts/cluster_plot.R`
+  (the last reached only through a Snakemake-param indirection invisible to
+  a literal grep of the R script itself). The same sweep also confirmed
+  several candidate files are genuinely **not** provably in scope
+  (`run_ie_subb.py`/`analyze_ie_subb.py`, `sbatch_synthetic_ie.sh`,
+  `synthetic_evolution/code/analyze.R`, `precision_probe.sh`,
+  `compute_column_comparison.{R,py}`) and recorded them above as explicit
+  out-of-scope calls rather than silent omissions.
+
+Because these findings changed Step 2's site list substantially (multiple
+new files, one new generator directory, two new experiment groups, several
+structural — not just line-number — corrections), per "Review process"'s
+own re-run rule this is squarely in "materially altered the diff" territory,
+not the "purely mechanical" carve-out Steps 1b/1c's minor corrections
+qualified for. **A second, focused review round follows below before
+implementation proceeds.**
+
+**Review gate round 2, run 2026-08-12 (3 fresh parallel passes against the
+revised plan text above):**
+
+**Commit:** revised from "one" to **four**, split by risk/verification
+profile — found more appropriate by this Step's own review gate given the
+now much larger and more heterogeneous scope than the original one-commit
+plan anticipated (mirrors how Steps 1/1b/1c all split along a stated axis
+rather than defaulting to one commit):
+1. The `paper/` R-script reading fixes — the coupled tissue-clustering unit
+   (`:59/:75/:217/:248/:271/:286`), `plot_cross_reference_identity.R`'s
+   ordering fix, `plot_interval_accuracy.R`'s restructuring,
+   `plot_parameter_objective_tradeoff*.R`, `plot_estimator_crossover.R`'s
+   label constant, and the four `docs/scripts/mode_d_*.R` B2 consumers — the
+   most directly manuscript-facing group.
+2. `experiments/maurano_dhs_validation/analyze.R` alone, given its size and
+   the discovery-gate finding's importance.
+3. The other `experiments/` generators — `estimator_compare.py`, `sweep.py`,
+   `estimator_ie_crossref.py`, the 3 `ref-comparison/scripts/*.R` files plus
+   the `workflow/Snakefile:180` fix, `run_sweep.py`'s OR-chain extension.
+4. The cross-species pair — `primate-phylogeny/`, `mus-homo/`, including the
+   `cluster_plot.R`/Snakemake-param-chain fix.
+
+Each commit message records its own per-file verification-script-run
+evidence per the paragraph above.
 
 **Then stop.** Report and wait for the user's go-ahead before starting
 Step 3. Do not continue automatically.
