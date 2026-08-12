@@ -183,7 +183,7 @@ def _hash_sketch(precision: int, n: int, seed: int) -> "_core.HLLSketch":
     return s
 
 
-# The fused jaccard+union pass (HLLSketch::jaccard_and_union_cardinality) is
+# The fused reg-eq+union pass (HLLSketch::reg_eq_and_union_cardinality) is
 # claimed bit-identical to the route it replaced -- reg_eq_similarity() plus
 # union_with()->cardinality() reached via intersection_size(). That claim is an
 # integer-multiset argument, so it deserves an exact test, not an approximate
@@ -473,7 +473,7 @@ def _saturated(precision: int):
     """Every register at its maximum, which drives the estimator's z to 0.
 
     This is the only way to reach the Flajolet fallback in
-    jaccard_and_union_cardinality -- the one branch whose bit-exactness rests on
+    reg_eq_and_union_cardinality -- the one branch whose bit-exactness rests on
     reproducing an index-ordered float sum rather than on the integer-histogram
     argument. Random-hash fixtures never get near it.
     """

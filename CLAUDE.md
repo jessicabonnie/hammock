@@ -373,10 +373,10 @@ establishing. Read the seed before re-litigating the question.
   `hash_size=32` option became viable once `_with_ends` was removed (divergence
   #8), since there is no longer a second sketch to merge with.
   **The pairwise metrics loop is one fused register pass** (2026-08-08).
-  `HLLSketch::jaccard_and_union_cardinality` walks both register arrays once,
+  `HLLSketch::reg_eq_and_union_cardinality` walks both register arrays once,
   accumulating the matching/active tallies *and* `counts[max(a[i], b[i])]++` —
   the union's register-value histogram — so no union sketch is ever built. It
-  replaced `jaccard_similarity()` + `intersection_size()`, which between them
+  replaced `reg_eq_similarity()` + `intersection_size()`, which between them
   walked the registers five times per pair and heap-allocated a whole sketch
   (16 MiB at p=24) N·M times, while re-estimating both operands' cardinalities
   that `pairwise_metrics_hll` had already hoisted.
@@ -807,7 +807,7 @@ unaffected; `tests/test_autodetect.py` asserts the new default.
   divergence #9). HLL is the only `AbstractSketch` implementation now, so that
   interface is a single-implementation abstraction; re-deriving it when a second
   backend actually lands will be cheaper than carrying the current one, whose
-  `jaccard_similarity(const AbstractSketch&)` + `dynamic_cast` shape is exactly
+  `reg_eq_similarity(const AbstractSketch&)` + `dynamic_cast` shape is exactly
   what made BagMinHash awkward.
 - File-level multiprocessing fallback (we use threads only).
 

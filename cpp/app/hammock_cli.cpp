@@ -481,11 +481,13 @@ int main(int argc, char** argv) {
                     continue;
                 }
                 // reg_jac is the register-equality value (CSV column
-                // reg_eq_similarity, computed by the reg_eq_similarity() C++
-                // method), a side effect of the
-                // fused union pass. Ie discards it (its column is derived
-                // from containments below); Full writes it to both cell[0]
-                // (reg_eq_similarity) and cell[7] (register_equality_
+                // reg_eq_similarity), computed here by
+                // reg_eq_and_union_cardinality() -- a side effect of the
+                // fused union pass, not by calling reg_eq_similarity()
+                // directly (that only happens in the qh[i]/rh[j]-null
+                // fallback branch just below). Ie discards it (its column is
+                // derived from containments below); Full writes it to both
+                // cell[0] (reg_eq_similarity) and cell[7] (register_equality_
                 // similarity), reusing the one computed value so the two are
                 // bit-identical, not merely equal-by-value -- matching
                 // runner._metrics_row_values' j_val reuse.

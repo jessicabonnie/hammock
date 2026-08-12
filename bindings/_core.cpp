@@ -277,12 +277,12 @@ pairwise_metrics_hll(const py::sequence& a_seq,
             for (py::ssize_t j = 0; j < m; j++) {
                 if (err.tripped()) continue;
                 try {
-                    // One register pass yields both the Jaccard and the union
-                    // cardinality. intersection_size() would re-estimate both
-                    // operands' cardinalities per pair (they are already
-                    // hoisted above) and materialize a union sketch — 16 MiB at
-                    // p=24, allocated and freed N*M times. See
-                    // HLLSketch::jaccard_and_union_cardinality for why this is
+                    // One register pass yields both the register-equality
+                    // similarity and the union cardinality. intersection_size()
+                    // would re-estimate both operands' cardinalities per pair
+                    // (they are already hoisted above) and materialize a union
+                    // sketch — 16 MiB at p=24, allocated and freed N*M times. See
+                    // HLLSketch::reg_eq_and_union_cardinality for why this is
                     // bit-identical rather than merely close.
                     double u;
                     a[i]->reg_eq_and_union_cardinality(*b[j], jbuf(i, j), u);

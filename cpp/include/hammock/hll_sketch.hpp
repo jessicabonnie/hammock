@@ -49,8 +49,8 @@ public:
     double cardinality() const override;
 
     // One pass over both register arrays, yielding the register-equality
-    // Jaccard *and* the cardinality of the union — without materializing the
-    // union sketch. This is what the pairwise metric loops want: the old route
+    // similarity *and* the cardinality of the union — without materializing
+    // the union sketch. This is what the pairwise metric loops want: the old route
     // (reg_eq_similarity + union_with()->cardinality(), or worse
     // intersection_size()) walks the registers three to five times per pair and
     // heap-allocates 16 MiB at p=24 for a union that is read once and thrown
