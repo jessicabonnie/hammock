@@ -1239,13 +1239,51 @@ unqualified version:
   the comment sites still pending) and after (fully clean per the corrected
   completeness bar).
 
-No adversarial post-implementation review round was run this time — out of
-scope for what was asked (implement Step 1c using the pre-implementation
-gate and land the specified commit split, then stop), unlike Step 1's and
-Step 1b's extra rounds, which were done but were never actually required by
-"Review process" above (that section defines one gate: before a Step's
-edits land). Recorded here so a later reader doesn't infer one happened by
-analogy to the two prior Steps' write-ups.
+**Update: a post-implementation adversarial review round was run after all,
+per explicit user request following the initial report above** (3 fresh
+parallel subagent passes against the actual landed diff — correctness
+line-by-line, blast radius/scope, and verification-gap hunting — same
+pattern as Step 1's and Step 1b's post-implementation rounds).
+
+- **Diff correctness: fully clean.** Every hunk in both commits confirmed
+  pure identifier/string substitution, zero logic change; every renamed
+  call site matches its declaration (no typos, no parameter-order
+  mismatch); all three exception-message strings read correctly; the
+  `hammock_cli.cpp` comment rewrite verified to accurately describe the
+  code below it; the three `CLAUDE.md` edits verified against current code.
+- **Verification-gap hunting: fully clean.** Independently reproduced, from
+  a from-scratch rebuild (not reusing any prior build artifact), every
+  number the commit messages cite: RPATH/`_DIGEST_AVAILABLE` check,
+  `cpp/tests/hammock_tests` 21/22 (same pre-existing unrelated failure),
+  `pytest tests/ --HAMMOCK_REQUIRE_CPP=1` 264 passed/8 skipped exactly, all
+  8 skips confirmed environment-gated (bedtools/samtools) with zero
+  digest-related skips — so this rename has no digest-gated test dependency
+  and no silent-skip risk of the kind that bit Step 1b. Separately confirmed
+  the fused method's two `double&` out-params (`reg_eq`, `union_cardinality`)
+  are genuinely order-checked by `test_containment_estimator.py`'s exact-`==`
+  cross-checks against the independent `estimate_intersection`/
+  `estimate_reg_eq_similarity` scalar paths, not merely compile-gated; and
+  re-confirmed (independently, not trusting the pre-implementation pass)
+  that no test anywhere matches on any of the three changed exception
+  strings.
+- **Blast radius/scope: one real, small miss found.** `hammock_cli.cpp:452`'s
+  comment ("The fused jaccard+union path below...") describes
+  `reg_eq_and_union_cardinality()` in loose prose, not the literal
+  identifier — predates this rename (`826d7b42`, 2026-08-08), sits ~30
+  lines from the block `1f2d739` *did* rewrite for the same method, and
+  slipped through both commits' grep verification because neither pattern
+  (`jaccard_and_union_cardinality\b`, case-sensitive `Jaccard` in
+  `hll_sketch.{hpp,cpp}`) matches a lowercase paraphrase in a different
+  file. Everything else this pass checked (local-variable exclusion,
+  file-set-vs-commit-message match, paper/experiments/README.md untouched,
+  a broadened spelling-variant sweep) matched the reviewed plan exactly —
+  this was the sole finding across all three passes.
+
+**Fixed as a follow-up commit, `6cce6d3`** (comment-only, one line,
+`cpp/app/hammock_cli.cpp:452`), re-verified with a fresh rebuild and
+`pytest tests/ --HAMMOCK_REQUIRE_CPP=1` (264 passed, 8 skipped, unchanged).
+A repo-wide sweep after the fix confirms no third stray "jaccard+union"-style
+paraphrase remains anywhere in the touched files.
 
 **Then stop.** Report what landed and the subagent reviewers' findings, and
 wait for the user's go-ahead before starting Step 2. Do not continue
