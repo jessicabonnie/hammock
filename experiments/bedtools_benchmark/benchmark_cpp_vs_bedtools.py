@@ -66,8 +66,9 @@ def check_binary_version(binary: str) -> str:
     if proc.returncode != 0 or not text.startswith("hammock-cpp "):
         raise RuntimeError(
             f"{binary} does not understand --version, so it predates 0.7.0. "
-            "This harness passes --no-metrics and parses microsecond timings, "
-            "neither of which that binary has. Rebuild AND reinstall: "
+            "This harness passes --register-equality (or --no-metrics on "
+            "older binaries) and parses microsecond timings, neither of "
+            "which that binary has. Rebuild AND reinstall: "
             "pip install -e . --no-build-isolation")
     got = text.split()[1]
     parts = tuple(int(x) for x in got.split(".")[:3])
@@ -76,6 +77,57 @@ def check_binary_version(binary: str) -> str:
             f"{binary} is hammock-cpp {got}; this harness needs "
             f">= {'.'.join(map(str, MIN_BINARY_VERSION))}.")
     return got
+
+
+_HELP_CACHE: Dict[str, str] = {}
+
+
+def _probe_binary_help(binary: str) -> str:
+    """Cached `<binary> --help` text.
+
+    Used by `_metrics_off_flag` to check flag support directly rather than
+    trust `--version`, which can lag behind the actual CLI contract (see
+    that function's docstring for why this matters specifically for the
+    metrics-column restructure). Cached per binary PATH, not content --
+    `fusion_ab.py`'s `--pre-binary`/`--post-binary` are different paths by
+    construction, so each gets its own independent cache entry no matter how
+    many times `run_hammock()` is called against them.
+
+    Raises RuntimeError on a bad/non-executable path instead of letting a
+    raw OSError/PermissionError escape -- this probe did not exist before
+    the metrics-column restructure (docs/seed-metrics-column-restructure.md),
+    so a bad `--pre-binary`/`--post-binary` value surfaces here for the
+    first time now.
+    """
+    if binary not in _HELP_CACHE:
+        try:
+            proc = subprocess.run([binary, "--help"], capture_output=True, text=True)
+        except OSError as e:
+            raise RuntimeError(f"could not run {binary} --help: {e}") from e
+        _HELP_CACHE[binary] = (proc.stdout or "") + (proc.stderr or "")
+    return _HELP_CACHE[binary]
+
+
+def _metrics_off_flag(binary: str) -> str:
+    """Flag string for the "cheap/register-equality" side of the
+    --metrics/(--no-metrics | --register-equality) pair, chosen per BINARY,
+    not per caller -- `fusion_ab.py` drives two binaries of different
+    vintages through the same `run_hammock()` call in one process, so the
+    choice cannot be a single hardcoded string or module-level constant.
+
+    Checked by CAPABILITY (does --help mention --register-equality), not by
+    --version number: the metrics-column restructure
+    (docs/seed-metrics-column-restructure.md) removed --no-metrics in favour
+    of --register-equality/--re without pyproject.toml's version bump
+    landing yet (that's Part 7's job) -- a binary built off this exact
+    worktree already lacks --no-metrics while still self-reporting
+    `--version 0.7.1`, the identical string a genuinely pre-restructure
+    binary reports. A version-number gate cannot tell those two apart;
+    checking --help for the literal flag can, and stays correct regardless
+    of when the version bump actually lands.
+    """
+    return ("--register-equality" if "--register-equality" in _probe_binary_help(binary)
+            else "--no-metrics")
 
 
 def find_hammock_cpp() -> str:
@@ -380,7 +432,7 @@ def harness_floor_ms(binary: str, precision: int, num_threads: int, reps: int = 
 
         hm = med(lambda: subprocess.run(
             [binary, lst, lst, "--mode", "B", "-p", str(precision), "-o", out,
-             "--threads", str(num_threads), "--no-metrics"],
+             "--threads", str(num_threads), _metrics_off_flag(binary)],
             capture_output=True, check=True))
 
         env = dict(os.environ)
@@ -477,12 +529,26 @@ def run_hammock(
     we omit the flags to keep the cmd line byte-identical to pre-subB runs.
 
     metrics selects the output shape explicitly: True passes --metrics (the
-    binary's default since 0.7.0), False passes --no-metrics. The metrics block
-    costs a union + cardinality per pair, so a run with it on is NOT
-    timing-comparable to the published numbers in RESULTS.md.
+    full 8-column block), False passes whatever `_metrics_off_flag(binary)`
+    resolves to for THIS binary -- --register-equality on a binary built
+    after the metrics-column restructure, --no-metrics on an older one (see
+    that function's docstring; this is not a version-number check, since the
+    two vintages can self-report the identical --version string). The
+    metrics block costs a union + cardinality per pair, so a run with it on
+    is NOT timing-comparable to the published numbers in RESULTS.md.
 
-    Requires hammock-cpp >= 0.7.0; an older binary rejects --no-metrics with
-    exit 2 rather than silently mistiming, which is the intended failure.
+    Requires hammock-cpp >= 0.7.0; an older binary rejects the disable-flag
+    with exit 2 rather than silently mistiming, which is the intended failure.
+
+    PART9: --metrics-arm/--metrics-all (see arms_for/ie_tool_name_for_subb)
+    exist only to obtain jaccard_similarity_ie via this full block, which
+    predates jaccard_similarity_ie having a cheap dedicated path. The bare/
+    no-flag default now IS that cheap path (1 metric column,
+    jaccard_similarity_ie alone) -- Part 9 should retarget --metrics-arm/
+    --metrics-all to drop the flag entirely rather than pass --metrics, and
+    re-measure before updating any published number. Not done here: this
+    comment marks the site, per docs/seed-metrics-column-restructure.md
+    Part 6 item 2 ("don't act on the flag here").
     """
     with tempfile.NamedTemporaryFile(mode="w", delete=False) as tmp:
         out_prefix = tmp.name
@@ -502,8 +568,10 @@ def run_hammock(
         # Explicit in both directions. Since 0.7.0 the binary emits the metrics
         # block by default, so omitting the flag no longer means "cheap run" --
         # a timed pass that silently gained a union plus two cardinality
-        # estimates per pair would not be comparable to RESULTS.md.
-        cmd += ["--metrics"] if metrics else ["--no-metrics"]
+        # estimates per pair would not be comparable to RESULTS.md. The
+        # disable-flag spelling depends on THIS binary's own vintage, not on
+        # the caller's -- see _metrics_off_flag's docstring.
+        cmd += ["--metrics"] if metrics else [_metrics_off_flag(binary)]
         r = run_with_time(cmd)
 
         sketch_s: Optional[float] = None
@@ -540,8 +608,18 @@ def run_hammock(
         r["write_time"] = write_s
 
         if keep_output:
-            csvs = [f for f in glob.glob(out_prefix + "*") if f.endswith(".csv")]
-            r["output_csv"] = csvs[0] if csvs else None
+            # out_prefix comes from tempfile.NamedTemporaryFile (line ~554),
+            # so it is unique per call -- at most one CSV can ever match this
+            # exact prefix, regardless of which tag (_ie/_re/_full, or none
+            # on an archival pre-restructure binary) hammock actually wrote.
+            # That's what makes an unqualified glob safe HERE, unlike the
+            # shared-directory glob[0] bugs fixed elsewhere in this repo
+            # (estimator_ie_crossref.py/estimator_ie_topology.py/
+            # estimator_ie_tissue.py, which glob a directory many separate
+            # runs write into). sorted() only for determinism if the glob
+            # library ever returns more than the expected single match.
+            candidates = sorted(f for f in glob.glob(out_prefix + "*") if f.endswith(".csv"))
+            r["output_csv"] = candidates[0] if candidates else None
             r["_out_prefix"] = out_prefix  # caller cleans up
         return r
     finally:
@@ -1129,15 +1207,22 @@ def main() -> int:
                              "mixed-stride. subB=1.0 emits 'hammock_cpp_B' for backwards compat; "
                              "other values emit 'hammock_cpp_B_subB<val>'.")
     parser.add_argument("--metrics-arm", action="store_true",
-                        help="Add a fourth hammock arm at subB=1.0 run WITHOUT --no-metrics, "
-                             "i.e. emitting jaccard_similarity_ie and the containment/cosketch "
-                             f"block. Labelled '{IE_ARM_TOOL}' so it fails the "
+                        help="Add a fourth hammock arm at subB=1.0 run WITH --metrics (the full "
+                             "8-column block), i.e. emitting jaccard_similarity_ie and the "
+                             "containment/cosketch block -- instead of the baseline arm's "
+                             "cheap register-equality flag. "
+                             f"Labelled '{IE_ARM_TOOL}' so it fails the "
                              "'^hammock_cpp_B' filter the R consumers use, and cannot double "
-                             "rows in their joins. Ignored if --metrics-all is also given.")
+                             "rows in their joins. Ignored if --metrics-all is also given. "
+                             "PART9: this exists only to obtain jaccard_similarity_ie, which "
+                             "the bare/no-flag default now gives cheaply on its own (1 column, "
+                             "no union/containment pass) -- retargeting this arm to drop the "
+                             "flag entirely, rather than pass --metrics, is Part 9's job "
+                             "(docs/seed-metrics-column-restructure.md), not done here.")
     parser.add_argument("--metrics-all", action="store_true",
-                        help="Run EVERY arm in --subB-list with --metrics instead of "
-                             "--no-metrics (replaces the default no-metrics arms, rather than "
-                             "adding one extra arm the way --metrics-arm does). Use this when "
+                        help="Run EVERY arm in --subB-list with --metrics instead of the "
+                             "cheap register-equality flag (replaces the default arms, rather "
+                             "than adding one extra arm the way --metrics-arm does). Use this when "
                              "the figure needs jaccard_similarity_ie wall times at subB < 1.0, "
                              "e.g. a subB-vs-N line plot -- --metrics-arm alone can only give "
                              "that column at subB=1.0. Labels via ie_tool_name_for_subb(): "

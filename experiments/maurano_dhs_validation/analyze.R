@@ -140,7 +140,7 @@ n_tissues <- length(unique(tissue_label_vec))
 # Mode B is r=0.998 vs bedtools, so it's effectively the interval-mode
 # reading of the same biology. Asking whether Mode D agrees with Mode B
 # is a sharper question than asking whether it agrees with bedtools.
-modeB_path <- file.path(results_dir, "raw_abc", "hammock_hll_p21_jaccB.csv")
+modeB_path <- file.path(results_dir, "raw_abc", "hammock_hll_p21_jaccB_full.csv")
 modeB_ref <- if (file.exists(modeB_path)) {
   read_csv(modeB_path, show_col_types = FALSE) %>%
     transmute(stem1 = strip_ext(file1), stem2 = strip_ext(file2),
@@ -218,15 +218,18 @@ compute_cluster_metrics <- function(j_hat_df) {
 }
 
 # Parse hammock filenames produced by python/hammock/outprefix.py.
-# Examples:
-#   hammock_hll_p21_jaccA.csv
-#   hammock_hll_p21_jaccB_B0.10.csv
-#   hammock_hll_p21_jaccC_expA1.50.csv
-#   hammock_hll_p21_jaccC_B0.25.csv
-#   hammock_mnmzr_p24_jaccD_k10_w20.csv
+# Trailing "_full" is the metrics-shape tag (always present now that these
+# runs pass --metrics; python/hammock/outprefix.py,
+# docs/seed-metrics-column-restructure.md). Examples (stem = basename minus
+# .csv):
+#   hammock_hll_p21_jaccA_full.csv
+#   hammock_hll_p21_jaccB_B0.10_full.csv
+#   hammock_hll_p21_jaccC_expA1.50_full.csv
+#   hammock_hll_p21_jaccC_B0.25_full.csv
+#   hammock_mnmzr_p24_jaccD_k10_w20_full.csv
 parse_abc_name <- function(stem) {
   m <- regmatches(stem, regexec(
-    "^hammock_hll_p(\\d+)_jacc([ABC])(?:_expA(\\d+\\.\\d+))?(?:_B(\\d+\\.\\d+))?$",
+    "^hammock_hll_p(\\d+)_jacc([ABC])(?:_expA(\\d+\\.\\d+))?(?:_B(\\d+\\.\\d+))?_full$",
     stem, perl = TRUE))[[1]]
   if (length(m) == 0) return(NULL)
   tibble(precision = as.integer(m[2]),
@@ -237,7 +240,7 @@ parse_abc_name <- function(stem) {
 
 parse_d_name <- function(stem) {
   m <- regmatches(stem, regexec(
-    "^hammock_mnmzr_p(\\d+)_jaccD_k(\\d+)_w(\\d+)$", stem, perl = TRUE))[[1]]
+    "^hammock_mnmzr_p(\\d+)_jaccD_k(\\d+)_w(\\d+)_full$", stem, perl = TRUE))[[1]]
   if (length(m) == 0) return(NULL)
   tibble(precision = as.integer(m[2]), k = as.integer(m[3]),
          w = as.integer(m[4]))

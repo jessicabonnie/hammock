@@ -1,4 +1,5 @@
-"""The standalone `hammock-cpp --metrics` block must match the Python CLI exactly.
+"""The standalone `hammock-cpp` must match the Python CLI exactly, in all
+three output shapes (ie/re/full) -- docs/seed-metrics-column-restructure.md.
 
 Both programs reach the same quantities from different starting points -- the
 Python side derives them from the containment arrays `pairwise_metrics_hll`
@@ -21,11 +22,28 @@ import pytest
 import hammock
 
 _REPO = Path(__file__).resolve().parent.parent
-_METRIC_COLS = [
+
+# Column lists per shape, matching runner.py's _metrics_shape exactly (order
+# matters -- these double as the expected trailing-header slice).
+_IE_COLS = ["jaccard_similarity_ie"]
+_RE_COLS = ["jaccard_similarity", "register_equality_similarity"]
+_FULL_COLS = [
     "jaccard_similarity", "jaccard_similarity_ie",
     "containment_AB", "containment_BA",
     "cosketch_geom", "cosketch_arith", "cosketch_max",
+    "register_equality_similarity",
 ]
+_IE_HEADER = ["query", "reference"] + _IE_COLS
+_RE_HEADER = ["query", "reference"] + _RE_COLS
+_FULL_HEADER = ["query", "reference"] + _FULL_COLS
+
+# (shape name, CLI flags, filename tag, header)
+_SHAPES = [
+    ("ie", [], "ie", _IE_HEADER),
+    ("re", ["--register-equality"], "re", _RE_HEADER),
+    ("full", ["--metrics"], "full", _FULL_HEADER),
+]
+_SHAPE_FLAGS = {name: flags for name, flags, _tag, _hdr in _SHAPES}
 
 
 def _find_hammock_cpp() -> Path | None:
@@ -95,17 +113,16 @@ def corpus(tmp_path: Path):
     return q, r
 
 
-def _run_python(q: Path, r: Path, out: Path) -> dict:
-    subprocess.run(
-        [sys.executable, "-m", "hammock.cli", str(q), str(r),
-         "--mode", "B", "-p", "20", "-o", str(out)],
-        check=True, capture_output=True, text=True, timeout=600)
+def _run_python(q: Path, r: Path, out: Path, shape: str) -> dict:
+    cmd = [sys.executable, "-m", "hammock.cli", str(q), str(r),
+           "--mode", "B", "-p", "20", "-o", str(out), *_SHAPE_FLAGS[shape]]
+    subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=600)
     csv_path = next(out.parent.glob(f"{out.name}*.csv"))
     with csv_path.open() as f:
         return {(row["file1"], row["file2"]): row for row in csv.DictReader(f)}
 
 
-def _run_cpp_path(q: Path, r: Path, out: Path, metrics: bool,
+def _run_cpp_path(q: Path, r: Path, out: Path, shape: str,
                   mode: str = "B", extra: list[str] | None = None) -> Path:
     """Run the binary and return the path it actually wrote.
 
@@ -115,7 +132,7 @@ def _run_cpp_path(q: Path, r: Path, out: Path, metrics: bool,
     rules in outprefix_with_suffix -- which this release changes three ways.
     """
     cmd = [str(_BIN), str(q), str(r), "--mode", mode, "-p", "20", "-o", str(out),
-           "--verbose", "--metrics" if metrics else "--no-metrics", *(extra or [])]
+           "--verbose", *_SHAPE_FLAGS[shape], *(extra or [])]
     proc = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=600)
     for line in proc.stderr.splitlines():
         if line.startswith("Wrote "):
@@ -123,77 +140,98 @@ def _run_cpp_path(q: Path, r: Path, out: Path, metrics: bool,
     raise AssertionError(f"no 'Wrote <path>' line in stderr:\n{proc.stderr}")
 
 
-def _run_cpp(q: Path, r: Path, out: Path, metrics: bool) -> dict:
-    csv_path = _run_cpp_path(q, r, out, metrics)
+def _run_cpp(q: Path, r: Path, out: Path, shape: str) -> dict:
+    csv_path = _run_cpp_path(q, r, out, shape)
     with csv_path.open() as f:
         return {(row["query"], row["reference"]): row
                 for row in csv.DictReader(f, delimiter="\t")}
 
 
-def test_metrics_block_matches_python_bit_for_bit(corpus, tmp_path: Path):
+@pytest.mark.parametrize("shape,cols", [("ie", _IE_COLS), ("re", _RE_COLS), ("full", _FULL_COLS)])
+def test_shape_matches_python_bit_for_bit(corpus, tmp_path: Path, shape, cols):
+    """Cross-tool bit-for-bit gate, for every shape, not just full.
+
+    Exact equality, not approx: same IEEE operations in the same order on
+    both sides. If this starts failing, the two derivations have diverged --
+    fix that rather than loosening the assertion.
+    """
     q, r = corpus
-    py = _run_python(q, r, tmp_path / "py")
-    cpp = _run_cpp(q, r, tmp_path / "cpp", metrics=True)
+    py = _run_python(q, r, tmp_path / f"py_{shape}", shape)
+    cpp = _run_cpp(q, r, tmp_path / f"cpp_{shape}", shape)
 
     assert set(py) == set(cpp), (sorted(py), sorted(cpp))
     for key in py:
-        for col in _METRIC_COLS:
-            # Exact equality, not approx: same IEEE operations in the same
-            # order on both sides. If this starts failing, the two derivations
-            # have diverged -- fix that rather than loosening the assertion.
-            assert float(py[key][col]) == float(cpp[key][col]), (key, col)
+        for col in cols:
+            assert float(py[key][col]) == float(cpp[key][col]), (shape, key, col)
 
 
-# _METRIC_COLS already leads with jaccard_similarity, so the full header is
-# just the two key columns plus the block.
-_FULL_HEADER = ["query", "reference"] + _METRIC_COLS
-_SLIM_HEADER = ["query", "reference", "jaccard_similarity"]
-
-
-def test_default_output_carries_the_metrics_block(corpus, tmp_path: Path):
-    """The default is the full block, on the untagged path.
-
-    Since 0.7.0 the binary emits what the Python CLI emits. The untagged
-    filename is deliberate: it is the path every pre-0.7.0 default run already
-    used, so the *reduced* shape is the one that gets a tag.
-    """
+@pytest.mark.parametrize("shape,flags,tag,header", _SHAPES)
+def test_shape_header_and_filename(corpus, tmp_path: Path, shape, flags, tag, header):
+    """Every shape is tagged now -- none stays bare (pre-restructure, only the
+    reduced shape was tagged '_j3' and the full block was the untagged
+    default)."""
     q, r = corpus
-    path = _run_cpp_path(q, r, tmp_path / "plain", metrics=True)
-    assert path.read_text().splitlines()[0].split("\t") == _FULL_HEADER
-    assert path.name == "plain_hll_p20_jaccB.csv"
+    path = _run_cpp_path(q, r, tmp_path / shape, shape)
+    assert path.read_text().splitlines()[0].split("\t") == header
+    assert path.name == f"{shape}_hll_p20_jaccB_{tag}.csv"
 
 
-def test_no_metrics_gives_three_columns(corpus, tmp_path: Path):
-    """--no-metrics is the opt-out for timing runs, and it tags its output."""
+def test_re_is_an_alias_for_register_equality(corpus, tmp_path: Path):
+    """`_run_cpp_path`/`_SHAPE_FLAGS` always spell it `--register-equality`;
+    this test is the one place `--re` itself gets exercised."""
     q, r = corpus
-    path = _run_cpp_path(q, r, tmp_path / "slim", metrics=False)
-    assert path.read_text().splitlines()[0].split("\t") == _SLIM_HEADER
-    assert path.name == "slim_hll_p20_jaccB_j3.csv"
+    cmd = [str(_BIN), str(q), str(r), "--mode", "B", "-p", "20",
+           "-o", str(tmp_path / "aliased"), "--verbose", "--re"]
+    proc = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=600)
+    written = next(line for line in proc.stderr.splitlines() if line.startswith("Wrote "))
+    written_path = Path(written[len("Wrote "):].strip())
+    assert written_path.name.endswith("_re.csv")
+    header = written_path.read_text().splitlines()[0].split("\t")
+    assert header == _RE_HEADER
 
 
-def test_no_metrics_changes_the_output_filename(corpus, tmp_path: Path):
-    """A 3-column and a 9-column file must not collide on one path."""
+def test_shapes_produce_distinct_filenames(corpus, tmp_path: Path):
+    """Three shapes at the same prefix must not collide on one path."""
     q, r = corpus
-    _run_cpp(q, r, tmp_path / "same", metrics=True)
-    _run_cpp(q, r, tmp_path / "same", metrics=False)
+    for shape in ("ie", "re", "full"):
+        _run_cpp(q, r, tmp_path / "same", shape)
     names = sorted(p.name for p in tmp_path.glob("same*.csv"))
-    assert len(names) == 2, names
-    assert any(n.endswith("_j3.csv") for n in names), names
+    assert len(names) == 3, names
+    assert {n.rsplit("_", 1)[-1] for n in names} == {"ie.csv", "re.csv", "full.csv"}, names
 
 
-def test_jaccard_similarity_is_identical_across_shapes(corpus, tmp_path: Path):
+def test_jaccard_similarity_is_identical_across_re_and_full_shapes(corpus, tmp_path: Path):
     """The frozen column must not depend on which shape you asked for.
 
     `jaccard_similarity` is register-equality and every archived analysis is
-    calibrated against it, so flipping the default must not perturb it. The
-    metrics block adds columns to its right; it must not touch column 3.
+    calibrated against it, so flipping shapes must not perturb it. "ie" has
+    no jaccard_similarity column at all, so the comparable pair is re vs full.
     """
     q, r = corpus
-    full = _run_cpp(q, r, tmp_path / "full", metrics=True)
-    slim = _run_cpp(q, r, tmp_path / "slim", metrics=False)
-    assert set(full) == set(slim)
+    full = _run_cpp(q, r, tmp_path / "full", "full")
+    re_ = _run_cpp(q, r, tmp_path / "slim", "re")
+    assert set(full) == set(re_)
     for key in full:
-        assert full[key]["jaccard_similarity"] == slim[key]["jaccard_similarity"], key
+        assert full[key]["jaccard_similarity"] == re_[key]["jaccard_similarity"], key
+
+
+@pytest.mark.parametrize("shape", ["re", "full"])
+def test_register_equality_similarity_duplicates_jaccard_similarity(corpus, tmp_path: Path, shape):
+    q, r = corpus
+    rows = _run_cpp(q, r, tmp_path / f"dup_{shape}", shape)
+    for key, row in rows.items():
+        assert row["jaccard_similarity"] == row["register_equality_similarity"], (shape, key, row)
+
+
+def test_default_matches_metrics_jaccard_similarity_ie(corpus, tmp_path: Path):
+    """jaccard_similarity_ie must be byte-identical between the bare default
+    and --metrics."""
+    q, r = corpus
+    ie = _run_cpp(q, r, tmp_path / "ie", "ie")
+    full = _run_cpp(q, r, tmp_path / "full", "full")
+    assert set(ie) == set(full)
+    for key in ie:
+        assert ie[key]["jaccard_similarity_ie"] == full[key]["jaccard_similarity_ie"], key
 
 
 def test_mode_defaults_to_b(corpus, tmp_path: Path):
@@ -208,7 +246,10 @@ def test_mode_defaults_to_b(corpus, tmp_path: Path):
         [str(_BIN), str(q), str(r), "-p", "20", "-o", str(tmp_path / "d"), "--verbose"],
         check=True, capture_output=True, text=True, timeout=600)
     assert "(mode B)" in proc.stderr, proc.stderr
-    assert (tmp_path / "d_hll_p20_jaccB.csv").exists()
+    # No explicit shape flag -> the default MetricsMode::Ie, tagged '_ie'.
+    # (Pre-restructure this asserted the untagged 'd_hll_p20_jaccB.csv'; that
+    # path no longer exists -- every shape is tagged now, including this one.)
+    assert (tmp_path / "d_hll_p20_jaccB_ie.csv").exists()
 
 
 def test_suba_and_subb_reach_the_filename(corpus, tmp_path: Path):
@@ -219,16 +260,40 @@ def test_suba_and_subb_reach_the_filename(corpus, tmp_path: Path):
     on one path. Both are silent data loss: the second run wins.
     """
     q, r = corpus
-    a = _run_cpp_path(q, r, tmp_path / "s", False, mode="C", extra=["--subA", "0.5"])
-    b = _run_cpp_path(q, r, tmp_path / "s", False, mode="C", extra=["--subA", "0.25"])
+    a = _run_cpp_path(q, r, tmp_path / "s", "re", mode="C", extra=["--subA", "0.5"])
+    b = _run_cpp_path(q, r, tmp_path / "s", "re", mode="C", extra=["--subA", "0.25"])
     assert a != b, (a, b)
 
-    lo = _run_cpp_path(q, r, tmp_path / "t", False, extra=["--subB", "0.001"])
-    hi = _run_cpp_path(q, r, tmp_path / "t", False, extra=["--subB", "0.005"])
+    lo = _run_cpp_path(q, r, tmp_path / "t", "re", extra=["--subB", "0.001"])
+    hi = _run_cpp_path(q, r, tmp_path / "t", "re", extra=["--subB", "0.005"])
     assert lo != hi, (lo, hi)
-    # The .4f rule is strict below 0.01, so the historical name is preserved.
-    keep = _run_cpp_path(q, r, tmp_path / "u", False, extra=["--subB", "0.01"])
-    assert keep.name == "u_hll_p20_jaccB_B0.01_j3.csv", keep.name
+    # The .4f rule is strict below 0.01, so the historical name is preserved
+    # (only the trailing shape tag moved from '_j3' to '_re').
+    keep = _run_cpp_path(q, r, tmp_path / "u", "re", extra=["--subB", "0.01"])
+    assert keep.name == "u_hll_p20_jaccB_B0.01_re.csv", keep.name
+
+
+def test_metrics_and_register_equality_are_mutually_exclusive(corpus, tmp_path: Path):
+    q, r = corpus
+    proc = subprocess.run(
+        [str(_BIN), str(q), str(r), "--mode", "B", "-p", "20",
+         "-o", str(tmp_path / "x"), "--metrics", "--register-equality"],
+        capture_output=True, text=True, timeout=600)
+    assert proc.returncode != 0
+    assert "mutually exclusive" in proc.stderr, proc.stderr
+
+
+def test_no_metrics_is_gone(corpus, tmp_path: Path):
+    """--no-metrics was removed outright (not aliased) -- same pattern as the
+    --peak-height removal (test_peak_height_is_gone, below): it now falls
+    through to the generic unknown-argument error."""
+    q, r = corpus
+    proc = subprocess.run(
+        [str(_BIN), str(q), str(r), "--mode", "B", "-p", "20",
+         "-o", str(tmp_path / "y"), "--no-metrics"],
+        capture_output=True, text=True, timeout=600)
+    assert proc.returncode != 0
+    assert "unknown argument '--no-metrics'" in proc.stderr, proc.stderr
 
 
 def test_version_is_on_stdout_and_matches_the_package():

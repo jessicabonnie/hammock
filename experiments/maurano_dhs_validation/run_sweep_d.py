@@ -125,7 +125,7 @@ def main() -> int:
     print(f"Planning {len(plan)} Mode D invocations on {FASTAS}.", file=sys.stderr)
     if args.dry_run:
         for k, w, p in plan:
-            print(f"  k={k} w={w} p={p} -> hammock_mnmzr_p{p}_jaccD_k{k}_w{w}.csv",
+            print(f"  k={k} w={w} p={p} -> hammock_mnmzr_p{p}_jaccD_k{k}_w{w}_full.csv",
                   file=sys.stderr)
         return 0
 
@@ -135,7 +135,11 @@ def main() -> int:
         wcsv.writerow(["k", "w", "precision", "wall_s", "cpu_s",
                        "max_rss_mb", "csv_path", "rc"])
         for k, w, p in plan:
-            outname = f"hammock_mnmzr_p{p}_jaccD_k{k}_w{w}.csv"
+            # "_full" matches the --metrics flag below (python/hammock/
+            # outprefix.py now always tags Python-CLI output _ie/_re/_full;
+            # docs/seed-metrics-column-restructure.md) -- analyze.R's
+            # parse_d_name requires this exact suffix.
+            outname = f"hammock_mnmzr_p{p}_jaccD_k{k}_w{w}_full.csv"
             outpath = RAW_DIR / outname
             cmd = [
                 hammock,
@@ -146,6 +150,10 @@ def main() -> int:
                 "-w", str(w),
                 "--threads", str(args.threads),
                 "--outprefix", str(outprefix),
+                # analyze.R's Mode D path reads the full containment/cosketch
+                # block (with a fallback that reconstructs jaccard_similarity_ie
+                # from containments if absent) -- needs the full shape.
+                "--metrics",
             ]
             log_path = logs_dir / f"d_{outname}.log"
             print(f"[run] {' '.join(shlex.quote(c) for c in cmd)}", file=sys.stderr)

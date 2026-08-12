@@ -51,19 +51,23 @@ wildcard_constraints:
     w    = r"\d+",
 
 # ── Target file paths ────────────────────────────────────────────────────────
-AB_CSVS = expand("results/raw_abc/hammock_hll_p{p}_jacc{mode}.csv",
+# "_full" tag matches the --metrics flag added to every rule's shell: block
+# below -- python/hammock/outprefix.py now always tags Python-CLI output
+# (_ie/_re/_full; docs/seed-metrics-column-restructure.md), and analyze.R's
+# parse_abc_name/parse_d_name require this exact suffix.
+AB_CSVS = expand("results/raw_abc/hammock_hll_p{p}_jacc{mode}_full.csv",
                  p=AB_PRECISIONS, mode=["A", "B"])
 C_EXPA_CSVS = expand(
-    "results/raw_abc/hammock_hll_p{p}_jaccC_expA{expA}.csv",
+    "results/raw_abc/hammock_hll_p{p}_jaccC_expA{expA}_full.csv",
     p=[C_PRECISION], expA=C_EXPA_VALS)
 C_SUBB_CSVS = expand(
-    "results/raw_abc/hammock_hll_p{p}_jaccC_B{subB}.csv",
+    "results/raw_abc/hammock_hll_p{p}_jaccC_B{subB}_full.csv",
     p=[C_PRECISION], subB=C_SUBB_VALS)
 ABC_CSVS = AB_CSVS + C_EXPA_CSVS + C_SUBB_CSVS
 
-D_CSVS_BASE = [f"results/raw_d/hammock_mnmzr_p{p}_jaccD_k{k}_w{w}.csv"
+D_CSVS_BASE = [f"results/raw_d/hammock_mnmzr_p{p}_jaccD_k{k}_w{w}_full.csv"
                for p in D_PS for (k, w) in KW_PAIRS]
-D_CSVS_EXT  = [f"results/raw_d/hammock_mnmzr_p{p}_jaccD_k{k}_w{w}.csv"
+D_CSVS_EXT  = [f"results/raw_d/hammock_mnmzr_p{p}_jaccD_k{k}_w{w}_full.csv"
                for p in EXT_PS for (k, w) in EXT_KW]
 # Union, preserving order, deduped.
 D_CSVS = list(dict.fromkeys(D_CSVS_BASE + D_CSVS_EXT))
@@ -120,7 +124,7 @@ rule run_mode_ab:
     input:
         beds = "data/maurano_files.txt",
     output:
-        "results/raw_abc/hammock_hll_p{p}_jacc{mode}.csv",
+        "results/raw_abc/hammock_hll_p{p}_jacc{mode}_full.csv",
     log:
         "logs/abc/p{p}_{mode}.log",
     threads: THREADS_PER_RUN
@@ -133,6 +137,7 @@ rule run_mode_ab:
         "--mode {wildcards.mode} --precision {wildcards.p} "
         "--threads {threads} "
         "--outprefix results/raw_abc/hammock "
+        "--metrics "
         "> {log} 2>&1"
 
 
@@ -141,7 +146,7 @@ rule run_mode_c_expA:
     input:
         beds = "data/maurano_files.txt",
     output:
-        "results/raw_abc/hammock_hll_p{p}_jaccC_expA{expA}.csv",
+        "results/raw_abc/hammock_hll_p{p}_jaccC_expA{expA}_full.csv",
     log:
         "logs/abc/p{p}_C_expA{expA}.log",
     threads: THREADS_PER_RUN
@@ -155,6 +160,7 @@ rule run_mode_c_expA:
         "--expA {wildcards.expA} "
         "--threads {threads} "
         "--outprefix results/raw_abc/hammock "
+        "--metrics "
         "> {log} 2>&1"
 
 
@@ -163,7 +169,7 @@ rule run_mode_c_subB:
     input:
         beds = "data/maurano_files.txt",
     output:
-        "results/raw_abc/hammock_hll_p{p}_jaccC_B{subB}.csv",
+        "results/raw_abc/hammock_hll_p{p}_jaccC_B{subB}_full.csv",
     log:
         "logs/abc/p{p}_C_subB{subB}.log",
     threads: THREADS_PER_RUN
@@ -177,6 +183,7 @@ rule run_mode_c_subB:
         "--subB {wildcards.subB} "
         "--threads {threads} "
         "--outprefix results/raw_abc/hammock "
+        "--metrics "
         "> {log} 2>&1"
 
 
@@ -185,7 +192,7 @@ rule run_mode_d:
     input:
         fastas = "data/maurano_fastas.txt",
     output:
-        "results/raw_d/hammock_mnmzr_p{p}_jaccD_k{k}_w{w}.csv",
+        "results/raw_d/hammock_mnmzr_p{p}_jaccD_k{k}_w{w}_full.csv",
     log:
         "logs/d/p{p}_k{k}_w{w}.log",
     threads: THREADS_PER_RUN
@@ -200,6 +207,7 @@ rule run_mode_d:
         "-k {wildcards.k} -w {wildcards.w} "
         "--threads {threads} "
         "--outprefix results/raw_d/hammock "
+        "--metrics "
         "> {log} 2>&1"
 
 

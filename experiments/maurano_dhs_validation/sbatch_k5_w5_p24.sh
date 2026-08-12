@@ -19,7 +19,13 @@ set -euo pipefail
 cd /home/jbonnie1/interval_sketch/hammock_claude/experiments/maurano_dhs_validation
 
 HAMMOCK=/home/jbonnie1/.conda/envs/claude-ref-comparison/bin/hammock
-CSV=results/raw_d/hammock_mnmzr_p24_jaccD_k5_w5.csv
+# "_full" tag matches --metrics below (python/hammock/outprefix.py now
+# always tags Python-CLI output _ie/_re/_full; docs/seed-metrics-column-restructure.md)
+# -- also needed so render_dendrogram.R's default jaccard_similarity read
+# below has a column to find, and so this lands under the same _full tag
+# the Snakefile's D_CSVS_BASE/D_CSVS_EXT patterns now require (see the
+# "future snakemake run will see it and skip" note above).
+CSV=results/raw_d/hammock_mnmzr_p24_jaccD_k5_w5_full.csv
 PNG=figures/mode_d_dendrogram_k5_w5_p24.png
 
 mkdir -p results/raw_d figures logs/d logs/slurm
@@ -29,6 +35,7 @@ echo "[$(date)] hammock Mode D k=5 w=5 p=24"
     --mode D --precision 24 -k 5 -w 5 \
     --threads 8 \
     --outprefix results/raw_d/hammock \
+    --metrics \
     > logs/d/p24_k5_w5.log 2>&1
 
 if [[ ! -s "$CSV" ]]; then

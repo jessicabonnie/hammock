@@ -36,9 +36,10 @@
 # intervals is ~873 MB of BED in the node-local /tmp (881 GB free, xfs on NVMe),
 # and 4096 sketches at p=18 is ~1 GB resident. Neither is close to a limit.
 #
-# Both arms are kept (--no-metrics and the default 9-column block) because the
-# cost of the metrics block at large N has never been measured -- every number
-# in CLAUDE.md's table is N=64.
+# Both arms are kept (the reduced-column timed arm, --register-equality, and
+# the full metrics block via --metrics-arm) because the cost of the metrics
+# block at large N has never been measured -- every number in CLAUDE.md's
+# table is N=64.
 
 set -euo pipefail
 cd /home/jbonnie1/interval_sketch/hammock_claude

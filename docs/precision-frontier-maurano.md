@@ -24,7 +24,9 @@ of the timed workload, which is why the two counts differ.
 ## Four things worth stating
 
 **1. p=18 reproduces the archived value exactly.** 1.151658×10⁻³ against
-1.1517×10⁻³ computed independently from `docs/data/hammock_hll_p18_jaccB.csv`.
+1.1517×10⁻³ computed independently from `docs/data/hammock_hll_p18_jaccB.csv`
+(renamed to `..._full.csv` in the metrics-column restructure,
+`docs/seed-metrics-column-restructure.md` — same file content, tag added).
 But note what that does and does not show: `jaccard_ie` is *exactly* symmetric
 (0 of 190 pairs asymmetric, exact comparison), so MAE over 380 ordered pairs is
 **algebraically guaranteed** to equal MAE over 190 unordered pairs. It confirms

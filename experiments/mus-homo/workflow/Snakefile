@@ -115,7 +115,10 @@ rule mus_homo_hammock:
     input:
         lst = f"{OUTDIR}/fasta_lists/all.txt",
     output:
-        csv = f"{OUTDIR}/k{{k}}_w{{w}}/mus_homo_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}.csv",
+        # "_full" tag matches --metrics below (python/hammock/outprefix.py
+        # now always tags Python-CLI output _ie/_re/_full;
+        # docs/seed-metrics-column-restructure.md).
+        csv = f"{OUTDIR}/k{{k}}_w{{w}}/mus_homo_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}_full.csv",
     params:
         outprefix = lambda wc: f"{OUTDIR}/k{wc.k}_w{wc.w}/mus_homo",
     log:
@@ -133,6 +136,7 @@ rule mus_homo_hammock:
             -w {wildcards.w} \
             --precision {PRECISION} \
             --full-paths \
+            --metrics \
             2>{log}
         """
 
@@ -141,7 +145,7 @@ rule mus_homo_hammock:
 rule cluster_and_plot:
     """Hierarchical clustering, dendrogram, PCA, cluster_assignments.tsv."""
     input:
-        matrix   = f"{OUTDIR}/k{{k}}_w{{w}}/mus_homo_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}.csv",
+        matrix   = f"{OUTDIR}/k{{k}}_w{{w}}/mus_homo_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}_full.csv",
         metadata = "config/samples.tsv",
     output:
         dendrogram = f"{OUTDIR}/k{{k}}_w{{w}}/dendrogram.png",

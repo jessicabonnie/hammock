@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """What the similarity block costs, as a function of HyperLogLog precision.
 
-Since v0.7.0 `hammock-cpp` emits `jaccard_similarity_ie` and the
-containment/cosketch columns by default, and `--no-metrics` is the opt-out used
-by every timed benchmark. This measures the difference between those two arms so
-Methods can state the cost of the configuration the paper recommends rather than
-assert it.
+`--metrics` gets `hammock-cpp` to emit `jaccard_similarity`,
+`jaccard_similarity_ie`, and the containment/cosketch/register-equality
+columns (the full block); `--register-equality` (the reduced-column opt-out
+used by every timed benchmark, `--no-metrics` on pre-restructure binaries --
+see `_metrics_off_flag` in benchmark_cpp_vs_bedtools.py) skips all of that.
+This measures the difference between those two arms so Methods can state the
+cost of the configuration the paper recommends rather than assert it.
 
 Precision is the axis, not file count. The extra work is a union sketch plus two
 cardinality estimates per pair, all of it inside the pairwise phase, so the

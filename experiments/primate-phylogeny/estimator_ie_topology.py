@@ -140,7 +140,11 @@ def run_mark(mark: str) -> None:
     print("-" * len(hdr))
     disagree = []
     for cell in cells:
-        found = glob.glob(os.path.join(RESULTS, mark, cell, "*.csv"))
+        # load_pair (via row["containment_AB"]) needs the "_full" (--metrics)
+        # shape -- narrow the glob so a "_ie"/"_re" file from the same
+        # directory can never be picked (was an unnarrowed *.csv glob,
+        # order-dependent across shapes).
+        found = glob.glob(os.path.join(RESULTS, mark, cell, "*_full.csv"))
         if not found:
             continue
         names, d_re, d_ie, off_re, off_ie = load_pair(found[0])

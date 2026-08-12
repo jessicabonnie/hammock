@@ -25,8 +25,11 @@
 # bottleneck it is on the 10k-interval synthetic corpus. The old number was
 # simply doing more work, not scaling worse.
 #
-# Why re-run something the code change did not touch. Both legs are --no-metrics
-# throughout, so the fused pairwise pass cannot have moved them. What is wrong
+# Why re-run something the code change did not touch. The first leg (line 69
+# below) runs the reduced-column arm throughout (--register-equality, was
+# --no-metrics), so the fused pairwise pass cannot have moved it -- the
+# second leg (line 78, --metrics) was added later and is a separate,
+# intentionally-full-block arm, not a second copy of the first. What is wrong
 # with the existing data is where it was taken: sacct has no job for either leg,
 # and sweep_maurano_20260512_173720.log records cpu_count=48 / 1511 GB, which is
 # devlangmead1 -- a shared interactive node with no reserved cores. Panel A came
@@ -68,8 +71,8 @@ fi
 # hammock leg: 3 methods x 6 subB x 5 reps on the 20-sample DHS corpus.
 "$PYTHON" experiments/subB_mixed_stride/run_sweep.py --corpus maurano
 
-# Same grid again with the 9-column output (jaccard_similarity_ie plus the
-# containment/cosketch block) -- the configuration CLAUDE.md actually
+# Same grid again with the full metrics block (jaccard_similarity_ie plus the
+# containment/cosketch/register-equality columns) -- the configuration CLAUDE.md actually
 # recommends, which no published Panel B number has ever measured. Kept as a
 # separate arm rather than a replacement so the two are directly comparable and
 # switching the panel stays a decision, not a side effect: it lands in

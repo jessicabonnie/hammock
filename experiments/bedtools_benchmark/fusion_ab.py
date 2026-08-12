@@ -4,9 +4,12 @@
 Why this exists. The cost of the similarity block was previously inferred by
 comparing a 2026-08-04 run to a 2026-08-08 run -- different binary, different
 node, different corpus, and the older run had no SLURM allocation at all. That
-comparison is not sound: the `--no-metrics` arm runs byte-identical code in both,
-and it measured 1.27-1.53x SLOWER on the old run, so any absolute cross-run
-number carries an unknown machine factor of that size.
+comparison is not sound: the reduced-column arm (`--no-metrics` on pre-
+restructure binaries, `--register-equality` on current ones -- see
+`_metrics_off_flag`'s capability probe in benchmark_cpp_vs_bedtools.py) runs
+byte-identical code in both, and it measured 1.27-1.53x SLOWER on the old
+run, so any absolute cross-run number carries an unknown machine factor of
+that size.
 
 The design here follows standard practice for comparing two builds:
 
@@ -27,16 +30,17 @@ interference by construction and is the better choice when spare cores exist,
 but both arms here are OpenMP jobs sized to the whole allocation, so running
 them concurrently would halve each and measure contention instead of the change.
 
-The four arms:
-    pre  x --no-metrics     <- unchanged code in both builds; the control
+The four arms (reduced-column arm's actual flag depends on the binary's era --
+see `_metrics_off_flag` above):
+    pre  x reduced   <- unchanged code in both builds; the control
     pre  x --metrics        <- the old union-allocating path
-    post x --no-metrics     <- control again
+    post x reduced   <- control again
     post x --metrics        <- the fused path
 
-The control pair is the point of the design: pre/post on --no-metrics must come
-out at 1.00, because that code is identical. Any departure is the measurement
-error of the whole experiment, and it bounds how much of the --metrics effect
-can be believed.
+The control pair is the point of the design: pre/post on the reduced-column
+arm must come out at 1.00, because that code is identical. Any departure is
+the measurement error of the whole experiment, and it bounds how much of the
+--metrics effect can be believed.
 
 Usage:
     python3 fusion_ab.py --pre-binary <path> --post-binary <path> --runs 5
@@ -225,7 +229,9 @@ def main() -> int:
         lo, hi = min(v), max(v)
         return f"{m:5.2f} [{lo:.2f}-{hi:.2f}]"
 
-    print("\nCONTROL -- post/pre on --no-metrics. Identical code: must be ~1.00.")
+    print("\nCONTROL -- post/pre on the reduced-column arm (--no-metrics on "
+          "pre-restructure binaries, --register-equality on current ones). "
+          "Identical code: must be ~1.00.")
     print("Its departure from 1.00 is this experiment's measurement error.")
     print(f"  {'p':>3}  {'pair_time':>20}  {'wall_time':>20}")
     for p in precisions:

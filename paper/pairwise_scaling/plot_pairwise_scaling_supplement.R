@@ -466,8 +466,9 @@ condition_of <- function(subb) case_when(
 )
 
 # Two bars per condition, paired tightly (see position_dodge2's padding
-# below): the existing register-equality (--no-metrics) timing, and the
-# +IE (full metrics block) timing added 2026-08-10. They come from DIFFERENT
+# below): the existing register-equality (--register-equality, was
+# --no-metrics) timing, and the +IE (full metrics block) timing added
+# 2026-08-10. They come from DIFFERENT
 # hammock-cpp invocations at the same subB -- the +IE bars cost more because
 # they compute the full containment/co-sketch block, not because of anything
 # to do with subsampling itself (same story as Figure 3A's two total-wall

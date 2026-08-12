@@ -1,7 +1,10 @@
 """Hammock CLI: pairwise Jaccard similarity in interval modes (A/B/C, BED) or sequence mode (D, FASTA).
 
 Output is a comma-separated CSV whose file1/file2 columns default to basenames; pass
---full-paths for normalized full paths in those columns.
+--full-paths for normalized full paths in those columns. Three output shapes, chosen by
+mutually exclusive flags: bare default (jaccard_similarity_ie only, tag _ie),
+--register-equality/--re (register-equality-only, tag _re), --metrics (full 8-column
+block, tag _full). See --metrics/--register-equality help.
 """
 from __future__ import annotations
 
@@ -74,9 +77,10 @@ def parse_args(argv=None):
         - Sequence mode (D): FASTA (.fa, .fasta, .fna, .ffn, .faa, .frn), plain or .gz.
           Selected automatically for FASTA input or for any --ref/--ref1/--ref2 flag.
 
-        Output: comma-separated CSV at <outprefix>_<sketch>_p<precision>_jacc<MODE>[...].csv;
+        Output: comma-separated CSV at <outprefix>_<sketch>_p<precision>_jacc<MODE>[..._ie|_re|_full].csv;
         the file1/file2 columns identify inputs using basenames by default.
-        Pass --full-paths to use normalized full paths instead.
+        Pass --full-paths to use normalized full paths instead. The trailing
+        _ie/_re/_full tag names the output shape (see --metrics/--register-equality).
 
         Sub-command: `hammock fetch-ref <keyword|url>` caches a reference genome for
         BED->FASTA runs; see `hammock fetch-ref --help`.
@@ -164,9 +168,11 @@ def parse_args(argv=None):
                    help='Output filename prefix (default: hammock). The run appends '
                         'its own suffixes plus ".csv": sketch type and precision and '
                         'mode letter, then _A<subA>/_expA<expA> and _B<subB> for any '
-                        'subsampling, _k<k>_w<w> in sequence mode, and '
-                        '_<ref1>-vs-<ref2> for a BED→FASTA run — e.g. the bare default '
-                        'writes hammock_hll_p18_jaccB.csv.')
+                        'subsampling, _k<k>_w<w> in sequence mode, '
+                        '_<ref1>-vs-<ref2> for a BED→FASTA run, and finally '
+                        '_ie/_re/_full for the output shape (see --metrics/'
+                        '--register-equality) — e.g. the bare default writes '
+                        'hammock_hll_p18_jaccB_ie.csv.')
     p.add_argument('--full-paths', action='store_true',
                    help='Write normalized paths in CSV file1/file2 columns instead of basenames.')
     p.add_argument("--precision", "-p", type=_precision, default=18,
@@ -249,6 +255,27 @@ def parse_args(argv=None):
                         'opt-in parity divergence (different accepted positions, not '
                         'byte-equal to orig), announced on stderr.')
 
+    # Output-shape flags: which similarity columns get written, mutually
+    # exclusive (argparse errors if both given, same pattern as --ref vs
+    # --ref1/--ref2 above). Neither flag -> the default "ie" shape.
+    metrics_group = p.add_mutually_exclusive_group()
+    metrics_group.add_argument(
+        '--metrics', action='store_true',
+        help='Emit the full 8-column metrics block: jaccard_similarity, '
+             'jaccard_similarity_ie, containment_AB, containment_BA, '
+             'cosketch_geom, cosketch_arith, cosketch_max, and '
+             'register_equality_similarity (a literal duplicate of '
+             'jaccard_similarity). Tags the output filename _full. Mutually '
+             'exclusive with --register-equality/--re.')
+    metrics_group.add_argument(
+        '--register-equality', '--re', action='store_true',
+        dest='register_equality',
+        help='Emit only jaccard_similarity and register_equality_similarity '
+             '(a literal duplicate of it) -- the cheap register-equality-only '
+             'arm; the hammock-cpp standalone binary skips the union/'
+             'containment pass entirely for this shape. Tags the output '
+             'filename _re. Mutually exclusive with --metrics.')
+
     args = p.parse_args(argv)
 
     # ---- BED→FASTA reference validation -------------------------------------
@@ -275,6 +302,16 @@ def parse_args(argv=None):
     # MinHash, which isn't shipped).
     args.hash_size = 64
     args.num_hashes = "NA"
+
+    # Canonical output-shape field the runner reads instead of the two raw
+    # flags -- "ie" (default), "re" (--register-equality/--re), or "full"
+    # (--metrics). See runner._metrics_shape.
+    if args.metrics:
+        args.metrics_mode = "full"
+    elif args.register_equality:
+        args.metrics_mode = "re"
+    else:
+        args.metrics_mode = "ie"
     return args
 
 

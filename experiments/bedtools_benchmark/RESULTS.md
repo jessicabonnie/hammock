@@ -65,9 +65,14 @@ nodes), 16 cpus, 32 GB:
 
 > **Every timing on this page is a 3-column run** — no `jaccard_similarity_ie`,
 > no containment/cosketch block. These predate v0.7.0, when the binary emitted
-> 3 columns unless `--metrics` was passed; since 0.7.0 the block is the default
-> and the harnesses pass `--no-metrics` explicitly to keep new timings on this
-> same footing. The block costs a union plus two cardinality estimates per pair,
+> 3 columns unless `--metrics` was passed; from 0.7.0 through the pre-restructure
+> era the block was the default and the harnesses passed `--no-metrics`
+> explicitly to keep new timings on this same footing. Since the metrics-column
+> restructure (`docs/seed-metrics-column-restructure.md`) the harnesses pass
+> `--register-equality` instead — same reduced-column arm, renamed flag; see
+> `benchmark_cpp_vs_bedtools.py`'s `_metrics_off_flag`, which resolves the
+> correct flag per binary. The block costs a union plus two cardinality
+> estimates per pair,
 > which lands entirely in the pairwise phase — 0.61% of wall at N=512, p=14.
 > That prediction has since been measured directly: the `hammock_ie_B` arm of
 > the Aug 4 files t=16 run costs **+1.45%** of wall at N=512. Timings from a run

@@ -158,7 +158,11 @@ rule phylo_hammock:
     input:
         lst = f"{OUTDIR}/{MARK}/fasta_lists/all.txt",
     output:
-        csv = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/phylo_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}.csv",
+        # "_full" tag matches --metrics below (python/hammock/outprefix.py
+        # now always tags Python-CLI output _ie/_re/_full;
+        # docs/seed-metrics-column-restructure.md) -- build_phylogeny.R
+        # needs cosketch_max/cosketch_geom, present in no other shape.
+        csv = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/phylo_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}_full.csv",
     params:
         outprefix = lambda wc: f"{OUTDIR}/{MARK}/k{wc.k}_w{wc.w}/phylo",
     log:
@@ -176,6 +180,7 @@ rule phylo_hammock:
             -w {wildcards.w} \
             --precision {PRECISION} \
             --full-paths \
+            --metrics \
             2>{log}
         """
 
@@ -187,7 +192,7 @@ rule build_phylogeny:
     (minimizer-only, minimizer+ends), and emit a per-cell metric_spreads
     summary covering all 12 hammock columns."""
     input:
-        matrix   = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/phylo_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}.csv",
+        matrix   = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/phylo_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}_full.csv",
         metadata = "config/samples.tsv",
     output:
         spread_tsv         = f"{OUTDIR}/{MARK}/k{{k}}_w{{w}}/metric_spreads.tsv",

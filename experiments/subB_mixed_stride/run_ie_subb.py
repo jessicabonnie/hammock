@@ -44,7 +44,12 @@ def run_cell(p: int, sub_b: float, method: str, tmp: str):
     prefix = os.path.join(tmp, "out")
     cmd = [BINARY, listfile, listfile, "--mode", "B", "-p", str(p),
            "-t", str(THREADS), "-o", prefix,
-           "--subB", repr(sub_b), "--subB-method", method]
+           "--subB", repr(sub_b), "--subB-method", method,
+           # Needs the full block: reads jaccard_similarity, jaccard_similarity_ie,
+           # containment_AB, containment_BA (COLS below), none of which the
+           # bare/no-flag default (jaccard_similarity_ie alone) or
+           # --register-equality (jaccard_similarity alone) would fully supply.
+           "--metrics"]
     t0 = time.time()
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:

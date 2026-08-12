@@ -1,5 +1,18 @@
 # Making the two front-ends agree (v0.7.0)
 
+**⛔ Superseded 2026-08-11.** The two-shape contract this document describes
+as current (`--metrics`/`--no-metrics`, untagged-default-vs-`_j3`, "both now
+B / 9 columns") was replaced in v0.8.0 by a three-shape contract
+(default/`--register-equality`/`--re`/`--metrics`, tagged `_ie`/`_re`/`_full`,
+none bare) — see `docs/seed-metrics-column-restructure.md` and CLAUDE.md's
+"Build / test" section for what's current. **Not deleted**: the cost-measurement
+tables below (µs/pair, write-cost, the estimator multiplier) are per-precision
+data cited from CLAUDE.md's Architecture section as historical numbers, and
+the restructure didn't change what any of those measurements cost — only
+which flag reaches which column shape. Read the tables as still-accurate
+*measurements*; read the prose around "9-column default" / `--no-metrics` /
+`_j3` as describing the *v0.7.0* contract, not the current one.
+
 Evidence and consequences for the change that flipped `hammock-cpp`'s defaults,
 removed BagMinHash, and fixed two filename collisions. Companion to divergence
 #9 in `CLAUDE.md`.

@@ -90,6 +90,13 @@ def main():
             for rep in range(args.reps):
                 cpp_out = os.path.join(tmp, f"cpp_t{t}_r{rep}")
                 cli_out = os.path.join(tmp, f"cli_t{t}_r{rep}")
+                # PART9 (docs/seed-metrics-column-restructure.md): --metrics
+                # here vs. cli_cmd's bare invocation below is a shape
+                # mismatch (_full vs _ie) under the new three-shape contract.
+                # Neither arm reads a CSV column here (only /usr/bin/time
+                # output is parsed), so the fix is to drop --metrics from
+                # cpp_cmd to match cli_cmd's bare shape; not retargeted here
+                # per "mark PART9 only, don't retarget."
                 cpp_cmd = [args.hammock_cpp_bin, l1, l2, "--mode", "B",
                            "-p", str(args.precision), "-o", cpp_out,
                            "--threads", str(t), "--metrics"]

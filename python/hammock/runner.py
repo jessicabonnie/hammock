@@ -22,6 +22,45 @@ from hammock.outprefix import get_new_prefix
 _CONTAINMENT_COLS = ["containment_AB", "containment_BA",
                      "cosketch_geom", "cosketch_arith", "cosketch_max"]
 
+# Three output shapes, selected by --metrics/--register-equality (see cli.py;
+# `args.metrics_mode` is "ie" (default), "re", or "full"). Docs/seed-metrics-
+# column-restructure.md Part 2 -- both `_metrics_shape` and `_metrics_row_values`
+# must agree on column count and order, and both call sites (A/B/C `run()` and
+# `_write_mode_d_csv`) must use the same `metrics_mode` for header and rows.
+def _metrics_shape(metrics_mode: str) -> tuple:
+    """Return (similarity_measures column names, filename tag) for
+    `metrics_mode` ("ie"/"re"/"full")."""
+    if metrics_mode == "full":
+        return (["jaccard_similarity", "jaccard_similarity_ie"]
+                 + _CONTAINMENT_COLS + ["register_equality_similarity"],
+                 "full")
+    if metrics_mode == "re":
+        return (["jaccard_similarity", "register_equality_similarity"], "re")
+    return (["jaccard_similarity_ie"], "ie")
+
+
+def _metrics_row_values(metrics_mode: str, jac, jac_ie, c_ab, c_ba,
+                        cs_geom, cs_arith, cs_max, i: int, j: int) -> list:
+    """Per-pair values matching `_metrics_shape`'s column list, in order.
+
+    `register_equality_similarity` is a literal duplicate of
+    `jaccard_similarity` -- computed once into `j_val` and reused, so the two
+    columns are guaranteed byte-identical rather than merely equal-by-value.
+    Only reads the arrays its own branch needs: callers that skip computing
+    `jac_ie`/`cs_geom`/`cs_arith`/`cs_max` for "re" (which never uses them)
+    rely on that -- do not add a code path here that reads them outside the
+    "full"/"ie" branches.
+    """
+    if metrics_mode == "full":
+        j_val = float(jac[i, j])
+        return [j_val, float(jac_ie[i, j]), float(c_ab[i, j]), float(c_ba[i, j]),
+                float(cs_geom[i, j]), float(cs_arith[i, j]), float(cs_max[i, j]),
+                j_val]
+    if metrics_mode == "re":
+        j_val = float(jac[i, j])
+        return [j_val, j_val]
+    return [float(jac_ie[i, j])]
+
 
 def _cosketch_from_containments(c_ab, c_ba):
     """Return (geom_mean, arith_mean, max) of the two directional containments."""
@@ -84,8 +123,24 @@ def _print_estimator_note(args) -> None:
     default-on banner is the kind of thing that ends up captured into someone's
     log parser. The README and docs/jaccard-definitional-gap.md are the
     canonical explanation; this is a nudge for interactive runs.
+
+    Parameterized by `args.metrics_mode` because only "full" emits both
+    columns -- the default ("ie") shape has no jaccard_similarity column and
+    "re" has no jaccard_similarity_ie column, so the two-column comparison
+    below would describe an absent column in those shapes.
     """
     if not args.verbose:
+        return
+    mode = getattr(args, "metrics_mode", "full")
+    if mode == "ie":
+        print("note: jaccard_similarity_ie is set-Jaccard (inclusion-exclusion), "
+              "comparable to bedtools.", file=sys.stderr)
+        return
+    if mode == "re":
+        print("note: jaccard_similarity/register_equality_similarity is "
+              "register-equality -- biased high, and the bias depends on both "
+              "sketch load and |A|/|B|, so rank only within comparable pairs.",
+              file=sys.stderr)
         return
     print("note: jaccard_similarity is register-equality -- "
           "biased high,\n"
@@ -375,10 +430,24 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches,
     minimizer_query = [s.minimizer_hll for s in query_sketches]
     minimizer_ref = [s.minimizer_hll for s in ref_sketches]
 
+    # `pairwise_metrics_hll` is called unconditionally regardless of shape --
+    # the Python binding always computes the fused union pass as a side
+    # effect (see docs/seed-metrics-column-restructure.md Part 2's cost
+    # note), so there is no cheaper call for the "re" shape on this front-end.
+    # Unlike hammock-cpp (Part 4), which branches per-shape and skips the
+    # union pass entirely for --register-equality, the Python CLI cannot skip
+    # it without a binding change -- not a regression, since it already paid
+    # this cost for every shape before this restructure.
     jac, c_ab, c_ba = _core.pairwise_metrics_hll(
         minimizer_query, minimizer_ref, threads=getattr(args, "omp_threads", 0) or 0)
-    cs_geom, cs_arith, cs_max = _cosketch_from_containments(c_ab, c_ba)
-    jac_ie = _jaccard_ie_from_containments(c_ab, c_ba)
+    metrics_mode = getattr(args, "metrics_mode", "full")
+    cs_geom = cs_arith = cs_max = jac_ie = None
+    if metrics_mode in ("full", "ie"):
+        jac_ie = _jaccard_ie_from_containments(c_ab, c_ba)
+    if metrics_mode == "full":
+        cs_geom, cs_arith, cs_max = _cosketch_from_containments(c_ab, c_ba)
+
+    similarity_measures, tag = _metrics_shape(metrics_mode)
 
     out_path = get_new_prefix(
         outprefix=args.outprefix,
@@ -391,11 +460,9 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches,
         expA=args.expA,
         kmer_size=args.kmer_size,
         window_size=args.window_size,
+        metrics_tag=tag,
     ) + ".csv"
 
-    similarity_measures = (
-        ["jaccard_similarity", "jaccard_similarity_ie"] + _CONTAINMENT_COLS
-    )
     # ref1/ref2 are always emitted (trailing, "NA" outside bed2fasta mode) so
     # the Mode D header stays fixed and cross-reference provenance is recorded.
     header = _build_header(args, similarity_measures) + ["ref1", "ref2"]
@@ -406,12 +473,14 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches,
         for i, qlabel in enumerate(query_labels):
             for j, rlabel in enumerate(ref_labels):
                 row = _row_prefix(args, qlabel, rlabel)
-                row.extend([
-                    float(jac[i, j]), float(jac_ie[i, j]),
-                    float(c_ab[i, j]), float(c_ba[i, j]),
-                    float(cs_geom[i, j]), float(cs_arith[i, j]), float(cs_max[i, j]),
-                    ref1, ref2,
-                ])
+                row.extend(_metrics_row_values(
+                    metrics_mode, jac, jac_ie, c_ab, c_ba,
+                    cs_geom, cs_arith, cs_max, i, j))
+                # ref1/ref2 trailing columns are Mode-D-specific (see
+                # _build_header above) and independent of metrics_mode --
+                # always appended after the similarity columns, for every
+                # shape, matching the header built above.
+                row.extend([ref1, ref2])
                 w.writerow(row)
 
     if args.verbose:
@@ -558,10 +627,20 @@ def run(args) -> int:
 
     if args.verbose:
         print("Computing pairwise Jaccard + containment...", file=sys.stderr)
+    # See the matching comment in _write_mode_d_csv: this call is
+    # unconditional regardless of shape -- the Python binding always
+    # computes the fused union pass, so "re" is not cheaper than "full" on
+    # this front-end (docs/seed-metrics-column-restructure.md Part 2).
     jaccard, c_ab, c_ba = _core.pairwise_metrics_hll(
         query_sketches, ref_sketches, threads=getattr(args, "omp_threads", 0) or 0)
-    cs_geom, cs_arith, cs_max = _cosketch_from_containments(c_ab, c_ba)
-    jac_ie = _jaccard_ie_from_containments(c_ab, c_ba)
+    metrics_mode = getattr(args, "metrics_mode", "full")
+    cs_geom = cs_arith = cs_max = jac_ie = None
+    if metrics_mode in ("full", "ie"):
+        jac_ie = _jaccard_ie_from_containments(c_ab, c_ba)
+    if metrics_mode == "full":
+        cs_geom, cs_arith, cs_max = _cosketch_from_containments(c_ab, c_ba)
+
+    similarity_measures, tag = _metrics_shape(metrics_mode)
 
     out_path = get_new_prefix(
         outprefix=args.outprefix,
@@ -574,10 +653,9 @@ def run(args) -> int:
         expA=args.expA,
         kmer_size=args.kmer_size,
         window_size=args.window_size,
+        metrics_tag=tag,
     ) + ".csv"
 
-    similarity_measures = (["jaccard_similarity", "jaccard_similarity_ie"]
-                           + _CONTAINMENT_COLS)
     header = _build_header(args, similarity_measures)
 
     with open(out_path, "w", newline="") as f:
@@ -588,11 +666,9 @@ def run(args) -> int:
             for j, r in enumerate(refs):
                 rlabel = _label(r, args.full_paths)
                 row = _row_prefix(args, qlabel, rlabel)
-                row.extend([
-                    float(jaccard[i, j]), float(jac_ie[i, j]),
-                    float(c_ab[i, j]), float(c_ba[i, j]),
-                    float(cs_geom[i, j]), float(cs_arith[i, j]), float(cs_max[i, j]),
-                ])
+                row.extend(_metrics_row_values(
+                    metrics_mode, jaccard, jac_ie, c_ab, c_ba,
+                    cs_geom, cs_arith, cs_max, i, j))
                 w.writerow(row)
 
     if args.verbose:

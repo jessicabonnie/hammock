@@ -54,10 +54,14 @@ Design and how-to-rerun live in `README.md`.
 > is now confirmed on real data rather than inferred.
 >
 > **Binary version.** These runs used a pre-0.7.0 `hammock-cpp`, when 3-column
-> output was the default and `--no-metrics` did not exist. `run_sweep.py` has
-> since been updated to require ≥ 0.7.0 and to pass `--no-metrics` explicitly,
-> so a re-run produces the same 3-column shape and comparable timings — but it
-> is a different binary, not the one that produced the tables below.
+> output was the default and no opt-out flag existed. `run_sweep.py` has since
+> been updated to require ≥ 0.7.0 and to pass the reduced-column arm flag
+> explicitly (`--register-equality`; was `--no-metrics` before the
+> three-shape restructure, `docs/seed-metrics-column-restructure.md`), so a
+> re-run produces the reduced-column shape (`query`/`reference`/
+> `jaccard_similarity`/`register_equality_similarity`) and comparable
+> timings — but it is a different binary, not the one that produced the
+> tables below.
 
 ---
 
