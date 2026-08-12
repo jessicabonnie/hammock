@@ -1369,9 +1369,14 @@ the file; that description was wrong. The actual sites:
   metric from discovery on any freshly regenerated Mode D CSV — no error, no
   `stop()`. Fix: accept either name per-file, mapping both to one canonical
   label, not a literal match against `"jaccard_similarity"` alone.
-- `scan_dir()`'s `jcols` parameter defaults to `"jaccard_similarity"`
-  (`:160`, `read_hammock_csv()`) and is exercised live — the ABC scan call at
-  `:282` doesn't override it. `:147`'s `j_truth = as.numeric(jaccard_similarity)`
+- `read_hammock_csv()`'s `jcol` (singular) parameter defaults to
+  `"jaccard_similarity"` at `:160`; `scan_dir()`'s own `jcols` (plural)
+  default is the separate call site at `:249` (corrected by round 2
+  review — an earlier draft conflated the two into one `:160` citation).
+  `scan_dir()` loops `jcols` and calls `read_hammock_csv(jcol=jc)` per
+  candidate, and is exercised live — the ABC scan call at `:282` doesn't
+  override it, so `read_hammock_csv`'s hard `stop()` on a missing `jcol` is
+  reachable on that path. `:147`'s `j_truth = as.numeric(jaccard_similarity)`
   is a bare NSE read against `raw_abc/hammock_hll_p21_jaccB_full.csv` (not
   one of Step 1's 5 rewritten CSVs).
 - Five downstream `filter(column == "jaccard_similarity", ...)` sites, not
@@ -1432,20 +1437,36 @@ walked its sibling files):
   that basis. The figure-numbering scheme there looks superseded relative to
   the live manuscript; noted as a residual observation, not a reason to skip
   the fix.
-- `scripts/exp_a_metric_comparison.R:38,84,100` (`metric_groups` tribble →
+- `scripts/exp_a_metric_comparison.R:36,84,100` (corrected by round 2
+  review — the `tribble(` defining `metric_groups` starts at `:36`, not
+  `:38`) (`metric_groups` tribble →
   `pull(.data[[metric]])` → `write_tsv`) — **silent degradation, not a
   crash**: the file already filters to present columns and prints a generic
   "skipping" message, so the row just vanishes with no distinguishing
   signal. In scope via `docs/paper_outline.md:372,389` ("Fig S1"), same
   standard as above.
-- `scripts/exp_a_validate_plot.R` — **no code fix needed in this file
-  itself.** Its `sim_col` is fully parameterized
-  (`snakemake@params[["sim_col"]]`, `:34`); the hardcoded literal actually
-  lives in `workflow/Snakefile:180` (`sim_col = "jaccard_similarity"`, a
-  `params:` block), one file outside this directory's originally-assigned
-  4-file list. Fix belongs in the Snakefile: resolve to a
-  `reg_eq_similarity`-preferred value there instead. In scope via
-  `docs/paper_outline.md:69,148` ("Fig 3"), same standard.
+- `scripts/exp_a_validate_plot.R` — **corrected by this Step's round 2
+  review: the original citation was simply wrong** (`docs/paper_outline.md:69,148`
+  is blank/unrelated prose, not this script — that document's actual "Fig 3"
+  is `mode_d_bedtools_vs_modeB_scatter.png`, a different file entirely).
+  Real chain, two-hop like the primate-phylogeny/mus-homo §9.6 citation
+  elsewhere in this Step: `docs/paper_outline.md` → `experiments/ref-comparison/docs/exp_a_results.md`
+  (which names this script and its `cross_ref_validation.png`/
+  `cross_ref_stats.tsv` outputs directly) — in scope on that basis. **Fix
+  mechanism also corrected, round 2 risk/safety finding:** the original
+  plan's "fix belongs in the Snakefile, resolve to a `reg_eq_similarity`-
+  preferred value there" was underspecified and risky — a Snakemake
+  `params:` block is a static literal, not a function, so a naive
+  implementation would just swap the literal string with no fallback at
+  all, violating the prefer-new-fall-back-to-old requirement, and has no
+  compile/pytest safety net if done wrong. Fix instead **inside
+  `exp_a_validate_plot.R` itself**, mirroring the precedent this Step
+  already sets for the structurally identical `mus-homo/scripts/cluster_plot.R`
+  case below: resolve `sim_col` from `mat`'s actual columns (prefer
+  `reg_eq_similarity`, fall back to the Snakemake-passed
+  `snakemake@params[["sim_col"]]` literal, log the fallback), leaving
+  `experiments/ref-comparison/workflow/Snakefile:180`'s literal untouched as
+  an unused legacy default — no Snakefile edit needed after all.
 
 **`experiments/subB_mixed_stride/run_sweep.py:130-131` already has a
 name-tolerance OR-chain with its own silent-degradation bug, found by
@@ -1471,12 +1492,16 @@ which names both scripts and their numbers directly) —
 `experiments/primate-phylogeny/` and `experiments/mus-homo/`:**
 - `primate-phylogeny/estimator_ie_topology.py:67`
   (`re_j[(a,b)] = float(row["jaccard_similarity"])`) — hard `KeyError`.
-- `primate-phylogeny/scripts/build_phylogeny.R:82`
-  (`intersect(all_metrics, names(mat_long))`) — silent degradation (row
-  quietly drops from `metric_spreads.tsv`).
-- `primate-phylogeny/scripts/build_phylogeny.R:110-118,160`
-  (`build_and_plot("jaccard_similarity", ...)`, hardcoded call-site
-  literal) — silent degradation, the worse of the two: on a missing column
+- `primate-phylogeny/scripts/build_phylogeny.R:82,86` (corrected by round 2
+  review — the `all_metrics` literal vector is defined at `:82`, the
+  `intersect(all_metrics, names(mat_long))` consuming it is at `:86`, not
+  both at `:82` as an earlier draft said) — silent degradation (row quietly
+  drops from `metric_spreads.tsv`).
+- `primate-phylogeny/scripts/build_phylogeny.R:160` (corrected by round 2
+  review — `:110-118` is the parameterized `build_and_plot` function
+  *definition*, not a hardcoded site; the only actual hardcoded call-site
+  literal, `build_and_plot("jaccard_similarity", ...)`, is at `:160` alone)
+  — silent degradation, the worse of the two: on a missing column
   it writes an empty Newick/dist file and a placeholder PNG, and the
   Snakemake rule still reports success. This is the file behind the
   primate-clade-recovery headline the citation chain rests on. Fix: resolve
@@ -1524,7 +1549,16 @@ doc already applies):**
   provenance document, and produces only ephemeral stdout under `/vast`, not
   a tracked artifact. Left unfixed per the "not provably in scope"
   standard — flagged here, in writing, so a future toucher of this file
-  knows the hazard exists rather than discovering it fresh.
+  knows the hazard exists rather than discovering it fresh. **Severity note,
+  added by round 2 review:** this failure mode gets *worse* once Step 1
+  lands — today it only misfires on a CSV that happens to lack the column;
+  after Step 1, every freshly-generated hammock CSV lacks it (emitters carry
+  no back-compat; only Step 2's readers get a fallback, and this script
+  isn't one of them), so silent corruption becomes this script's permanent
+  behavior, not an occasional hazard. **Also add this file as a named
+  exception to Step 4's "Done when" grep bar**, below, so its known,
+  deliberately-unfixed literal doesn't read as an unaddressed leftover at
+  that gate.
 - `experiments/mus-homo/scripts/compute_column_comparison.{R,py}` — already
   broken by the earlier, unrelated `_with_ends` column removal
   (self-documented "OBSOLETE... DOES NOT RUN on current output"), same
@@ -1533,6 +1567,36 @@ doc already applies):**
 - `experiments/primate-phylogeny/config/config.yaml:36`'s `primary_sim_col`
   value — confirmed by grep that nothing in that experiment tree actually
   reads this key; no functional fix needed.
+- `experiments/ref-comparison/config/config.yaml:25`'s `primary_sim_col`
+  value — same as the primate-phylogeny case above (found by round 2 review,
+  the exactly-analogous exclusion for this directory was never stated):
+  confirmed by grep that nothing in `ref-comparison/` reads this key; no
+  functional fix needed.
+- **Three more `experiments/maurano_dhs_validation/` scripts, found by round
+  2 review, missed despite `analyze.R` in the same directory getting the
+  deepest treatment in this whole plan** — all three read `jaccard_similarity`
+  as a bare literal, and all three were checked against all three provenance
+  documents (`paper/outline.md`, `paper/draft.md`, `docs/paper_outline.md`)
+  with zero citations found for any of their output figures, so none is
+  provably in scope:
+  - `mode_c_interpolation.R:44,50,52,58` (`select(..., jaccard_similarity)`/
+    `rename(j_A = jaccard_similarity)`) — would hard-error post-Step-1;
+    outputs (`mode_c_subB_interpolation_agg.png`,
+    `mode_c_expA_interpolation_agg.png`) cited nowhere.
+  - `render_dendrogram.R:27` (`jcol <- ... else "jaccard_similarity"`) — a
+    standalone CLI utility's hardcoded default; not cited anywhere.
+  - `make_metric_plots.R:35,114` (`filter(column == "jaccard_similarity",
+    ...)`) — silent degradation (empty filter, no error) if left. Its
+    outputs (`mode_d_lines_p24.png`, `mode_d_violins_by_k.png`) share
+    filenames with the in-scope `docs/scripts/mode_d_lines.R`/
+    `mode_d_violins.R` outputs but read from a *different*, untracked
+    source (`results/mode_d_summary.csv`, a symlink into scratch, not the
+    tracked `docs/data/mode_d_summary.csv`); `PLOT_GENERATION.md` marks it
+    "executed... archived spec, not an outstanding task." Left out of scope
+    on the same "not provably in scope" standard as the rest of this list,
+    recorded here rather than silently omitted so a future pass doesn't
+    mistake this for an oversight — matching the same reasoning already
+    applied elsewhere in this doc (e.g. Scope F's closing paragraph).
 
 **Reading `mode_d_summary.csv`'s `column` field (category B2), specifically:**
 **six consumers, not five** (corrected 2026-08-12 by Step 1's round-1 risk/
@@ -1568,32 +1632,73 @@ scripts have no pytest/`cpp/tests`-equivalent safety net, so "the review
 gate confirms the pattern was applied" is not sufficient on its own, found
 by review:** before this Step's commits can be called verified, run every
 edited script at least once against a real input in each of its two
-fallback branches where feasible (against one of Step 1's already-renamed
-archived CSVs for the "prefers `reg_eq_similarity`" branch, and against an
-unmodified older archived CSV or a synthetic pre-rename-header fixture for
-the "falls back to `jaccard_similarity`" branch), confirming non-empty,
-non-`NA` output and the expected log line in each case — not deferring this
-entirely to Step 3's expensive full regenerate-and-diff pass, which is a
-correctness *proof*, not a cheap syntax/logic check. Record per-file
-pass/fail in the commit message(s).
+fallback branches where feasible, confirming non-empty, non-`NA` output and
+the expected log line in each case — not deferring this entirely to Step
+3's expensive full regenerate-and-diff pass, which is a correctness *proof*,
+not a cheap syntax/logic check. Record per-file pass/fail in the commit
+message(s). **Made concrete for the full expanded scope, round 2 finding —
+the original wording only covered the handful of scripts reading Step 1's
+specific 5 rewritten archived CSVs, not the majority of this Step's now-much
+larger scope:**
+- For scripts reading one of Step 1's 5 rewritten CSVs
+  (`plot_interval_accuracy.R`, `plot_cross_reference_identity.R` on
+  `exp_a_broad_k10_w10.csv`): use those files directly for the
+  "prefers `reg_eq_similarity`" branch, an unmodified archived CSV predating
+  Step 1 for the fallback branch.
+- For everything else (the large majority — `plot_sequence_tissue_clustering.R`,
+  the six `mode_d_summary.csv` consumers, `analyze.R`, `estimator_compare.py`/
+  `sweep.py`/`estimator_ie_crossref.py`, the ref-comparison and cross-species
+  scripts): generate a small fresh CSV by running the worktree's own
+  post-Step-1 `hammock`/`hammock-cpp` build for the "prefers" branch, and
+  reuse any convenient pre-Step-1 archived CSV (or a small synthetic
+  pre-rename-header fixture) for the fallback branch.
+- **`exp_a_validate_plot.R` and `mus-homo/scripts/cluster_plot.R` are
+  Snakemake `script:`-directive files**, not directly `Rscript`-runnable —
+  they reference an injected `snakemake@params[[...]]` S4 object. Verify
+  either by invoking `snakemake -R <rule>` against a minimal/mocked DAG, or
+  by stubbing a `snakemake` S4 object with the needed `params`/`input`/
+  `output` slots at the top of an interactive session before `source()`-ing
+  the script body — state which was used in the commit message, since a
+  plain `Rscript script.R` will not exercise these two.
+- Verification runs of `exp_a_dendrogram.R`/`exp_a_metric_comparison.R`
+  should write to a scratch path, not their real default output paths —
+  see the residual-risk note below for why.
 
 **Accepted residual risk, recorded in writing per this doc's own rule,
-found by review:** Step 2 updates several generating scripts (`analyze.R`,
-`estimator_compare.py`, `sweep.py`, the `ref-comparison`/cross-species
-scripts) to emit `reg_eq_similarity`-preferring output, but does **not**
-regenerate the tracked CSVs those scripts produce (`docs/data/mode_d_summary.csv`,
-the three `paper/*_stats.csv` files, `results/exp_a_estimator_delta.csv`,
-etc. — Step 3 does that). Between Step 2 landing and Step 3 regenerating,
-anyone who runs one of these updated generators against a mix of pre- and
-post-Step-1 raw hammock CSVs on this worktree branch could silently produce
-a locally-regenerated file that diverges from what's checked in. Same class
-of risk Step 1's review gate already accepted in writing for
-`plot_interval_accuracy.R`/`plot_cross_reference_identity.R`'s transient-
-breakage window; accepted here on the same grounds — nothing in this plan
-runs these generators during that window, the worktree branch never touches
-`main` before Step 4's merge, and Step 3's regenerate-and-diff is
-specifically designed to catch exactly this class of drift before it could
-reach `main`.
+found by review, corrected by round 2 review:** Step 2 updates several
+generating scripts (`analyze.R`, `estimator_compare.py`, `sweep.py`, the
+`ref-comparison`/cross-species scripts) to emit `reg_eq_similarity`-
+preferring output, but does **not** regenerate the tracked CSVs/figures
+those scripts produce (Step 3 does that). Between Step 2 landing and Step 3
+regenerating, anyone who runs one of these updated generators against a mix
+of pre- and post-Step-1 raw hammock CSVs on this worktree branch could
+silently produce a locally-regenerated file that diverges from what's
+checked in. Same class of risk Step 1's review gate already accepted in
+writing for `plot_interval_accuracy.R`/`plot_cross_reference_identity.R`'s
+transient-breakage window; accepted here on the same grounds — nothing in
+this plan runs these generators during that window (the verification runs
+above write to scratch paths, not real output paths, precisely to keep it
+that way), the worktree branch never touches `main` before Step 4's merge,
+and Step 3's regenerate-and-diff is specifically designed to catch exactly
+this class of drift before it could reach `main`. **The specific tracked
+files at risk, corrected — round 2 found the original list both wrong and
+incomplete:** `docs/data/mode_d_summary.csv` and the three
+`paper/*_stats.csv` files are tracked and at risk, as originally stated.
+`results/exp_a_estimator_delta.csv` is **not** — it's gitignored
+(`experiments/ref-comparison/.gitignore:2`), confirmed via `git check-ignore
+-v`, so removed from this list. **Missing from the original list entirely:
+7 force-tracked figures under `experiments/ref-comparison/figures/`**
+(`cross_ref_dendrogram_k10_w10.png`, `cross_ref_dendrogram_k15_w15.png`,
+`cross_ref_validation_broad_k10_w10.png`, `metric_comparison_broad_k10_w10.png`,
+`metric_comparison_narrow_k10_w10.png`, `sweep_effect_size_broad.png`,
+`sweep_effect_size_narrow.png`) — tracked via `git ls-files` despite the
+directory being gitignored, and the actual manuscript figure sources for
+Figs 7/S1. `exp_a_dendrogram.R`/`exp_a_metric_comparison.R` (both edited by
+this Step) default-write to exactly these paths, so a verification run that
+doesn't redirect output would clobber them with locally-regenerated,
+not-yet-Step-3-proven data — the verification methodology above now says to
+write to scratch instead, closing this specific instance of the risk rather
+than just accepting it.
 
 **Review gate:** 3 reviewers confirm the fallback pattern (with logging) is
 applied consistently, that every coupled site-group above was edited
@@ -1673,6 +1778,68 @@ implementation proceeds.**
 **Review gate round 2, run 2026-08-12 (3 fresh parallel passes against the
 revised plan text above):**
 
+- **Process/convention fit:** repo state confirmed (`main` at `b871ddb`
+  going in, worktree still untouched at `6cce6d3`, both clean). Round 1's
+  own classification (materially altered the diff, not mechanical) was
+  independently re-judged correct — the re-run itself is warranted. One
+  blocking finding, since fixed above: `exp_a_validate_plot.R`'s
+  `docs/paper_outline.md:69,148` citation is factually wrong (that
+  location is a different figure entirely) — corrected, and the fix
+  mechanism moved from an underspecified Snakefile edit to matching the
+  already-established `cluster_plot.R` in-script-resolution precedent. One
+  process observation, addressed by this write-up itself: this round's
+  findings needed to actually be recorded in the doc, not just referenced —
+  done here.
+- **Scope completeness:** the deep site citations spot-checked
+  (`plot_sequence_tissue_clustering.R`'s five-site chain, `analyze.R`'s
+  discovery gate and five filter sites, `estimator_compare.py`/`sweep.py`,
+  the ref-comparison and cross-species scripts, all six exclusion calls)
+  held up, modulo the mechanical line-drift corrections folded in above
+  (`exp_a_metric_comparison.R:36` not `:38`; `build_phylogeny.R:82,86` and
+  `:160` not `:82`/`:110-118,160`; `analyze.R`'s `read_hammock_csv`/
+  `scan_dir` defaults disentangled to `:160`/`:249`). One blocking gap,
+  closed above: three more `experiments/maurano_dhs_validation/` scripts
+  (`mode_c_interpolation.R`, `render_dendrogram.R`, `make_metric_plots.R`)
+  and `experiments/ref-comparison/config/config.yaml:25`'s unused
+  `primary_sim_col` key were never evaluated despite `analyze.R` in the same
+  directory getting the deepest treatment in the whole plan — all four
+  independently checked against every provenance document and confirmed
+  correctly excludable, now recorded as explicit out-of-scope calls rather
+  than silent omissions.
+- **Risk/safety:** two blocking findings, both closed above. The
+  `ref-comparison/workflow/Snakefile:180` fix as originally planned risked
+  becoming an unconditional rename with no fallback (a Snakemake `params:`
+  block is a static literal, not a function) and had no orchestration-layer
+  safety net — closed by dropping the Snakefile edit entirely and resolving
+  inside `exp_a_validate_plot.R` itself, the same precedent already used for
+  `cluster_plot.R`. The "Accepted residual risk" paragraph both overstated
+  one risk (`results/exp_a_estimator_delta.csv` is gitignored, not tracked)
+  and missed a real one (7 force-tracked figures under
+  `experiments/ref-comparison/figures/` that the edited dendrogram/
+  metric-comparison scripts default-write to) — corrected, and the
+  verification methodology now requires scratch-path output so the risk is
+  closed rather than merely re-accepted. Confirmed clean on the other five
+  checks: `cluster_plot.R`'s fix is safe (single consumer of `sim_col`, no
+  other downstream re-read by name); zero test coverage anywhere for any
+  newly-added file (matches and extends round 1); `precision_probe.sh`'s
+  "left unfixed, flagged" framing needed a severity escalation note and a
+  named Step-4 exception, both added above; commit 3's bundling concern is
+  substantially reduced now that the Snakefile edit is gone (one fewer,
+  higher-risk, no-safety-net change mixed into that commit).
+
+Every blocking finding from both round-1 and round-2 has now been folded
+into the plan text above, in writing, per this doc's own "resolved in
+writing" rule — none deferred as a verbal/chat-only resolution. The round-2
+findings themselves are corrections and strengthenings of already-agreed
+scope (a citation fix, a fix-location change within an already-in-scope
+file, an out-of-scope determination for four more files, a residual-risk
+correction, a verification-methodology concretization) — none of them
+expand what gets edited beyond what round 1 already settled, so per
+"Review process"'s re-run rule this is the "purely mechanical" class and
+does not require a third round.
+
+**Step 2 is ready to implement.** Proceeding to the actual edits.
+
 **Commit:** revised from "one" to **four**, split by risk/verification
 profile — found more appropriate by this Step's own review gate given the
 now much larger and more heterogeneous scope than the original one-commit
@@ -1687,8 +1854,10 @@ rather than defaulting to one commit):
 2. `experiments/maurano_dhs_validation/analyze.R` alone, given its size and
    the discovery-gate finding's importance.
 3. The other `experiments/` generators — `estimator_compare.py`, `sweep.py`,
-   `estimator_ie_crossref.py`, the 3 `ref-comparison/scripts/*.R` files plus
-   the `workflow/Snakefile:180` fix, `run_sweep.py`'s OR-chain extension.
+   `estimator_ie_crossref.py`, the 3 `ref-comparison/scripts/*.R` files
+   (`exp_a_validate_plot.R`'s fix now lives entirely in the R script itself,
+   per round 2's correction above — no Snakefile edit in this commit),
+   `run_sweep.py`'s OR-chain extension.
 4. The cross-species pair — `primate-phylogeny/`, `mus-homo/`, including the
    `cluster_plot.R`/Snakemake-param-chain fix.
 
@@ -1867,11 +2036,14 @@ Step 2's backward-compat fallback string literals in paper/experiments code
 (`else "jaccard_similarity"` and equivalents — these are *supposed* to
 survive, they're what makes old archived CSVs still parse); (c) historical
 seed/CLAUDE.md/memory entries explicitly marked as superseded/historical;
-and (d) nothing else describing it as the current column *or method or
-binding* name — after Step 1b, `grep -rn 'jaccard_similarity(' cpp/
-bindings/` (the call-syntax form, not the CSV-string form) should return
-nothing at all, since that Step removes the identifier everywhere it was a
-name rather than a string.
+(d) `experiments/primate-phylogeny/scripts/precision_probe.sh:106` — Step
+2's review gate deliberately left this one literal unfixed (not provably in
+scope, see that Step's write-up), so its survival here is expected, not a
+leftover to chase down; and (e) nothing else describing it as the current
+column *or method or binding* name — after Step 1b, `grep -rn
+'jaccard_similarity(' cpp/ bindings/` (the call-syntax form, not the
+CSV-string form) should return nothing at all, since that Step removes the
+identifier everywhere it was a name rather than a string.
 
 **Then stop and report.** Step 4 ends in a merge to `main`, so there's no
 further Step to hold off on — but still stop here and report the final
