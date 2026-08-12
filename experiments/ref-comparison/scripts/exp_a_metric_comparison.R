@@ -33,27 +33,9 @@ csv_file <- args[1]; meta_file <- args[2]
 out_png  <- args[3]; out_tsv   <- args[4]
 peak_lbl <- if (length(args) >= 5) args[5] else "broad"
 
-mat  <- read_csv(csv_file,  show_col_types = FALSE)
-
-# Resolve the live register-equality column name before building the
-# tribble, so both the read (via metric_groups$metric, below) and the
-# re-emitted `metric` value in out_tsv use the resolved name. Prefer the
-# post-rename `reg_eq_similarity`; fall back to the legacy
-# `jaccard_similarity` for archived CSVs written before
-# docs/seed-jaccard-reg-eq-rename.md's Step 1 -- logged only when the
-# fallback actually fires (i.e. `reg_eq_similarity` is genuinely absent),
-# kept as its own message distinct from the generic "skipping" note below so
-# the two don't read as duplicates of each other.
-reg_eq_col <- if ("reg_eq_similarity" %in% names(mat)) "reg_eq_similarity" else "jaccard_similarity"
-if (!("reg_eq_similarity" %in% names(mat))) {
-  message("exp_a_metric_comparison.R: 'reg_eq_similarity' column not found ",
-          "in ", basename(csv_file), "; falling back to legacy ",
-          "'jaccard_similarity' column name (pre-rename hammock output).")
-}
-
 metric_groups <- tribble(
   ~metric,                          ~flavor,           ~kind,
-  reg_eq_col,                       "minimizer",       "jaccard",
+  "jaccard_similarity",             "minimizer",       "jaccard",
   "containment_AB",                 "minimizer",       "containment_AB",
   "containment_BA",                 "minimizer",       "containment_BA",
   "cosketch_geom",                  "minimizer",       "cosketch_geom",
@@ -70,6 +52,7 @@ metric_groups <- tribble(
   "jaccard_similarity_ie_with_ends","minimizer+ends",  "jaccard_ie"
 )
 
+mat  <- read_csv(csv_file,  show_col_types = FALSE)
 missing_metrics <- setdiff(metric_groups$metric, names(mat))
 if (length(missing_metrics) > 0) {
   message("note: ", length(missing_metrics), " metric column(s) absent from ",

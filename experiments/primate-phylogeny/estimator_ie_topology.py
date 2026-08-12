@@ -58,31 +58,13 @@ def _tag(path: str) -> str:
     return os.path.basename(path)[: -len(".fa")]
 
 
-_REG_EQ_FALLBACK_LOGGED = False
-
-
-def _reg_eq_value(row: dict) -> float:
-    """Register-equality similarity for a CSV row: prefer `reg_eq_similarity`,
-    fall back to the legacy `jaccard_similarity` name for archived pre-rename
-    files. Logs the fallback once per script run, not once per row."""
-    global _REG_EQ_FALLBACK_LOGGED
-    if "reg_eq_similarity" in row:
-        return float(row["reg_eq_similarity"])
-    if not _REG_EQ_FALLBACK_LOGGED:
-        print("estimator_ie_topology.py: 'reg_eq_similarity' column not found, "
-              "falling back to legacy 'jaccard_similarity' (archived pre-rename CSV?)",
-              file=sys.stderr)
-        _REG_EQ_FALLBACK_LOGGED = True
-    return float(row["jaccard_similarity"])
-
-
 def load_pair(path):
     """Return (names, D_re, D_ie, offdiag_re, offdiag_ie)."""
     re_j, ie_j = {}, {}
     with open(path) as fh:
         for row in csv.DictReader(fh):
             a, b = _tag(row["file1"]), _tag(row["file2"])
-            re_j[(a, b)] = _reg_eq_value(row)
+            re_j[(a, b)] = float(row["jaccard_similarity"])
             ie_j[(a, b)] = float(_ie(np.array([[float(row["containment_AB"])]]),
                                      np.array([[float(row["containment_BA"])]]))[0, 0])
     names = [t for t in TAXA if (t, t) in re_j]

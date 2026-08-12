@@ -26,30 +26,16 @@ cairo_png_in <- function(filename, width, height, ...) {
 }
 
 # ── Snakemake I/O ─────────────────────────────────────────────────────────
-mat_file          <- snakemake@input[["matrix"]]
-meta_file         <- snakemake@input[["metadata"]]
-out_dendro        <- snakemake@output[["dendrogram"]]
-out_pca           <- snakemake@output[["pca"]]
-out_clusters      <- snakemake@output[["clusters"]]
-# workflow/Snakefile:155 passes config.yaml's `primary_sim_col`
-# ("jaccard_similarity") as this param -- an inert legacy default now, kept
-# untouched deliberately (a static Snakemake `params:` literal has no
-# fallback capability of its own). The live column name is resolved below
-# from mat_long's actual columns instead: prefer `reg_eq_similarity`, fall
-# back to this Snakemake-passed literal for archived pre-rename CSVs.
-snakemake_sim_col <- snakemake@params[["sim_col"]]
+mat_file     <- snakemake@input[["matrix"]]
+meta_file    <- snakemake@input[["metadata"]]
+out_dendro   <- snakemake@output[["dendrogram"]]
+out_pca      <- snakemake@output[["pca"]]
+out_clusters <- snakemake@output[["clusters"]]
+sim_col      <- snakemake@params[["sim_col"]]
 
 mat_long <- read_csv(mat_file, show_col_types = FALSE)
 meta     <- read_tsv(meta_file, show_col_types = FALSE) %>%
             select(sample_id, tissue, species, ref)
-
-if ("reg_eq_similarity" %in% names(mat_long)) {
-  sim_col <- "reg_eq_similarity"
-} else {
-  message("cluster_plot.R: 'reg_eq_similarity' column not found, falling back to ",
-          "Snakemake-passed sim_col '", snakemake_sim_col, "' (archived pre-rename CSV?)")
-  sim_col <- snakemake_sim_col
-}
 
 mat_long <- mat_long %>%
   mutate(
