@@ -11,10 +11,10 @@ replicate (the same _rotate-style anti-confound benchmark_cpp_vs_bedtools.py
 uses elsewhere).
 
 Both front-ends now share the three-shape metrics contract
-(docs/seed-metrics-column-restructure.md): bare/no-flag emits only
-`jaccard_similarity_ie`, `--register-equality`/`--re` emits
-`jaccard_similarity` + `register_equality_similarity`, `--metrics` emits the
-full 8-column block. Neither arm here reads any CSV column (this script only
+(docs/seed-metrics-column-restructure.md, docs/seed-jaccard-reg-eq-rename.md):
+bare/no-flag emits only `jaccard_similarity_ie`, `--register-equality`/`--re`
+emits `reg_eq_similarity` alone, `--metrics` emits the full 7-column block.
+Neither arm here reads any CSV column (this script only
 times wall-clock), so: `cli_cmd` below is always the bare/`_ie` invocation
 (previously the CLI's only option, since it had no metrics flag at all before
 this contract existed -- PART9 (docs/seed-metrics-column-restructure.md)

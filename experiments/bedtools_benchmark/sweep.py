@@ -133,8 +133,8 @@ def parse_hammock_csv(path: str, column: str = "jaccard_similarity"):
     Returns {(query, reference): value}. Column lookup is by name, not
     position: the three metrics shapes have different widths -- the bare
     default is 3 total columns (query, reference, jaccard_similarity_ie),
-    --register-equality is 4 (+ jaccard_similarity, register_equality_similarity),
-    and --metrics is 10 (query, reference + 8 metric columns) -- so an index
+    --register-equality is 3 (query, reference, reg_eq_similarity), and
+    --metrics is 9 (query, reference + 7 metric columns) -- so an index
     would silently read containment_AB as if it were a Jaccard.
 
     When `column` is the default `"jaccard_similarity"` (the register-
@@ -175,8 +175,8 @@ def parse_hammock_csv(path: str, column: str = "jaccard_similarity"):
             raise KeyError(
                 f"{path} has no {lookup_column!r} column (header: {header}). "
                 f"Re-run hammock-cpp with --metrics (or --register-equality "
-                f"if `column` is jaccard_similarity/register_equality_similarity/"
-                f"reg_eq_similarity).") from None
+                f"if `column` is reg_eq_similarity or the legacy "
+                f"jaccard_similarity).") from None
         for line in f:
             parts = line.rstrip("\n").split("\t")
             if len(parts) <= idx:

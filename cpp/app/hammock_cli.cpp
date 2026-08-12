@@ -137,16 +137,13 @@ void print_help(const char* prog) {
         "                          hashed (default: tab). This is not the output\n"
         "                          delimiter; changing it changes every sketch and breaks\n"
         "                          comparability with the Python CLI.\n"
-        "  --metrics               Emit the full 8-column block: reg_eq_similarity,\n"
+        "  --metrics               Emit the full 7-column block: reg_eq_similarity,\n"
         "                          jaccard_similarity_ie, containment_AB, containment_BA,\n"
-        "                          cosketch_geom, cosketch_arith, cosketch_max,\n"
-        "                          register_equality_similarity (the last a literal\n"
-        "                          duplicate of reg_eq_similarity). Tags the output\n"
-        "                          filename '_full'. Mutually exclusive with\n"
+        "                          cosketch_geom, cosketch_arith, cosketch_max. Tags the\n"
+        "                          output filename '_full'. Mutually exclusive with\n"
         "                          --register-equality/--re.\n"
-        "  --register-equality,    Emit reg_eq_similarity and register_equality_\n"
-        "  --re                    similarity (a literal duplicate of it) -- the cheap\n"
-        "                          register-equality-only arm, skipping the union/\n"
+        "  --register-equality,    Emit reg_eq_similarity alone -- the cheap\n"
+        "  --re                    register-equality-only arm, skipping the union/\n"
         "                          containment pass entirely. Tags the output filename\n"
         "                          '_re'. Mutually exclusive with --metrics.\n"
         "                          Default (neither flag given): emit jaccard_similarity_ie\n"
@@ -170,10 +167,10 @@ void print_help(const char* prog) {
         "  where <shape> is exactly one of ie (default), re (--register-equality/--re), or\n"
         "  full (--metrics) -- every run is tagged, none stays bare. Columns by shape:\n"
         "    ie:   query, reference, jaccard_similarity_ie\n"
-        "    re:   query, reference, reg_eq_similarity, register_equality_similarity\n"
+        "    re:   query, reference, reg_eq_similarity\n"
         "    full: query, reference, reg_eq_similarity, jaccard_similarity_ie,\n"
         "          containment_AB, containment_BA, cosketch_geom, cosketch_arith,\n"
-        "          cosketch_max, register_equality_similarity\n"
+        "          cosketch_max\n"
         "  Inputs are always named by basename; there is no --full-paths here. Note the\n"
         "  metric columns match the Python CLI bit-for-bit, but the row layout does not:\n"
         "  the Python CSV is comma-delimited and carries extra metadata columns.\n";
@@ -405,19 +402,18 @@ int main(int argc, char** argv) {
         return 1;
     }
     // Header + stride vary 3 ways: Ie (1 col: jaccard_similarity_ie), Full
-    // (8 cols: the containment/cosketch block plus a register_equality_
-    // similarity duplicate), RegisterEquality (2 cols: reg_eq_similarity
-    // and its literal duplicate). Order and names must match runner.py's
-    // _metrics_shape bit-for-bit -- see tests/test_hammock_cpp_metrics.py.
+    // (7 cols: reg_eq_similarity, jaccard_similarity_ie, and the containment/
+    // cosketch block), RegisterEquality (1 col: reg_eq_similarity alone).
+    // Order and names must match runner.py's _metrics_shape bit-for-bit --
+    // see tests/test_hammock_cpp_metrics.py.
     switch (args.metrics_mode) {
         case MetricsMode::Full:
             std::fprintf(fp, "query\treference\treg_eq_similarity\tjaccard_similarity_ie"
                              "\tcontainment_AB\tcontainment_BA"
-                             "\tcosketch_geom\tcosketch_arith\tcosketch_max"
-                             "\tregister_equality_similarity\n");
+                             "\tcosketch_geom\tcosketch_arith\tcosketch_max\n");
             break;
         case MetricsMode::RegisterEquality:
-            std::fprintf(fp, "query\treference\treg_eq_similarity\tregister_equality_similarity\n");
+            std::fprintf(fp, "query\treference\treg_eq_similarity\n");
             break;
         case MetricsMode::Ie:
             std::fprintf(fp, "query\treference\tjaccard_similarity_ie\n");
@@ -426,8 +422,8 @@ int main(int argc, char** argv) {
 
     const size_t n = queries.size();
     const size_t m = refs.size();
-    const size_t stride = (args.metrics_mode == MetricsMode::Full) ? 8
-                         : (args.metrics_mode == MetricsMode::RegisterEquality) ? 2 : 1;
+    const size_t stride = (args.metrics_mode == MetricsMode::Full) ? 7
+                         : (args.metrics_mode == MetricsMode::RegisterEquality) ? 1 : 1;
     std::vector<double> matrix(n * m * stride);
 
     // Ie and Full both need the union pass (Ie derives jaccard_similarity_ie
@@ -477,7 +473,7 @@ int main(int argc, char** argv) {
                     // Cheap arm: one register-equality pass, no union, no
                     // cardinality estimate. Must stay this way -- see the
                     // MetricsMode comment above.
-                    cell[0] = cell[1] = qsk[i]->reg_eq_similarity(*rsk[j]);
+                    cell[0] = qsk[i]->reg_eq_similarity(*rsk[j]);
                     continue;
                 }
                 // reg_jac is the register-equality value (CSV column
@@ -486,11 +482,8 @@ int main(int argc, char** argv) {
                 // fused union pass, not by calling reg_eq_similarity()
                 // directly (that only happens in the qh[i]/rh[j]-null
                 // fallback branch just below). Ie discards it (its column is
-                // derived from containments below); Full writes it to both
-                // cell[0] (reg_eq_similarity) and cell[7] (register_equality_
-                // similarity), reusing the one computed value so the two are
-                // bit-identical, not merely equal-by-value -- matching
-                // runner._metrics_row_values' j_val reuse.
+                // derived from containments below); Full writes it to
+                // cell[0] (reg_eq_similarity) alone.
                 double reg_jac, u;
                 if (qh[i] && rh[j]) {
                     qh[i]->reg_eq_and_union_cardinality(*rh[j], reg_jac, u);
@@ -514,7 +507,6 @@ int main(int argc, char** argv) {
                     cell[4] = std::sqrt(std::max(c_ab * c_ba, 0.0));
                     cell[5] = 0.5 * (c_ab + c_ba);
                     cell[6] = std::max(c_ab, c_ba);
-                    cell[7] = reg_jac;
                 }
             } catch (const std::exception& e) {
 #pragma omp critical

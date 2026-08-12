@@ -32,10 +32,10 @@ def _metrics_shape(metrics_mode: str) -> tuple:
     `metrics_mode` ("ie"/"re"/"full")."""
     if metrics_mode == "full":
         return (["reg_eq_similarity", "jaccard_similarity_ie"]
-                 + _CONTAINMENT_COLS + ["register_equality_similarity"],
+                 + _CONTAINMENT_COLS,
                  "full")
     if metrics_mode == "re":
-        return (["reg_eq_similarity", "register_equality_similarity"], "re")
+        return (["reg_eq_similarity"], "re")
     return (["jaccard_similarity_ie"], "ie")
 
 
@@ -43,22 +43,16 @@ def _metrics_row_values(metrics_mode: str, jac, jac_ie, c_ab, c_ba,
                         cs_geom, cs_arith, cs_max, i: int, j: int) -> list:
     """Per-pair values matching `_metrics_shape`'s column list, in order.
 
-    `register_equality_similarity` is a literal duplicate of
-    `reg_eq_similarity` -- computed once into `j_val` and reused, so the two
-    columns are guaranteed byte-identical rather than merely equal-by-value.
     Only reads the arrays its own branch needs: callers that skip computing
     `jac_ie`/`cs_geom`/`cs_arith`/`cs_max` for "re" (which never uses them)
     rely on that -- do not add a code path here that reads them outside the
     "full"/"ie" branches.
     """
     if metrics_mode == "full":
-        j_val = float(jac[i, j])
-        return [j_val, float(jac_ie[i, j]), float(c_ab[i, j]), float(c_ba[i, j]),
-                float(cs_geom[i, j]), float(cs_arith[i, j]), float(cs_max[i, j]),
-                j_val]
+        return [float(jac[i, j]), float(jac_ie[i, j]), float(c_ab[i, j]), float(c_ba[i, j]),
+                float(cs_geom[i, j]), float(cs_arith[i, j]), float(cs_max[i, j])]
     if metrics_mode == "re":
-        j_val = float(jac[i, j])
-        return [j_val, j_val]
+        return [float(jac[i, j])]
     return [float(jac_ie[i, j])]
 
 
@@ -137,7 +131,7 @@ def _print_estimator_note(args) -> None:
               "comparable to bedtools.", file=sys.stderr)
         return
     if mode == "re":
-        print("note: reg_eq_similarity/register_equality_similarity is "
+        print("note: reg_eq_similarity is "
               "register-equality -- biased high, and the bias depends on both "
               "sketch load and |A|/|B|, so rank only within comparable pairs.",
               file=sys.stderr)

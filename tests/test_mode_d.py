@@ -53,10 +53,7 @@ def test_mode_d_runs_and_self_jaccard_is_one(tmp_path: Path) -> None:
         "file1", "file2", "sketch_type", "mode",
         "precision", "num_hashes", "kmer_size", "window_size",
         "reg_eq_similarity", "jaccard_similarity_ie", *cont_block,
-        # register_equality_similarity is the full shape's trailing column
-        # (a literal duplicate of reg_eq_similarity), appended before the
-        # Mode-D-specific ref1/ref2 trailer.
-        "register_equality_similarity",
+        # Mode-D-specific trailer, appended after the similarity block.
         "ref1", "ref2",
     ]
     # self-pair must be Jaccard = 1.0 (and containment = 1.0).
@@ -70,8 +67,7 @@ def test_mode_d_runs_and_self_jaccard_is_one(tmp_path: Path) -> None:
     # identical registers the union estimate equals both cardinalities
     # bitwise, so inter = 2c - c = c exactly and 1/(1 + 1 - 1) == 1.0.
     for name in ("reg_eq_similarity", "jaccard_similarity_ie",
-                 "containment_AB", "containment_BA", "cosketch_geom",
-                 "register_equality_similarity"):
+                 "containment_AB", "containment_BA", "cosketch_geom"):
         assert float(self_row[header.index(name)]) == 1.0, name
 
 

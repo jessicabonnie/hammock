@@ -70,11 +70,6 @@ _PROJECTED_OUT = {
     # against orig's differently-named `jaccard_similarity` -- is still
     # compared, by column position (see `_projected_rows`), not by name.
     "jaccard_similarity_ie",
-    # Same reasoning: register_equality_similarity (added by --register-equality
-    # / --metrics, docs/seed-metrics-column-restructure.md Part 2) is a literal
-    # duplicate of reg_eq_similarity written under a second name. Orig has no
-    # counterpart column; reg_eq_similarity itself is still compared byte-equal.
-    "register_equality_similarity",
 }
 
 
