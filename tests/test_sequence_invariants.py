@@ -30,7 +30,7 @@ def test_minimizer_sketch_is_case_insensitive() -> None:
     # Soft-masked (lowercase) input must produce an identical sketch.
     # Case-insensitivity comes from `digest` itself, not from any hammock-side
     # uppercasing -- the ends sketch that used to do that is gone (divergence #8).
-    assert up.minimizer_hll.estimate_jaccard(lo.minimizer_hll) == pytest.approx(1.0)
+    assert up.minimizer_hll.estimate_reg_eq_similarity(lo.minimizer_hll) == pytest.approx(1.0)
 
 
 @digest_only

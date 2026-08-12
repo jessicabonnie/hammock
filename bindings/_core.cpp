@@ -318,14 +318,14 @@ PYBIND11_MODULE(_core, m) {
              py::arg("s"),
              "Hash a string with XXH64(seed=0) and add to the sketch.")
         .def("estimate_cardinality", &HLLSketch::cardinality)
-        .def("estimate_jaccard",
+        .def("estimate_reg_eq_similarity",
              [](const HLLSketch& self, const HLLSketch& other) {
                  return self.reg_eq_similarity(other);
              },
              py::arg("other"))
         // Inclusion-exclusion |A| + |B| - |A u B|, clamped at 0 — the estimator
         // behind the containment/cosketch columns, and a different quantity
-        // from estimate_jaccard's register-equality statistic. Exposed so the
+        // from estimate_reg_eq_similarity's register-equality statistic. Exposed so the
         // two paths are separately testable; see
         // tests/test_containment_estimator.py.
         .def("estimate_intersection",

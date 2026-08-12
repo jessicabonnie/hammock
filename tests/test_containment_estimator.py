@@ -76,7 +76,7 @@ def test_disjoint_containment_near_zero_but_jaccard_column_is_not():
 
     c_ab, _ = containments(a, b)
     assert c_ab < 0.02
-    assert a.estimate_jaccard(b) > 0.10
+    assert a.estimate_reg_eq_similarity(b) > 0.10
 
 
 def test_intersection_never_negative():
@@ -116,7 +116,7 @@ def test_mismatched_precision_raises_not_aborts():
     with pytest.raises(RuntimeError):
         small.estimate_intersection(big)
     with pytest.raises(RuntimeError):
-        big.estimate_jaccard(small)
+        big.estimate_reg_eq_similarity(small)
 
 
 def test_pairwise_metrics_mismatched_precision_raises_not_aborts():
@@ -140,7 +140,7 @@ def test_pairwise_metrics_matches_scalar_path():
     for i, sa in enumerate(a):
         for j, sb in enumerate(b):
             inter = sa.estimate_intersection(sb)
-            assert jac[i][j] == pytest.approx(sa.estimate_jaccard(sb))
+            assert jac[i][j] == pytest.approx(sa.estimate_reg_eq_similarity(sb))
             assert c_ab[i][j] == pytest.approx(inter / sa.estimate_cardinality())
             assert c_ba[i][j] == pytest.approx(inter / sb.estimate_cardinality())
 
@@ -204,7 +204,7 @@ def test_pairwise_metrics_exactly_matches_scalar_path(precision):
         for j, sb in enumerate(b):
             inter = sa.estimate_intersection(sb)
             ca, cb = sa.estimate_cardinality(), sb.estimate_cardinality()
-            assert jac[i][j] == sa.estimate_jaccard(sb)
+            assert jac[i][j] == sa.estimate_reg_eq_similarity(sb)
             assert c_ab[i][j] == ((inter / ca) if ca > 0 else 0.0)
             assert c_ba[i][j] == ((inter / cb) if cb > 0 else 0.0)
 
@@ -235,7 +235,7 @@ def test_pairwise_metrics_exact_on_degenerate_sketches():
         for j, sb in enumerate(b):
             inter = sa.estimate_intersection(sb)
             ca, cb = sa.estimate_cardinality(), sb.estimate_cardinality()
-            assert jac[i][j] == sa.estimate_jaccard(sb)
+            assert jac[i][j] == sa.estimate_reg_eq_similarity(sb)
             assert c_ab[i][j] == ((inter / ca) if ca > 0 else 0.0)
             assert c_ba[i][j] == ((inter / cb) if cb > 0 else 0.0)
 
@@ -254,7 +254,7 @@ def test_pairwise_metrics_exact_at_extreme_size_ratio():
     jac, c_ab, c_ba = _core.pairwise_metrics_hll(a, b)
     inter = tiny.estimate_intersection(huge)
     ca, cb = tiny.estimate_cardinality(), huge.estimate_cardinality()
-    assert jac[0][0] == tiny.estimate_jaccard(huge)
+    assert jac[0][0] == tiny.estimate_reg_eq_similarity(huge)
     assert c_ab[0][0] == ((inter / ca) if ca > 0 else 0.0)
     assert c_ba[0][0] == ((inter / cb) if cb > 0 else 0.0)
 
@@ -495,4 +495,4 @@ def test_fused_matches_scalar_path_on_the_flajolet_fallback(precision):
         inter = a.estimate_intersection(b)
         assert c_ab[0][0] == ((inter / ca) if ca > 0 else 0.0)
         assert c_ba[0][0] == ((inter / cb) if cb > 0 else 0.0)
-        assert jac[0][0] == a.estimate_jaccard(b)
+        assert jac[0][0] == a.estimate_reg_eq_similarity(b)
