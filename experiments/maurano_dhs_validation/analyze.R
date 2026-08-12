@@ -64,6 +64,34 @@ strip_ext <- function(x) {
   sub("\\.(bed|fa|fasta|fna)$", "", x, ignore.case = TRUE)
 }
 
+# ── reg_eq_similarity / jaccard_similarity fallback (rename in progress) ────
+# jaccard_similarity was renamed reg_eq_similarity
+# (docs/seed-jaccard-reg-eq-rename.md Step 1) -- it's the register-equality
+# statistic, not set Jaccard. This script both reads hammock output and
+# re-emits the value into several downstream CSVs, so every read site below
+# prefers the new name and falls back to the old one per-file for archived
+# CSVs Step 1 didn't rewrite. jaccard_similarity_ie is a different, unrelated
+# column and is never touched by this fallback.
+REG_EQ_COL        <- "reg_eq_similarity"
+REG_EQ_LEGACY_COL <- "jaccard_similarity"
+REG_EQ_VALUES     <- c(REG_EQ_COL, REG_EQ_LEGACY_COL)
+
+# Log the very first fallback per run, not per row/file -- a bare presence
+# check alone can't distinguish "this is a legitimately old archived file"
+# from "a fresh run silently regressed and is still writing the old name"
+# (e.g. a partial merge that reverted runner.py's rename but not
+# hammock_cli.cpp's).
+.reg_eq_fallback_logged <- FALSE
+log_reg_eq_fallback <- function(context) {
+  if (!.reg_eq_fallback_logged) {
+    message("Note: '", REG_EQ_COL, "' not found, falling back to legacy '",
+            REG_EQ_LEGACY_COL, "' (first seen at: ", context, "). Expected ",
+            "for archived pre-rename files; unexpected for a freshly ",
+            "regenerated one.")
+    .reg_eq_fallback_logged <<- TRUE
+  }
+}
+
 # ── matrix + clustering helpers (used both for figures and for ARI/NMI) ─────
 to_matrix <- function(df) {
   # df has stem1/stem2/j_hat (extension stripped). Symmetrize, fill diag=1.
@@ -142,9 +170,16 @@ n_tissues <- length(unique(tissue_label_vec))
 # is a sharper question than asking whether it agrees with bedtools.
 modeB_path <- file.path(results_dir, "raw_abc", "hammock_hll_p21_jaccB_full.csv")
 modeB_ref <- if (file.exists(modeB_path)) {
-  read_csv(modeB_path, show_col_types = FALSE) %>%
+  modeB_raw <- read_csv(modeB_path, show_col_types = FALSE)
+  modeB_col <- if (REG_EQ_COL %in% names(modeB_raw)) {
+    REG_EQ_COL
+  } else {
+    log_reg_eq_fallback(modeB_path)
+    REG_EQ_LEGACY_COL
+  }
+  modeB_raw %>%
     transmute(stem1 = strip_ext(file1), stem2 = strip_ext(file2),
-              j_truth = as.numeric(jaccard_similarity))
+              j_truth = as.numeric(.data[[modeB_col]]))
 } else {
   warning("Mode B p=21 reference not found at ", modeB_path)
   NULL
@@ -157,7 +192,16 @@ read_hammock_csv <- function(path, jcol = NULL) {
   # hammock v0.6.0 (CLAUDE.md divergence #8) after it was shown to track
   # bedtools less cleanly on this very corpus. Archived CSVs still have it.
   df <- read_csv(path, show_col_types = FALSE)
-  if (is.null(jcol)) jcol <- "jaccard_similarity"
+  if (is.null(jcol)) jcol <- REG_EQ_COL
+  # reg_eq_similarity was renamed from jaccard_similarity
+  # (docs/seed-jaccard-reg-eq-rename.md Step 1); CSVs written before that
+  # rename still carry the old header. Prefer the new name, fall back to the
+  # old one per-file, logging the fallback once per run.
+  if (identical(jcol, REG_EQ_COL) && !(jcol %in% names(df)) &&
+      REG_EQ_LEGACY_COL %in% names(df)) {
+    log_reg_eq_fallback(path)
+    jcol <- REG_EQ_LEGACY_COL
+  }
   # The CSVs under raw_d/ predate the jaccard_similarity_ie column (v0.4.0) but
   # already carry the containments it is derived from, so recover it here rather
   # than resweeping 235 configurations. Mirrors
@@ -246,7 +290,7 @@ parse_d_name <- function(stem) {
          w = as.integer(m[4]))
 }
 
-scan_dir <- function(dir, parser, jcols = "jaccard_similarity",
+scan_dir <- function(dir, parser, jcols = REG_EQ_COL,
                      refs = list(bedtools = NULL),
                      do_clustering = FALSE) {
   # `refs` is a named list of reference dataframes (each with stem1, stem2,
@@ -325,7 +369,7 @@ if (!is.null(modeB_ref)) d_refs$mode_B <- modeB_ref
 # list: current Mode D output carries this entire minimizer block. The removed
 # `_with_ends` family is intentionally absent even when archived CSVs contain it.
 d_metric_order <- c(
-  "jaccard_similarity", "jaccard_similarity_ie",
+  REG_EQ_COL, "jaccard_similarity_ie",
   "containment_AB", "containment_BA",
   "cosketch_geom", "cosketch_arith", "cosketch_max"
 )
@@ -333,10 +377,21 @@ d_files <- list.files(d_dir, pattern = "\\.csv$", full.names = TRUE)
 d_headers <- lapply(d_files, function(p) {
   names(read_csv(p, n_max = 0, show_col_types = FALSE))
 })
+# reg_eq_similarity was renamed from jaccard_similarity
+# (docs/seed-jaccard-reg-eq-rename.md Step 1). Accept either name per-file,
+# mapping both to the one canonical REG_EQ_COL label below -- the old
+# `metric %in% header` check alone required the literal old name in *every*
+# scanned file's header, which would silently drop the metric from discovery
+# the moment raw_d/ contains a mix of pre- and post-rename CSVs.
 metric_available <- function(metric, header) {
   metric %in% header ||
+    (identical(metric, REG_EQ_COL) && REG_EQ_LEGACY_COL %in% header) ||
     (identical(metric, "jaccard_similarity_ie") &&
        all(c("containment_AB", "containment_BA") %in% header))
+}
+if (any(vapply(d_headers, function(h)
+    !(REG_EQ_COL %in% h) && (REG_EQ_LEGACY_COL %in% h), logical(1)))) {
+  log_reg_eq_fallback("Mode D discovery gate (raw_d/*.csv headers)")
 }
 d_metrics <- Filter(
   function(metric) {
@@ -359,8 +414,16 @@ if (nrow(d) > 0) {
   write_csv(d_out, file.path(results_dir, "mode_d_summary.csv"))
   cat("Wrote results/mode_d_summary.csv (", nrow(d_out), "rows)\n")
 
+  # Both the canonical REG_EQ_COL ("reg_eq_similarity") and the pre-rename
+  # REG_EQ_LEGACY_COL ("jaccard_similarity") map to the same output label --
+  # d_out$column can carry either depending on which name a given raw_d/
+  # file's header used (see read_hammock_csv()'s fallback above) -- so both
+  # keys must resolve identically for downstream consumers (e.g. the
+  # pivot_wider(names_from = col_short, ...) below, which bakes this exact
+  # string into hardcoded column names like `ari_register_equality`).
   short_col <- function(x) dplyr::recode(
     x,
+    reg_eq_similarity = "register_equality",
     jaccard_similarity = "register_equality",
     jaccard_similarity_ie = "ie",
     .default = x
@@ -370,7 +433,7 @@ if (nrow(d) > 0) {
   # Keep the existing published figures on their declared primary estimator.
   # The complete discovered metric block is available in mode_d_summary.csv;
   # adding summary metrics must not silently redraw every historical heatmap.
-  d_plot     <- d_out %>% filter(column == "jaccard_similarity")
+  d_plot     <- d_out %>% filter(column %in% REG_EQ_VALUES)
   d_bedtools <- d_plot %>% filter(reference == "bedtools")
   d_modeB    <- d_plot %>% filter(reference == "mode_B")
   n_p <- length(unique(d_plot$precision))
@@ -451,7 +514,7 @@ if (nrow(d) > 0) {
 
   # ── Pearson vs Spearman per config (scatter, one panel) ─────────────────
   ps <- d_bedtools %>%
-    filter(column == "jaccard_similarity", !is.na(pearson), !is.na(spearman))
+    filter(column %in% REG_EQ_VALUES, !is.na(pearson), !is.na(spearman))
   p_ps <- ggplot(ps, aes(x = pearson, y = spearman,
                          colour = factor(precision))) +
     geom_abline(slope = 1, intercept = 0, colour = "grey50", linetype = "dashed") +
@@ -468,7 +531,7 @@ if (nrow(d) > 0) {
   # ── r vs bedtools  vs  r vs Mode B per config (scatter, one panel) ──────
   if (!is.null(modeB_ref)) {
     refs_wide <- d_out %>%
-      filter(column == "jaccard_similarity", !is.na(pearson)) %>%
+      filter(column %in% REG_EQ_VALUES, !is.na(pearson)) %>%
       select(k, w, precision, reference, pearson) %>%
       pivot_wider(names_from = reference, values_from = pearson) %>%
       filter(!is.na(bedtools), !is.na(mode_B))
@@ -489,7 +552,7 @@ if (nrow(d) > 0) {
 
   # ── Metric tradeoff: Pearson r vs ARI per config (the headline tradeoff) ─
   tr <- d_bedtools %>%
-    filter(column == "jaccard_similarity", !is.na(pearson), !is.na(ari)) %>%
+    filter(column %in% REG_EQ_VALUES, !is.na(pearson), !is.na(ari)) %>%
     mutate(label = sprintf("k=%d w=%d p=%d", k, w, precision))
   best_pear <- tr %>% arrange(desc(pearson)) %>% slice(1)
   best_ari  <- tr %>% arrange(desc(ari))     %>% slice(1)
@@ -547,7 +610,7 @@ if (nrow(d) > 0) {
     else            z <- z %>% arrange(.data[[col_name]])
     z %>% slice(1)
   }
-  b_pool <- d_bedtools %>% filter(column == "jaccard_similarity")
+  b_pool <- d_bedtools %>% filter(column %in% REG_EQ_VALUES)
   cat("\nBest Mode D configs (column=jaccard_similarity, ref=bedtools):\n")
   for (m in c("pearson", "spearman", "ari", "nmi")) {
     b <- pick_best(b_pool, m, descending = TRUE)
@@ -751,7 +814,7 @@ if (!is.null(best_d_path)) {
     d_mat,
     sprintf("Mode D k=%d w=%d p=%d (%s)  —  ARI = %.3f, NMI = %.3f",
             best$k, best$w, best$precision,
-            sub("jaccard_similarity", "no_ends", best_d_col),
+            sub(paste0(REG_EQ_COL, "|", REG_EQ_LEGACY_COL), "no_ends", best_d_col),
             best_ari_val, best_nmi_val),
     draw_clusters = TRUE
   )
