@@ -57,7 +57,6 @@ dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 
 PRECISION <- 24
 REFERENCE <- "bedtools"
-SIM_COLUMNS <- c("jaccard_similarity", "jaccard_similarity_ie")
 FIG6_K <- 10
 FIG6_W <- 30
 ARI_TOL <- 1e-12
@@ -78,6 +77,20 @@ if (length(missing_cols) > 0) {
   stop(basename(summary_csv), " lacks columns: ", paste(missing_cols, collapse = ", "), call. = FALSE)
 }
 
+# `column` is a data value (the metric name a summary row is about), not a CSV
+# header, so the reg_eq_similarity/jaccard_similarity fallback here is a value
+# comparison against unique(raw$column) rather than a names(df) presence check
+# -- see docs/seed-jaccard-reg-eq-rename.md Step 2. Logged once per script run.
+resolve_reg_eq_value <- function(column_values) {
+  if ("reg_eq_similarity" %in% column_values) return("reg_eq_similarity")
+  message(
+    "reg_eq_similarity not found in 'column' values; falling back to jaccard_similarity"
+  )
+  "jaccard_similarity"
+}
+REG_EQ_COL <- resolve_reg_eq_value(unique(raw$column))
+SIM_COLUMNS <- c(REG_EQ_COL, "jaccard_similarity_ie")
+
 # Supplement the staged paper copy from the experiment summary if a newer
 # estimator has not yet been staged into docs/data.
 missing_metrics <- setdiff(SIM_COLUMNS, unique(raw$column))
@@ -94,10 +107,7 @@ if (length(missing_metrics) > 0) {
 }
 
 panel_levels <- c("A  Register equality", "B  Inclusion–exclusion Jaccard")
-panel_lookup <- c(
-  jaccard_similarity = panel_levels[[1]],
-  jaccard_similarity_ie = panel_levels[[2]]
-)
+panel_lookup <- setNames(panel_levels, c(REG_EQ_COL, "jaccard_similarity_ie"))
 
 sweep <- raw %>%
   filter(
@@ -129,7 +139,7 @@ sweep <- sweep %>% mutate(k_label = factor(as.character(k), levels = as.characte
 
 # Compare ARI cell-by-cell with only base merge + dplyr; no tidyr dependency.
 re <- sweep %>%
-  filter(column == "jaccard_similarity") %>%
+  filter(column == REG_EQ_COL) %>%
   select(k, w, ari_re = ari)
 ie <- sweep %>%
   filter(column == "jaccard_similarity_ie") %>%

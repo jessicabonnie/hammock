@@ -56,7 +56,6 @@ repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 K <- 10
 W <- 30
 P <- 24
-DEFAULT_SIM_COL <- "jaccard_similarity"
 
 experiment_dir <- file.path(repo_root, "experiments", "maurano_dhs_validation")
 default_csv <- file.path(
@@ -72,7 +71,10 @@ argv <- commandArgs(trailingOnly = TRUE)
 input_csv <- if (length(argv) >= 1) argv[1] else default_csv
 key_tsv <- if (length(argv) >= 2) argv[2] else default_key
 out_png <- if (length(argv) >= 3) argv[3] else default_output
-sim_col <- if (length(argv) >= 4 && nzchar(argv[4])) argv[4] else DEFAULT_SIM_COL
+# Resolved below, once `raw` is loaded, so the reg_eq_similarity/
+# jaccard_similarity fallback (see resolve_sim_col()) can inspect the actual
+# columns present in the input CSV. An explicit CLI override always wins.
+sim_col_arg <- if (length(argv) >= 4 && nzchar(argv[4])) argv[4] else NA_character_
 
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 for (path in c(input_csv, key_tsv)) {
@@ -214,6 +216,20 @@ key <- read_tsv(key_tsv, show_col_types = FALSE) %>%
   transmute(stem = strip_ext(File), tissue = Biosample_term_name)
 
 raw <- add_jaccard_ie(read_csv(input_csv, show_col_types = FALSE))
+
+# Prefer the renamed register-equality column; archived pre-Step-1 CSVs only
+# have jaccard_similarity, so fall back to it and log that we did (once per
+# run, not per row) -- see docs/seed-jaccard-reg-eq-rename.md Step 2.
+resolve_sim_col <- function(explicit, df) {
+  if (!is.na(explicit)) return(explicit)
+  if ("reg_eq_similarity" %in% names(df)) return("reg_eq_similarity")
+  message(
+    "reg_eq_similarity not found in input CSV; falling back to jaccard_similarity"
+  )
+  "jaccard_similarity"
+}
+sim_col <- resolve_sim_col(sim_col_arg, raw)
+
 required_cols <- c("file1", "file2", sim_col)
 missing_cols <- setdiff(required_cols, names(raw))
 if (length(missing_cols) > 0) {
@@ -268,7 +284,7 @@ partition_signature <- function(p) {
 }
 
 agreement <- bind_rows(lapply(
-  intersect(c("jaccard_similarity", "jaccard_similarity_ie"), names(raw)),
+  intersect(c(sim_col, "jaccard_similarity_ie"), names(raw)),
   function(cl) {
     h <- hclust(as.dist(1 - similarity_matrix(raw, cl)), method = "average")
     p <- cutree(h, k = n_tissues)
@@ -283,7 +299,7 @@ agreement <- bind_rows(lapply(
   }
 ))
 
-ref_signature <- agreement$signature[agreement$column == "jaccard_similarity"]
+ref_signature <- agreement$signature[agreement$column == sim_col]
 agreement$partition_identical <- if (length(ref_signature) == 1) {
   agreement$signature == ref_signature
 } else {
@@ -353,7 +369,7 @@ plot(
   hc,
   hang = -1,
   labels = FALSE,
-  main = if (identical(sim_col, DEFAULT_SIM_COL)) {
+  main = if (is.na(sim_col_arg)) {
     "Sequence sketches recover fetal-tissue organization"
   } else {
     sprintf("Sequence sketches recover fetal-tissue organization (%s)", sim_col)

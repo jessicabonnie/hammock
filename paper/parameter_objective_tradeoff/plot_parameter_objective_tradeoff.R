@@ -67,7 +67,6 @@ for (path in c(out_png, out_ie_png)) {
 if (!file.exists(summary_csv)) stop("Input file not found: ", summary_csv, call. = FALSE)
 
 PRECISION <- 24
-SIM_COLUMNS <- c("jaccard_similarity", "jaccard_similarity_ie")
 REFERENCE <- "bedtools"
 FIG6_K <- 10
 FIG6_W <- 30
@@ -90,6 +89,20 @@ if (length(missing_cols) > 0) {
     paste(missing_cols, collapse = ", "), call. = FALSE
   )
 }
+
+# `column` is a data value (the metric name a summary row is about), not a CSV
+# header, so the reg_eq_similarity/jaccard_similarity fallback here is a value
+# comparison against unique(raw$column) rather than a names(df) presence check
+# -- see docs/seed-jaccard-reg-eq-rename.md Step 2. Logged once per script run.
+resolve_reg_eq_value <- function(column_values) {
+  if ("reg_eq_similarity" %in% column_values) return("reg_eq_similarity")
+  message(
+    "reg_eq_similarity not found in 'column' values; falling back to jaccard_similarity"
+  )
+  "jaccard_similarity"
+}
+REG_EQ_COL <- resolve_reg_eq_value(unique(raw$column))
+SIM_COLUMNS <- c(REG_EQ_COL, "jaccard_similarity_ie")
 
 missing_metrics <- setdiff(SIM_COLUMNS, unique(raw$column))
 if (length(missing_metrics) > 0) {

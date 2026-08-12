@@ -88,7 +88,7 @@ COL_GRID <- "#D9DEE3"
 COL_TEXT <- "#20262D"
 base_family <- "sans"
 
-EST_RE <- "Register-equality (jaccard_similarity)"
+EST_RE <- "Register-equality (reg_eq_similarity)"
 EST_IE <- "Inclusion–exclusion (jaccard_similarity_ie)"
 EST_LEVELS <- c(EST_IE, EST_RE)
 EST_COLORS <- setNames(c(COL_IE, COL_RE), EST_LEVELS)
@@ -148,10 +148,29 @@ bedtools_pairs <- bedtools_raw %>%
   unordered_pairs(file1, file2) %>%
   transmute(.a, .b, is_self, bedtools_jaccard = jaccard)
 
+# Prefer the renamed register-equality column; archived pre-Step-1 CSVs only
+# have jaccard_similarity, so fall back to it and log that we did (once per
+# script run, not once per input file) -- see
+# docs/seed-jaccard-reg-eq-rename.md Step 2.
+.sim_col_fallback_logged <- FALSE
+resolve_sim_col <- function(df, context = NULL) {
+  if ("reg_eq_similarity" %in% names(df)) return("reg_eq_similarity")
+  if (!.sim_col_fallback_logged) {
+    message(
+      "reg_eq_similarity not found",
+      if (!is.null(context)) paste0(" (", context, ")") else "",
+      "; falling back to jaccard_similarity"
+    )
+    .sim_col_fallback_logged <<- TRUE
+  }
+  "jaccard_similarity"
+}
+
 read_hammock <- function(path, precision) {
   raw <- read_csv(path, show_col_types = FALSE)
+  sim_col <- resolve_sim_col(raw, basename(path))
   required_hammock <- c(
-    "file1", "file2", "jaccard_similarity", "jaccard_similarity_ie"
+    "file1", "file2", sim_col, "jaccard_similarity_ie"
   )
   missing_hammock <- setdiff(required_hammock, names(raw))
   if (length(missing_hammock) > 0) {
@@ -168,8 +187,8 @@ read_hammock <- function(path, precision) {
     transmute(
       .a, .b, is_self,
       precision = as.integer(precision),
-      `Register-equality (jaccard_similarity)` = jaccard_similarity,
-      `Inclusion–exclusion (jaccard_similarity_ie)` = jaccard_similarity_ie
+      !!EST_RE := .data[[sim_col]],
+      !!EST_IE := jaccard_similarity_ie
     ) %>%
     pivot_longer(
       cols = all_of(c(EST_RE, EST_IE)),

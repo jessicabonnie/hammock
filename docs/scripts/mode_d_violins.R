@@ -44,8 +44,21 @@ theme_pub <- theme_minimal(base_size = 13) +
 raw <- read_csv(file.path(data_dir, "mode_d_summary.csv"),
                 show_col_types = FALSE)
 
+# `column` holds a data value naming which metric a summary row is about, not
+# a CSV header, so the reg_eq_similarity/jaccard_similarity fallback here is a
+# value comparison against unique(raw$column), not a names(df) presence check.
+# See docs/seed-jaccard-reg-eq-rename.md Step 2.
+reg_eq_value <- if ("reg_eq_similarity" %in% unique(raw$column)) {
+  "reg_eq_similarity"
+} else {
+  message(
+    "reg_eq_similarity not found in 'column' values; falling back to jaccard_similarity"
+  )
+  "jaccard_similarity"
+}
+
 d_long <- raw |>
-  filter(column == "jaccard_similarity", reference == "bedtools") |>
+  filter(column == reg_eq_value, reference == "bedtools") |>
   select(k, w, precision, pearson, ari) |>
   pivot_longer(c(pearson, ari), names_to = "metric", values_to = "value") |>
   mutate(k = factor(k),

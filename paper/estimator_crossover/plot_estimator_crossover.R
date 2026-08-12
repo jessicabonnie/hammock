@@ -59,7 +59,7 @@ COL_IE <- "#D28B35"
 COL_GRID <- "#D9DEE3"
 COL_TEXT <- "#20262D"
 
-EST_RE <- "Register-equality (jaccard_similarity)"
+EST_RE <- "Register-equality (reg_eq_similarity)"
 EST_IE <- "Inclusion–exclusion (jaccard_similarity_ie)"
 EST_LEVELS <- c(EST_RE, EST_IE)
 EST_COLORS <- setNames(c(COL_RE, COL_IE), EST_LEVELS)
