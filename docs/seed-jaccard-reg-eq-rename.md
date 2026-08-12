@@ -1864,6 +1864,35 @@ rather than defaulting to one commit):
 Each commit message records its own per-file verification-script-run
 evidence per the paragraph above.
 
+**Step 2 landed as four commits on the worktree branch** (`13dd1d2` —
+`paper/` R-script reading fixes + the four `docs/scripts/mode_d_*.R` B2
+consumers, 10 files; `784117e` — `experiments/maurano_dhs_validation/analyze.R`
+alone, all 6 named sites plus the `short_col` key; `1154644` — the other
+`experiments/` generators (`estimator_compare.py`, `sweep.py`,
+`estimator_ie_crossref.py`, the 3 `ref-comparison/scripts/*.R` files
+including `exp_a_validate_plot.R`'s in-script fix, `run_sweep.py`'s OR-chain
+extension), 7 files; `ed0b0fb` — the cross-species pair
+(`primate-phylogeny/`, `mus-homo/`), 4 files). 22 files changed total
+(494 insertions, 69 deletions), matching the plan's four-way split exactly.
+Each commit's own message records its detailed per-file verification
+evidence (real archived pre- and post-Step-1 data used wherever it existed
+in this worktree, hand-built fixtures only where none did; Snakemake
+`script:`-directive files — `exp_a_validate_plot.R`, `cluster_plot.R`,
+`build_phylogeny.R` — verified via a stubbed minimal S4 `snakemake` object
+rather than a full DAG run; all generated output written to scratch, never
+clobbering tracked figures/CSVs, confirmed via `git status` after every
+run). Two pre-existing, out-of-scope bugs were hit and routed around during
+verification setup, not fixed (not this Step's job): `analyze.R`'s
+`compute_metrics_vs_ref`/`compute_cluster_metrics` erroring on
+single-row/small-sample inputs, and `estimator_ie_crossref.py`'s `main()`
+dividing by zero on a single-cell peak type.
+
+Then re-reviewed by 3 fresh adversarial subagents against the **actual
+landed diff** (correctness line-by-line, blast radius/scope, and
+verification-gap hunting) — same pattern as Steps 1/1b/1c's
+post-implementation rounds, run at the user's explicit request for this
+Step too.
+
 **Then stop.** Report and wait for the user's go-ahead before starting
 Step 3. Do not continue automatically.
 
