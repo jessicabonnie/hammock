@@ -913,3 +913,169 @@ stated "resolved in writing" requirement — not a template to re-litigate.
    `paper/*_stats.csv` files). **Resolved: update generating code in Step 2,
    regenerate + diff in Step 3**, as the doc's original leaning — user
    confirmed directly, no change to Steps 2/3's plan.
+
+## Setup inventory (completed 2026-08-12, worktree `../hammock_claude_wt_regeq` / branch `jaccard-reg-eq-rename`)
+
+Pre-flight: `squeue -u $USER` returned no running jobs — no conflicting writer
+to `docs/data/` or any `paper/*/results` directory. Worktree created clean
+off `main` at `f4cf813`.
+
+Re-ran every sweep in "Scope / current-state inventory" from scratch (grep
+sweeps, not a re-read of the snapshot). **Result: the snapshot above is
+accurate and complete — no file was added to or removed from any category.**
+Specifics below, organized by the doc's own taxonomy, each row a direct
+re-verification (not a repeat of the snapshot's prose).
+
+**A. Emitting code.** Confirmed exact sites: `runner.py:38` (`_metrics_shape`
+"re" tuple), `:34-35` ("full" tuple), `_metrics_row_values`/docstring
+`:46-47`, `_print_estimator_note` `:128-145`; `cli.py:264-273` help strings;
+`hammock_cli.cpp` — three header `fprintf`s now at `:414,420,423` (line
+numbers shifted slightly from the snapshot's ~414/420/423 estimate but same
+three lines), `--help` text `:140-173`, comments `:32,409`, and the two
+per-pair value-write sites `:480` (`RegisterEquality` branch,
+`cell[0]=cell[1]=...jaccard_similarity(...)`) and `:494`
+(`reg_jac = ...jaccard_similarity(...)`, feeding the `Full` branch's
+`cell[7]` a few lines later) — both confirmed untouched by Step 1, both
+correctly in Step 1b/Step 4's scope, not this Step's.
+
+**B. Archived CSV headers.** Re-swept **every tracked `.csv` under `paper/`,
+`docs/data/`, `experiments/`** (recursive `git ls-files`, 23 files total, not
+just a top-two-levels sample) for a header-row token match on both `,` and
+`\t` delimiters. Exactly the same 5 files match, no more, no less:
+`docs/data/exp_a_narrow_k10_w10.csv`, `docs/data/exp_a_broad_k10_w10.csv`,
+`docs/data/hammock_hll_p18_jaccB_full.csv`,
+`docs/data/hammock_hll_p21_jaccB_full.csv`,
+`docs/data/hammock_hll_p23_jaccB_full.csv`. Also checked every tracked
+`.tsv`/`.txt` under the same trees (30 files) — none carry a
+`jaccard_similarity` header; `docs/data/maurano_bedtools_ref.tsv`'s `jaccard`
+column is bedtools' own output field, a different name, correctly out of
+scope. **Collision hazard reconfirmed by direct header read**: both
+`exp_a_narrow_k10_w10.csv` and `exp_a_broad_k10_w10.csv` literally contain
+`...,jaccard_similarity,containment_AB,containment_BA,cosketch_geom,
+cosketch_arith,cosketch_max,jaccard_similarity_with_ends,
+containment_AB_with_ends,...` in that header — a non-word-boundary
+substitution would corrupt the `_with_ends` twin, exactly as the snapshot
+warned.
+
+**B2. Data-value CSVs.** `grep -c` across all 23 tracked CSVs for the literal
+string in the file body: the same 4 files, same order of magnitude as the
+snapshot — `docs/data/mode_d_summary.csv` (940), `paper/estimator_crossover/
+estimator_crossover_stats.csv` (24), `paper/interval_accuracy/
+interval_accuracy_stats.csv` (6), `paper/sequence_tissue_clustering/
+estimator_agreement_stats.csv` (2). No other tracked CSV in any of the three
+trees carries the string as a data value. Also spot-checked the specific
+`docs/data/*.csv` files that Figure 3/S6/S7/S8/S9/S10's provenance
+paragraphs cite as inputs (`cpp_vs_bedtools_t16_p18.csv`,
+`cpp_vs_bedtools_t16_p18_largeN.csv`, `sweep_threads_p18.csv`,
+`sweep_precision_maurano_p18_t{8,16}.csv`, `maurano_subB_ie_summary.csv`,
+`maurano_subB_re_vs_bedtools.csv`, `maurano_subB_summary.csv`,
+`maurano_bedtools.csv`) individually — **0 occurrences in every one of
+them**; they're timing/MAE tables with no `jaccard_similarity` column at
+all (`maurano_bedtools.csv` has a bare `jaccard` field, bedtools' own name,
+not ours). So none of the benchmark-figure provenance chains (Figures 3,
+S6-S10) pull in any B2-style file; only Figures 4, 6, 7 do, via the four
+files above — consistent with the snapshot.
+
+**C. Paper R scripts.** Re-confirmed every line number the snapshot cites,
+including the two the first-draft-correction flagged: `plot_interval_accuracy.R:91`
+(`EST_RE` label) *and* `:154` (`required_hammock` column-presence check,
+distinct from `:171`'s value read) both present as described;
+`plot_parameter_objective_tradeoff_estimators.R:60`
+(`SIM_COLUMNS <- c("jaccard_similarity", "jaccard_similarity_ie")`) present
+alongside `:98,132`; `plot_sequence_tissue_clustering.R:271`
+(`intersect(c("jaccard_similarity","jaccard_similarity_ie"), names(raw))`)
+and `:286` (`agreement$column == "jaccard_similarity"`) both present and
+confirmed coupled — `:271` builds the working set, `:286` filters a
+*different* hardcoded literal against it, exactly the silent-`NA`-if-only-
+one-edited hazard the snapshot flagged.
+
+**D. `experiments/` + `docs/scripts/` scripts.** Recursive `.py`/`.R`/`.sh`
+grep under `experiments/` returns **exactly 34 files** (the snapshot's
+count, re-derived independently, not copied): `maurano_dhs_validation/`,
+`primate-phylogeny/`, `bedtools_benchmark/`, `mus-homo/`, `modeD_flanking/`
+(correctly untouched — archival), `ref-comparison/` (4 files:
+`estimator_ie_crossref.py`, `scripts/exp_a_dendrogram.R`,
+`scripts/exp_a_metric_comparison.R`, `scripts/exp_a_validate_plot.R`),
+`subB_mixed_stride/` (6 files: `analyze_ie_subb.py`, `run_ie_subb.py`,
+`run_sweep.py`, `sbatch_maurano.sh`, `sbatch_synthetic_ie.sh`,
+`summarize_synthetic_ie.py`), `synthetic_evolution/` (1 file:
+`code/analyze.R`). `docs/scripts/` has exactly 4 of its 7 files matching —
+`mode_d_violins.R`, `mode_d_lines.R`, `mode_d_metric_tradeoff.R`,
+`mode_d_bedtools_vs_modeB_scatter.R` — the other 3
+(`maurano_speed.R`, `maurano_speed_table.R`, `synthetic_nscaling.R`) do not
+reference the column at all. Cross-checked against `paper/outline.md` and
+`paper/draft.md`'s `**Figure N generation.**` provenance paragraphs directly
+(not inferred): Figures 4, 6, 7 (and via `docs/paper_outline.md`'s
+figure-index table, Figures 3/4/6/S4 of *that* doc's own numbering) are the
+only ones whose cited inputs touch a `jaccard_similarity` column; Figures
+3/S6/S7/S8/S9/S10's cited inputs are the pure-timing files confirmed clean
+in B2 above.
+
+**No dynamically-constructed column names found.** Grepped for
+`paste0`/`sprintf`/f-string patterns that build the string
+`"jaccard_similarity"` rather than writing it as a literal — none found; the
+one `f"jaccard_similarity ..."` hit
+(`experiments/ref-comparison/estimator_ie_crossref.py:139`) is a print-message
+prefix, not a column-name construction, and the file is already correctly
+in-scope via category D.
+
+**E. Tests.** Re-grepped all 8 files; confirmed each has at least one
+literal, non-`_ie` hit needing a fix, and traced what each actually reads.
+Worth recording for Step 1's review gate (this is the parity-test check the
+motivation section asked to be verified for real, not just asserted):
+`test_parity_against_original.py`'s `_projected_rows`/`test_jaccard_byte_equal`
+comparison is **already position-effective, not name-matching** — it builds
+`keep` independently per side by filtering out only the names in
+`_PROJECTED_OUT` (which contains neither `jaccard_similarity` nor
+`reg_eq_similarity`), then compares the surviving *tuples* positionally. So
+once ours emits `reg_eq_similarity` in the same column position orig emits
+`jaccard_similarity`, the byte-equality check keeps working with **no code
+change needed** to that function — Open Question 2's "map by position, not
+name" is already satisfied by the existing implementation, not something
+Step 1 needs to newly add. The real fixes needed in this file are the two
+sites that look up *our own* header by the literal name to find a column
+index for a value read (`test_mode_b_subB_actually_subsamples:176`,
+`.split(",").index("jaccard_similarity")` against **our** CSV) — those must
+become `"reg_eq_similarity"`. Same pattern (reading our own emitted header by
+name) is the fix needed in `test_mode_d.py:115`, `test_bed2fasta_cli.py:72`,
+`test_jaccard_ie.py:241`, and the column-list/index literals in
+`test_metrics_flags.py:29,106,107,127` and
+`test_hammock_cpp_metrics.py:29,215,223`. `test_mode_d_parity.py` and
+`test_containment_estimator.py` only need prose/comment updates (no literal
+`.index("jaccard_similarity")`-style lookups found in either).
+
+**F. Docs.** The 6 doc files the snapshot names
+(`CLAUDE.md`, `README.md`, `docs/jaccard-definitional-gap.md`,
+`docs/estimator-analysis-findings.md`, `docs/paper_outline.md`,
+`docs/submittability-concerns.md`) plus `paper/methods.md`, `paper/draft.md`,
+`paper/outline.md` are confirmed to have live, current-fact prose describing
+the column (`README.md` in particular documents the column contract at
+length — lines 6, 46, 53, 60, 209, 213, 353, 364, 392 — answering the
+snapshot's open "verify whether it documents columns at all" with: yes,
+extensively, it is genuinely in Step 4's scope, not a light touch).
+
+**Found by this re-sweep, not called out in the snapshot: a broader set of
+*historical/status* docs also match the grep** (seed docs other than this
+one, dated plan/results notes, experiment READMEs) —
+`docs/bedtools-baseline-retraction.md`, `docs/figure3-panel-a-rebuild.md`,
+`docs/metrics-by-default.md`, `docs/mode-d-ends-removal.md`,
+`docs/part6-plan-draft.md`, `docs/part6-plan-v2.md`, `docs/part6-plan-v3.md`,
+`docs/precision-frontier-maurano.md`, `docs/seed-benchmark-methodology.md`,
+`docs/seed-mode-d-hash-width.md`, `docs/seed-mode-d-threading.md`,
+`docs/seed-subsampling-synthetic-supplement.md`, and per-experiment
+`README.md`/`RESULTS.md`/`docs/experiment_design.md` files under
+`experiments/bedtools_benchmark/`, `experiments/maurano_dhs_validation/`,
+`experiments/modeD_flanking/`, `experiments/mus-homo/`,
+`experiments/primate-phylogeny/`, `experiments/ref-comparison/`,
+`experiments/subB_mixed_stride/`, `experiments/synthetic_evolution/`.
+**Explicitly marked out of scope for every Step in this plan**, by the same
+reasoning already applied to `docs/seed-metrics-column-restructure.md`
+itself: these are dated records of what was true or what was measured at
+the time, not living descriptions of the current CLI contract — rewriting
+them to say `reg_eq_similarity` would misrepresent what those historical
+runs actually emitted. None of Steps 1-4 touch this list. Recorded here so
+a future pass doesn't mistake the omission for an oversight.
+
+**Conclusion: no scope changes.** The plan's Steps 1-4 as written are ready
+to execute against exactly the files already named in "Scope /
+current-state inventory" above. Proceeding to Step 1's review gate.
