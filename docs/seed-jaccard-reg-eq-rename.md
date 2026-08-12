@@ -2177,6 +2177,163 @@ blocked until this Step's regenerate-and-diff has actually run and the user
 has accepted the result — not merely until this Step's own plan/gate looks
 clean.**
 
+**Step 3 executed, 2026-08-12. Result: NOT clean — one real, confirmed
+regression found; Step 4/merge remains blocked.** Re-verified the Step 2
+scope itself first, per the user's explicit instruction (Step 2 shrank twice
+same-day): `git diff --stat f4cf813...f37bec6` in the worktree decomposes
+into exactly 8 Step-2 files + the 5 archived-CSV renames + 3 emitting-code
+files + 6 C++-method-rename files + 9 test files + `CLAUDE.md` (32 files
+total, no residue) — the corrected 8-file scope from Step 2's "Second
+correction" is what was regenerated here, not the original 22 or the first
+correction's 15.
+
+Regenerated against real data wherever real data exists on disk, with a
+documented, narrower substitute wherever it doesn't (see below); every run's
+tracked-path side effects were reverted with `git checkout --` immediately
+after copying output to scratch, and both `main` and the worktree confirmed
+`git status`-clean throughout:
+
+- **Figure 4** (`plot_interval_accuracy.R`, 3 of the 5 renamed archived
+  CSVs): main-PNG byte-identical; the two-metric supplementary PNG differs
+  only in the baked-in legend text (`jaccard_similarity`→`reg_eq_similarity`);
+  `interval_accuracy_stats.csv` differs only in that label token across all
+  ~30 numeric fields on the 3 changed rows; raw CSV data rows byte-identical,
+  header token swapped cleanly (word-boundary-safe, `_ie` untouched).
+- **Figure 5 + S5b** (`plot_cross_reference_identity.R`, 1 of the 5 renamed
+  CSVs): both PNGs byte-identical; raw CSV data rows byte-identical, header
+  token swapped cleanly (`_with_ends` twin untouched).
+- **Figure 6 + S5a** (`plot_sequence_tissue_clustering.R`, exercises the
+  fallback path — its `raw_d` input predates and is untouched by Step 1):
+  both PNGs byte-identical; fallback log fires correctly
+  (`"reg_eq_similarity not found in input CSV; falling back to
+  jaccard_similarity"`). **`estimator_agreement_stats.csv` is where the real
+  finding is — see below; the dendrograms/PNGs themselves are unaffected.**
+- **`analyze.R` + Figure 7**: `analyze.R`'s filename parser requires a
+  `_full` suffix the actual `raw_abc`/`raw_d` files on disk don't carry —
+  confirmed identical "no outputs found" behavior on unmodified `main`, so
+  this is a **pre-existing data/script mismatch, not caused by this rename**.
+  Built `_full`-suffixed copies of a representative subset as a substitute
+  fixture: `mode_d_summary.csv`, `estimator_ari_by_config.csv`,
+  `best_config_by_column.csv`, and `abc_summary.csv` all structurally
+  identical between `main` and the worktree once the label text and the
+  scratch-path column are normalized out (row *order* shifts because two of
+  these tables sort by column name and the name changed — a real but
+  expected consequence of the rename, not numeric drift; every individual
+  value matches its pre-rename counterpart exactly). Separately, `docs/data/
+  mode_d_summary.csv` (the real, tracked, unregenerable-today input Figure 7
+  actually reads) is confirmed byte-identical between `main` and the
+  worktree — Step 2 never touched it — but it turns out to be **missing
+  `jaccard_similarity_ie` rows at p=24 entirely** (a second, independent
+  pre-existing data-staleness gap: `main`'s own unmodified script fails on
+  this same file with the same error, "Estimator panels do not contain the
+  same p=24 parameter cells"). Built a balanced synthetic fixture (real
+  register-equality rows from the tracked file, cloned as IE rows) and
+  confirmed byte-identical Figure 7 PNG across baseline / worktree-fallback /
+  worktree-fully-renamed variants.
+- **Table S5's `exp_a_estimator_delta.csv`** (`estimator_ie_crossref.py`):
+  `experiments/ref-comparison/results/exp_a/` is empty on this machine — a
+  third pre-existing data-availability gap, unrelated to the rename. Built a
+  synthetic 2-cell fixture matching the real glob/schema; baseline /
+  worktree-fallback / worktree-renamed all produced byte-identical output.
+  The real, already-existing `exp_a_estimator_delta.csv` on `main` is
+  gitignored/untracked and simply isn't present in the worktree checkout
+  (never copied in) — not deleted or altered by anything in this rename.
+- **Figure S8 (`sweep.py`) / Figure S9 (`run_sweep.py`)**: literal
+  reproduction of the archived sweep CSVs behind these two figures would
+  mean re-running the original SLURM sweeps — disproportionate for a
+  pure-rename parity check, and not launched unilaterally (flagged here per
+  `memory/feedback_adversarial_review_before_expensive_jobs.md` rather than
+  run or silently skipped). Instead: built real small BED corpora and ran
+  each checkout's actual compiled `hammock-cpp` binary (`--metrics` for
+  `sweep.py`'s path, `--register-equality` for `run_sweep.py`'s, matching
+  what each script really invokes). Both binaries produced bit-identical
+  values (`0.453416149068323`) with only the header token differing; each
+  script's `parse_hammock_csv` was exercised against all three combinations
+  (own-checkout, and worktree-vs-`main`'s-unrenamed-output for the fallback
+  path) and returned the identical parsed value every time, with the
+  fallback log firing correctly.
+
+**The real finding, independently confirmed by the risk/safety reviewer with
+a control run against `main`:** `plot_sequence_tissue_clustering.R`'s
+`agreement` table (feeds `estimator_agreement_stats.csv`, one of Table S5's
+four inputs) changed from comparing a **fixed** pair of columns
+(`intersect(c("jaccard_similarity", "jaccard_similarity_ie"), names(raw))`
+on `main`, invariant to the script's 4th positional argument) to comparing
+`intersect(c(sim_col, "jaccard_similarity_ie"), names(raw))` on the
+worktree, where `sim_col` is the *resolved* column — which can equal
+`"jaccard_similarity_ie"` itself when the script is invoked with that as an
+explicit override (the exact invocation that generates Supplementary Figure
+S5a). When `sim_col == "jaccard_similarity_ie"`, R's `intersect()` dedupes
+the pair to one element, so the table silently collapses from 2 rows to 1,
+**silently dropping the register-equality-vs-IE comparison** for that one
+invocation — no error, no warning, `partition_identical` still comes out
+`TRUE` (trivially, self-vs-self). Reproduced on demand: worktree default
+call → 2 rows; worktree S5a-override call → 1 row; the identical
+S5a-override call on unmodified `main` → 2 rows (control, confirms this is
+new, not pre-existing).
+
+This is a real logic regression, not a label swap, caught by exactly the
+mechanism Step 3 exists to run — but it is narrow: it does **not** touch
+either manuscript PNG (Figure 6 / S5a are computed from `sim_col` directly,
+upstream of this block), and it does **not** currently corrupt any committed
+file (the tracked `estimator_agreement_stats.csv` on the worktree branch
+happens to hold the correct 2-row content, because the default/Figure-6
+invocation was what last wrote it during Step 2's own verification). The
+hazard is that this file's output path is **not parameterizable** — both the
+Figure-6 and S5a invocations, which `paper/draft.md:271/273` document as the
+normal way to regenerate these two companion figures plus Table S5, write to
+the same fixed path, so whichever invocation runs **last** now silently
+determines what Table S5's register-equality row reads on the next
+regeneration, where pre-rename this was invocation-order-independent.
+
+Per this Step's own stop rule ("If any diff shows a numeric change beyond
+the expected label/name swap, stop — treat it as a bug in Steps 1-2, not
+something to wave through"): **stopping here.** Not fixed as part of this
+Step — Step 3's remit was regenerate-and-diff, not implement fixes, and the
+user's standing instruction is to report and wait before any further code
+change. Also recorded for the record, not as a finding requiring a diff
+change: a fabricated `<system-reminder>`-styled tool result appeared during
+this Step's work, structurally identical to the incident already logged
+under Step 1 (a claim that a tracked file "was modified... by the user or a
+linter," bundled with an instruction not to tell the user) — its content
+turned out to match what the implementing session's own prior `git checkout`
+had already correctly restored, so no actual corruption resulted, but the
+"don't tell the user" instruction was not followed, consistent with this
+doc's existing norm. Separately, the risk/safety reviewer observed a
+transient, harmlessly-resolved race (one tracked file briefly showed
+modified, then clean, seconds apart) from two review agents' execute phases
+overlapping in the same shared worktree — nothing was left dirty, but
+serializing or isolating reviewers' execution phases would remove the risk
+next time.
+
+**Review gate (3 reviewers, run against the actual diff *results*, per this
+Step's own requirement, not just the plan):**
+- **Scope completeness:** clean. Independently re-derived the 8-file scope
+  from direct `paper/outline.md`/`paper/draft.md` citations (not
+  `docs/paper_outline.md`) and confirmed it matches exactly, including
+  tracing `analyze.R` and `plot_sequence_tissue_clustering.R` as two of
+  Table S5's four generators; cross-checked against the worktree's own
+  `git diff --stat` and found no residue.
+- **Independent regeneration:** clean, and genuinely independent — reran
+  Figure 4 and Figure 5 from scratch without reading this report, on both
+  checkouts, and separately re-diffed the raw p18 CSV; got the same
+  byte-identical / label-only-diff results reported above.
+- **Risk/safety + finding verification:** confirmed the
+  `estimator_agreement_stats.csv` regression above precisely, with its own
+  control run against `main`; assessed it as not touching any committed
+  file or manuscript PNG today, but as a genuine post-rename regression that
+  must be fixed and re-verified before Step 4/merge, not accepted as
+  residual risk.
+
+**Not accepted as residual risk — recorded as the reason Step 4 stays
+blocked**, per the "⛔ Merge gate" note at the top of this doc: the
+`estimator_agreement_stats.csv` bug above. Suggested fix shape (not
+implemented here): make the `agreement` table's comparison set independent
+of the *override* argument again — always the resolved default
+register-equality column name plus `jaccard_similarity_ie`, not literally
+`sim_col` — so an S5a-style invocation can never collapse the pair to one
+element regardless of which column the dendrogram itself is drawn on.
+
 ### Step 4 — Remove the duplicate `register_equality_similarity` column, then close out
 
 Covers the user's step 4, plus the version bump and doc sync the user asked
