@@ -31,11 +31,11 @@ def _metrics_shape(metrics_mode: str) -> tuple:
     """Return (similarity_measures column names, filename tag) for
     `metrics_mode` ("ie"/"re"/"full")."""
     if metrics_mode == "full":
-        return (["jaccard_similarity", "jaccard_similarity_ie"]
+        return (["reg_eq_similarity", "jaccard_similarity_ie"]
                  + _CONTAINMENT_COLS + ["register_equality_similarity"],
                  "full")
     if metrics_mode == "re":
-        return (["jaccard_similarity", "register_equality_similarity"], "re")
+        return (["reg_eq_similarity", "register_equality_similarity"], "re")
     return (["jaccard_similarity_ie"], "ie")
 
 
@@ -44,7 +44,7 @@ def _metrics_row_values(metrics_mode: str, jac, jac_ie, c_ab, c_ba,
     """Per-pair values matching `_metrics_shape`'s column list, in order.
 
     `register_equality_similarity` is a literal duplicate of
-    `jaccard_similarity` -- computed once into `j_val` and reused, so the two
+    `reg_eq_similarity` -- computed once into `j_val` and reused, so the two
     columns are guaranteed byte-identical rather than merely equal-by-value.
     Only reads the arrays its own branch needs: callers that skip computing
     `jac_ie`/`cs_geom`/`cs_arith`/`cs_max` for "re" (which never uses them)
@@ -99,7 +99,7 @@ def _jaccard_ie_from_containments(c_ab, c_ba):
     a consumer asserting `<= 1.0` will trip. Matches
     experiments/bedtools_benchmark/estimator_compare.py, except for the clamp.
 
-    Unlike `jaccard_similarity` (register equality), this carries no
+    Unlike `reg_eq_similarity` (register equality), this carries no
     chance-agreement floor, so it is comparable to `bedtools jaccard`.
     """
     c_ab = np.minimum(np.asarray(c_ab, dtype=float), 1.0)
@@ -125,7 +125,7 @@ def _print_estimator_note(args) -> None:
     canonical explanation; this is a nudge for interactive runs.
 
     Parameterized by `args.metrics_mode` because only "full" emits both
-    columns -- the default ("ie") shape has no jaccard_similarity column and
+    columns -- the default ("ie") shape has no reg_eq_similarity column and
     "re" has no jaccard_similarity_ie column, so the two-column comparison
     below would describe an absent column in those shapes.
     """
@@ -137,12 +137,12 @@ def _print_estimator_note(args) -> None:
               "comparable to bedtools.", file=sys.stderr)
         return
     if mode == "re":
-        print("note: jaccard_similarity/register_equality_similarity is "
+        print("note: reg_eq_similarity/register_equality_similarity is "
               "register-equality -- biased high, and the bias depends on both "
               "sketch load and |A|/|B|, so rank only within comparable pairs.",
               file=sys.stderr)
         return
-    print("note: jaccard_similarity is register-equality -- "
+    print("note: reg_eq_similarity is register-equality -- "
           "biased high,\n"
           "      and the bias depends on both sketch load and |A|/|B|, so rank "
           "only within\n"

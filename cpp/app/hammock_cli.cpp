@@ -29,7 +29,7 @@ namespace {
 // runner.py's `args.metrics_mode` ("ie"/"re"/"full"); Ie is the default
 // because it is the column this repo recommends reading (CLAUDE.md
 // divergence #2) -- comparable to bedtools, unlike register-equality
-// jaccard_similarity. RegisterEquality is the one shape that must stay
+// reg_eq_similarity. RegisterEquality is the one shape that must stay
 // cheap: it is the timing arm every benchmark harness in this repo uses,
 // and it must not compute the union/containment pass.
 enum class MetricsMode { Ie, RegisterEquality, Full };
@@ -137,14 +137,14 @@ void print_help(const char* prog) {
         "                          hashed (default: tab). This is not the output\n"
         "                          delimiter; changing it changes every sketch and breaks\n"
         "                          comparability with the Python CLI.\n"
-        "  --metrics               Emit the full 8-column block: jaccard_similarity,\n"
+        "  --metrics               Emit the full 8-column block: reg_eq_similarity,\n"
         "                          jaccard_similarity_ie, containment_AB, containment_BA,\n"
         "                          cosketch_geom, cosketch_arith, cosketch_max,\n"
         "                          register_equality_similarity (the last a literal\n"
-        "                          duplicate of jaccard_similarity). Tags the output\n"
+        "                          duplicate of reg_eq_similarity). Tags the output\n"
         "                          filename '_full'. Mutually exclusive with\n"
         "                          --register-equality/--re.\n"
-        "  --register-equality,    Emit jaccard_similarity and register_equality_\n"
+        "  --register-equality,    Emit reg_eq_similarity and register_equality_\n"
         "  --re                    similarity (a literal duplicate of it) -- the cheap\n"
         "                          register-equality-only arm, skipping the union/\n"
         "                          containment pass entirely. Tags the output filename\n"
@@ -153,7 +153,7 @@ void print_help(const char* prog) {
         "                          alone, tagged '_ie'. This needs the same union pass as\n"
         "                          --metrics (not the cheap arm) -- it is the column this\n"
         "                          project recommends reading by default, comparable to\n"
-        "                          bedtools, unlike jaccard_similarity.\n"
+        "                          bedtools, unlike reg_eq_similarity.\n"
         "  --output, -o <prefix>   Output filename prefix (default: hammock); --outprefix\n"
         "                          is accepted as an alias. Suffixes are appended, see\n"
         "                          Output below.\n"
@@ -170,8 +170,8 @@ void print_help(const char* prog) {
         "  where <shape> is exactly one of ie (default), re (--register-equality/--re), or\n"
         "  full (--metrics) -- every run is tagged, none stays bare. Columns by shape:\n"
         "    ie:   query, reference, jaccard_similarity_ie\n"
-        "    re:   query, reference, jaccard_similarity, register_equality_similarity\n"
-        "    full: query, reference, jaccard_similarity, jaccard_similarity_ie,\n"
+        "    re:   query, reference, reg_eq_similarity, register_equality_similarity\n"
+        "    full: query, reference, reg_eq_similarity, jaccard_similarity_ie,\n"
         "          containment_AB, containment_BA, cosketch_geom, cosketch_arith,\n"
         "          cosketch_max, register_equality_similarity\n"
         "  Inputs are always named by basename; there is no --full-paths here. Note the\n"
@@ -406,18 +406,18 @@ int main(int argc, char** argv) {
     }
     // Header + stride vary 3 ways: Ie (1 col: jaccard_similarity_ie), Full
     // (8 cols: the containment/cosketch block plus a register_equality_
-    // similarity duplicate), RegisterEquality (2 cols: jaccard_similarity
+    // similarity duplicate), RegisterEquality (2 cols: reg_eq_similarity
     // and its literal duplicate). Order and names must match runner.py's
     // _metrics_shape bit-for-bit -- see tests/test_hammock_cpp_metrics.py.
     switch (args.metrics_mode) {
         case MetricsMode::Full:
-            std::fprintf(fp, "query\treference\tjaccard_similarity\tjaccard_similarity_ie"
+            std::fprintf(fp, "query\treference\treg_eq_similarity\tjaccard_similarity_ie"
                              "\tcontainment_AB\tcontainment_BA"
                              "\tcosketch_geom\tcosketch_arith\tcosketch_max"
                              "\tregister_equality_similarity\n");
             break;
         case MetricsMode::RegisterEquality:
-            std::fprintf(fp, "query\treference\tjaccard_similarity\tregister_equality_similarity\n");
+            std::fprintf(fp, "query\treference\treg_eq_similarity\tregister_equality_similarity\n");
             break;
         case MetricsMode::Ie:
             std::fprintf(fp, "query\treference\tjaccard_similarity_ie\n");
@@ -480,13 +480,15 @@ int main(int argc, char** argv) {
                     cell[0] = cell[1] = qsk[i]->jaccard_similarity(*rsk[j]);
                     continue;
                 }
-                // reg_jac is register-equality jaccard_similarity, a side
-                // effect of the fused union pass. Ie discards it (its column
-                // is derived from containments below); Full writes it to both
-                // cell[0] and cell[7] (register_equality_similarity), reusing
-                // the one computed value so the two are bit-identical, not
-                // merely equal-by-value -- matching runner._metrics_row_values'
-                // j_val reuse.
+                // reg_jac is the register-equality value (CSV column
+                // reg_eq_similarity; still the jaccard_similarity() C++
+                // method until Step 1b renames it), a side effect of the
+                // fused union pass. Ie discards it (its column is derived
+                // from containments below); Full writes it to both cell[0]
+                // (reg_eq_similarity) and cell[7] (register_equality_
+                // similarity), reusing the one computed value so the two are
+                // bit-identical, not merely equal-by-value -- matching
+                // runner._metrics_row_values' j_val reuse.
                 double reg_jac, u;
                 if (qh[i] && rh[j]) {
                     qh[i]->jaccard_and_union_cardinality(*rh[j], reg_jac, u);

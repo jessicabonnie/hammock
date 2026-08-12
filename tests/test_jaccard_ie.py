@@ -1,7 +1,7 @@
 """Tests for the inclusion-exclusion Jaccard column (`jaccard_similarity_ie`).
 
 The point of the column is that it estimates a *different quantity* from
-`jaccard_similarity`: register-equality carries a chance-agreement floor whose
+`reg_eq_similarity`: register-equality carries a chance-agreement floor whose
 size depends on sketch load and on |A|/|B|, while inclusion-exclusion does not.
 The regression that matters is that the two columns stay distinguishable in the
 regime where the floor bites.
@@ -225,7 +225,7 @@ def test_csv_has_both_columns_and_they_agree_at_high_overlap(tmp_path: Path):
     lst_a.write_text(f"{a}\n")
     lst_b.write_text(f"{b}\n")
 
-    # --metrics: this test reads jaccard_similarity AND jaccard_similarity_ie
+    # --metrics: this test reads reg_eq_similarity AND jaccard_similarity_ie
     # from the same row, which only the full-block shape carries together
     # (docs/seed-metrics-column-restructure.md Part 2 -- the bare default
     # dropped to jaccard_similarity_ie alone).
@@ -238,7 +238,7 @@ def test_csv_has_both_columns_and_they_agree_at_high_overlap(tmp_path: Path):
     assert len(rows) == 1
     row = rows[0]
     assert "jaccard_similarity_ie" in row
-    j_re = float(row["jaccard_similarity"])
+    j_re = float(row["reg_eq_similarity"])
     j_ie = float(row["jaccard_similarity_ie"])
     assert 0.0 <= j_ie <= 1.0
     # True bp Jaccard is ~0.95; I-E should land on it, register-equality high.

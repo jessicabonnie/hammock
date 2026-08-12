@@ -261,16 +261,16 @@ def parse_args(argv=None):
     metrics_group = p.add_mutually_exclusive_group()
     metrics_group.add_argument(
         '--metrics', action='store_true',
-        help='Emit the full 8-column metrics block: jaccard_similarity, '
+        help='Emit the full 8-column metrics block: reg_eq_similarity, '
              'jaccard_similarity_ie, containment_AB, containment_BA, '
              'cosketch_geom, cosketch_arith, cosketch_max, and '
              'register_equality_similarity (a literal duplicate of '
-             'jaccard_similarity). Tags the output filename _full. Mutually '
+             'reg_eq_similarity). Tags the output filename _full. Mutually '
              'exclusive with --register-equality/--re.')
     metrics_group.add_argument(
         '--register-equality', '--re', action='store_true',
         dest='register_equality',
-        help='Emit only jaccard_similarity and register_equality_similarity '
+        help='Emit only reg_eq_similarity and register_equality_similarity '
              '(a literal duplicate of it) -- the cheap register-equality-only '
              'arm; the hammock-cpp standalone binary skips the union/'
              'containment pass entirely for this shape. Tags the output '

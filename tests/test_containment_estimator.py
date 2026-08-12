@@ -69,7 +69,7 @@ def test_disjoint_containment_near_zero_but_jaccard_column_is_not():
 
     Inclusion-exclusion has no chance-agreement term; register-equality does,
     and its floor is set by the load factor n/m. On disjoint inputs the
-    containments read ~0 while `jaccard_similarity` sits well above it.
+    containments read ~0 while `reg_eq_similarity` sits well above it.
     """
     a = range_sketch(14, 0, 200_000)
     b = range_sketch(14, 200_000, 400_000)

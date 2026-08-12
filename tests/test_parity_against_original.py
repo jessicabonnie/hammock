@@ -65,13 +65,15 @@ _PROJECTED_OUT = {
     # A *Jaccard* column is projected out here, which looks wrong at a glance.
     # It isn't: jaccard_similarity_ie is a second, inclusion-exclusion
     # estimator emitted alongside the register-equality one. Orig has no
-    # counterpart, so there is nothing to be unfaithful to. The column that
-    # must stay byte-equal -- jaccard_similarity -- is still compared.
+    # counterpart, so there is nothing to be unfaithful to. The quantity that
+    # must stay byte-equal -- register-equality, our `reg_eq_similarity`
+    # against orig's differently-named `jaccard_similarity` -- is still
+    # compared, by column position (see `_projected_rows`), not by name.
     "jaccard_similarity_ie",
     # Same reasoning: register_equality_similarity (added by --register-equality
     # / --metrics, docs/seed-metrics-column-restructure.md Part 2) is a literal
-    # duplicate of jaccard_similarity written under a second name. Orig has no
-    # counterpart column; jaccard_similarity itself is still compared byte-equal.
+    # duplicate of reg_eq_similarity written under a second name. Orig has no
+    # counterpart column; reg_eq_similarity itself is still compared byte-equal.
     "register_equality_similarity",
 }
 
@@ -79,14 +81,23 @@ _PROJECTED_OUT = {
 def _projected_rows(csv_text: str) -> list[tuple]:
     """Drop containment/cosketch and inclusion-exclusion columns before comparing.
 
-    Parity is required for `jaccard_similarity` (the register-equality column
-    orig also emits); orig 0.4.0 has no counterpart for our containment,
-    cosketch, or inclusion-exclusion surface.
+    Parity is required for `reg_eq_similarity` (the register-equality column;
+    orig calls its own copy `jaccard_similarity` -- a different literal name
+    at the same column position, not compared by name here, see below); orig
+    0.4.0 has no counterpart for our containment, cosketch, or
+    inclusion-exclusion surface.
+
+    Excludes the header row (`lines[1:]`, not `lines`) -- comparison is by
+    column *position*, not by column *name*, since our `reg_eq_similarity`
+    and orig's frozen `jaccard_similarity` are deliberately different
+    literal strings for the same quantity. Including the header row would
+    compare those two strings against each other and fail on the name alone,
+    even when every data value beneath them is byte-identical.
     """
     lines = csv_text.strip().split("\n")
     header = lines[0].split(",")
     keep = [i for i, name in enumerate(header) if name not in _PROJECTED_OUT]
-    return [tuple(line.split(",")[i] for i in keep) for line in lines]
+    return [tuple(line.split(",")[i] for i in keep) for line in lines[1:]]
 
 
 # NOTE on parity scope. Three ways our hammock differs from hammock-orig:
@@ -132,7 +143,7 @@ def test_jaccard_byte_equal(tmp_path: Path, mode: str, extra: list[str]) -> None
         orig_extra.append(a)
     common = [str(files), str(files), "--mode", mode, "-p", "14"]
     _run([ORIG, *common, *orig_extra, "-o", str(tmp_path / "orig")], tmp_path)
-    # --register-equality restores the jaccard_similarity column this test
+    # --register-equality restores the reg_eq_similarity column this test
     # compares (docs/seed-metrics-column-restructure.md Part 2 made the bare
     # default jaccard_similarity_ie-only). OURS-only -- hammock-orig has no
     # such flag, so it must not land in `common`/`extra`, which are shared
@@ -162,7 +173,7 @@ def test_mode_b_subB_actually_subsamples(tmp_path: Path) -> None:
     Jaccard with subB=0.25 differs meaningfully from subB=1.0 — i.e. the
     flag is doing something."""
     files = _files_list(tmp_path)
-    # --register-equality restores the jaccard_similarity column read below
+    # --register-equality restores the reg_eq_similarity column read below
     # (docs/seed-metrics-column-restructure.md Part 2: bare default is now
     # jaccard_similarity_ie-only). Both invocations are OURS-only, so it's
     # safe to put on the shared `common` list.
@@ -173,7 +184,7 @@ def test_mode_b_subB_actually_subsamples(tmp_path: Path) -> None:
     full = next(tmp_path.glob("full*.csv")).read_text().splitlines()
     sub = next(tmp_path.glob("sub*.csv")).read_text().splitlines()
     # cross-pair Jaccard column should differ between full sampling and 25% sampling
-    jac_col = full[0].split(",").index("jaccard_similarity")
+    jac_col = full[0].split(",").index("reg_eq_similarity")
     full_jac = full[2].split(",")[jac_col]
     sub_jac = sub[2].split(",")[jac_col]
     assert full_jac != sub_jac, f"--subB 0.25 produced same Jaccard as no subsampling ({full_jac})"

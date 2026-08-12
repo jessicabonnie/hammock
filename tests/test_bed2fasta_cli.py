@@ -60,7 +60,7 @@ def test_bed2fasta_end_to_end(tmp_path: Path) -> None:
 @pytest.mark.skipif(not HAS_BEDTOOLS, reason="bedtools not on PATH")
 def test_bed2fasta_self_comparison_is_one(tmp_path: Path) -> None:
     ref, l1, _ = _setup(tmp_path)
-    # --register-equality restores the jaccard_similarity column read below
+    # --register-equality restores the reg_eq_similarity column read below
     # (docs/seed-metrics-column-restructure.md Part 2 dropped it from the
     # bare default).
     r = _run([OURS, str(l1), str(l1), "--ref", str(ref),
@@ -69,7 +69,7 @@ def test_bed2fasta_self_comparison_is_one(tmp_path: Path) -> None:
     csv = next(tmp_path.glob("self*.csv")).read_text().splitlines()
     header = csv[0].split(",")
     row = csv[1].split(",")
-    assert float(row[header.index("jaccard_similarity")]) == pytest.approx(1.0)
+    assert float(row[header.index("reg_eq_similarity")]) == pytest.approx(1.0)
 
 
 def test_ref_mutually_exclusive_with_ref1(tmp_path: Path) -> None:

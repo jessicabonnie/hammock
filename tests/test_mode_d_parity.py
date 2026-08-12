@@ -5,7 +5,8 @@ in CLAUDE.md means our Mode D adds each minimizer's raw 64-bit hash via
 `add_hash64`, whereas orig's conda env falls through to the Python slow path
 that hashes the *decimal digits* of each minimizer hash as k-mers. The
 minimizer sets are identical (same `digest`), but the HLL ingestion differs by
-design, so `jaccard_similarity` diverges (e.g. 0.75 vs 0.7903 on tiny.fa). An
+design, so our `reg_eq_similarity` diverges from orig's `jaccard_similarity`
+(e.g. 0.75 vs orig's 0.7903 on tiny.fa). An
 earlier byte-equal version of this test only ever "passed" because
 `shutil.which("hammock")` resolved to the orig binary (conda `hammock` ahead of
 our env on PATH), silently comparing orig-to-orig.
@@ -87,12 +88,12 @@ def test_mode_d_structural_parity(tmp_path: Path, k: int, w: int, p: int) -> Non
               "-p", str(p), "-k", str(k), "-w", str(w)]
     _run([str(CONDA_ORIG), *common, "-o", str(tmp_path / "orig")], tmp_path)
     # --metrics: `sim_cols`/`sym_cols` below dynamically scan ours_csv's
-    # header for jaccard_similarity*/containment*/cosketch* columns to check
-    # well-formedness/symmetry across all of them. Under the new bare default
-    # (docs/seed-metrics-column-restructure.md Part 2) that scan would still
-    # find jaccard_similarity_ie and pass, just silently covering 1 column
-    # instead of 7 -- OURS-only, since CONDA_ORIG (a separate upstream
-    # install) has no such flag.
+    # header for reg_eq_similarity/jaccard_similarity*/containment*/cosketch*
+    # columns to check well-formedness/symmetry across all of them. Under the
+    # new bare default (docs/seed-metrics-column-restructure.md Part 2) that
+    # scan would still find jaccard_similarity_ie and pass, just silently
+    # covering 1 column instead of 7 -- OURS-only, since CONDA_ORIG (a
+    # separate upstream install) has no such flag.
     _run([OURS, *common, "--metrics", "-o", str(tmp_path / "ours")], tmp_path)
 
     orig_csv = next(tmp_path.glob("orig*.csv")).read_text()
@@ -108,13 +109,15 @@ def test_mode_d_structural_parity(tmp_path: Path, k: int, w: int, p: int) -> Non
     #     by design — divergence #6 — so we sanity-check ours, not equality).
     header, rows = _rows(ours_csv)
     sim_cols = [i for i, c in enumerate(header)
-                if c.startswith(("jaccard_similarity", "containment", "cosketch"))]
+                if c.startswith(("jaccard_similarity", "reg_eq_similarity",
+                                  "containment", "cosketch"))]
     assert sim_cols, "no similarity columns emitted"
     # containment_AB/BA are *antisymmetric* -- C_AB(a,b) == C_BA(b,a), not
     # C_AB(b,a) -- so they belong in the range and self-pair checks but must be
     # excluded from the symmetry check below.
     sym_cols = [i for i in sim_cols
-                if header[i].startswith(("jaccard_similarity", "cosketch"))]
+                if header[i].startswith(("jaccard_similarity", "reg_eq_similarity",
+                                          "cosketch"))]
     by_pair = {}
     for r in rows:
         f1, f2 = r[header.index("file1")], r[header.index("file2")]
