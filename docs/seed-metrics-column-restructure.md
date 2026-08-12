@@ -1,5 +1,13 @@
 # Seed: restructure default/`--register-equality`/`--metrics` output columns and filenames
 
+**Superseded for the column *name*, 2026-08-12: `docs/seed-jaccard-reg-eq-rename.md`
+renames `jaccard_similarity` → `reg_eq_similarity` and drops the
+`register_equality_similarity` duplicate this seed introduced (v0.9.0). The
+shape/count structure this seed defines otherwise still holds — three
+mutually exclusive shapes, every filename tagged — minus that one now-removed
+duplicate column. Historical record below is unchanged, describing the
+contract as it stood at v0.8.0.**
+
 **Status: spec accepted 2026-08-11, implementation not started.** This is an
 implementation plan, not a research seed — the "evidence gathered" is the
 current-state inventory below; "what still needs establishing" is whether the

@@ -137,13 +137,13 @@ which is **not** set Jaccard.
 
 ## The containment columns are *not* affected — and give a way out
 
-Only `jaccard_similarity` uses register equality. The `containment_AB` /
+Only `reg_eq_similarity` uses register equality. The `containment_AB` /
 `containment_BA` columns (and the three `cosketch_*` derived from them) go
 through `pairwise_metrics_hll` (`bindings/_core.cpp`), which
 uses **inclusion–exclusion** — `|A| + |B| − |A ∪ B|`, Ertl estimator on each,
 union by register-wise max, clamped to `>= 0`. That path has no
 chance-agreement term, so those columns estimate the true set quantities.
-On disjoint inputs at p=16, n=2×10⁵: `jaccard_similarity` = 0.168 while
+On disjoint inputs at p=16, n=2×10⁵: `reg_eq_similarity` = 0.168 while
 `containment_AB` = 0.000.
 
 Consequently a set-Jaccard estimate is recoverable, with no rerun and no code
@@ -160,7 +160,7 @@ Measured against `bedtools jaccard` on 90 synthetic pairs spanning
 J = 0.003 … 0.99 (matched row sets; I-E clamped-to-zero rows scored as 0,
 which is exactly what the shipped `jaccard_similarity_ie` column reports):
 
-| p | MAE `jaccard_similarity` | MAE reconstructed `J_set` | ratio | I-E clamped |
+| p | MAE `reg_eq_similarity` | MAE reconstructed `J_set` | ratio | I-E clamped |
 | --- | --- | --- | --- | --- |
 | 12 | 0.15173 | 0.00822 | 18× | 25/90 |
 | 16 | 0.15173 | 0.00207 | 73× | 0 |
@@ -188,9 +188,9 @@ identically and there is nothing to contaminate.
 
 | J < 0.05 | p=12 | p=16 | p=20 | p=24 |
 | --- | --- | --- | --- | --- |
-| τ, `jaccard_similarity` | 0.335 | **0.658** | **0.905** | 0.907 |
+| τ, `reg_eq_similarity` | 0.335 | **0.658** | **0.905** | 0.907 |
 | τ, `jaccard_similarity_ie` | 0.289 | 0.562 | 0.794 | **0.967** |
-| MAE, `jaccard_similarity` | 0.1696 | 0.1696 | 0.1694 | 0.0447 |
+| MAE, `reg_eq_similarity` | 0.1696 | 0.1696 | 0.1694 | 0.0447 |
 | MAE, `jaccard_similarity_ie` | 0.0081 | 0.0019 | 0.0005 | 0.0001 |
 
 Above J = 0.05 both estimators are at or within one discordant comparison of
@@ -220,7 +220,7 @@ Rule of thumb: its absolute error is ≈ `0.6/√m` roughly flat in J, so its
 *relative* error is ≈ `0.6/(J√m)` and it becomes uninformative below
 J ≈ a few/√m (p=14 → J ≲ 0.02; p=20 → J ≲ 0.002).
 
-**The honest summary.** `jaccard_similarity` is a low-variance but biased
+**The honest summary.** `reg_eq_similarity` is a low-variance but biased
 transform of set Jaccard, monotone only at fixed cardinality ratio;
 `jaccard_similarity_ie` is near-unbiased but noisier and censored at 0. The
 earlier framing "neither dominates, report both" overstated the symmetry:
@@ -273,7 +273,7 @@ why the section is rewritten rather than merely retracted.
 
 ## Rank fidelity is not free — measure it per corpus
 
-The "use `jaccard_similarity` for ranking" advice above holds only within a
+The "use `reg_eq_similarity` for ranking" advice above holds only within a
 fixed pair geometry. Because `c` varies with `|A|/|B|`, the estimator applies a
 *different* transform to each pair, and ordering can invert. The resolution
 limit for a corpus whose worst cardinality ratio is `r` is the true Jaccard at
