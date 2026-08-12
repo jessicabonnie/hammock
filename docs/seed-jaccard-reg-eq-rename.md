@@ -772,13 +772,80 @@ compiles, the Python extension rebuilds, and `cpp/tests/` + `pytest tests/`
 are all green, both renames are complete by construction) and that
 `estimate_intersection` was correctly left untouched.
 
+**Review gate, run 2026-08-12 (3 parallel subagent passes — scope
+completeness, risk/safety, process/convention fit — against the plan text as
+it stood before this paragraph's own edits):**
+
+- **Process/convention fit: clean.** Worktree/main state matches the doc's
+  own commit citations exactly (merge-base `f4cf813`, worktree at `3f1e5ca`,
+  `main` 4 commits ahead with the Setup/round-1/round-2/post-implementation
+  paperwork); the doc's own "Commit: two" line was independently confirmed
+  unambiguous; the seed doc itself is byte-identical between the merge-base
+  and the worktree branch (confirmed via `git diff`), i.e. no seed-doc edits
+  leaked onto the worktree branch; no CLAUDE.md convention (Python-is-the-
+  program, narrow/stateless `_core` bindings) is implicated by a pure
+  identifier rename. No findings.
+- **Scope completeness: no blocking gaps.** Independent grep across the whole
+  worktree (cpp/, bindings/, python/, tests/, paper/, experiments/,
+  docs/scripts/, memory/) confirmed all 11 Part 1 sites and all 8 Part 2 sites
+  are exactly the enumerated set, including confirming `estimate_intersection`
+  is a genuinely different code path (wraps `intersection_size`, not
+  `jaccard_similarity`) and correctly left alone, and that
+  `extern/hll/hll.cpp`'s vendored, differently-named, zero-call-site
+  `jaccard_similarity_registers` is correctly out of scope. Two non-blocking
+  findings: (1) the plan's citation of `hammock_cli.cpp`'s second call site as
+  line 494 is stale — it's actually line 496 (line 494 is unrelated,
+  `jaccard_and_union_cardinality`); the code snippet quoted is correct, only
+  the line number drifted. (2) Five in-repo comments name the old
+  method/binding identifier in prose and will read as stale (one,
+  `hammock_cli.cpp:484-485`, is actively self-referential — "until Step 1b
+  renames it" — and becomes self-contradictory the moment Step 1b lands) but
+  aren't in Part 1/2's enumerated edit list: `hll_sketch.hpp:54`,
+  `hll_sketch.cpp:176`, `hll_sketch.cpp:258`, `hammock_cli.cpp:484-485`,
+  `bindings/_core.cpp:328`. A sixth, `test_containment_estimator.py:187`
+  ("the route it replaced -- `jaccard_similarity()` plus `union_with()`"),
+  was flagged independently by the risk/safety pass, in a file Part 2 already
+  edits for 7 call sites. Folded into Part 1's diff below (mechanical, no
+  scope change) rather than left for a later untracked pass.
+- **Risk/safety: no blocking issue with the rename itself — pure identifier
+  substitution, no logic touched, no ABI-surface risk found (no CMakeLists
+  reference, no `.pyi` stub, no export/version-script file, no duck-typed
+  `estimate_jaccard` call path anywhere) — but one BLOCKING finding on the
+  *verification methodology* the plan proposed.** The Review-gate paragraph
+  above claims "if `cpp/tests/` + `pytest tests/` are all green, both renames
+  are complete by construction." That's true for Part 1 (any stale C++
+  identifier is a hard compile error) and true for 7 of Part 2's 8 Python
+  call sites (a stale `estimate_jaccard` there is a loud `AttributeError`).
+  But `tests/test_sequence_invariants.py:33`'s call site sits inside a test
+  decorated `@digest_only` — skipped, not failed, whenever the bioconda
+  `digest` package isn't importable, a real recurring condition in this repo
+  (CLAUDE.md's cluster-compiler/RPATH caveat, divergence #6). In a
+  digest-less environment, a missed rename at that one site would produce a
+  silent skip indistinguishable from normal, not a test failure — so "pytest
+  green" alone does not prove Part 2 is complete in every environment.
+  **Closed by strengthening verification, not by changing the diff**: Part
+  2's commit requires an explicit `grep -rn 'estimate_jaccard\b' bindings/
+  tests/ python/` returning zero hits, run in addition to (not instead of)
+  `pytest tests/`, so completeness doesn't depend on `digest` availability.
+  This is a mechanical addition to the verification step, not a scope or diff
+  change, so per "Review process"'s re-run rule it doesn't require a fresh
+  3-pass round. Also confirmed clean by this pass: the Step 1b/Step 4
+  `hammock_cli.cpp` overlap composes safely (disjoint edit classes at the
+  same lines), and no `.def()` name collision with `estimate_reg_eq_similarity`.
+
+**Step 1b is ready to implement.** Proceeding to the actual edits, folding in
+both non-blocking comment-sweep findings and the strengthened grep
+verification.
+
 **Commit:** two — (1) the C++ method rename (Part 1, all
 declaration/definition/call sites), (2) the Python-facing binding rename
 (Part 2: the `.def(...)` registration plus its 8 test call sites) — kept
 separate since Part 2 is the one with any (small, in-repo-only) API-surface
 implication, worth its own reviewable diff. Each commit's message records a
 green `cpp/tests/`/`pytest tests/` run as evidence it compiles and behaves
-identically.
+identically, plus (per the risk/safety finding above) a clean
+`grep -rn 'estimate_jaccard\b'`/`grep -rn 'jaccard_similarity\b'` sweep of the
+relevant files for Part 2/Part 1 respectively.
 
 **Then stop.** Report and wait for the user's go-ahead before starting
 Step 2. Do not continue automatically.
