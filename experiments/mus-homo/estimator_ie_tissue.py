@@ -49,6 +49,24 @@ def tissue(name: str) -> str:
     return os.path.basename(name).split("_")[1]
 
 
+_REG_EQ_FALLBACK_LOGGED = False
+
+
+def _reg_eq_value(row: dict) -> float:
+    """Register-equality similarity for a CSV row: prefer `reg_eq_similarity`,
+    fall back to the legacy `jaccard_similarity` name for archived pre-rename
+    files. Logs the fallback once per script run, not once per row."""
+    global _REG_EQ_FALLBACK_LOGGED
+    if "reg_eq_similarity" in row:
+        return float(row["reg_eq_similarity"])
+    if not _REG_EQ_FALLBACK_LOGGED:
+        print("estimator_ie_tissue.py: 'reg_eq_similarity' column not found, "
+              "falling back to legacy 'jaccard_similarity' (archived pre-rename CSV?)",
+              file=sys.stderr)
+        _REG_EQ_FALLBACK_LOGGED = True
+    return float(row["jaccard_similarity"])
+
+
 def load(path):
     rows = []
     with open(path) as fh:
@@ -56,7 +74,7 @@ def load(path):
             a, b = os.path.basename(row["file1"]), os.path.basename(row["file2"])
             if a == b:
                 continue
-            rows.append((a, b, float(row["jaccard_similarity"]),
+            rows.append((a, b, _reg_eq_value(row),
                          float(_ie(np.array([[float(row["containment_AB"])]]),
                                    np.array([[float(row["containment_BA"])]]))[0, 0])))
     return rows

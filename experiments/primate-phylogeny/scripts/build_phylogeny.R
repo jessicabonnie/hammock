@@ -77,9 +77,26 @@ clade_colors <- c(
   marsupial      = "#9467bd"
 )
 
+# Register-equality column: prefer the new name, fall back to the legacy
+# `jaccard_similarity` name for archived pre-rename CSVs. Resolved once
+# against the actually-loaded data (not hardcoded at any call site below),
+# and logged at most once per run even though it feeds two consumers
+# (the metric-spread table and build_and_plot()'s tree call).
+.reg_eq_fallback_logged <- FALSE
+resolve_reg_eq_col <- function(df) {
+  if ("reg_eq_similarity" %in% names(df)) return("reg_eq_similarity")
+  if (!.reg_eq_fallback_logged) {
+    message("build_phylogeny.R: 'reg_eq_similarity' column not found, ",
+            "falling back to legacy 'jaccard_similarity' (archived pre-rename CSV?)")
+    .reg_eq_fallback_logged <<- TRUE
+  }
+  "jaccard_similarity"
+}
+reg_eq_col <- resolve_reg_eq_col(mat_long)
+
 # ── Metric-spread summary (all hammock similarity columns) ────────────────
 all_metrics <- c(
-  "jaccard_similarity", "jaccard_similarity_ie",
+  reg_eq_col, "jaccard_similarity_ie",
   "containment_AB", "containment_BA",
   "cosketch_geom", "cosketch_arith", "cosketch_max"
 )
@@ -93,8 +110,12 @@ get_pair_val <- function(col, a, b) {
 
 spread_rows <- lapply(present, function(col) {
   vals <- cross_only[[col]]
+  # Canonical label regardless of which name was actually read, so
+  # metric_spreads.tsv reads `reg_eq_similarity` in both the prefers and
+  # fallback branches.
+  metric_label <- if (col == reg_eq_col) "reg_eq_similarity" else col
   tibble(
-    metric            = col,
+    metric            = metric_label,
     min_cross         = min(vals, na.rm = TRUE),
     max_cross         = max(vals, na.rm = TRUE),
     spread            = max(vals, na.rm = TRUE) - min(vals, na.rm = TRUE),
@@ -157,7 +178,11 @@ build_and_plot <- function(sim_col, out_newick, out_png, out_dist, label_tag) {
 }
 
 # ── Build the three chosen trees ──────────────────────────────────────────
-build_and_plot("jaccard_similarity",            out_newick_jmz, out_png_jmz, out_dist_jmz, "minimizer Jaccard")
+# reg_eq_col was resolved above, against the actually-loaded data -- not a
+# hardcoded literal here, so a missing-column silent-empty-output failure
+# (see build_and_plot's guard above) can only occur if neither the new nor
+# the legacy column name is present, not merely because the new name is.
+build_and_plot(reg_eq_col,                      out_newick_jmz, out_png_jmz, out_dist_jmz, "minimizer Jaccard")
 build_and_plot("cosketch_max",                  out_newick_cmz, out_png_cmz, out_dist_cmz, "minimizer cosketch_max")
 build_and_plot("cosketch_geom",                 out_newick_gmz, out_png_gmz, out_dist_gmz, "minimizer cosketch_geom")
 
