@@ -21,6 +21,29 @@ worktree (Setup) per explicit user instruction, overriding the default
 work-on-main convention (`memory/feedback_work_on_main.md`) for this task
 only.
 
+## ⛔ Merge gate — hard requirement (user instruction, 2026-08-12)
+
+**Do not merge the `jaccard-reg-eq-rename` worktree branch to `main` until
+Step 3 has actually regenerated the affected paper figures and proven the
+diff is clean.** This is an explicit, absolute instruction from the user,
+given immediately after Step 2's scope-overreach correction (see that
+correction, in Step 2's section below, for why this gate matters even more
+than it would have anyway) — not a restatement of Step 3's existing
+sign-off process, a stronger version of it: **"prove we can regenerate the
+paper figures" is a precondition for merge, not a nice-to-have.** Step 4's
+merge instructions already say to merge only after Step 3's user go-ahead;
+this note exists so that requirement cannot be missed by a future
+implementer skimming straight to Step 4, or loosened into "Step 3 looked
+fine, proceeding" without the actual regenerate-and-diff having been run
+and its result shown to the user. If Step 3 cannot be completed for any
+reason (missing raw data, a broken figure-generation script, anything) —
+**stop and say so; do not merge anyway on the theory that the source-code
+changes look correct.** Correct-looking source is exactly what motivated
+this whole correction — Step 2 passed two pre-implementation gates and a
+post-implementation gate before the user caught the scope error, so "the
+reviewers found nothing" is demonstrably not sufficient evidence for
+merge-readiness while Step 3 hasn't run yet.
+
 ## Motivation (user request, 2026-08-12)
 
 `jaccard_similarity` is a misleading name — it is the register-equality
@@ -2066,7 +2089,11 @@ evidence that Steps 1-2's changes did.
 **Then stop.** Report the parity results and wait for the user's go-ahead
 before starting Step 4 — this Step's sign-off matters more than most, since
 it's the safety proof the whole rename rests on. Do not continue
-automatically.
+automatically. **See also the "⛔ Merge gate — hard requirement" note at the
+top of this doc, added 2026-08-12: merge to `main` (Step 4's close) is
+blocked until this Step's regenerate-and-diff has actually run and the user
+has accepted the result — not merely until this Step's own plan/gate looks
+clean.**
 
 ### Step 4 — Remove the duplicate `register_equality_similarity` column, then close out
 
@@ -2180,8 +2207,17 @@ above, the version bump) — kept separate from (1) because the risky
 code-count change and the purely-textual closeout are different things to
 review and, if needed, revert independently. Then rebase, re-run
 `pytest tests/`, and **merge with `git merge` (not squash)** so this Step's
-two commits — and Steps 1-2's four — all stay individually visible in
+two commits — and Steps 1-2's commits — all stay individually visible in
 `main`'s history, per "Commit discipline" above.
+
+**Before any of this: re-read the "⛔ Merge gate — hard requirement" note at
+the top of this doc.** This merge cannot happen — regardless of how clean
+Steps 1-4's own gates and pytest runs look — until Step 3 has actually
+regenerated the affected paper figures and the user has seen and accepted
+that diff. If you find yourself at this point in the doc without Step 3
+having been completed and confirmed by the user, stop here and go back;
+"the code changes all look correct" is explicitly not sufficient grounds to
+proceed, per that note.
 
 **Done when:** `pytest tests/` is green on `main` post-merge; `cpp/tests/`
 green; `pyproject.toml` reads `0.9.0`; `git worktree list` no longer shows
