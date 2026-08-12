@@ -52,11 +52,8 @@ def test_mode_d_runs_and_self_jaccard_is_one(tmp_path: Path) -> None:
     assert csv[0].split(",") == [
         "file1", "file2", "sketch_type", "mode",
         "precision", "num_hashes", "kmer_size", "window_size",
-        "jaccard_similarity", "jaccard_similarity_ie", *cont_block,
-        # register_equality_similarity is the full shape's trailing column
-        # (a literal duplicate of jaccard_similarity), appended before the
-        # Mode-D-specific ref1/ref2 trailer.
-        "register_equality_similarity",
+        "reg_eq_similarity", "jaccard_similarity_ie", *cont_block,
+        # Mode-D-specific trailer, appended after the similarity block.
         "ref1", "ref2",
     ]
     # self-pair must be Jaccard = 1.0 (and containment = 1.0).
@@ -69,9 +66,8 @@ def test_mode_d_runs_and_self_jaccard_is_one(tmp_path: Path) -> None:
     # Exact 1.0, not approx, for the inclusion-exclusion columns too: for
     # identical registers the union estimate equals both cardinalities
     # bitwise, so inter = 2c - c = c exactly and 1/(1 + 1 - 1) == 1.0.
-    for name in ("jaccard_similarity", "jaccard_similarity_ie",
-                 "containment_AB", "containment_BA", "cosketch_geom",
-                 "register_equality_similarity"):
+    for name in ("reg_eq_similarity", "jaccard_similarity_ie",
+                 "containment_AB", "containment_BA", "cosketch_geom"):
         assert float(self_row[header.index(name)]) == 1.0, name
 
 
@@ -103,7 +99,7 @@ def test_mode_d_distinct_files_have_nontrivial_jaccard(tmp_path: Path) -> None:
     files1 = _files_list(tmp_path, "tiny.fa")
     files2 = tmp_path / "primary.txt"
     files2.write_text(str(DATA / "tiny2.fa") + "\n")
-    # --register-equality restores the jaccard_similarity column read below
+    # --register-equality restores the reg_eq_similarity column read below
     # (docs/seed-metrics-column-restructure.md Part 2 dropped it from the
     # bare default).
     _run([OURS, str(files1), str(files2), "--mode", "D",
@@ -112,7 +108,7 @@ def test_mode_d_distinct_files_have_nontrivial_jaccard(tmp_path: Path) -> None:
     lines = next(tmp_path.glob("cross*.csv")).read_text().splitlines()
     header = lines[0].split(",")
     row = lines[1].split(",")
-    jac = float(row[header.index("jaccard_similarity")])
+    jac = float(row[header.index("reg_eq_similarity")])
     assert 0.0 <= jac < 1.0, f"expected non-self Jaccard in [0, 1), got {jac}"
 
 

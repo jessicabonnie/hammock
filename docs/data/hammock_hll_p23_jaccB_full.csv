@@ -1,4 +1,4 @@
-file1,file2,sketch_type,mode,precision,num_hashes,kmer_size,window_size,jaccard_similarity,jaccard_similarity_ie,containment_AB,containment_BA,cosketch_geom,cosketch_arith,cosketch_max
+file1,file2,sketch_type,mode,precision,num_hashes,kmer_size,window_size,reg_eq_similarity,jaccard_similarity_ie,containment_AB,containment_BA,cosketch_geom,cosketch_arith,cosketch_max
 fBrain-DS14718.hotspot.twopass.fdr0.05.merge.bed,fBrain-DS14718.hotspot.twopass.fdr0.05.merge.bed,hyperloglog,B,23,NA,8,40,1.0,1.0,1.0,1.0,1.0,1.0,1.0
 fBrain-DS14718.hotspot.twopass.fdr0.05.merge.bed,fBrain-DS16302.hotspot.twopass.fdr0.05.merge.bed,hyperloglog,B,23,NA,8,40,0.48871731758117676,0.3537425010356615,0.5892442570557637,0.46952193220872884,0.525987739510836,0.5293830946322462,0.5892442570557637
 fBrain-DS14718.hotspot.twopass.fdr0.05.merge.bed,fHeart-DS15643.hotspot.twopass.fdr0.05.merge.bed,hyperloglog,B,23,NA,8,40,0.3916701078414917,0.2403442937550201,0.4101220135320729,0.3673230663945764,0.3881330643046518,0.3887225399633246,0.4101220135320729

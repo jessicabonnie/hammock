@@ -46,10 +46,10 @@ void HLLSketch::merge_max(const HLLSketch& other) {
     }
 }
 
-double HLLSketch::jaccard_similarity(const AbstractSketch& other) const {
+double HLLSketch::reg_eq_similarity(const AbstractSketch& other) const {
     const HLLSketch* o = dynamic_cast<const HLLSketch*>(&other);
     if (!o) {
-        throw std::runtime_error("Cannot compute Jaccard between different sketch types");
+        throw std::runtime_error("Cannot compute register-equality similarity between different sketch types");
     }
     // hash_size must match as well as precision: equal precision alone gives
     // equal register *counts* (so no overread) but the rho values are on
@@ -58,7 +58,7 @@ double HLLSketch::jaccard_similarity(const AbstractSketch& other) const {
     // Unreachable from Python -- the pybind ctor exposes only `precision`, so
     // every sketch there is hash_size 64 -- so adding it moves no value.
     if (precision_ != o->precision_ || hash_size_ != o->hash_size_) {
-        throw std::runtime_error("HLLs must have same precision and hash size for Jaccard");
+        throw std::runtime_error("HLLs must have same precision and hash size for register-equality similarity");
     }
     // Python parity: estimate_jaccard_registers
     //   active = (R_a != 0) | (R_b != 0)
@@ -170,16 +170,16 @@ bool HLLSketch::ertl_from_counts(const std::vector<size_t>& counts, double& out)
     return true;
 }
 
-void HLLSketch::jaccard_and_union_cardinality(const HLLSketch& other,
-                                              double& jaccard,
-                                              double& union_cardinality) const {
-    // Same guards as jaccard_similarity() and union_with(): equal precision
+void HLLSketch::reg_eq_and_union_cardinality(const HLLSketch& other,
+                                             double& reg_eq,
+                                             double& union_cardinality) const {
+    // Same guards as reg_eq_similarity() and union_with(): equal precision
     // *and* hash size. Unequal precision would overread the operand's
     // registers; equal precision with unequal hash size gives rho values on
     // different scales.
     if (precision_ != other.precision_ || hash_size_ != other.hash_size_) {
         throw std::runtime_error(
-            "HLLs must have same precision and hash size for fused jaccard/union");
+            "HLLs must have same precision and hash size for fused register-equality/union");
     }
 
     const size_t max_register_value = hash_size_ - precision_;
@@ -199,8 +199,8 @@ void HLLSketch::jaccard_and_union_cardinality(const HLLSketch& other,
         if (u != 0) union_all_zero = false;
     }
 
-    jaccard = (active == 0) ? 0.0
-                            : static_cast<double>(matching) / static_cast<double>(active);
+    reg_eq = (active == 0) ? 0.0
+                           : static_cast<double>(matching) / static_cast<double>(active);
 
     // Mirrors cardinality()'s all-zero short-circuit on the union sketch.
     if (union_all_zero) {
@@ -255,7 +255,7 @@ std::unique_ptr<AbstractSketch> HLLSketch::union_with(const AbstractSketch& othe
     }
     // Without this the loop below reads o->registers_[i] for i < this->
     // num_registers_ — a heap overread (and, via the write, corruption) when
-    // the operand has the smaller precision. jaccard_similarity and merge_max
+    // the operand has the smaller precision. reg_eq_similarity and merge_max
     // both guard; this one did not.
     if (precision_ != o->precision_ || hash_size_ != o->hash_size_) {
         throw std::runtime_error("HLLs must have same precision for union");

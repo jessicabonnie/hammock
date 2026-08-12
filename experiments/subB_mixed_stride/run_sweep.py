@@ -113,23 +113,67 @@ def groups_for_corpus(corpus: str, size_classes: List[str]):
     raise ValueError(f"unknown corpus: {corpus}")
 
 
+# Set once, the first time a row resolves its "jaccard" value from anything
+# other than the preferred `reg_eq_similarity` column
+# (docs/seed-jaccard-reg-eq-rename.md Step 2) -- logs which candidate in the
+# OR-chain below actually fired, once per script run, not once per row. This
+# chain pre-dates the rename and had no logging at all, so a silent
+# substitution of the wrong estimator (e.g. falling through all the way to
+# jaccard_similarity_ie, a different estimator family entirely -- see
+# CLAUDE.md divergence #2) was invisible in run output; this makes it
+# visible.
+_REG_EQ_CANDIDATE_LOGGED = False
+
+
 def parse_hammock_csv(path: str) -> List[Dict[str, Any]]:
     """Hammock-cpp Mode B output, TAB-separated. Header depends on which of the
     three v0.8.0 output shapes was requested (docs/seed-metrics-column-
-    restructure.md): register-equality has jaccard_similarity; full has both
-    jaccard_similarity and jaccard_similarity_ie; bare default (used by this
-    script's own --metrics/IE-capture arm since the 2026-08-11 retarget) has
-    only jaccard_similarity_ie and no jaccard_similarity column at all -- so
-    the "jaccard" field below must fall back to it, or every row from that
-    arm would silently fail the `j is None` check and be dropped.
+    restructure.md): register-equality has reg_eq_similarity (or, for
+    archived pre-rename CSVs, jaccard_similarity); full has both plus
+    jaccard_similarity_ie; bare default (used by this script's own
+    --metrics/IE-capture arm since the 2026-08-11 retarget) has only
+    jaccard_similarity_ie and no register-equality column at all -- so the
+    "jaccard" field below must fall back to it, or every row from that arm
+    would silently fail the `j is None` check and be dropped.
+
+    The OR-chain below is itself a pre-existing, pre-rename silent-
+    degradation hazard (found by docs/seed-jaccard-reg-eq-rename.md Step 2's
+    review): with no logging, a fresh run that unexpectedly lacks
+    `reg_eq_similarity`/`jaccard_similarity` falls through all the way to
+    `jaccard_similarity_ie` with no visible sign that a different estimator
+    got substituted into the `jaccard` field. Logging which candidate
+    resolves (once per run) makes that visible.
     """
+    global _REG_EQ_CANDIDATE_LOGGED
     rows: List[Dict[str, Any]] = []
     with open(path) as fh:
         reader = csv.DictReader(fh, delimiter="\t")
+        # Resolve the "jaccard" field's source column ONCE from the header,
+        # by presence (`in fieldnames`), not per-row truthiness -- a per-row
+        # `r.get(...)` truthy check would treat a present-but-blank field
+        # (e.g. an empty string for one malformed row) as "absent" and
+        # silently fall through to a different estimator for just that row,
+        # while every other row in the same file used the preferred column.
+        # Resolving once from the header keeps one candidate for the whole
+        # file, matching the "resolve once, log once" pattern the rest of
+        # this rename uses everywhere else (docs/seed-jaccard-reg-eq-rename.md
+        # Step 2's post-implementation review).
+        fieldnames = reader.fieldnames or []
+        for candidate in ("reg_eq_similarity", "jaccard_similarity", "jaccard",
+                           "jaccard_similarity_ie"):
+            if candidate in fieldnames:
+                break
+        else:
+            candidate = None
+        if candidate is not None and candidate != "reg_eq_similarity" \
+                and not _REG_EQ_CANDIDATE_LOGGED:
+            print(f"run_sweep.py: 'reg_eq_similarity' column not used for "
+                  f"the 'jaccard' field in {path}; resolved via fallback "
+                  f"candidate '{candidate}' instead.", file=sys.stderr)
+            _REG_EQ_CANDIDATE_LOGGED = True
         for r in reader:
-            j = (r.get("jaccard_similarity") or r.get("jaccard")
-                 or r.get("jaccard_similarity_ie"))
-            if j is None:
+            j = r.get(candidate) if candidate is not None else None
+            if j is None or j == "":
                 continue
             # Capturing the IE column is the entire point of this script's own
             # --metrics arm. Absent (register-equality shape) these stay None

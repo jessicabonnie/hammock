@@ -53,8 +53,9 @@ zero.
 
 Figure 3's headline runs `--register-equality`/`--re` (named `--no-metrics`
 before the v0.8.0 metrics-restructure; same reduced shape, renamed flag), i.e.
-the register-equality `jaccard_similarity` column. The paper's own guidance is to read
-`jaccard_similarity_ie` for anything that matters — and that column costs
+the register-equality column (`jaccard_similarity` at the time this was
+written, renamed `reg_eq_similarity` in v0.9.0 — see item 4). The paper's own
+guidance is to read `jaccard_similarity_ie` for anything that matters — and that column costs
 8.5% more wall time at N=512, rising with N. The speed number shown is for a
 column the paper tells readers not to trust.
 
@@ -66,27 +67,40 @@ column the paper tells readers not to trust.
 **Partially resolved by the v0.8.0 metrics-restructure (2026-08-11), not yet
 by the paper.** A bare CLI invocation no longer ships `jaccard_similarity` by
 default at all — the default shape is `jaccard_similarity_ie` alone (getting
-`jaccard_similarity` now requires `--register-equality`/`--re` or `--metrics`,
-both explicit). So the "silently reaches users by default" half of this
-concern is gone going forward. What's unchanged: Figure 6's headline
+the register-equality column now requires `--register-equality`/`--re` or
+`--metrics`, both explicit). So the "silently reaches users by default" half
+of this concern is gone going forward. What's unchanged: Figure 6's headline
 clustering result (ARI=0.91) was already generated, under the old default,
 using `jaccard_similarity` — that figure doesn't regenerate itself just
 because the CLI's default changed, and the concern below (about that specific
 figure) still stands until it's rerun on `_ie`.
 
-It's column 1 of the pre-restructure default, unrenamed, no runtime warning
-unless `--verbose` is passed. It carries a chance-agreement floor (~0.17, not
-constant — varies with size ratio) and isn't rank-faithful across
-differently-sized pairs. Documented internally as frozen for backward
-compatibility with the original tool's values, not as a scientific choice.
-Figure 6's headline clustering result (ARI=0.91) uses this column, against
-the paper's own stated rule to use the calibrated one for anything that
-matters.
+It's column 1 of the pre-restructure default, unrenamed at the time this was
+written, no runtime warning unless `--verbose` is passed. It carries a
+chance-agreement floor (~0.17, not constant — varies with size ratio) and
+isn't rank-faithful across differently-sized pairs. Documented internally as
+frozen for backward compatibility with the original tool's values, not as a
+scientific choice. Figure 6's headline clustering result (ARI=0.91) uses this
+column, against the paper's own stated rule to use the calibrated one for
+anything that matters.
 
 **Cost to fix:** the frozen constraint is on the *values*, not the *label* —
 renaming the CLI flag/column is cheap. Recomputing Figure 6 on `_ie` and
 checking the result holds is a rerun, not a redesign (a scoped check already
 shows the two columns agree at that one cell).
+
+**Update, v0.9.0 (2026-08-12, `docs/seed-jaccard-reg-eq-rename.md`): the
+label half is now done.** The column is renamed `jaccard_similarity` →
+`reg_eq_similarity` — the "frozen for backward compatibility... not a
+scientific choice" framing above is exactly why the rename was made, since
+the *values* stayed frozen and only the label changed. This does not by
+itself resolve the concern: Figure 6's archived CSV predates the rename and
+still carries the old `jaccard_similarity` header (Step 2 of that seed added
+a `reg_eq_similarity`-preferred, `jaccard_similarity`-fallback read path to
+`plot_sequence_tissue_clustering.R` rather than regenerating it), and the
+figure still needs to be rerun on `_ie` and checked, as this section already
+said. Only the "renaming the CLI flag/column is cheap" half of the "Cost to
+fix" above is now spent; the rerun-and-check half is still open.
 
 ## 5. HyperLogLog vs. MinHash is never argued
 

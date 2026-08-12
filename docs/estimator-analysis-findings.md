@@ -38,7 +38,7 @@ and should settle them.
 > reproduces exactly (see §9's script list).
 
 **Scope of the underlying question:** hammock's interval mode emits two Jaccard
-columns — `jaccard_similarity` (register-equality) and `jaccard_similarity_ie`
+columns — `reg_eq_similarity` (register-equality) and `jaccard_similarity_ie`
 (inclusion–exclusion) — plus the containment/cosketch block. The governing
 document is `docs/jaccard-definitional-gap.md`. This file records what is
 wrong in that document and in the paper outlines, what is already correct and
@@ -228,7 +228,7 @@ roughly **r ∈ [1.00, 1.03]** — tighter than any corpus in this repo; Maurano
 fails it by ~25×. **[R]**
 
 **Recommended rewrite of the guidance:** use `jaccard_similarity_ie`;
-`jaccard_similarity` only when set sizes are near-identical. Report **bias and
+`reg_eq_similarity` only when set sizes are near-identical. Report **bias and
 noise as two numbers on the same ΔJ axis** — that single comparison carries
 more than the whole resolution table.
 
@@ -246,7 +246,7 @@ all carry the full modern schema **[V]**:
 
 ```
 file1,file2,sketch_type,mode,precision,num_hashes,kmer_size,window_size,
-jaccard_similarity,jaccard_similarity_ie,containment_AB,containment_BA,
+reg_eq_similarity,jaccard_similarity_ie,containment_AB,containment_BA,
 cosketch_geom,cosketch_arith,cosketch_max
 ```
 
@@ -489,7 +489,7 @@ reproduce from this file). No disagreement there.
 always" either; it is a **reading** rule, since the Python CLI emits both columns
 unconditionally and nothing is recomputed by choosing:
 
-> Use `jaccard_similarity_ie`. `jaccard_similarity` is preferable only for
+> Use `jaccard_similarity_ie`. `reg_eq_similarity` is preferable only for
 > ranking pairs of near-identical set size that all sit below J ≈ 0.05, at
 > p ≤ 20 — and raising `-p` to 24 removes even that.
 
@@ -598,7 +598,7 @@ What *is* unchanged is everything published:
   Pearson optimum moves to k=20, w=20, p=20 (r = 1.0000) and still has ARI 0.693
   against the ARI optimum's 0.910.
 
-So the published Mode D figures should stay on `jaccard_similarity` — not
+So the published Mode D figures should stay on `reg_eq_similarity` — not
 because the two columns agree everywhere, but because they agree exactly where
 the figures make their claims, and moving would move them onto a column that
 `docs/seed-mode-d-hash-width.md` flags as suspect at p ≥ 20.
@@ -616,7 +616,7 @@ generate it, so the next session does not have to recompute:
   clusterings are degenerate.
 - `results/best_config_by_column.csv` — per-column argmax per objective with the
   full tie set. Confirms the `_ie` ARI optimum resolving to p=12, k=10, w=20 is
-  a 9-way tie broken by dplyr's stable sort, and that `jaccard_similarity`'s own
+  a 9-way tie broken by dplyr's stable sort, and that `reg_eq_similarity`'s own
   optimum is already an 8-way tie across precisions. The arbitrary tie-break is
   not new to the IE arm.
 - `results/estimator_arm_comparison.csv` — the per-precision table above.
@@ -625,7 +625,7 @@ generate it, so the next session does not have to recompute:
   cluster id.
 
 One thing this section did not say and should: **the Pearson optimum moves
-between columns** — k=20, w=100, p=24 on `jaccard_similarity` (r = 0.9996)
+between columns** — k=20, w=100, p=24 on `reg_eq_similarity` (r = 0.9996)
 against k=20, w=20 on `_ie` (r = 0.99997) — so Figure 7's two panels annotate
 different best-Pearson cells. The "Pearson-optimal ≠ ARI-optimal" claim survives
 either way (ARI 0.693 vs 0.910).

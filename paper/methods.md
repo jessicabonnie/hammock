@@ -6,7 +6,7 @@ This document is the working space for determining the content and organization 
 
 - The manuscript will not mention the former `with_ends` sequence metrics.
 - Inclusion–exclusion Jaccard (`jaccard_similarity_ie`) is the principal interval-mode metric for comparison with `bedtools jaccard`.
-- Register equality (`jaccard_similarity`) is retained by the software for compatibility and may be described in Methods, but it should not be the primary validation target in the main text.
+- Register equality (`reg_eq_similarity`) is retained by the software for compatibility and may be described in Methods, but it should not be the primary validation target in the main text.
 - Figure 4 should emphasize inclusion–exclusion Jaccard as the metric that lies near the identity line with BEDTools. Register equality should be removed from the main figure unless it serves a clearly necessary secondary purpose.
 
 # Proposed Methods organization
@@ -90,7 +90,7 @@ Include:
 Include:
 
 - `jaccard_similarity_ie`: set-Jaccard estimate obtained from HLL cardinality estimates using inclusion-exclusion. This is the principal interval-mode metric used for comparison with `bedtools jaccard`.
-- `jaccard_similarity`: register-equality statistic, defined as the fraction of active HLL registers whose stored values are equal. It is retained for compatibility with the original Hammock implementation and is not ordinary set Jaccard.
+- `reg_eq_similarity`: register-equality statistic, defined as the fraction of active HLL registers whose stored values are equal. It is retained for compatibility with the original Hammock implementation and is not ordinary set Jaccard.
 - `containment_AB` and `containment_BA`: directional containment estimates.
 - `cosketch_geom`, `cosketch_arith`, and `cosketch_max`: symmetric summaries of the directional containments.
 - Sequence-mode rows record the reference associated with each collection when sequence is extracted from BED input.

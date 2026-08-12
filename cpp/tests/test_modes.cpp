@@ -25,7 +25,7 @@ TEST_CASE("Mode A: same BED file ⇒ Jaccard 1.0") {
     HLLSketch a(14), b(14);
     process_bed_file_mode_a(p, a);
     process_bed_file_mode_a(p, b);
-    CHECK(a.jaccard_similarity(b) == doctest::Approx(1.0).epsilon(1e-9));
+    CHECK(a.reg_eq_similarity(b) == doctest::Approx(1.0).epsilon(1e-9));
     std::remove(p.c_str());
 }
 
@@ -41,7 +41,7 @@ TEST_CASE("Mode A: chr/non-chr prefixes normalize identically") {
     HLLSketch a(14), b(14);
     process_bed_file_mode_a(p1, a);
     process_bed_file_mode_a(p2, b);
-    CHECK(a.jaccard_similarity(b) == doctest::Approx(1.0).epsilon(1e-9));
+    CHECK(a.reg_eq_similarity(b) == doctest::Approx(1.0).epsilon(1e-9));
     std::remove(p1.c_str());
     std::remove(p2.c_str());
 }

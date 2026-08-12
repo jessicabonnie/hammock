@@ -22,11 +22,10 @@ OURS = shutil.which("hammock")
 
 pytestmark = pytest.mark.skipif(OURS is None, reason="hammock not on PATH")
 
-_FULL_TAIL = ["jaccard_similarity", "jaccard_similarity_ie",
+_FULL_TAIL = ["reg_eq_similarity", "jaccard_similarity_ie",
               "containment_AB", "containment_BA",
-              "cosketch_geom", "cosketch_arith", "cosketch_max",
-              "register_equality_similarity"]
-_RE_TAIL = ["jaccard_similarity", "register_equality_similarity"]
+              "cosketch_geom", "cosketch_arith", "cosketch_max"]
+_RE_TAIL = ["reg_eq_similarity"]
 _IE_TAIL = ["jaccard_similarity_ie"]
 
 # (flag args, filename tag, expected trailing similarity columns)
@@ -97,14 +96,14 @@ def test_mode_d_shape_header_filename_and_ref_columns(tmp_path: Path, flags, tag
         assert row[-2:] == ["NA", "NA"]  # plain FASTA run, no --ref
 
 
-def test_register_equality_matches_metrics_jaccard_similarity(tmp_path: Path) -> None:
-    """jaccard_similarity must be byte-identical between --re and --metrics."""
+def test_register_equality_matches_metrics_reg_eq_similarity(tmp_path: Path) -> None:
+    """reg_eq_similarity must be byte-identical between --re and --metrics."""
     re_csv = _run_shape(tmp_path, ["--register-equality"], "B", "tiny_a.bed", "tiny_b.bed")
     full_csv = _run_shape(tmp_path, ["--metrics"], "B", "tiny_a.bed", "tiny_b.bed")
     re_header, re_rows = _read_csv(re_csv)
     full_header, full_rows = _read_csv(full_csv)
-    re_val = re_rows[0][re_header.index("jaccard_similarity")]
-    full_val = full_rows[0][full_header.index("jaccard_similarity")]
+    re_val = re_rows[0][re_header.index("reg_eq_similarity")]
+    full_val = full_rows[0][full_header.index("reg_eq_similarity")]
     assert re_val == full_val
 
 
@@ -120,15 +119,6 @@ def test_default_matches_metrics_jaccard_similarity_ie(tmp_path: Path) -> None:
     assert ie_val == full_val
 
 
-def test_register_equality_similarity_duplicates_jaccard_similarity(tmp_path: Path) -> None:
-    for flags in (["--register-equality"], ["--metrics"]):
-        csv_path = _run_shape(tmp_path, flags, "B", "tiny_a.bed", "tiny_b.bed")
-        header, rows = _read_csv(csv_path)
-        j = rows[0][header.index("jaccard_similarity")]
-        re_sim = rows[0][header.index("register_equality_similarity")]
-        assert j == re_sim, (flags, header, rows)
-
-
 def test_metrics_and_register_equality_are_mutually_exclusive(tmp_path: Path) -> None:
     files = _files_list(tmp_path, "tiny_a.bed", "tiny_b.bed")
     r = _run([OURS, str(files), str(files), "--mode", "B", "-p", "12",
@@ -141,4 +131,4 @@ def test_re_is_an_alias_for_register_equality(tmp_path: Path) -> None:
     csv_path = _run_shape(tmp_path, ["--re"], "B", "tiny_a.bed", "tiny_b.bed")
     assert csv_path.name.endswith("_re.csv")
     header, _ = _read_csv(csv_path)
-    assert header[-2:] == _RE_TAIL
+    assert header[-len(_RE_TAIL):] == _RE_TAIL

@@ -26,12 +26,11 @@ _REPO = Path(__file__).resolve().parent.parent
 # Column lists per shape, matching runner.py's _metrics_shape exactly (order
 # matters -- these double as the expected trailing-header slice).
 _IE_COLS = ["jaccard_similarity_ie"]
-_RE_COLS = ["jaccard_similarity", "register_equality_similarity"]
+_RE_COLS = ["reg_eq_similarity"]
 _FULL_COLS = [
-    "jaccard_similarity", "jaccard_similarity_ie",
+    "reg_eq_similarity", "jaccard_similarity_ie",
     "containment_AB", "containment_BA",
     "cosketch_geom", "cosketch_arith", "cosketch_max",
-    "register_equality_similarity",
 ]
 _IE_HEADER = ["query", "reference"] + _IE_COLS
 _RE_HEADER = ["query", "reference"] + _RE_COLS
@@ -200,27 +199,37 @@ def test_shapes_produce_distinct_filenames(corpus, tmp_path: Path):
     assert {n.rsplit("_", 1)[-1] for n in names} == {"ie.csv", "re.csv", "full.csv"}, names
 
 
-def test_jaccard_similarity_is_identical_across_re_and_full_shapes(corpus, tmp_path: Path):
+def test_reg_eq_similarity_is_identical_across_re_and_full_shapes(corpus, tmp_path: Path):
     """The frozen column must not depend on which shape you asked for.
 
-    `jaccard_similarity` is register-equality and every archived analysis is
+    `reg_eq_similarity` is register-equality and every archived analysis is
     calibrated against it, so flipping shapes must not perturb it. "ie" has
-    no jaccard_similarity column at all, so the comparable pair is re vs full.
+    no reg_eq_similarity column at all, so the comparable pair is re vs full.
     """
     q, r = corpus
     full = _run_cpp(q, r, tmp_path / "full", "full")
     re_ = _run_cpp(q, r, tmp_path / "slim", "re")
     assert set(full) == set(re_)
     for key in full:
-        assert full[key]["jaccard_similarity"] == re_[key]["jaccard_similarity"], key
+        assert full[key]["reg_eq_similarity"] == re_[key]["reg_eq_similarity"], key
 
 
-@pytest.mark.parametrize("shape", ["re", "full"])
-def test_register_equality_similarity_duplicates_jaccard_similarity(corpus, tmp_path: Path, shape):
+@pytest.mark.parametrize("shape,header", [(s, h) for s, _f, _t, h in _SHAPES])
+def test_shape_row_length_matches_header(corpus, tmp_path: Path, shape, header):
+    """csv.DictReader silently tolerates a row with the wrong field count
+    (extra values go to the None restkey, missing ones get restval) -- a
+    header/stride desync in the C++ output (e.g. a stale `cell[]` write left
+    over from a column-count change) would not be caught by the
+    column-by-column checks elsewhere in this file. Parse raw lines instead,
+    mirroring tests/test_metrics_flags.py's `len(row) == len(header)` checks.
+    """
     q, r = corpus
-    rows = _run_cpp(q, r, tmp_path / f"dup_{shape}", shape)
-    for key, row in rows.items():
-        assert row["jaccard_similarity"] == row["register_equality_similarity"], (shape, key, row)
+    cpp_path = _run_cpp_path(q, r, tmp_path / f"len_{shape}", shape)
+    lines = cpp_path.read_text().splitlines()
+    assert lines[0].split("\t") == header
+    for line in lines[1:]:
+        row = line.split("\t")
+        assert len(row) == len(header), (shape, row)
 
 
 def test_default_matches_metrics_jaccard_similarity_ie(corpus, tmp_path: Path):

@@ -39,7 +39,6 @@ repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 data_dir <- file.path(repo_root, "docs", "data")
 peaks_csv <- file.path(data_dir, "exp_a_broad_k10_w10.csv")
 meta_tsv <- file.path(data_dir, "exp_a_metadata.tsv")
-DEFAULT_SIM_COL <- "jaccard_similarity"
 
 argv <- commandArgs(trailingOnly = TRUE)
 out_png <- if (length(argv) >= 1) {
@@ -47,10 +46,13 @@ out_png <- if (length(argv) >= 1) {
 } else {
   file.path(repo_root, "paper", "figures", "cross_reference_identity.png")
 }
-# argv[2] selects the similarity column. `jaccard_similarity_ie` is accepted
-# even though this CSV predates that column: it carries containment_AB and
-# containment_BA, from which it is exactly recoverable (see below).
-SIM_COL <- if (length(argv) >= 2 && nzchar(argv[2])) argv[2] else DEFAULT_SIM_COL
+# argv[2] selects the similarity column explicitly. `jaccard_similarity_ie` is
+# accepted even though this CSV predates that column: it carries
+# containment_AB and containment_BA, from which it is exactly recoverable
+# (see below). When not given, resolved below (after raw is loaded) preferring
+# reg_eq_similarity and falling back to jaccard_similarity for archived
+# pre-Step-1 CSVs -- see docs/seed-jaccard-reg-eq-rename.md Step 2.
+SIM_COL_ARG <- if (length(argv) >= 2 && nzchar(argv[2])) argv[2] else NA_character_
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 
 for (path in c(peaks_csv, meta_tsv)) {
@@ -104,6 +106,15 @@ if (!("jaccard_similarity_ie" %in% names(raw)) &&
   raw[["jaccard_similarity_ie"]] <-
     jaccard_ie_from_containments(raw$containment_AB, raw$containment_BA)
 }
+resolve_sim_col <- function(explicit, df) {
+  if (!is.na(explicit)) return(explicit)
+  if ("reg_eq_similarity" %in% names(df)) return("reg_eq_similarity")
+  message(
+    "reg_eq_similarity not found in input CSV; falling back to jaccard_similarity"
+  )
+  "jaccard_similarity"
+}
+SIM_COL <- resolve_sim_col(SIM_COL_ARG, raw)
 if (!SIM_COL %in% names(raw)) {
   stop(
     "Similarity column '", SIM_COL, "' not present in ", basename(peaks_csv),
@@ -291,7 +302,7 @@ panel <- ggplot() +
     # Named only on the non-default column, so the manuscript figure is
     # unchanged. It goes in the subtitle rather than the title because the
     # title is already near the panel width and appending to it clips.
-    subtitle = if (identical(SIM_COL, DEFAULT_SIM_COL)) NULL else {
+    subtitle = if (is.na(SIM_COL_ARG)) NULL else {
       sprintf("similarity = %s", SIM_COL)
     },
     x = "1 − Jaccard (UPGMA)",

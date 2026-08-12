@@ -208,7 +208,7 @@ py::array_t<double> pairwise_jaccard_hll(const py::sequence& a_seq,
             for (py::ssize_t j = 0; j < m; j++) {
                 if (err.tripped()) continue;
                 try {
-                    buf(i, j) = a[i]->jaccard_similarity(*b[j]);
+                    buf(i, j) = a[i]->reg_eq_similarity(*b[j]);
                 } catch (...) {
                     err.capture();
                 }
@@ -277,15 +277,15 @@ pairwise_metrics_hll(const py::sequence& a_seq,
             for (py::ssize_t j = 0; j < m; j++) {
                 if (err.tripped()) continue;
                 try {
-                    // One register pass yields both the Jaccard and the union
-                    // cardinality. intersection_size() would re-estimate both
-                    // operands' cardinalities per pair (they are already
-                    // hoisted above) and materialize a union sketch — 16 MiB at
-                    // p=24, allocated and freed N*M times. See
-                    // HLLSketch::jaccard_and_union_cardinality for why this is
+                    // One register pass yields both the register-equality
+                    // similarity and the union cardinality. intersection_size()
+                    // would re-estimate both operands' cardinalities per pair
+                    // (they are already hoisted above) and materialize a union
+                    // sketch — 16 MiB at p=24, allocated and freed N*M times. See
+                    // HLLSketch::reg_eq_and_union_cardinality for why this is
                     // bit-identical rather than merely close.
                     double u;
-                    a[i]->jaccard_and_union_cardinality(*b[j], jbuf(i, j), u);
+                    a[i]->reg_eq_and_union_cardinality(*b[j], jbuf(i, j), u);
                     const double inter = std::max(0.0, a_card[i] + b_card[j] - u);
                     abbuf(i, j) = (a_card[i] > 0) ? (inter / a_card[i]) : 0.0;
                     babuf(i, j) = (b_card[j] > 0) ? (inter / b_card[j]) : 0.0;
@@ -318,14 +318,14 @@ PYBIND11_MODULE(_core, m) {
              py::arg("s"),
              "Hash a string with XXH64(seed=0) and add to the sketch.")
         .def("estimate_cardinality", &HLLSketch::cardinality)
-        .def("estimate_jaccard",
+        .def("estimate_reg_eq_similarity",
              [](const HLLSketch& self, const HLLSketch& other) {
-                 return self.jaccard_similarity(other);
+                 return self.reg_eq_similarity(other);
              },
              py::arg("other"))
         // Inclusion-exclusion |A| + |B| - |A u B|, clamped at 0 — the estimator
         // behind the containment/cosketch columns, and a different quantity
-        // from estimate_jaccard's register-equality statistic. Exposed so the
+        // from estimate_reg_eq_similarity's register-equality statistic. Exposed so the
         // two paths are separately testable; see
         // tests/test_containment_estimator.py.
         .def("estimate_intersection",

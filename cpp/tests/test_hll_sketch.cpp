@@ -17,7 +17,7 @@ TEST_CASE("HLLSketch identical inputs => Jaccard 1.0") {
         a.add(h);
         b.add(h);
     }
-    CHECK(a.jaccard_similarity(b) == doctest::Approx(1.0).epsilon(0.05));
+    CHECK(a.reg_eq_similarity(b) == doctest::Approx(1.0).epsilon(0.05));
 }
 
 TEST_CASE("HLLSketch disjoint inputs => low Jaccard") {
@@ -28,7 +28,7 @@ TEST_CASE("HLLSketch disjoint inputs => low Jaccard") {
     }
     // Jaccard for two disjoint sets should be near zero. With p=14 and
     // 1000 elements each, give plenty of slack.
-    CHECK(a.jaccard_similarity(b) < 0.1);
+    CHECK(a.reg_eq_similarity(b) < 0.1);
 }
 
 TEST_CASE("HLLSketch determinism: same inputs in different order produce identical state") {
@@ -40,7 +40,7 @@ TEST_CASE("HLLSketch determinism: same inputs in different order produce identic
         b.add(xxhash::hash64("k_" + std::to_string(i)));
     }
     CHECK(a.cardinality() == doctest::Approx(b.cardinality()));
-    CHECK(a.jaccard_similarity(b) == doctest::Approx(1.0).epsilon(1e-9));
+    CHECK(a.reg_eq_similarity(b) == doctest::Approx(1.0).epsilon(1e-9));
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ TEST_CASE("HLLSketch disjoint sets give containment near zero, unlike register-e
     const double c_ab = a.intersection_size(b) / a.cardinality();
     CHECK(c_ab < 0.02);
     // ... while the register-equality Jaccard sits on its floor, well above 0.
-    CHECK(a.jaccard_similarity(b) > 0.10);
+    CHECK(a.reg_eq_similarity(b) > 0.10);
 }
 
 TEST_CASE("HLLSketch intersection_size never returns a negative estimate") {
@@ -132,7 +132,7 @@ TEST_CASE("HLLSketch mismatched precision throws instead of overreading") {
     }
     CHECK_THROWS_AS(big.union_with(small), std::runtime_error);
     CHECK_THROWS_AS(big.intersection_size(small), std::runtime_error);
-    CHECK_THROWS_AS(big.jaccard_similarity(small), std::runtime_error);
+    CHECK_THROWS_AS(big.reg_eq_similarity(small), std::runtime_error);
     // ...and in the other direction, where the overread would be a write.
     CHECK_THROWS_AS(small.union_with(big), std::runtime_error);
     CHECK_THROWS_AS(small.intersection_size(big), std::runtime_error);

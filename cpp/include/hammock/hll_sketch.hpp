@@ -45,13 +45,13 @@ public:
     }
     // In-place elementwise max — used to combine thread-local accumulators.
     void merge_max(const HLLSketch& other);
-    double jaccard_similarity(const AbstractSketch& other) const override;
+    double reg_eq_similarity(const AbstractSketch& other) const override;
     double cardinality() const override;
 
     // One pass over both register arrays, yielding the register-equality
-    // Jaccard *and* the cardinality of the union — without materializing the
-    // union sketch. This is what the pairwise metric loops want: the old route
-    // (jaccard_similarity + union_with()->cardinality(), or worse
+    // similarity *and* the cardinality of the union — without materializing
+    // the union sketch. This is what the pairwise metric loops want: the old route
+    // (reg_eq_similarity + union_with()->cardinality(), or worse
     // intersection_size()) walks the registers three to five times per pair and
     // heap-allocates 16 MiB at p=24 for a union that is read once and thrown
     // away.
@@ -64,9 +64,9 @@ public:
     // registers directly is the z < 1e-10 Flajolet fallback, which is
     // summation-order sensitive; it is reproduced here over max(a[i], b[i]) in
     // index order.
-    void jaccard_and_union_cardinality(const HLLSketch& other,
-                                       double& jaccard,
-                                       double& union_cardinality) const;
+    void reg_eq_and_union_cardinality(const HLLSketch& other,
+                                      double& reg_eq,
+                                      double& union_cardinality) const;
 
     double intersection_size(const AbstractSketch& other) const override;
     std::unique_ptr<AbstractSketch> union_with(const AbstractSketch& other) const override;

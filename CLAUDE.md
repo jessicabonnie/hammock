@@ -67,7 +67,7 @@ every `-march=` tried (x86-64, v2, haswell, skylake-avx512, native), **and**
 `-Ofast`/`-ffast-math` — the τ/σ loops are loop-carried, so there is nothing
 to reassociate. Treat that as "no known hazard", not a guarantee: if you touch
 the flags, re-run the byte-identity gate (capture a Mode B + Mode D CSV before
-and after and diff the whole row). `jaccard_similarity` itself is an exact
+and after and diff the whole row). `reg_eq_similarity` itself is an exact
 ratio of two integer register counts and is immune either way.
 
 The bed2fasta tests (`tests/test_bed2fasta*.py`) and their `--ref` end-to-end
@@ -85,15 +85,27 @@ build, or the site-packages copy.
 **Since v0.8.0, both front-ends share a three-shape output contract** —
 mutually exclusive flags, every shape tagged, none bare
 (`docs/seed-metrics-column-restructure.md`; landed on the
-`metrics-restructure` branch 2026-08-11, not yet merged to `main` at time of
-writing — see that seed's Part 8. Add a dated "SHIPPED" note here, matching
-divergence #9's framing, once the merge lands):
+`metrics-restructure` branch and merged to `main` 2026-08-11/12, `00e3dd5`/
+`071dcf4` — **SHIPPED**, correcting this note, which had sat unresolved
+since before the merge landed; see that seed's Part 8/9).
+
+**SHIPPED 2026-08-12 (v0.9.0, `docs/seed-jaccard-reg-eq-rename.md`):** the
+register-equality column is renamed `jaccard_similarity` →
+`reg_eq_similarity` (the name was misleading — it is not set Jaccard, see
+divergence #2 below), and the now-redundant `register_equality_similarity`
+literal-duplicate column (added by the v0.8.0 restructure specifically to
+make `--re`/`--metrics` output self-describing without relying on column
+position — `reg_eq_similarity` now does that on its own) is dropped.
+Shrinks `re` from 4 columns to 3 and `full` from 8 to 7. `jaccard_similarity_ie`
+is untouched, in every shape. Code that reads archived pre-rename CSVs
+should prefer `reg_eq_similarity` if present, falling back to
+`jaccard_similarity` if not.
 
 | Shape | Flag | Columns | Filename tag |
 |---|---|---|---|
 | default | *(none)* | `jaccard_similarity_ie` alone | `_ie` |
-| register-equality | `--register-equality`/`--re` | `jaccard_similarity`, `register_equality_similarity` (literal duplicate) | `_re` |
-| full | `--metrics` | `jaccard_similarity`, `jaccard_similarity_ie`, `containment_AB/BA`, `cosketch_*`, `register_equality_similarity` (8 cols; last duplicates the first) | `_full` |
+| register-equality | `--register-equality`/`--re` | `reg_eq_similarity` | `_re` |
+| full | `--metrics` | `reg_eq_similarity`, `jaccard_similarity_ie`, `containment_AB/BA`, `cosketch_*` (7 cols) | `_full` |
 
 The IE derivation is written the same way in both front-ends — see
 `jaccard_ie_from_containments` in `hammock_cli.cpp` and
@@ -126,8 +138,9 @@ characteristics between the two front-ends for this flag — only the column
 contract is guaranteed to match bit-for-bit, not the cost profile.
 
 Pass **`--register-equality`/`--re`** on `hammock-cpp` for timing runs. It
-drops to 2 columns and tags the output `_re` (**not** `_j3` — that tag is
-gone). The default (bare) shape is **not** the cheap arm either — it needs the
+drops to 1 column (`reg_eq_similarity`, since v0.9.0 — see the SHIPPED note
+above) and tags the output `_re` (**not** `_j3` — that tag is gone). The
+default (bare) shape is **not** the cheap arm either — it needs the
 same fused union pass `--metrics` does, just fewer output columns — so a timed
 run comparing default vs. `--metrics` measures write cost, not estimator cost;
 comparing `--re` vs. either of the other two measures the union pass itself.
@@ -146,9 +159,13 @@ are the *old* two-shape contract (`--metrics` = the old always-full block,
 are unaffected, since the restructure only changed which flag reaches which
 shape, not the cost of computing the union pass or writing the extra columns.
 `--no-metrics` there maps to today's `--register-equality`/`--re`; the old
-`--metrics` maps closest to today's `--metrics` (today's block additionally
-writes one more `%.17g` field for `register_equality_similarity`, not
-separately measured here):
+`--metrics` maps closest to today's `--metrics`. (At the time this
+measurement was taken, the v0.8.0 block additionally wrote one more `%.17g`
+field for `register_equality_similarity`, not separately measured here; that
+field is gone as of v0.9.0's rename/dedup, so today's `--metrics` writes one
+fewer column than what was actually measured below — a small, un-remeasured
+difference in the write-cost direction, not the estimator cost the table is
+about.):
 
 | p | 12 | 14 | 16 | 18 | 20 | 22 | 24 |
 |---|---|---|---|---|---|---|---|
@@ -373,10 +390,10 @@ establishing. Read the seed before re-litigating the question.
   `hash_size=32` option became viable once `_with_ends` was removed (divergence
   #8), since there is no longer a second sketch to merge with.
   **The pairwise metrics loop is one fused register pass** (2026-08-08).
-  `HLLSketch::jaccard_and_union_cardinality` walks both register arrays once,
+  `HLLSketch::reg_eq_and_union_cardinality` walks both register arrays once,
   accumulating the matching/active tallies *and* `counts[max(a[i], b[i])]++` —
   the union's register-value histogram — so no union sketch is ever built. It
-  replaced `jaccard_similarity()` + `intersection_size()`, which between them
+  replaced `reg_eq_similarity()` + `intersection_size()`, which between them
   walked the registers five times per pair and heap-allocated a whole sketch
   (16 MiB at p=24) N·M times, while re-estimating both operands' cardinalities
   that `pairwise_metrics_hll` had already hoisted.
@@ -439,7 +456,7 @@ These are deliberate; parity tests that touch them are skipped or projected.
    (the `>= 0` clamp lives in `pairwise_metrics_hll`; `HLLSketch::intersection_size`
    is the equivalent scalar reference path, kept for tests). Same
    formula as orig's `hyperloglog.py estimate_intersection`. This is **not**
-   the register-equality path that `jaccard_similarity` uses — see the
+   the register-equality path that `reg_eq_similarity` uses — see the
    estimator note below, it matters:
    - `containment_AB = |A ∩ B| / |A|`
    - `containment_BA = |A ∩ B| / |B|`
@@ -474,12 +491,12 @@ These are deliberate; parity tests that touch them are skipped or projected.
    matches, you have hit this.
 
    **The two estimator families in a row are on different scales — do not
-   mix them.** `jaccard_similarity` is register-equality, which carries a
+   mix them.** `reg_eq_similarity` is register-equality, which carries a
    chance-agreement floor `c` (two registers tie when different elements
    have equal ρ). The containment/cosketch block is inclusion-exclusion and
    carries no such floor. Measured on *disjoint* inputs at p=16, n=2×10⁵:
-   `jaccard_similarity = 0.168` while `containment_AB = 0.000`. So
-   `jaccard_similarity` is *approximately* an affine transform `c + (1−c)·J`
+   `reg_eq_similarity = 0.168` while `containment_AB = 0.000`. So
+   `reg_eq_similarity` is *approximately* an affine transform `c + (1−c)·J`
    of set-Jaccard, while the containments estimate the true set quantities.
    Two qualifications, both measured, both load-bearing:
 
@@ -493,7 +510,7 @@ These are deliberate; parity tests that touch them are skipped or projected.
      |A|/|B|**, not by precision as such: 0.1699 as λ→∞ at equal cardinality,
      but 0.152 at ratio 2, 0.097 at ratio 5, 0.058 at ratio 10; and 0.045 at
      p=24 once m > n. It is **not** a constant you can subtract, and
-     **`jaccard_similarity` is therefore not rank-faithful across pairs of
+     **`reg_eq_similarity` is therefore not rank-faithful across pairs of
      differing cardinality ratio.** On the 20-sample Maurano corpus (ratio up
      to 2.2) it inverts bedtools' ordering for 2.5% of pairs (Kendall
      τ = 0.951). Rank only within comparable pairs.
@@ -507,15 +524,15 @@ These are deliberate; parity tests that touch them are skipped or projected.
    A/B/C output.
 
    **Pick by what you need.** `jaccard_similarity_ie` wins on *calibration*
-   (MAE vs bedtools 5×10⁻⁴ at p=20 vs 0.15 for `jaccard_similarity`), and it
+   (MAE vs bedtools 5×10⁻⁴ at p=20 vs 0.15 for `reg_eq_similarity`), and it
    is the only one of the two that is comparable across pairs of differing set
    size. Use it for magnitude and for any comparison spanning different set
-   sizes; use `jaccard_similarity` only to rank pairs of comparable size.
+   sizes; use `reg_eq_similarity` only to rank pairs of comparable size.
    Caveat on `_ie`: it is censored at 0 by the `>= 0` clamp (25/90 pairs at
    p=12, all low-J — an exact 0.0 means "clamped or empty", never "measured
    zero") and is uninformative below J ≈ a few/√m.
 
-   **The counter-claim that `jaccard_similarity` wins on *resolution* is
+   **The counter-claim that `reg_eq_similarity` wins on *resolution* is
    retracted as stated.** The measurement behind it (error sd 0.0014 vs
    0.0024 at p=16, J<0.05) used a binned statistic that mixes within-bin
    true-J variance into the register-equality column only, and it was taken
@@ -526,7 +543,7 @@ These are deliberate; parity tests that touch them are skipped or projected.
 
    | J < 0.05, τ vs bedtools | p=12 | p=16 | p=20 | p=24 |
    |---|---|---|---|---|
-   | `jaccard_similarity` | 0.335 | **0.658** | **0.905** | 0.907 |
+   | `reg_eq_similarity` | 0.335 | **0.658** | **0.905** | 0.907 |
    | `jaccard_similarity_ie` | 0.289 | 0.562 | 0.794 | **0.967** |
 
    Above J = 0.05 both reach τ = 1 by p=20 and there is nothing to choose.
@@ -601,9 +618,10 @@ These are deliberate; parity tests that touch them are skipped or projected.
    path and returns `jaccard_similarity=0` even self-vs-self on synthetic
    FASTAs. We use `_core.HLLSketch.add_hash64(hash_val)` unconditionally
    — matching the *intent* of orig's fast path. Consequently our Mode D
-   `jaccard_similarity` differs from orig **even on `tiny.fa`** (e.g. 0.75
-   vs orig's 0.7903 at k=5,w=20): the minimizer *sets* are identical (same
-   `digest`), but orig's slow path hashes the *decimal digits* of each
+   `reg_eq_similarity` differs from orig's `jaccard_similarity` **even on
+   `tiny.fa`** (e.g. 0.75 vs orig's 0.7903 at k=5,w=20): the minimizer *sets*
+   are identical (same `digest`), but orig's slow path hashes the *decimal
+   digits* of each
    minimizer hash as k-mers while we ingest the raw 64-bit hash. So Mode D
    parity is **structural, not byte-equal** — `tests/test_mode_d_parity.py`
    asserts matching structural columns + well-formed similarity values, not
@@ -616,9 +634,12 @@ These are deliberate; parity tests that touch them are skipped or projected.
    libstdc++), see `memory/project_modeD_zero_rpath_digest.md`;
    `sketch_fasta` now raises loudly instead of falling back silently.
 7. **Second Jaccard column: `jaccard_similarity_ie`** (v0.4.0). Orig emits one
-   Jaccard column, computed by register equality. We emit that column
-   unchanged — byte-equal, and parity tests still compare it — plus a second
-   inclusion-exclusion column immediately after it. Rationale is divergence #2's
+   Jaccard column, computed by register equality. We emit that same
+   quantity — byte-equal, under our own name `reg_eq_similarity` since v0.9.0
+   (`docs/seed-jaccard-reg-eq-rename.md`; compared against orig's frozen
+   `jaccard_similarity` by column position now that the names differ, not by
+   name) — plus a second inclusion-exclusion column immediately after it.
+   Rationale is divergence #2's
    estimator note: the register-equality column is not set Jaccard and is not
    rank-faithful across pairs of differing size, so a run had no
    bedtools-comparable Jaccard in it even though the underlying quantity was
@@ -635,8 +656,9 @@ These are deliberate; parity tests that touch them are skipped or projected.
    `tests/test_parity_against_original.py` adds the new name to
    `_PROJECTED_OUT` so it is dropped before comparison — projecting out a
    *Jaccard* column looks wrong at a glance,
-   but orig has no counterpart to be unfaithful to and `jaccard_similarity`
-   is still compared byte-for-byte.
+   but orig has no counterpart to be unfaithful to and `reg_eq_similarity`
+   is still compared byte-for-byte (by position, against orig's
+   `jaccard_similarity`).
 8. **The Mode D `_with_ends` column family is removed** (v0.6.0). Orig emits
    `jaccard_similarity_with_ends`; we no longer do, and we also dropped the six
    `_ie`/containment/cosketch twins we had added alongside it. Mode D now emits
@@ -807,7 +829,7 @@ unaffected; `tests/test_autodetect.py` asserts the new default.
   divergence #9). HLL is the only `AbstractSketch` implementation now, so that
   interface is a single-implementation abstraction; re-deriving it when a second
   backend actually lands will be cheaper than carrying the current one, whose
-  `jaccard_similarity(const AbstractSketch&)` + `dynamic_cast` shape is exactly
+  `reg_eq_similarity(const AbstractSketch&)` + `dynamic_cast` shape is exactly
   what made BagMinHash awkward.
 - File-level multiprocessing fallback (we use threads only).
 
