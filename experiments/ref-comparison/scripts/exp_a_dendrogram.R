@@ -29,6 +29,12 @@ broad_csv <- args[1]; narrow_csv <- args[2]
 meta_file <- args[3]; out_png   <- args[4]
 kw_label  <- if (length(args) >= 5) args[5] else "k=10, w=10"
 
+# Set once, the first time a loaded CSV lacks the post-rename
+# `reg_eq_similarity` column (docs/seed-jaccard-reg-eq-rename.md Step 2), so
+# the fallback message prints at most once per script run even though
+# build_dendro() below is called twice (broad, narrow).
+.reg_eq_fallback_logged <- FALSE
+
 meta <- read_tsv(meta_file, show_col_types = FALSE) %>%
   mutate(key = paste(sample_id, ref, sep = "__"))
 
@@ -44,11 +50,22 @@ build_dendro <- function(csv_file, peak_type) {
            key_a    = paste(sample_a, ref_a, sep = "__"),
            key_b    = paste(sample_b, ref_b, sep = "__"))
 
+  # Prefer the post-rename column; fall back to the legacy name for archived
+  # CSVs written before docs/seed-jaccard-reg-eq-rename.md's Step 1. Resolved
+  # once before the loop, not re-checked per row.
+  sim_col <- if ("reg_eq_similarity" %in% names(mat)) "reg_eq_similarity" else "jaccard_similarity"
+  if (sim_col != "reg_eq_similarity" && !.reg_eq_fallback_logged) {
+    message("exp_a_dendrogram.R: 'reg_eq_similarity' column not found in ",
+            csv_file, "; falling back to legacy 'jaccard_similarity' column ",
+            "name (pre-rename hammock output).")
+    .reg_eq_fallback_logged <<- TRUE
+  }
+
   keys <- sort(unique(c(mat$key_a, mat$key_b)))
   n    <- length(keys)
   sim  <- matrix(NA_real_, n, n, dimnames = list(keys, keys))
   for (i in seq_len(nrow(mat))) {
-    sim[mat$key_a[i], mat$key_b[i]] <- mat$jaccard_similarity[i]
+    sim[mat$key_a[i], mat$key_b[i]] <- mat[[sim_col]][i]
   }
   # Symmetrize defensively, then derive distance.
   sim[is.na(sim)] <- t(sim)[is.na(sim)]

@@ -31,11 +31,29 @@ mat_file  <- snakemake@input[["matrix"]]
 meta_file <- snakemake@input[["metadata"]]
 out_plot  <- snakemake@output[["plot"]]
 out_stats <- snakemake@output[["stats"]]
-sim_col   <- snakemake@params[["sim_col"]]
+# Snakemake-injected literal, now only a legacy default -- see the
+# reg_eq_similarity-preferred resolution below, after the data is loaded
+# (docs/seed-jaccard-reg-eq-rename.md Step 2, round 2 correction:
+# workflow/Snakefile:180's literal is left untouched and unused for the
+# preferred path).
+snakemake_sim_col <- snakemake@params[["sim_col"]]
 
 # ── Load data ─────────────────────────────────────────────────────────────
 mat  <- read_csv(mat_file, show_col_types = FALSE)
 meta <- read_tsv(meta_file, show_col_types = FALSE)
+
+# Prefer the post-rename `reg_eq_similarity` column if the loaded matrix has
+# it; otherwise fall back to the Snakemake-passed `sim_col` param (which for
+# pre-rename runs/configs is "jaccard_similarity"). Logged only when the
+# fallback actually fires, so a fresh post-rename run stays silent.
+if ("reg_eq_similarity" %in% names(mat)) {
+  sim_col <- "reg_eq_similarity"
+} else {
+  sim_col <- snakemake_sim_col
+  message("exp_a_validate_plot.R: 'reg_eq_similarity' column not found in ",
+          mat_file, "; falling back to Snakemake-passed sim_col param (",
+          snakemake_sim_col, ").")
+}
 
 # Hammock output is long-form with columns like:
 #   file1, file2, jaccard_similarity, jaccard_similarity_with_ends, ...

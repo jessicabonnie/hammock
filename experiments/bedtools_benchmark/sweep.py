@@ -124,6 +124,9 @@ def parse_bedtools_jaccards(stdout: str):
     return out
 
 
+_SWEEP_REG_EQ_FALLBACK_LOGGED = False
+
+
 def parse_hammock_csv(path: str, column: str = "jaccard_similarity"):
     """Read one similarity column out of a hammock-cpp TSV, by header name.
 
@@ -134,24 +137,46 @@ def parse_hammock_csv(path: str, column: str = "jaccard_similarity"):
     and --metrics is 10 (query, reference + 8 metric columns) -- so an index
     would silently read containment_AB as if it were a Jaccard.
 
-    Raises KeyError if the file exists but lacks `column` -- that means the
-    binary ran with a narrower shape (--register-equality or the bare
-    default) than `column` needs, and returning {} instead would show up
+    When `column` is the default `"jaccard_similarity"` (the register-
+    equality metric), this prefers the post-rename `reg_eq_similarity` header
+    if present (docs/seed-jaccard-reg-eq-rename.md), falling back to the
+    legacy `jaccard_similarity` name for archived files written before that
+    rename -- logged once per script run, the first time the fallback fires,
+    so a fresh run that's still silently emitting the old name doesn't look
+    identical to expected legacy-file handling. Any other `column` value
+    (e.g. `jaccard_similarity_ie`) is looked up verbatim -- no preference, no
+    fallback, no log.
+
+    Raises KeyError if the file exists but lacks the resolved column -- that
+    means the binary ran with a narrower shape (--register-equality or the
+    bare default) than `column` needs, and returning {} instead would show up
     downstream as "no pairs in common", i.e. a silently empty accuracy column
     rather than a failure.
     """
+    global _SWEEP_REG_EQ_FALLBACK_LOGGED
     out = {}
     if not path or not os.path.exists(path):
         return out
     with open(path) as f:
         header = f.readline().rstrip("\n").split("\t")
+        lookup_column = column
+        if column == "jaccard_similarity" and "reg_eq_similarity" in header:
+            lookup_column = "reg_eq_similarity"
+        elif column == "jaccard_similarity" and "jaccard_similarity" in header \
+                and not _SWEEP_REG_EQ_FALLBACK_LOGGED:
+            print("sweep.py: 'reg_eq_similarity' column not found in "
+                  f"{path}; falling back to legacy 'jaccard_similarity' "
+                  "column name (pre-rename hammock-cpp output).",
+                  file=sys.stderr)
+            _SWEEP_REG_EQ_FALLBACK_LOGGED = True
         try:
-            idx = header.index(column)
+            idx = header.index(lookup_column)
         except ValueError:
             raise KeyError(
-                f"{path} has no {column!r} column (header: {header}). "
+                f"{path} has no {lookup_column!r} column (header: {header}). "
                 f"Re-run hammock-cpp with --metrics (or --register-equality "
-                f"if `column` is jaccard_similarity/register_equality_similarity).") from None
+                f"if `column` is jaccard_similarity/register_equality_similarity/"
+                f"reg_eq_similarity).") from None
         for line in f:
             parts = line.rstrip("\n").split("\t")
             if len(parts) <= idx:

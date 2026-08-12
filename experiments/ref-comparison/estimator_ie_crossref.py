@@ -47,6 +47,32 @@ from hammock.runner import _jaccard_ie_from_containments as _ie  # noqa: E402
 RESULTS = os.path.join(_REPO, "experiments", "ref-comparison", "results", "exp_a")
 META = os.path.join(_REPO, "docs", "data", "exp_a_metadata.tsv")
 
+# Set once, the first time a row is read with the pre-rename
+# `jaccard_similarity` column instead of `reg_eq_similarity`
+# (docs/seed-jaccard-reg-eq-rename.md Step 2). `cell_stats` is called once
+# per CSV via an outer glob over potentially many "cell" directories, so this
+# flag is module-level -- logged once for the whole run, not once per cell.
+_REG_EQ_FALLBACK_LOGGED = False
+
+
+def _reg_eq_value(row: dict, path: str) -> float:
+    """Read the register-equality column, preferring the post-rename name.
+
+    Falls back to the legacy `jaccard_similarity` name for archived CSVs
+    written before the rename; logs the fallback once for the whole run.
+    """
+    global _REG_EQ_FALLBACK_LOGGED
+    val = row.get("reg_eq_similarity")
+    if val is not None:
+        return float(val)
+    if not _REG_EQ_FALLBACK_LOGGED:
+        print("estimator_ie_crossref.py: 'reg_eq_similarity' column not "
+              f"found (first seen in {path}); falling back to legacy "
+              "'jaccard_similarity' column name (pre-rename hammock "
+              "output).", file=sys.stderr)
+        _REG_EQ_FALLBACK_LOGGED = True
+    return float(row["jaccard_similarity"])
+
 
 def load_tissue_map(path: str) -> dict[str, str]:
     with open(path) as fh:
@@ -81,7 +107,7 @@ def cell_stats(path: str, tissue_of: dict[str, str]) -> dict | None:
             t1, t2 = tissue_of.get(s1), tissue_of.get(s2)
             if t1 is None or t2 is None:
                 return None  # unannotated sample: refuse to guess
-            reg = float(row["jaccard_similarity"])
+            reg = _reg_eq_value(row, path)
             ie = float(_ie(np.array([[float(row["containment_AB"])]]),
                            np.array([[float(row["containment_BA"])]]))[0, 0])
             bucket = xref if t1 == t2 else diff
