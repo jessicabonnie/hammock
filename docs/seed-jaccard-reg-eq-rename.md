@@ -594,6 +594,45 @@ separate since the second is pure data-file editing with its own `diff`-based
 verification and reviewers may want to inspect it independently of the code
 change.
 
+**Review gate round 2, run 2026-08-12 (3 fresh parallel passes, focused on
+round 1's two new fixes and their knock-on effects, per "Review process"'s
+re-run rule):**
+
+- **Scope completeness: clean.** Both fixes verified correct against the
+  actual current file content (line numbers match exactly, no drift). The
+  `lines[1:]` fix has exactly one caller and no other header-as-data instance
+  exists in that file. The widened `startswith` tuples were traced
+  column-by-column against `runner._metrics_shape`'s actual "full" list and
+  confirmed to select the same set (7 similarity cols / 5 symmetric cols)
+  pre- and post-rename, with `containment`/`cosketch` untouched. A sweep of
+  the remaining 6 Scope-E files plus the emitting code found no third
+  non-literal reference to the column — round 1's two fixes are the complete
+  set.
+- **Risk/safety: clean.** `lines[1:]` loses no real test coverage (any
+  genuine column-count/order mismatch would still fail on every data row, not
+  just the header) and is the correct fix rather than a weakened one. The
+  widened tuples don't false-positive-match anything else in the full 8-column
+  shape — `register_equality_similarity` diverges from `reg_eq_similarity` at
+  the 4th character, so it stays correctly excluded, unchanged from before.
+  Both fixes are pure Python test-file edits (`runner.py`-backed CLI path),
+  no C++ rebuild needed to implement or verify them. Round 1's two
+  non-blocking findings re-confirmed accurate by direct read of both named R
+  scripts (`stop()`-on-missing-column in both, not silent degradation).
+- **Process/convention fit: clean, plus two mechanical cleanups identified
+  and now applied** (not requiring their own review round, per the "purely
+  mechanical" carve-out): the Setup inventory's first correction paragraph
+  had a stale "see ... below" pointing at content that is actually above it
+  in the file — fixed to "above". And round 1's `plot_parameter_objective_tradeoff.R`
+  finding was recorded as a note inside Step 1's round-1 subsection but never
+  actually threaded into Step 2's own consumer list — fixed: Step 2's
+  "Reading `mode_d_summary.csv`'s `column` field" paragraph now names six
+  consumers, not five, including that file. Both the commit-discipline check
+  (seed-doc edits on `main`, worktree branch untouched and still at `f4cf813`
+  pre-Step-1) and round 1's re-run-vs-mechanical judgment call were confirmed
+  correct on independent re-derivation, not just accepted as given.
+
+**Step 1 is ready to implement.** Proceeding to the actual edits.
+
 **Then stop.** Per "Review process" above: report what landed and the
 subagent reviewers' findings, and wait for the user's own go-ahead before
 starting Step 1b. Do not continue automatically.
@@ -736,11 +775,20 @@ These four generated files are **not** hand-edited (Step 1 explicitly
 excluded them); Step 3 regenerates and diffs them instead.
 
 **Reading `mode_d_summary.csv`'s `column` field (category B2), specifically:**
-five consumers, not one — `paper/parameter_objective_tradeoff/plot_parameter_objective_tradeoff_estimators.R`
-plus all four of `docs/scripts/mode_d_violins.R`, `mode_d_lines.R`,
-`mode_d_metric_tradeoff.R`, `mode_d_bedtools_vs_modeB_scatter.R` filter on
+**six consumers, not five** (corrected 2026-08-12 by Step 1's round-1 risk/
+safety review — the original five-consumer count missed a sixth) —
+`paper/parameter_objective_tradeoff/plot_parameter_objective_tradeoff_estimators.R`,
+its non-`_estimators` sibling
+`paper/parameter_objective_tradeoff/plot_parameter_objective_tradeoff.R`
+(same `SIM_COLUMNS <- c("jaccard_similarity", "jaccard_similarity_ie")`
+pattern, confirmed live — not dead code — by `paper/draft.md:122`/
+`paper/outline.md:95`'s Figure 7 provenance paragraph: "the existing
+`plot_parameter_objective_tradeoff.R` is retained unchanged as the
+single-estimator diagnostic workflow"), plus all four of
+`docs/scripts/mode_d_violins.R`, `mode_d_lines.R`, `mode_d_metric_tradeoff.R`,
+`mode_d_bedtools_vs_modeB_scatter.R` filter on
 `column == "jaccard_similarity"`. Apply the same reg_eq_similarity-preferred/
-jaccard_similarity-fallback pattern to all five (their `column` field is data
+jaccard_similarity-fallback pattern to all six (their `column` field is data
 read from the regenerated CSV, not a CSV-level column name, so the fallback
 here is a value comparison — `filter(column %in% c("reg_eq_similarity",
 "jaccard_similarity"))` or equivalent — not a `names(df)` presence check).
@@ -1091,7 +1139,7 @@ in-scope via category D.
 **E. Tests.** Re-grepped all 8 files; confirmed each has at least one
 literal, non-`_ie` hit needing a fix, and traced what each actually reads.
 
-**Correction (post-gate finding, see "Step 1 review gate" below): the
+**Correction (post-gate finding, see "Step 1 review gate round 1" above): the
 paragraph originally here claimed `test_parity_against_original.py`'s
 `_projected_rows`/`test_jaccard_byte_equal` needed no code change. That
 claim was wrong, caught by the scope-completeness reviewer, not by this
