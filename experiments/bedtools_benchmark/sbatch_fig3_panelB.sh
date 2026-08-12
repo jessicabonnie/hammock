@@ -37,7 +37,9 @@
 #
 # VERIFICATION GATE. At p=18 the run must reproduce
 # jaccard_ie_mae_vs_bt = 1.1517e-3, which was computed independently from the
-# archived docs/data/hammock_hll_p18_jaccB.csv against maurano_bedtools_ref.tsv.
+# archived docs/data/hammock_hll_p18_jaccB_full.csv (renamed from
+# hammock_hll_p18_jaccB.csv in the metrics-column restructure -- same
+# content, tag added) against maurano_bedtools_ref.tsv.
 # A local dry run of this exact configuration returned 1.151647e-3 (ratio
 # 1.0000). A materially different value means something is wrong with the run,
 # not with the gate.

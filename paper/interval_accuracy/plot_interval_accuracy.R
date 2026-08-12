@@ -49,8 +49,13 @@ data_dir <- file.path(repo_root, "docs", "data")
 bedtools_tsv <- file.path(data_dir, "maurano_bedtools_ref.tsv")
 PRECISIONS <- c(18, 21, 23)
 REFERENCE_PRECISION <- 21
+# "_full" tag: this script reads both jaccard_similarity (register-equality)
+# and jaccard_similarity_ie, which only the full metrics block (--metrics)
+# emits together (python/hammock/outprefix.py; the file was renamed to match
+# in the metrics-column restructure, docs/seed-metrics-column-restructure.md
+# -- same content, tag added).
 hammock_csvs <- setNames(
-  file.path(data_dir, sprintf("hammock_hll_p%d_jaccB.csv", PRECISIONS)),
+  file.path(data_dir, sprintf("hammock_hll_p%d_jaccB_full.csv", PRECISIONS)),
   PRECISIONS
 )
 
