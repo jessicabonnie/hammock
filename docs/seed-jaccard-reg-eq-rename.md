@@ -847,8 +847,70 @@ identically, plus (per the risk/safety finding above) a clean
 `grep -rn 'estimate_jaccard\b'`/`grep -rn 'jaccard_similarity\b'` sweep of the
 relevant files for Part 2/Part 1 respectively.
 
+**Step 1b landed as two commits on the worktree branch** (`cfde6e7` Part 1 —
+C++ method rename + the 6 comment-sweep sites the pre-implementation gate
+authorized; `a64cd2c` Part 2 — Python binding rename), each verified before
+commit with a fresh build (conda-env compiler, per the cluster-compiler
+caveat), the required `grep` sweeps (both empty), `cpp/tests/hammock_tests`
+(21/22 passed — see below), and `pytest tests/` with `HAMMOCK_REQUIRE_CPP=1`
+(264 passed, 8 skipped, all bedtools/samtools-PATH, none digest-gated in this
+environment). Then re-reviewed by 3 fresh adversarial subagents against the
+**actual diff** (correctness line-by-line, blast radius/scope, verification-gap
+hunting) — same pattern as Step 1's post-implementation review. All three
+independently rebuilt the worktree and reproduced every claimed number
+exactly; two came back fully clean (one cosmetic line-wrap nit in a
+`hammock_cli.cpp` comment; one note that a reworded comment there inherited,
+rather than introduced, a minor pre-existing ambiguity about which code path
+actually computes `reg_jac`). The third surfaced a real finding, below.
+
+**One pre-existing, unrelated test failure, confirmed mechanically not
+caused by this rename.** `cpp/tests/hammock_tests`'s "Mode A: chr/non-chr
+prefixes normalize identically" fails identically (`0 == Approx(1)`) at the
+pre-Step-1b baseline (`3f1e5ca`) and after both commits — the implementer
+stashed/rebuilt to confirm this during implementation, and the
+verification-gap reviewer independently confirmed it more strongly still: the
+`git diff` touching this test and the method it calls is a pure identifier
+substitution with byte-identical logic either side, so the failure is
+mechanically guaranteed to be identical, not merely observed to be. Apparently
+`cpp/tests/` (it needs `-DHAMMOCK_BUILD_TESTS=ON`, off by default, plus
+`-DCMAKE_POLICY_VERSION_MINIMUM=3.5` for the vendored doctest's old CMake
+floor) had never actually been built and run in this repo's session history
+before this Step — worth a follow-up outside this seed's scope; not fixed
+here, not blocking Step 1b.
+
+**Real finding, not blocking these two commits, but blocking the broader
+rename goal's completeness claim: `HLLSketch::jaccard_and_union_cardinality`
+still says "jaccard" and is the actual hot-path producer of the
+`reg_eq_similarity` CSV value.** Found by the verification-gap reviewer.
+Step 1b's plan and its grep-based verification (`jaccard_similarity(`,
+`estimate_jaccard\b`) were both scoped to the two specific identifiers named
+in the user's request — neither pattern matches
+`jaccard_and_union_cardinality`, a different, pre-existing, unrenamed method
+(`cpp/include/hammock/hll_sketch.hpp:67`, `cpp/src/hll_sketch.cpp:173`) that
+computes the *same* register-equality quantity fused with a union-cardinality
+pass, with an output parameter literally named `jaccard`. It is not a rarely
+used alternate path: `bindings/_core.cpp:288`'s `pairwise_metrics_hll`
+(called unconditionally for every CSV row by both `runner.py:441,634`) and
+`hammock_cli.cpp:494` (the default/full/metrics arms of `hammock-cpp`) both
+call it to produce the value written into the shipped `reg_eq_similarity`
+column — `reg_eq_similarity()` itself (the method Step 1b renamed) is only
+reached via `pairwise_jaccard_hll` and the `--register-equality` cheap-arm
+fallback branch (`hammock_cli.cpp:496`). So on the default/full/metrics code
+path, the value in the `reg_eq_similarity` column is actually computed by a
+method whose name and parameter still say "jaccard" — exactly the surface
+the user's stated goal ("make sure the register equality calculation isn't
+named jaccard misleadingly on anything someone might be using") was aimed
+at, and Step 1b's grep verification cannot see it because the identifier
+doesn't match either pattern it checked for. Both commits did exactly what
+their reviewed, gated plan scoped — this is a genuine scope gap in the
+*plan*, found only after implementation, not a defect in the diff. Not
+touched here; needs its own decision (a Step 1c, or folded into a future
+step) before the rename can be called complete by the user's own stated
+goal, not just by Step 1b's narrower plan text.
+
 **Then stop.** Report and wait for the user's go-ahead before starting
-Step 2. Do not continue automatically.
+Step 2 — and, separately, before deciding whether to add a step for
+`jaccard_and_union_cardinality`. Do not continue automatically.
 
 ### Step 2 — Update paper/experiments code to read `reg_eq_similarity`, with fallback
 
