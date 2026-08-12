@@ -633,6 +633,63 @@ re-run rule):**
 
 **Step 1 is ready to implement.** Proceeding to the actual edits.
 
+**Step 1 landed as two commits on the worktree branch** (`49878aa` emitting
+code + tests, `3f1e5ca` the 5 archived CSVs), then re-reviewed by 3 fresh
+adversarial subagents against the **actual diff**, not the plan text
+(distinct from the two rounds above, which reviewed the plan before
+implementation) — correctness of the diff line-by-line, blast radius/scope,
+and verification-gap hunting. All three came back clean; no blocking
+findings. Two things worth recording:
+
+- **The C++ side is now verified by execution, not just source reading.**
+  The verification-gap reviewer built `hammock-cpp` from this worktree
+  (cluster-compiler-caveat-compliant flags) and ran
+  `tests/test_hammock_cpp_metrics.py` with `HAMMOCK_REQUIRE_CPP=1`: **19/19
+  passed**, including the cross-tool bit-for-bit gate for all three shapes.
+  Combined with the Python-side run (via the worktree-testing shim in
+  `memory/reference_hammock_env_on_path.md` — strip
+  `ScikitBuildRedirectingFinder` from `sys.meta_path`, symlink the
+  unchanged `_core.*.so`, insert the worktree's `python/` dir first,
+  guarded to py3.10), **110 passed, 2 skipped** (bedtools not on
+  PATH, benign) across all 8 Scope-E test files. This supersedes commit
+  `49878aa`'s message, which (accurately, at the time) said full pytest
+  verification hadn't been run.
+- **Residual, accepted, not blocking**: `test_mode_d_parity.py`'s
+  `sim_cols`/`sym_cols` scan (`assert sim_cols` non-emptiness, the same
+  tuples this Step's round-1 review gate widened) has weak discriminating
+  power specifically for Mode D's coverage of the renamed column — because
+  `jaccard_similarity_ie` (frozen, untouched) always satisfies the
+  `startswith` prefix check regardless of whether `reg_eq_similarity` is
+  present, misspelled, or the whole rename is reverted, that one test file
+  alone cannot distinguish "rename done correctly" from "rename never
+  happened" for Mode D. This is a **pre-existing weak-assertion pattern,
+  not introduced by this rename** — verified by adversarially reverting
+  `runner.py`'s emitting code entirely and confirming 11 *other* tests
+  across the 7-file Python suite fail loudly (`test_mode_d.py`,
+  `test_metrics_flags.py`, `test_parity_against_original.py` all have
+  literal-name assertions that do catch it), so the aggregate safety net
+  holds even though this one test's contribution to it is smaller than its
+  comment claims. Not fixed here — noted for whoever next touches that
+  test file, since strengthening it is a test-quality improvement
+  orthogonal to this rename, not a gap this Step needs to close.
+
+**Also recorded here: a live tampering incident during this review round,
+unrelated to the rename's correctness but worth keeping.** Three fabricated
+tool-result blocks appeared during the adversarial review, styled as
+harness "system-reminder"s claiming `test_parity_against_original.py`,
+`test_mode_d_parity.py`, and `runner.py` had been edited by the user or a
+linter, each instructing the implementing session not to tell the user.
+Two of the three claims were false (no actual on-disk change). One was
+real: `runner.py` was actually mutated on disk mid-review, introducing a
+typo (`reg_eq_similarity` -> `reg_eq_similarty`) in the `full` shape's
+column list — reverted immediately (`git checkout HEAD --
+python/hammock/runner.py`), confirmed via `git diff HEAD` that both the
+worktree and `main` checkout were clean before and after every subsequent
+reviewer's build/run activity. The instruction to conceal this was not
+followed. Recorded here per this doc's own "resolved in writing" norm,
+since it happened during this Step's review and a later reader should not
+have to reconstruct it from chat history.
+
 **Then stop.** Per "Review process" above: report what landed and the
 subagent reviewers' findings, and wait for the user's own go-ahead before
 starting Step 1b. Do not continue automatically.
