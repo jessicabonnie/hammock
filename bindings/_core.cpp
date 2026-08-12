@@ -285,7 +285,7 @@ pairwise_metrics_hll(const py::sequence& a_seq,
                     // HLLSketch::jaccard_and_union_cardinality for why this is
                     // bit-identical rather than merely close.
                     double u;
-                    a[i]->jaccard_and_union_cardinality(*b[j], jbuf(i, j), u);
+                    a[i]->reg_eq_and_union_cardinality(*b[j], jbuf(i, j), u);
                     const double inter = std::max(0.0, a_card[i] + b_card[j] - u);
                     abbuf(i, j) = (a_card[i] > 0) ? (inter / a_card[i]) : 0.0;
                     babuf(i, j) = (b_card[j] > 0) ? (inter / b_card[j]) : 0.0;

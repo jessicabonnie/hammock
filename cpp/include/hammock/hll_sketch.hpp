@@ -64,9 +64,9 @@ public:
     // registers directly is the z < 1e-10 Flajolet fallback, which is
     // summation-order sensitive; it is reproduced here over max(a[i], b[i]) in
     // index order.
-    void jaccard_and_union_cardinality(const HLLSketch& other,
-                                       double& jaccard,
-                                       double& union_cardinality) const;
+    void reg_eq_and_union_cardinality(const HLLSketch& other,
+                                      double& reg_eq,
+                                      double& union_cardinality) const;
 
     double intersection_size(const AbstractSketch& other) const override;
     std::unique_ptr<AbstractSketch> union_with(const AbstractSketch& other) const override;

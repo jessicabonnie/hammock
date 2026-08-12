@@ -491,7 +491,7 @@ int main(int argc, char** argv) {
                 // runner._metrics_row_values' j_val reuse.
                 double reg_jac, u;
                 if (qh[i] && rh[j]) {
-                    qh[i]->jaccard_and_union_cardinality(*rh[j], reg_jac, u);
+                    qh[i]->reg_eq_and_union_cardinality(*rh[j], reg_jac, u);
                 } else {
                     reg_jac = qsk[i]->reg_eq_similarity(*rsk[j]);
                     u = qsk[i]->union_with(*rsk[j])->cardinality();
