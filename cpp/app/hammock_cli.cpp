@@ -449,7 +449,7 @@ int main(int argc, char** argv) {
         for (size_t j = 0; j < m; j++) rcard[j] = rsk[j]->cardinality();
     }
 
-    // The fused jaccard+union path below is a non-virtual HLLSketch method, so
+    // The fused reg-eq+union path below is a non-virtual HLLSketch method, so
     // downcast once here rather than per pair. HLLSketch is the only
     // AbstractSketch implementation, so this always succeeds; if a second
     // backend ever lands, a null entry falls back to the virtual route.
