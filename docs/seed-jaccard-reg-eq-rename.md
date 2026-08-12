@@ -495,6 +495,24 @@ cross-tool `==` gate):
   two with column-*shape* assertions that also need Step 4's count changes
   later), but all 8, since several assert exact CSV header/column content
   that this Step's rename directly changes.
+- **Two non-literal fixes, found by the Step 1 review gate's round 1 (not
+  catchable by the grep pass above — see the Setup inventory's Scope-E
+  corrections for the full trace), required in the same commit:**
+  - `tests/test_parity_against_original.py::_projected_rows` — change
+    `for line in lines` to `for line in lines[1:]` so the header row is
+    excluded from the compared tuples. Without this, `test_jaccard_byte_equal`
+    fails on the header alone the moment our side's header token diverges
+    from orig's frozen `jaccard_similarity`, regardless of whether every
+    data value still matches.
+  - `tests/test_mode_d_parity.py::test_mode_d_structural_parity` — widen the
+    two `str.startswith(...)` tuples at (currently) `:110-111` and `:116-117`
+    from `("jaccard_similarity", "containment", "cosketch")` /
+    `("jaccard_similarity", "cosketch")` to
+    `("jaccard_similarity", "reg_eq_similarity", "containment", "cosketch")` /
+    `("jaccard_similarity", "reg_eq_similarity", "cosketch")`. Without this,
+    the renamed column silently drops out of both the range/self-pair check
+    and the symmetry check — the test still passes, just checking one fewer
+    column than intended.
 
 Archived CSVs (the Setup-confirmed header list, 5 files in the initial
 snapshot): edit **only** the header row's `jaccard_similarity` token →
@@ -516,6 +534,57 @@ collision explicitly checked), name-only in the emitting code (no `cell[]`/
 `stride` changes should appear in this diff at all — flag any that do, they
 belong in Step 4), and all 8 Scope-E test files addressed. Don't proceed to
 Step 2 until resolved or explicitly accepted as residual risk in writing.
+
+**Review gate round 1, run 2026-08-12 (3 parallel subagent passes — scope
+completeness, risk/safety, process/convention fit — against the plan text as
+it stood before this paragraph's own edits):**
+
+- **Process/convention fit: clean.** Commit split, worktree/main carve-out,
+  both-front-ends-same-commit, and off-limits-territory checks all verified
+  directly against repo state (not just doc prose) — no findings.
+- **Risk/safety: clean for Step 1 itself, two non-blocking findings recorded
+  for later Steps, not requiring a Step 1 diff change:**
+  1. `paper/parameter_objective_tradeoff/plot_parameter_objective_tradeoff.R`
+     (the non-`_estimators` sibling) also reads `jaccard_similarity` as data
+     from `docs/data/mode_d_summary.csv`'s `column` field
+     (`SIM_COLUMNS <- c("jaccard_similarity", "jaccard_similarity_ie")`) and
+     is confirmed live, not dead code, by `paper/draft.md:122`/
+     `paper/outline.md:95`'s Figure 7 provenance paragraph ("the existing
+     `plot_parameter_objective_tradeoff.R` is retained unchanged as the
+     single-estimator diagnostic workflow"). **Missing from Scope C /
+     Category B2's consumer list — add it to Step 2's file list before Step
+     2's own plan is treated as complete** (same fallback treatment as its
+     `_estimators` sibling). Doesn't affect Step 1, which never touches B2
+     readers.
+  2. Two paper scripts that read the 5 archived CSVs Step 1 edits directly by
+     path+name (`plot_interval_accuracy.R` on the three `hammock_hll_p*`
+     files, `plot_cross_reference_identity.R` on `exp_a_broad_k10_w10.csv`)
+     are not updated until Step 2, so the worktree branch is transiently
+     non-functional for those two scripts between Step 1 landing and Step 2
+     landing. **Accepted as residual risk, in writing, right here**: nothing
+     in this plan runs those scripts during that window (Step 3's
+     regenerate-and-diff only runs after Steps 1+2 both land), the worktree
+     branch never touches `main` until Step 4's merge, and the failure mode
+     if triggered early is a loud `stop()`/missing-column R error, not silent
+     wrong output.
+- **Scope completeness: two blocking findings, both fixed in this Step's plan
+  text above before proceeding (not deferred) — see the Setup inventory's
+  "Scope-E" corrections for the full trace.** `test_parity_against_original.py`'s
+  `_projected_rows` was comparing the CSV header row as if it were a data
+  row (an off-by-one in `for line in lines` vs `lines[1:]`), which only ever
+  passed because both sides happened to share the literal string
+  `jaccard_similarity`; `test_mode_d_parity.py`'s dynamic `startswith` column
+  scan would silently drop the renamed column from two of its checks. Both
+  are now explicit line items above, in the same commit as the rest of Step
+  1's Scope-E fixes. All other scope-completeness checks (line-for-line
+  emitting-code verification, the 5-CSV archived list and its `_with_ends`
+  collision, the repo-wide CSV/TSV/TXT sweep, the "no dynamic column-name
+  construction" claim, the figure-provenance cross-check) were independently
+  re-verified against the actual files and found accurate.
+
+Because these findings materially changed Step 1's planned diff (two new
+required test fixes), a second, focused review round follows below before
+implementation proceeds, per "Review process"'s re-run rule.
 
 **Commit:** two, once the review gate clears — (1) emitting-code + test
 rename (`runner.py`, `cli.py`, `hammock_cli.cpp`, the two Scope-E test files'
@@ -1021,28 +1090,76 @@ in-scope via category D.
 
 **E. Tests.** Re-grepped all 8 files; confirmed each has at least one
 literal, non-`_ie` hit needing a fix, and traced what each actually reads.
-Worth recording for Step 1's review gate (this is the parity-test check the
-motivation section asked to be verified for real, not just asserted):
-`test_parity_against_original.py`'s `_projected_rows`/`test_jaccard_byte_equal`
-comparison is **already position-effective, not name-matching** — it builds
-`keep` independently per side by filtering out only the names in
-`_PROJECTED_OUT` (which contains neither `jaccard_similarity` nor
-`reg_eq_similarity`), then compares the surviving *tuples* positionally. So
-once ours emits `reg_eq_similarity` in the same column position orig emits
-`jaccard_similarity`, the byte-equality check keeps working with **no code
-change needed** to that function — Open Question 2's "map by position, not
-name" is already satisfied by the existing implementation, not something
-Step 1 needs to newly add. The real fixes needed in this file are the two
-sites that look up *our own* header by the literal name to find a column
-index for a value read (`test_mode_b_subB_actually_subsamples:176`,
+
+**Correction (post-gate finding, see "Step 1 review gate" below): the
+paragraph originally here claimed `test_parity_against_original.py`'s
+`_projected_rows`/`test_jaccard_byte_equal` needed no code change. That
+claim was wrong, caught by the scope-completeness reviewer, not by this
+Setup pass — recorded here as a correction, not silently rewritten, per this
+doc's own "resolved in writing" rule.** The original reasoning (`keep` is
+built independently per side by filtering `_PROJECTED_OUT` by name, then
+compared positionally) is correct as far as it goes, but misses that
+`_projected_rows`'s `return` line iterates `for line in lines` over **all**
+of `lines = csv_text.strip().split("\n")`, including `lines[0]`, the header
+row itself. So the first tuple in the returned list is the header's own
+*column names* at the kept positions, not data — and `test_jaccard_byte_equal`
+compares `orig_rows == ours_rows` including that first tuple. Today, both
+sides' header token is the literal string `jaccard_similarity`, so that
+tuple happens to match and the test passes; that was never intentional
+(nothing in the function's name, docstring, or the surrounding tests
+suggests the header should be part of the comparison), it just never
+mattered before because both sides used the same literal name. Once Step 1
+renames only our side's header token to `reg_eq_similarity`, that first
+tuple diverges (`"reg_eq_similarity" != "jaccard_similarity"` at the same
+index) and all 7 `test_jaccard_byte_equal` parametrizations fail on the
+header alone, before a single data value is even compared. **Not
+catchable by Step 1's own "grep for a literal hit and fix" remediation** —
+the string `jaccard_similarity` appears in this function only in surrounding
+comments/docstring, never in the comparison logic itself, so a grep-driven
+pass walks past it. **Fix, now folded into Step 1's plan (see below): change
+`_projected_rows` to iterate `lines[1:]`, dropping the header row from the
+comparison** — this is exactly what "map by column position, not name"
+(Open Question 2) requires: two same-position data columns compare equal
+regardless of what either side's header calls them, and header-name equality
+was never supposed to be part of the contract.
+
+The real fixes elsewhere in this file are the two sites that look up *our
+own* header by the literal name to find a column index for a value read
+(`test_mode_b_subB_actually_subsamples:176`,
 `.split(",").index("jaccard_similarity")` against **our** CSV) — those must
 become `"reg_eq_similarity"`. Same pattern (reading our own emitted header by
 name) is the fix needed in `test_mode_d.py:115`, `test_bed2fasta_cli.py:72`,
 `test_jaccard_ie.py:241`, and the column-list/index literals in
 `test_metrics_flags.py:29,106,107,127` and
-`test_hammock_cpp_metrics.py:29,215,223`. `test_mode_d_parity.py` and
-`test_containment_estimator.py` only need prose/comment updates (no literal
-`.index("jaccard_similarity")`-style lookups found in either).
+`test_hammock_cpp_metrics.py:29,215,223`.
+
+**Second correction, same source:** `test_mode_d_parity.py` was described
+above as needing "prose/comment updates only." Also wrong, also caught by
+the scope-completeness reviewer. `test_mode_d_structural_parity`
+(`:110-111,116-117`) scans **our own** freshly-emitted `--metrics` header
+dynamically by prefix match, not by an exact literal:
+```python
+sim_cols = [i for i, c in enumerate(header)
+            if c.startswith(("jaccard_similarity", "containment", "cosketch"))]
+...
+sym_cols = [i for i in sim_cols
+            if header[i].startswith(("jaccard_similarity", "cosketch"))]
+```
+After Step 1's rename, the renamed column no longer starts with
+`"jaccard_similarity"`, so it silently drops out of both `sim_cols` (the
+range/self-pair check) and `sym_cols` (the symmetry check) — the test keeps
+passing, just quietly checking 6 similarity columns instead of 7. Literal
+`grep`-and-substitute would also get this wrong a different way (substituting
+the tuple's `"jaccard_similarity"` entry outright would then stop matching
+`jaccard_similarity_ie`, which must still match). **Fix, folded into Step 1:
+widen both tuples to `("jaccard_similarity", "reg_eq_similarity",
+"containment", "cosketch")` and `("jaccard_similarity", "reg_eq_similarity",
+"cosketch")` respectively** — keeps matching `jaccard_similarity_ie` via the
+unchanged `"jaccard_similarity"` prefix and restores coverage of the renamed
+column.
+
+`test_containment_estimator.py` still only needs a prose/comment update (no
+literal or dynamic lookup found there beyond the comment at `:72,187`).
 
 **F. Docs.** The 6 doc files the snapshot names
 (`CLAUDE.md`, `README.md`, `docs/jaccard-definitional-gap.md`,
