@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """What the similarity block costs, as a function of HyperLogLog precision.
 
-`--metrics` gets `hammock-cpp` to emit `jaccard_similarity`,
-`jaccard_similarity_ie`, and the containment/cosketch/register-equality
-columns (the full block); `--register-equality` (the reduced-column opt-out
+`--metrics` gets `hammock-cpp` to emit `reg_eq_similarity`,
+`jaccard_similarity_ie`, and the containment/cosketch columns (the full
+block); `--register-equality` (the reduced-column opt-out
 used by every timed benchmark, `--no-metrics` on pre-restructure binaries --
 see `_metrics_off_flag` in benchmark_cpp_vs_bedtools.py) skips all of that.
 This measures the difference between those two arms so Methods can state the

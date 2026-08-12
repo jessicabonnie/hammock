@@ -5,7 +5,7 @@ Answers a question neither the Maurano corpus nor `estimator_compare.py`'s own
 summary tables can: **at low true Jaccard, which estimator ranks pairs better,
 and does the answer depend on precision?**
 
-Why this stratification matters. `jaccard_similarity` (register-equality) is
+Why this stratification matters. `reg_eq_similarity` (register-equality) is
 biased by a chance-agreement floor but has lower variance;
 `jaccard_similarity_ie` (inclusion-exclusion) is near-unbiased but noisier and
 censored at 0 by the `>= 0` clamp. Whether the bias or the noise dominates is a

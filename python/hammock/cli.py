@@ -3,7 +3,7 @@
 Output is a comma-separated CSV whose file1/file2 columns default to basenames; pass
 --full-paths for normalized full paths in those columns. Three output shapes, chosen by
 mutually exclusive flags: bare default (jaccard_similarity_ie only, tag _ie),
---register-equality/--re (register-equality-only, tag _re), --metrics (full 8-column
+--register-equality/--re (register-equality-only, tag _re), --metrics (full 7-column
 block, tag _full). See --metrics/--register-equality help.
 """
 from __future__ import annotations
