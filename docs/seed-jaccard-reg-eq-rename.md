@@ -977,7 +977,9 @@ matching the existing naming pattern rather than inventing a new one);
 output parameter `jaccard` → `reg_eq` (matches the renamed CSV column and
 the renamed sibling method).
 
-**Site 1 — declaration + doc comment**, `cpp/include/hammock/hll_sketch.hpp:52-68`:
+**Site 1 — declaration + doc comment**, `cpp/include/hammock/hll_sketch.hpp:51-69`
+(corrected from an earlier draft's "52-68" — off by one at each boundary,
+found by review):
 the doc comment above the declaration ("yielding the register-equality
 Jaccard *and* the cardinality of the union") and the `void
 jaccard_and_union_cardinality(const HLLSketch& other, double& jaccard,
@@ -987,8 +989,22 @@ double& union_cardinality) const;` signature itself.
 `:181-182` (the exception message: `"HLLs must have same precision and hash
 size for fused jaccard/union"` — a string a caller could see in a thrown
 exception, in scope for the same "anything someone might be using" reason
-as the rest of this rename), `:201` (the `jaccard = (active == 0) ? 0.0 :
-...` assignment, renamed to `reg_eq = ...` to match the renamed parameter).
+as the rest of this rename), `:202-203` (corrected from an earlier draft's
+"201", found by review — the `jaccard = (active == 0) ? 0.0 : ...`
+assignment, renamed to `reg_eq = ...` to match the renamed parameter).
+
+**Site 2b — two more exception-message strings, in the already-renamed
+`reg_eq_similarity()` method, same file — found adjacent by the Step 1c
+review gate's scope-completeness pass, folded in here rather than left as a
+gap:** `cpp/src/hll_sketch.cpp:52` (`"Cannot compute Jaccard between
+different sketch types"`) and `:61` (`"HLLs must have same precision and
+hash size for Jaccard"`). These are leftover from Step 1b — its grep
+verification was scoped to `jaccard_similarity(` and `estimate_jaccard\b`,
+neither of which matches a string literal inside the method body, so they
+slipped through even though `reg_eq_similarity()` was the method being
+renamed at the time. Same class of fix as Site 2's exception message
+(caller-visible text, no logic change), same file already being edited by
+this Step — mechanical, not a scope expansion of what this rename is for.
 
 **Site 3 — call site**, `cpp/app/hammock_cli.cpp:494`:
 `qh[i]->jaccard_and_union_cardinality(*rh[j], reg_jac, u);` → rename the
@@ -1011,7 +1027,8 @@ jbuf(i, j), u);` — rename the call only).
 
 **Deliberately out of scope, stated here for the review gate to weigh, not
 silently excluded:** the local variable `jaccard` and accessor `jbuf` inside
-`pairwise_metrics_hll` (`bindings/_core.cpp:236-239`) are themselves named
+`pairwise_metrics_hll` (`bindings/_core.cpp:240,243` — corrected from an
+earlier draft's "236-239", found by review) are themselves named
 after the same misleading word and hold exactly the register-equality
 values this whole rename is about — but they are call-site-local
 implementation details, never exposed as a name to any caller (the function
@@ -1035,6 +1052,20 @@ sweeping every local variable that happens to touch the value.
   identifier only; the surrounding technical claim (one fused register pass,
   bit-identical by construction) is unaffected by a rename and stays as
   written.
+- `CLAUDE.md:379`, same paragraph as `:376` above — "It replaced
+  `jaccard_similarity()` + `intersection_size()`" is *already* stale, a
+  leftover from Step 1b (which renamed `jaccard_similarity()` to
+  `reg_eq_similarity()` but didn't touch this sentence) — found by the Step
+  1c review gate's scope-completeness pass. Fixed here since it's in the
+  exact paragraph this Step is already editing and the same "living
+  reference, stays accurate" reasoning applies.
+- `CLAUDE.md:810`, a separate location (divergence #9's "Not implemented"
+  section) — `` `jaccard_similarity(const AbstractSketch&)` + `dynamic_cast`
+  shape `` describes `HLLSketch`'s current inheritance pattern, not a dated
+  measurement, using the pre-Step-1b method name. Also found by the Step 1c
+  review gate's scope-completeness pass, also a Step-1b leftover (not
+  something Step 1c's own rename touches functionally), fixed here in the
+  same CLAUDE.md commit rather than left for a third pass to find.
 
 **Explicitly left untouched, matching the established historical-doc
 precedent from this seed's own Scope F:** `docs/seed-hammock-cpp-file-dispatch.md:191,316`
@@ -1059,23 +1090,125 @@ actually resolves the inherited ambiguity Step 1b's post-implementation
 review flagged, rather than just moving it; (d) no CMakeLists/export-map/
 `.pyi`/duck-typed-caller ABI-surface risk (same check Step 1b's risk/safety
 pass already ran for the sibling rename — re-run here since this is a
-different identifier, don't just cite the prior clean result). Verification
-methodology, mirroring Step 1b: since every site is either a compiled C++
-call/declaration (stale name = hard compile error) or a comment (no runtime
-effect), a green `cpp/tests/hammock_tests` build + `pytest tests/
---HAMMOCK_REQUIRE_CPP=1` plus a clean `grep -rn 'jaccard_and_union_cardinality\b'`
-sweep of the whole repo (expect zero hits) is sufficient completeness proof,
-same as Step 1b's closing argument.
+different identifier, don't just cite the prior clean result — this rename
+is actually lower-risk than Step 1b's, since Site 3/4 are the *only* callers
+and both are compiled C++, with zero `.def(...)` pybind11 exposure at all
+for this identifier).
 
-**Commit:** two, once the review gate clears, mirroring Step 1's and Step
-1b's code/prose split — (1) the functional rename (method + parameter +
-both call sites + the exception message, i.e. everything in `cpp/` and
-`bindings/_core.cpp:288`'s call site that a compiler gates), (2) the
-comment/doc-only updates (the `hll_sketch.hpp` doc comment,
-`bindings/_core.cpp:285`'s comment, the `hammock_cli.cpp` comment
-including its ambiguity fix, the two `test_containment_estimator.py`
-comments, `CLAUDE.md:376`) — kept separate since (1) is compiler-verified
-and (2) is not, the same reason Step 1 and Step 1b both split this way.
+Verification methodology, mirroring Step 1b, **with one gap closed by
+review before implementation, not after**: since every site is either a
+compiled C++ call/declaration (stale name = hard compile error) or a
+comment (no runtime effect), the completeness proof is a green
+`cpp/tests/hammock_tests` build + `pytest tests/ --HAMMOCK_REQUIRE_CPP=1` +
+a clean `grep -rn 'jaccard_and_union_cardinality\b'` sweep of the whole
+repo, **expecting zero hits outside the two deliberately-preserved
+historical docs** (`docs/seed-hammock-cpp-file-dispatch.md`,
+`docs/seed-metrics-column-restructure.md` — corrected from an earlier
+draft's unqualified "expect zero hits," which self-contradicted this Step's
+own decision, two paragraphs up, to leave those two files untouched; found
+by the risk/safety review pass).
+
+**Closing a real gap in that methodology, found by the risk/safety
+review pass, not by a diff change:** `cpp/tests/hammock_tests` (via
+`HAMMOCK_BUILD_TESTS`) only builds against the `hammock_core` static lib —
+it covers Sites 1-2 but not Site 3 (`hammock-cpp`, gated by
+`HAMMOCK_BUILD_CLI`) or Site 4 (`_core.so`, the pybind11 extension). Site 3
+is already guarded against silent staleness by
+`tests/test_hammock_cpp_metrics.py::test_binary_is_not_stale` (asserts the
+`hammock-cpp` binary's mtime is >= every file under `cpp/app`, `cpp/src`,
+`cpp/include`). **Site 4 has no equivalent guard** — `pytest tests/` alone
+does not rebuild `_core.so`, so an implementer who edits
+`bindings/_core.cpp` and runs `pytest tests/` against an already-installed
+extension could get a fully green run without the edited code ever having
+been recompiled, on the single most consequential site (the hot path
+`runner.py` actually calls for every default/full/metrics CSV row).
+**Required before this Step's commits can rely on "pytest green" as
+evidence:** an explicit `pip install -e . --no-build-isolation` (per the
+cluster-compiler-caveat build in CLAUDE.md) immediately before the
+verification `pytest` run, confirmed by checking `_core*.so`'s mtime is
+newer than `bindings/_core.cpp`'s post-edit mtime — recorded in the commit
+message alongside the other verification evidence, the same place Step 1b
+recorded its build/grep evidence.
+
+**Commit:** two, once the review gate clears. **Correction, found by two of
+the three review passes independently: an earlier draft justified this
+split as "the same reason Step 1 and Step 1b both split this way" — that
+citation is wrong.** Step 1's split axis was code vs. archived-CSV *data*;
+Step 1b's was internal-C++-method vs. public-Python-binding (an
+API-surface distinction), and Step 1b actually folded its whole comment
+sweep into the *same* commit as its code rename rather than splitting them
+out. Step 1c's split is its own, different axis — compiler-verified vs.
+not — stated on its own merits below, not as a repeat of either precedent:
+(1) the functional rename (method + parameter + both call sites + all
+three exception-message strings, i.e. everything in `cpp/` and
+`bindings/_core.cpp:288`'s call site that a compiler gates — a stale name
+anywhere in this commit is a hard build failure, which is what makes this
+commit cheap to gate), (2) the comment/doc-only updates (the
+`hll_sketch.hpp` doc comment, `bindings/_core.cpp:285`'s comment, the
+`hammock_cli.cpp` comment including its ambiguity fix, the two
+`test_containment_estimator.py` comments, `CLAUDE.md:376,379,810`) — kept
+separate because (2)'s correctness rests on human review of prose, not on
+the compiler, and reviewers may want to weigh that evidence differently
+from (1)'s.
+
+Each commit's message must record: a green `cpp/tests/hammock_tests` build,
+a green `pytest tests/ --HAMMOCK_REQUIRE_CPP=1` run against a freshly
+rebuilt `_core.so` (per the verification-methodology fix above — confirm
+`pip install -e . --no-build-isolation` ran after the edit, not before),
+and a clean `grep -rn 'jaccard_and_union_cardinality\b'` sweep (zero hits
+outside the two preserved historical docs).
+
+**Review gate, run 2026-08-12 (3 parallel subagent passes — scope
+completeness, risk/safety, process/convention fit — against the plan text
+as it stood before this paragraph's own edits, i.e. the version committed
+in `082f042`):**
+
+- **Process/convention fit: clean.** Commit discipline directly verified
+  (`082f042` on `main` is doc-only; worktree branch confirmed still at
+  `a64cd2c`, untouched). The Decision section's reasoning and its "SHIPPED
+  note slipped" citation were both independently verified against actual
+  repo state, not taken on faith. One non-blocking finding: the "Commit:"
+  paragraph's claim to mirror Step 1's/Step 1b's split rationale was
+  inaccurate — fixed above.
+- **Scope completeness: site list for `jaccard_and_union_cardinality`
+  itself confirmed complete** by an independent repo-wide grep (matches the
+  plan's enumeration exactly, including the two correctly-preserved
+  historical docs and the correctly-empty paper/experiments/README.md
+  claim). Two adjacent findings, both folded in above rather than left as
+  gaps: the two leftover "Jaccard" exception-message strings inside the
+  already-renamed `reg_eq_similarity()` (Site 2b, new), and two leftover
+  stale-name references in CLAUDE.md (`:379`, `:810`) that Step 1b's own
+  comment sweep missed. Three line-number citations had drifted from actual
+  file content (all corrected above — mechanical, no scope change). The
+  "deliberately out of scope" call on `bindings/_core.cpp`'s local
+  `jaccard`/`jbuf` variables was independently verified correct: every
+  consumer of `pairwise_metrics_hll`'s return value unpacks it as a plain
+  positional tuple, never by name.
+- **Risk/safety: no blocking issue with the rename itself** — confirmed
+  lower ABI-surface risk than Step 1b's sibling rename (zero pybind11
+  `.def(...)` exposure for this identifier at all; only two call sites,
+  both compiled C++). No exception-message-text matching anywhere in the
+  test suite (`pytest.raises(match=...)`, `CHECK_THROWS_WITH`), so the
+  exception-string renames are safe. **Two real gaps in the verification
+  *methodology* text, both closed above by strengthening verification, not
+  by changing the diff** (mirroring how Step 1b's own risk/safety finding
+  was closed): the unqualified "expect zero hits" completeness bar
+  self-contradicted this Step's own decision to preserve two historical
+  docs; and `_core.so` (Site 4, the actual hot-path file) had no staleness
+  guard equivalent to `test_binary_is_not_stale`'s coverage of `hammock-cpp`
+  — closed with an explicit fresh-rebuild requirement before any commit can
+  cite "pytest green" as evidence.
+
+Because these findings changed Step 1c's site list (Site 2b, two more
+CLAUDE.md lines) and its verification methodology, per "Review process"'s
+own re-run rule this would normally need a second focused round — but every
+change here is the same "purely mechanical, no fresh round needed" class
+Step 1b's own round 1 established for its comment-sweep findings (string/
+line-number corrections and a verification-strengthening addition, no
+change to the core rename's shape or risk profile), so proceeding directly
+to implementation.
+
+**Step 1c is ready to implement.**
 
 **Then stop.** Report what landed and the subagent reviewers' findings, and
 wait for the user's go-ahead before starting Step 2. Do not continue
