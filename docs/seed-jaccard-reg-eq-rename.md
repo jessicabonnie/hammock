@@ -1957,6 +1957,70 @@ end-to-end (a real one did exist and the reviewer built and ran it,
 confirming already-correct behavior — a commit-message accuracy note, not
 a code defect).
 
+**Correction, found by the user directly (not by any of the subagent
+gates), 2026-08-12: 7 of Step 2's 22 files were scope overreach and have
+been reverted.** The user's actual original scope for this Step, quoted
+verbatim earlier in this doc's Motivation section, was narrow: *"code that
+reads CSVs for paper figures/stats should prefer `reg_eq_similarity` if
+present, falling back to `jaccard_similarity` if not."* Both round 1 and
+round 2's review gates — and this session's own implementation — treated
+"cited somewhere in `docs/paper_outline.md`, including via a two-hop
+citation chain through another doc" as equivalent to "feeds a paper
+figure/stat." That standard was too loose, and neither review round caught
+it; the user did, after Step 2 had already landed and been through its
+post-implementation round.
+
+Concretely wrong: `experiments/mus-homo/` and `experiments/primate-phylogeny/`
+were justified via `docs/paper_outline.md:319` → `docs/estimator-analysis-
+findings.md` §9.6. Re-reading the actual source sentence: *"Downstream: no
+published Mode D or cross-species headline changes under either column."*
+That sentence is a robustness check confirming an **existing** published
+conclusion is unaffected by estimator choice — it explicitly says nothing
+new was published from this analysis. Citing it as grounds for two whole
+experiment directories being "in scope" inverted what the sentence actually
+says. Similarly, `experiments/ref-comparison/scripts/exp_a_dendrogram.R`,
+`exp_a_metric_comparison.R`, and `exp_a_validate_plot.R` were justified only
+via `docs/paper_outline.md` citations with no `paper/outline.md`/
+`paper/draft.md` counterpart — one of those three citations (`exp_a_validate_plot.R`'s
+"Fig 3") was independently found to be **factually wrong** by this Step's
+own round-2 review (it names a different, unrelated figure), and a reviewer
+separately flagged `docs/paper_outline.md`'s figure numbering as "looks
+superseded relative to the live manuscript." Neither red flag was treated
+as reason enough to stop and ask at the time; it should have been.
+
+**Reverted, commit `665ea55`** (7 files, restored to their pre-Step-2 state —
+bare `jaccard_similarity` reads, no fallback logic, matching the state of
+every other file this seed correctly judged out of scope):
+`experiments/mus-homo/estimator_ie_tissue.py`,
+`experiments/mus-homo/scripts/cluster_plot.R`,
+`experiments/primate-phylogeny/estimator_ie_topology.py`,
+`experiments/primate-phylogeny/scripts/build_phylogeny.R`,
+`experiments/ref-comparison/scripts/exp_a_dendrogram.R`,
+`experiments/ref-comparison/scripts/exp_a_metric_comparison.R`,
+`experiments/ref-comparison/scripts/exp_a_validate_plot.R`.
+
+**Kept, re-confirmed against a direct (not multi-hop) citation in the live
+manuscript, not just `docs/paper_outline.md`:** `estimator_compare.py`
+(feeds `paper/estimator_crossover/plot_estimator_crossover.R`, named by its
+own "Figure:" line), `sweep.py` (feeds Figure 3B's cross-check and Figure
+S8), `estimator_ie_crossref.py` (feeds Table S5, `paper/draft.md:273`),
+`run_sweep.py` (feeds Figure S9, `paper/draft.md:282`), and all of commits
+`13dd1d2`/`784117e` (the `paper/` R scripts, `docs/scripts/mode_d_*.R`, and
+`analyze.R` — all reachable from `docs/paper_outline.md`'s **structured
+figure-index table**, a direct citation, not a loose prose chain — the same
+standard that correctly found `docs/scripts/` in scope during Setup).
+
+Step 2's file count is now **15**, not 22. The doc's site descriptions and
+commit-list above are left as originally written (an accurate record of
+what was planned and why) rather than retroactively edited — this
+correction section is the record of what actually shipped and why 7 sites
+were removed after the fact. Lesson for future Steps in this seed: a
+`docs/paper_outline.md` citation is a necessary check, not a sufficient
+one — read the cited sentence itself for what it actually claims before
+treating a directory as in scope, and a citation with no counterpart in the
+live `paper/outline.md`/`paper/draft.md` deserves a stop-and-ask, not an
+implementation.
+
 **Then stop.** Report and wait for the user's go-ahead before starting
 Step 3. Do not continue automatically.
 
