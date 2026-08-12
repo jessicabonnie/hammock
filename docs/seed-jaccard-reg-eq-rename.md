@@ -1210,6 +1210,43 @@ to implementation.
 
 **Step 1c is ready to implement.**
 
+**Step 1c landed as two commits on the worktree branch** (`2dff13a` — the
+functional rename: method, parameter, both call sites, three exception-
+message strings including Site 2b's two leftovers inside
+`reg_eq_similarity()`; `1f2d739` — comment/doc updates, including the
+inherited-ambiguity fix in `hammock_cli.cpp` and the two leftover
+`CLAUDE.md` references at `:379`/`:810`). Both commits' verification ran as
+the review gate's strengthened methodology required, not the original
+unqualified version:
+
+- Rebuilt with the conda-env compiler per the cluster-compiler caveat
+  (`CC`/`CXX` pointed at `$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-{gcc,g++}`);
+  confirmed via `readelf -d` that the conda env lib leads `_core.so`'s
+  RPATH (no `gcc-9.3.0`) and `_DIGEST_AVAILABLE == True`.
+- Confirmed `_core.so`'s mtime postdates `bindings/_core.cpp`'s edit for
+  each commit — the staleness-guard requirement the risk/safety review
+  added, closing the one gap that specific pass called blocking.
+- `cpp/tests/hammock_tests` (`-DHAMMOCK_BUILD_TESTS=ON
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5`): **21/22 passed**, both before and
+  after each commit — the same pre-existing "Mode A chr/non-chr prefixes"
+  failure the Step 1b post-implementation review already traced to the
+  pre-Step-1b baseline, mechanically unaffected by a pure identifier rename.
+- `pytest tests/ --HAMMOCK_REQUIRE_CPP=1`: **264 passed, 8 skipped**
+  (bedtools/samtools not on PATH, benign) — identical before and after both
+  commits, matching Step 1b's closing baseline exactly.
+- `grep -rn 'jaccard_and_union_cardinality\b'` repo-wide: zero hits outside
+  the two deliberately-preserved historical docs, both before commit 2 (with
+  the comment sites still pending) and after (fully clean per the corrected
+  completeness bar).
+
+No adversarial post-implementation review round was run this time — out of
+scope for what was asked (implement Step 1c using the pre-implementation
+gate and land the specified commit split, then stop), unlike Step 1's and
+Step 1b's extra rounds, which were done but were never actually required by
+"Review process" above (that section defines one gate: before a Step's
+edits land). Recorded here so a later reader doesn't infer one happened by
+analogy to the two prior Steps' write-ups.
+
 **Then stop.** Report what landed and the subagent reviewers' findings, and
 wait for the user's go-ahead before starting Step 2. Do not continue
 automatically.
