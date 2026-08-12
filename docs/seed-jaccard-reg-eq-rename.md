@@ -912,6 +912,175 @@ goal, not just by Step 1b's narrower plan text.
 Step 2 — and, separately, before deciding whether to add a step for
 `jaccard_and_union_cardinality`. Do not continue automatically.
 
+## Decision: `jaccard_and_union_cardinality` — do it now, as Step 1c (2026-08-12)
+
+**Resolved: rename it now, before Step 2, as a new Step 1c below.** Not
+deferred.
+
+Reasoning:
+
+- It is closer to the user's actual stated goal than either identifier Step
+  1b already renamed. Step 1b's post-implementation review established that
+  on the default/`--metrics`/`--full` code path — the one that produces the
+  shipped `reg_eq_similarity` CSV value for the overwhelming majority of
+  real runs — the value is computed by `jaccard_and_union_cardinality`, not
+  by `reg_eq_similarity()` (that method is only reached via the
+  `--register-equality` cheap-arm branch and `pairwise_jaccard_hll`'s
+  all-pairs matrix). A method whose name and output-parameter both still say
+  "jaccard" is, on the hot path, a bigger instance of exactly the problem
+  ("make sure the register equality calculation isn't named jaccard
+  misleadingly on anything someone might be using") than the two identifiers
+  already fixed.
+- It is the same low-risk class of change as Step 1b: a pure identifier
+  rename inside a public-on-GitHub but currently zero-external-caller C++
+  method, with the same "compiler catches a stale name" verification
+  property that made Step 1b cheap to gate. No new risk category is
+  introduced.
+- Doing it now keeps the "eliminate misleading internal jaccard naming"
+  work as one contiguous, disjoint-from-Step-2 unit on the worktree branch,
+  rather than reopening the C++ internals after Step 2-4 have already moved
+  on to paper/doc consumer-facing work. This doc already contains one
+  cautionary example of a promised follow-up slipping (the v0.8.0 "SHIPPED"
+  note that still hadn't landed in CLAUDE.md as of this doc's own Scope F) —
+  deferring this finding "for later, unscheduled" risks the same fate, and
+  there is no step downstream of Step 2 that naturally picks it back up
+  otherwise.
+- It does not entangle with or block Step 2's plan. Step 2 is entirely about
+  paper/experiments *reading* code (CSV column names, R/Python consumer
+  scripts); `jaccard_and_union_cardinality` is an internal C++ method with
+  zero paper/experiments callers (confirmed by grep below) and zero effect
+  on any CSV's shape or values. The two are cleanly separable in scope,
+  files touched, and review lens even though both live under the
+  "misleading naming" theme.
+
+Considered and rejected: deferring to "whenever Step 4 touches CLAUDE.md
+anyway." Rejected because Step 4 is about the *user-facing* column/version
+contract (the "Done when" checklist's `grep -rn 'jaccard_similarity('`
+check is explicitly scoped to `cpp/` and `bindings/` call *syntax*, which
+this rename actually satisfies more completely if done first — doing it
+after Step 4 would mean Step 4's own "Done when" grep needs re-running
+anyway). Folding it into Step 4 also mixes a pure-internal-rename commit
+into Step 4's already-larger column-removal-plus-version-bump commit set for
+no benefit.
+
+### Step 1c — Rename `HLLSketch::jaccard_and_union_cardinality`
+
+**Scope, confirmed by grep across `cpp/`, `bindings/`, `python/`, `tests/`,
+`paper/`, `experiments/`, `docs/`, `README.md`, `CLAUDE.md` (2026-08-12,
+this Step's own inventory — no reliance on Step 1b's grep, which was scoped
+to different identifiers and never matched this one):**
+
+New names: method `HLLSketch::jaccard_and_union_cardinality` →
+`reg_eq_and_union_cardinality` (mirrors `reg_eq_similarity()` — short,
+consistent root, and still names both things the fused pass computes,
+matching the existing naming pattern rather than inventing a new one);
+output parameter `jaccard` → `reg_eq` (matches the renamed CSV column and
+the renamed sibling method).
+
+**Site 1 — declaration + doc comment**, `cpp/include/hammock/hll_sketch.hpp:52-68`:
+the doc comment above the declaration ("yielding the register-equality
+Jaccard *and* the cardinality of the union") and the `void
+jaccard_and_union_cardinality(const HLLSketch& other, double& jaccard,
+double& union_cardinality) const;` signature itself.
+
+**Site 2 — definition**, `cpp/src/hll_sketch.cpp:173-175` (signature),
+`:181-182` (the exception message: `"HLLs must have same precision and hash
+size for fused jaccard/union"` — a string a caller could see in a thrown
+exception, in scope for the same "anything someone might be using" reason
+as the rest of this rename), `:201` (the `jaccard = (active == 0) ? 0.0 :
+...` assignment, renamed to `reg_eq = ...` to match the renamed parameter).
+
+**Site 3 — call site**, `cpp/app/hammock_cli.cpp:494`:
+`qh[i]->jaccard_and_union_cardinality(*rh[j], reg_jac, u);` → rename the
+call only; `reg_jac` (the caller's local variable) is already correctly
+named and untouched. Same file, `:483-489`: the multi-line comment above
+this call currently says "computed by the reg_eq_similarity() C++ method" —
+**this is already slightly wrong** (a pre-existing inaccuracy Step 1b's own
+post-implementation review flagged as "inherited, not introduced": `reg_jac`
+on this code path is actually computed by
+`jaccard_and_union_cardinality`/`reg_eq_and_union_cardinality`, not by
+calling `reg_eq_similarity()`, which is only reached in the `qh[i] &&
+rh[j]` — false fallback branch a few lines below). Step 1c fixes this
+comment for real while renaming the identifier it names, rather than
+carrying the inaccuracy forward under a new name.
+
+**Site 4 — call site + comment**, `bindings/_core.cpp:285` (comment: "See
+HLLSketch::jaccard_and_union_cardinality for why this is bit-identical
+rather than merely close"), `:288` (`a[i]->jaccard_and_union_cardinality(*b[j],
+jbuf(i, j), u);` — rename the call only).
+
+**Deliberately out of scope, stated here for the review gate to weigh, not
+silently excluded:** the local variable `jaccard` and accessor `jbuf` inside
+`pairwise_metrics_hll` (`bindings/_core.cpp:236-239`) are themselves named
+after the same misleading word and hold exactly the register-equality
+values this whole rename is about — but they are call-site-local
+implementation details, never exposed as a name to any caller (the function
+returns a plain positional tuple), and renaming them is not what either the
+Step 1b finding or this decision's reasoning above calls for (which is
+specifically the *method* and its *formal parameter*, the two things a
+future caller reads to understand the API). Matches Step 1b's own precedent
+of leaving already-fine local variable names alone (`reg_jac`) rather than
+sweeping every local variable that happens to touch the value.
+
+**Comment/doc updates outside `cpp/`/`bindings/`:**
+- `tests/test_containment_estimator.py:186` ("The fused jaccard+union pass
+  (HLLSketch::jaccard_and_union_cardinality)...") and `:476` ("the Flajolet
+  fallback in jaccard_and_union_cardinality") — comment-only, no test logic
+  touched (neither line calls the method directly; both describe it in
+  prose motivating the test).
+- `CLAUDE.md:376` (the `docs/seed-mode-d-hash-width.md` "Open seeds" bullet,
+  under "The pairwise metrics loop is one fused register pass") — this is a
+  *living* reference into still-open work, not a dated snapshot, so it stays
+  accurate rather than going stale the moment this Step lands. Update the
+  identifier only; the surrounding technical claim (one fused register pass,
+  bit-identical by construction) is unaffected by a rename and stays as
+  written.
+
+**Explicitly left untouched, matching the established historical-doc
+precedent from this seed's own Scope F:** `docs/seed-hammock-cpp-file-dispatch.md:191,316`
+and `docs/seed-metrics-column-restructure.md:77` are dated records of past
+findings/measurements (Part 2's performance investigation; Part 4's cost
+note) that named the function as it was called *at the time* — rewriting
+them to the new name would misrepresent what was true when written, the
+same reasoning already applied to every other historical doc this seed
+touches. No paper/, experiments/, or README.md reference exists (confirmed
+by grep, zero hits in all three).
+
+**Review gate:** 3 reviewers confirm (a) the site list above is complete —
+independently re-grep `cpp/`, `bindings/`, `python/`, `tests/`, `paper/`,
+`experiments/`, `docs/`, `README.md`, `CLAUDE.md`, `memory/` for
+`jaccard_and_union_cardinality\b` and for the bare word `jaccard` inside
+`hll_sketch.hpp`/`hll_sketch.cpp`/the touched `hammock_cli.cpp`/
+`bindings/_core.cpp` regions, to catch anything the snapshot above missed;
+(b) the "deliberately out of scope" call on `bindings/_core.cpp`'s local
+`jaccard`/`jbuf` variables is the right line to draw, not scope-creep
+avoidance dressed up as principle; (c) the hammock_cli.cpp comment fix
+actually resolves the inherited ambiguity Step 1b's post-implementation
+review flagged, rather than just moving it; (d) no CMakeLists/export-map/
+`.pyi`/duck-typed-caller ABI-surface risk (same check Step 1b's risk/safety
+pass already ran for the sibling rename — re-run here since this is a
+different identifier, don't just cite the prior clean result). Verification
+methodology, mirroring Step 1b: since every site is either a compiled C++
+call/declaration (stale name = hard compile error) or a comment (no runtime
+effect), a green `cpp/tests/hammock_tests` build + `pytest tests/
+--HAMMOCK_REQUIRE_CPP=1` plus a clean `grep -rn 'jaccard_and_union_cardinality\b'`
+sweep of the whole repo (expect zero hits) is sufficient completeness proof,
+same as Step 1b's closing argument.
+
+**Commit:** two, once the review gate clears, mirroring Step 1's and Step
+1b's code/prose split — (1) the functional rename (method + parameter +
+both call sites + the exception message, i.e. everything in `cpp/` and
+`bindings/_core.cpp:288`'s call site that a compiler gates), (2) the
+comment/doc-only updates (the `hll_sketch.hpp` doc comment,
+`bindings/_core.cpp:285`'s comment, the `hammock_cli.cpp` comment
+including its ambiguity fix, the two `test_containment_estimator.py`
+comments, `CLAUDE.md:376`) — kept separate since (1) is compiler-verified
+and (2) is not, the same reason Step 1 and Step 1b both split this way.
+
+**Then stop.** Report what landed and the subagent reviewers' findings, and
+wait for the user's go-ahead before starting Step 2. Do not continue
+automatically.
+
 ### Step 2 — Update paper/experiments code to read `reg_eq_similarity`, with fallback
 
 Covers the user's step 2. Every in-scope script from Setup's table,
