@@ -2334,6 +2334,61 @@ register-equality column name plus `jaccard_similarity_ie`, not literally
 `sim_col` — so an S5a-style invocation can never collapse the pair to one
 element regardless of which column the dendrogram itself is drawn on.
 
+**Fixed and re-reviewed, 2026-08-12, per explicit user instruction
+("Fix the bug and re-run the review gate before Step 4").** Landed as the
+worktree commit `3179ba1`, following the suggested fix shape above exactly:
+introduces `reg_eq_col <- resolve_sim_col(NA_character_, raw)`, resolved
+once (so the fallback message still logs at most once per run), independent
+of any CLI override; `sim_col` still resolves to the override when one is
+given (unchanged for the dendrogram/`required_cols`/plot-title sites, which
+are supposed to respect it) but the `agreement` table's `intersect()` call
+and its `ref_signature` lookup now key on `reg_eq_col`, not `sim_col`.
+Verified directly before commit (default call, S5a-override call against
+unrenamed data, S5a-override call against a renamed copy) — all three now
+correctly write 2 rows, and both Figure 6 and S5a PNGs confirmed
+byte-identical to their pre-fix values.
+
+**A fresh 3-reviewer gate ran against the fix itself** (correctness,
+independent reproduction, blast-radius/regression — the same pattern as
+every other gate in this doc), not just against the plan to fix it, per the
+user's explicit "re-run the review gate" instruction:
+- **Correctness:** clean. Traced every remaining use of `sim_col` and
+  `reg_eq_col` in the file (7 sites total) and confirmed each is keyed on
+  the right one; confirmed `resolve_sim_col` now has exactly one live call
+  site (fallback logs at most once, by construction); confirmed the fix
+  reproduces the actual structural invariant `main`'s original hardcoded
+  literal had (a value fixed independent of override), not a special-case
+  guard against one specific override value. One non-blocking observation:
+  if an archived CSV lacked *both* register-equality names entirely, the
+  same silent-collapse shape could recur for a different reason — but `main`
+  has the identical pre-existing exposure, so this fix neither introduces
+  nor worsens it, and no archived CSV in this repo triggers it.
+- **Independent reproduction:** clean. Reran all three scenarios from
+  scratch, matched every claimed row count and fallback-log behavior exactly
+  (2/2/2 rows; fallback logs only on the two unrenamed-data runs), reverted
+  the worktree cleanly after each run.
+- **Blast radius:** clean. Confirmed by diff inspection that the fix's two
+  hunks sit entirely upstream (the `sim_col`-equivalence hunk) or entirely
+  downstream-but-isolated (the `agreement`-block hunk, anchored after
+  `ari`/`nmi` are already computed) of the dendrogram/PNG-rendering code, so
+  Figure 6/S5a's actual visual output is provably untouched — confirmed by
+  directly diffing pre-fix vs post-fix PNG `md5sum`s (identical). Reran the
+  default (Figure 6) path on `main` vs the post-fix worktree against the
+  same real data and got a fully byte-identical `estimator_agreement_stats.csv`
+  (not merely label-equivalent, since this particular input has no renamed
+  column to differ on). Confirmed no other tracked `.R`/`.py` file reads
+  `estimator_agreement_stats.csv` (Table S5 is hand-compiled from it into
+  the manuscript, per `paper/draft.md:273`), so there is no programmatic
+  downstream consumer the row-count change could disturb, and the CSV's
+  header/schema is unchanged either way.
+
+**Step 3, including this follow-up, is now clean.** The one blocking finding
+is fixed, re-verified from scratch by three independent reviewers (one of
+whom directly reproduced both the original bug and the fix), and nothing
+else from the original regeneration pass changed. Per the "⛔ Merge gate"
+note, Step 4/merge may now proceed **once the user gives explicit
+go-ahead** — this doc update itself is not that go-ahead.
+
 ### Step 4 — Remove the duplicate `register_equality_similarity` column, then close out
 
 Covers the user's step 4, plus the version bump and doc sync the user asked
