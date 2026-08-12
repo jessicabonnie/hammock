@@ -35,23 +35,10 @@ dir.create(figures_dir, recursive = TRUE, showWarnings = FALSE)
 raw <- read_csv(file.path(data_dir, "mode_d_summary.csv"),
                 show_col_types = FALSE)
 
-# `column` holds a data value naming which metric a summary row is about, not
-# a CSV header, so the reg_eq_similarity/jaccard_similarity fallback here is a
-# value comparison against unique(raw$column), not a names(df) presence check.
-# See docs/seed-jaccard-reg-eq-rename.md Step 2.
-reg_eq_value <- if ("reg_eq_similarity" %in% unique(raw$column)) {
-  "reg_eq_similarity"
-} else {
-  message(
-    "reg_eq_similarity not found in 'column' values; falling back to jaccard_similarity"
-  )
-  "jaccard_similarity"
-}
-
 refs_wide <- raw |>
   # k=5 has only a single surviving (w=20) point at p=24 — not a real sweep,
   # so drop it rather than imply coverage it doesn't have.
-  filter(column == reg_eq_value, !is.na(pearson), precision == 24,
+  filter(column == "jaccard_similarity", !is.na(pearson), precision == 24,
          k >= 8) |>
   select(k, w, precision, reference, pearson) |>
   pivot_wider(names_from = reference, values_from = pearson) |>

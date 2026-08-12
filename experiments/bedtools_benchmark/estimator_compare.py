@@ -30,34 +30,6 @@ GENOME_LEN = 10_000_000
 # Fraction of A's intervals reused in B. Spans J ~ 0 .. 1.
 FRACS = [0.0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.85, 0.95, 1.0]
 
-# Set once, the first time a row is read with the pre-rename
-# `jaccard_similarity` column instead of `reg_eq_similarity`
-# (docs/seed-jaccard-reg-eq-rename.md Step 2). Used to log the fallback
-# exactly once per script run rather than once per row.
-_REG_EQ_FALLBACK_LOGGED = False
-
-
-def _reg_eq_value(row):
-    """Read the register-equality column, preferring the post-rename name.
-
-    hammock CSVs written before the reg_eq_similarity rename
-    (docs/seed-jaccard-reg-eq-rename.md) carry `jaccard_similarity` instead.
-    Prefer the new name; fall back to the old one; log the fallback once per
-    run so a fresh run that's silently still emitting the old name (e.g. a
-    partial cross-front-end rename) is visible in run output rather than
-    looking identical to expected legacy-file handling.
-    """
-    global _REG_EQ_FALLBACK_LOGGED
-    val = row.get("reg_eq_similarity")
-    if val is not None:
-        return float(val)
-    if not _REG_EQ_FALLBACK_LOGGED:
-        print("estimator_compare.py: 'reg_eq_similarity' column not found; "
-              "falling back to legacy 'jaccard_similarity' column name "
-              "(pre-rename hammock output).", file=sys.stderr)
-        _REG_EQ_FALLBACK_LOGGED = True
-    return float(row["jaccard_similarity"])
-
 
 def rand_intervals(n, rng):
     out = []
@@ -283,7 +255,7 @@ def main():
                 continue
             c_ab = float(r["containment_AB"])
             c_ba = float(r["containment_BA"])
-            j_re = _reg_eq_value(r)
+            j_re = float(r["jaccard_similarity"])
             j_ie, clamped = ie_jaccard(c_ab, c_ba)
             rows.append({
                 "precision": p,
