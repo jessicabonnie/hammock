@@ -77,7 +77,11 @@ def main() -> int:
     print(hdr)
     print("-" * len(hdr))
     for cell in cells:
-        found = glob.glob(os.path.join(args.results, cell, "*.csv"))
+        # load() (via row["containment_AB"]) needs the "_full" (--metrics)
+        # shape -- narrow the glob so a "_ie"/"_re" file from the same
+        # directory can never be picked (was an unnarrowed *.csv glob,
+        # order-dependent across shapes).
+        found = glob.glob(os.path.join(args.results, cell, "*_full.csv"))
         if not found:
             continue
         strata = {"within-species": [], "cross-sp, same tissue": [], "cross-sp, diff tissue": []}

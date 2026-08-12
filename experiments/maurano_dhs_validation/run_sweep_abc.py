@@ -75,7 +75,11 @@ def output_csv_name(mode: str, precision: int, expA: float, subB: float) -> str:
         name += f"_expA{expA:.2f}"
     if subB != 1.0:
         name += f"_B{subB:.2f}"
-    return name + ".csv"
+    # "_full" matches the --metrics flag added below (python/hammock/
+    # outprefix.py now always tags Python-CLI output _ie/_re/_full;
+    # docs/seed-metrics-column-restructure.md) -- analyze.R's parse_abc_name
+    # requires this exact suffix.
+    return name + "_full.csv"
 
 
 def run_with_time(cmd: List[str], log_path: Path) -> Tuple[float, float, float, int]:
@@ -158,6 +162,10 @@ def main() -> int:
                 "--precision", str(prec),
                 "--threads", str(args.threads),
                 "--outprefix", str(outprefix),
+                # analyze.R reads the full containment/cosketch block, not
+                # just jaccard_similarity -- needs the full shape, not the
+                # new bare default or --register-equality.
+                "--metrics",
             ]
             if mode == "C":
                 cmd += ["--expA", str(expA), "--subB", str(subB)]

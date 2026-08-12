@@ -10,18 +10,30 @@ threads), same machine/allocation, alternating which tool goes first each
 replicate (the same _rotate-style anti-confound benchmark_cpp_vs_bedtools.py
 uses elsewhere).
 
-The `hammock` CLI has no --metrics/--no-metrics opt-out (CLAUDE.md: it always
-emits the full 9-column block, matching hammock-cpp's default since v0.7.0).
-hammock-cpp's arm is controlled by --cpp-metrics-arm: 'no-metrics' (the
-default, since 2026-08-11) matches what benchmark_cpp_vs_bedtools.py actually
-passes for every headline figure; 'metrics' reproduces the original
-apples-to-apples 9-column comparison (job 29758101,
+Both front-ends now share the three-shape metrics contract
+(docs/seed-metrics-column-restructure.md): bare/no-flag emits only
+`jaccard_similarity_ie`, `--register-equality`/`--re` emits
+`jaccard_similarity` + `register_equality_similarity`, `--metrics` emits the
+full 8-column block. Neither arm here reads any CSV column (this script only
+times wall-clock), so: `cli_cmd` below is always the bare/`_ie` invocation
+(previously the CLI's only option, since it had no metrics flag at all before
+this contract existed -- PART9 (docs/seed-metrics-column-restructure.md):
+this is a shape asymmetry against whatever `cpp_cmd` arm is selected below,
+not retargeted here per "mark PART9 only, don't retarget"); `cpp_cmd`'s arm is
+controlled by --cpp-metrics-arm: 'no-metrics' (the default, since 2026-08-11)
+matches what benchmark_cpp_vs_bedtools.py actually passes for every headline
+figure and now maps internally to hammock-cpp's `--re`/`--register-equality`
+flag (the pre-restructure `--no-metrics` flag this choice name is inherited
+from was removed outright, not aliased -- see the seed doc's "Decisions" --
+the `--cpp-metrics-arm` choice string itself is kept as `no-metrics` since
+it's this script's own external argparse surface, already depended on by
+sbatch_cli_overhead.sh, not the binary's flag); 'metrics' reproduces the
+original apples-to-apples 9-column comparison (job 29758101,
 results/cli_overhead_1786473951.csv) for continuity with that data. See
 docs/seed-hammock-cpp-file-dispatch.md Part 2's "Important scope note": the
 crossover was originally measured only on the --metrics arm, which is NOT the
-arm the headline figures use, so a --no-metrics remeasurement was flagged as
-the natural next step. Note the CLI's own wall time is unaffected either way
-(it always emits 9 columns) -- only the cpp side's arm changes here.
+arm the headline figures use, so a --no-metrics (now register-equality)
+remeasurement was flagged as the natural next step.
 
 Extended to N up to 2048, where a single run can take hours, this picked up
 two hardenings mirrored from benchmark_cpp_vs_bedtools.py's checkpoint/pin
@@ -217,9 +229,14 @@ def main() -> int:
                      default="no-metrics",
                      help="hammock-cpp arm to time (default: no-metrics, "
                           "matching what benchmark_cpp_vs_bedtools.py passes "
-                          "for every headline figure; 'metrics' reproduces "
-                          "the original job-29758101 comparison). The CLI "
-                          "always emits the 9-column block either way.")
+                          "for every headline figure -- maps internally to "
+                          "hammock-cpp's --register-equality/--re flag, since "
+                          "the choice name predates and outlived the "
+                          "removed --no-metrics flag it was named for; "
+                          "'metrics' reproduces the original job-29758101 "
+                          "comparison, full 8-column block). The CLI side "
+                          "(cli_cmd) always runs bare (the _ie shape) either "
+                          "way -- see module docstring.")
     ap.add_argument("--hammock-cpp-bin", default=os.environ.get(
         "HAMMOCK_CPP_BIN",
         "/home/jbonnie1/.conda/envs/claude-ref-comparison/lib/python3.10/site-packages/bin/hammock-cpp"))
@@ -314,8 +331,12 @@ def main() -> int:
 
                     cpp_out = os.path.join(tmp_dir, "cpp_out")
                     cli_out = os.path.join(tmp_dir, "cli_out")
+                    # PART9 (docs/seed-metrics-column-restructure.md): --no-metrics
+                    # was removed; --register-equality/--re is its replacement
+                    # (the "no-metrics" --cpp-metrics-arm choice name above is
+                    # this script's own external surface and is kept as-is).
                     cpp_metrics_flag = ("--metrics" if args.cpp_metrics_arm == "metrics"
-                                         else "--no-metrics")
+                                         else "--re")
                     cpp_cmd = [args.hammock_cpp_bin, l1, l2, "--mode", "B",
                                "-p", str(args.precision), "-o", cpp_out,
                                "--threads", str(args.threads), cpp_metrics_flag]

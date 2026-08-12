@@ -93,13 +93,16 @@ message(sprintf("Loading %d CSV file(s) from %s", length(csv_files),
                 opt[["hammock-dir"]]))
 
 # Parse metadata out of the filename. Filename (set by hammock outprefix.py):
-#   synth_r{RATE}_{TYPE}_hll_p{PRECISION}_jacc{MODE}[_expA{E}][_B{SUBB}].csv
+#   synth_r{RATE}_{TYPE}_hll_p{PRECISION}_jacc{MODE}[_expA{E}][_B{SUBB}]_full.csv
 # - subB suffix omitted by hammock when subB == 1.0 → treat as subB=1.0.
 # - expA suffix omitted when expA == 0 → treat as expA=0.0.
+# - trailing "_full" is the metrics-shape tag (python/hammock/outprefix.py;
+#   docs/seed-metrics-column-restructure.md) -- required, not optional: the
+#   Makefile always passes --metrics, so every current-format file has it.
 parse_meta <- function(path) {
   bn <- basename(path)
   m <- str_match(bn,
-    "^synth_r([0-9.]+)_([ABC])_hll_p(\\d+)_jacc([ABC])(?:_expA([0-9.]+))?(?:_B([0-9.]+))?\\.csv$")
+    "^synth_r([0-9.]+)_([ABC])_hll_p(\\d+)_jacc([ABC])(?:_expA([0-9.]+))?(?:_B([0-9.]+))?_full\\.csv$")
   if (any(is.na(m[1, 1])))
     stop(sprintf("Cannot parse hammock CSV name: %s", bn))
   mode <- m[1, 5]

@@ -31,8 +31,9 @@
 # The workload still uses 16 threads -- the other 32 cores are guaranteed idle
 # headroom, not extra parallelism.
 #
-# ARMS. bedtools, hammock subB=1.0 --no-metrics, hammock subB=1.0 with the
-# default 9-column block (--metrics-arm). Deliberately NO subB<1 arm: Panel C is
+# ARMS. bedtools, hammock subB=1.0 --register-equality (the reduced-column
+# timed arm), hammock subB=1.0 with the full metrics block (--metrics-arm).
+# Deliberately NO subB<1 arm: Panel C is
 # the subsampling panel, plot_pairwise_scaling.R:112 filters subB curves out of
 # Panel A anyway, and including one re-opens a framing this figure is being
 # rebuilt to avoid.

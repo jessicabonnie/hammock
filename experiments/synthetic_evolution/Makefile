@@ -74,19 +74,23 @@ EVOLVE_STAMPS := $(foreach r,$(RATES),$(foreach t,$(TYPES),$(EVOLVED_DIR)/.stamp
 LIST_FILES    := $(foreach r,$(RATES),$(foreach t,$(TYPES),$(EVOLVED_DIR)/list_r$(r)_$(t).txt))
 
 # Hammock CSV naming (set by hammock/outprefix.py):
-#   {outprefix}_hll_p{P}_jacc{MODE}.csv
-#   {outprefix}_hll_p{P}_jaccC[_expA{E}][_B{S}].csv  (suffix omitted if 0/1.0)
+#   {outprefix}_hll_p{P}_jacc{MODE}_full.csv
+#   {outprefix}_hll_p{P}_jaccC[_expA{E}][_B{S}]_full.csv  (suffix omitted if 0/1.0)
 # We use outprefix = $(HAMMOCK_DIR)/synth_r{R}_{T} and pin subB at $(SUBB).
+# The trailing "_full" tag matches the --metrics flag passed to every hammock
+# invocation below (python/hammock/outprefix.py now always tags Python-CLI
+# output _ie/_re/_full; docs/seed-metrics-column-restructure.md) --
+# code/analyze.R's parse_meta regex requires this exact suffix.
 PREFIX_FOR    = $(HAMMOCK_DIR)/synth_r$(1)_$(2)
 HAMMOCK_AB    := $(foreach r,$(RATES),$(foreach t,$(TYPES),\
-                   $(call PREFIX_FOR,$(r),$(t))_hll_p$(PRECISION)_jaccA.csv \
-                   $(call PREFIX_FOR,$(r),$(t))_hll_p$(PRECISION)_jaccB.csv))
+                   $(call PREFIX_FOR,$(r),$(t))_hll_p$(PRECISION)_jaccA_full.csv \
+                   $(call PREFIX_FOR,$(r),$(t))_hll_p$(PRECISION)_jaccB_full.csv))
 # Mode C, expA=0 (no boost), subB=$(SUBB) → name has _B{SUBB} but no _expA.
 HAMMOCK_C_DEF := $(foreach r,$(RATES),$(foreach t,$(TYPES),\
-                   $(call PREFIX_FOR,$(r),$(t))_hll_p$(PRECISION)_jaccC_B$(SUBB).csv))
+                   $(call PREFIX_FOR,$(r),$(t))_hll_p$(PRECISION)_jaccC_B$(SUBB)_full.csv))
 # Mode C, expA > 0, subB=$(SUBB) → name has both _expA{E} and _B{SUBB}.
 HAMMOCK_C_EXP := $(foreach r,$(RATES),$(foreach t,$(TYPES),$(foreach e,$(C_EXPA_POS),\
-                   $(call PREFIX_FOR,$(r),$(t))_hll_p$(PRECISION)_jaccC_expA$(e)_B$(SUBB).csv)))
+                   $(call PREFIX_FOR,$(r),$(t))_hll_p$(PRECISION)_jaccC_expA$(e)_B$(SUBB)_full.csv)))
 HAMMOCK_CSVS  := $(HAMMOCK_AB) $(HAMMOCK_C_DEF) $(HAMMOCK_C_EXP)
 
 FIGURE_TARGETS  := \
@@ -162,7 +166,7 @@ $(EVOLVED_DIR)/list_r%.txt: $(EVOLVED_DIR)/.stamp_r$$*
 
 # ── Step 3: hammock runs ────────────────────────────────────────────────────
 # Mode A
-$(HAMMOCK_DIR)/synth_r%_hll_p$(PRECISION)_jaccA.csv: \
+$(HAMMOCK_DIR)/synth_r%_hll_p$(PRECISION)_jaccA_full.csv: \
         $(BASE_BED_LIST) \
         $(EVOLVED_DIR)/list_r$$*.txt
 	@mkdir -p $(HAMMOCK_DIR) $(LOGS)
@@ -173,10 +177,11 @@ $(HAMMOCK_DIR)/synth_r%_hll_p$(PRECISION)_jaccA.csv: \
 	    --mode A --precision $(PRECISION) \
 	    --threads $(THREADS) \
 	    --outprefix $(HAMMOCK_DIR)/synth_r$$rate\_$$type \
+	    --metrics \
 	    > $(LOGS)/hammock_r$$rate\_$$type\_modeA.log 2>&1
 
 # Mode B
-$(HAMMOCK_DIR)/synth_r%_hll_p$(PRECISION)_jaccB.csv: \
+$(HAMMOCK_DIR)/synth_r%_hll_p$(PRECISION)_jaccB_full.csv: \
         $(BASE_BED_LIST) \
         $(EVOLVED_DIR)/list_r$$*.txt
 	@mkdir -p $(HAMMOCK_DIR) $(LOGS)
@@ -187,6 +192,7 @@ $(HAMMOCK_DIR)/synth_r%_hll_p$(PRECISION)_jaccB.csv: \
 	    --mode B --precision $(PRECISION) \
 	    --threads $(THREADS) \
 	    --outprefix $(HAMMOCK_DIR)/synth_r$$rate\_$$type \
+	    --metrics \
 	    > $(LOGS)/hammock_r$$rate\_$$type\_modeB.log 2>&1
 
 # Mode C, expA=0 (no boost), subB=$(SUBB). CSV name has _B{SUBB} but no _expA.
@@ -203,10 +209,11 @@ $(HAMMOCK_C_DEF): $(BASE_BED_LIST)
 	    --mode C --precision $(PRECISION) --subB $(SUBB) \
 	    --threads $(THREADS) \
 	    --outprefix $(HAMMOCK_DIR)/synth_r$$rate\_$$type \
+	    --metrics \
 	    > $(LOGS)/hammock_r$$rate\_$$type\_modeC_B$(SUBB).log 2>&1
 
 # Mode C, expA > 0, subB=$(SUBB). Static pattern, one CSV per (rate, type, expA).
-# Filename: synth_r{R}_{T}_hll_p{P}_jaccC_expA{E}_B{SUBB}.csv
+# Filename: synth_r{R}_{T}_hll_p{P}_jaccC_expA{E}_B{SUBB}_full.csv
 $(HAMMOCK_C_EXP): $(BASE_BED_LIST)
 	@mkdir -p $(HAMMOCK_DIR) $(LOGS)
 	@bn=$$(basename $@ .csv); \
@@ -220,6 +227,7 @@ $(HAMMOCK_C_EXP): $(BASE_BED_LIST)
 	    --mode C --precision $(PRECISION) --expA $$expa --subB $(SUBB) \
 	    --threads $(THREADS) \
 	    --outprefix $(HAMMOCK_DIR)/synth_r$$rate\_$$type \
+	    --metrics \
 	    > $(LOGS)/hammock_r$$rate\_$$type\_modeC_expA$$expa\_B$(SUBB).log 2>&1
 
 # ── Step 4: analysis (figures + summary CSV) ────────────────────────────────

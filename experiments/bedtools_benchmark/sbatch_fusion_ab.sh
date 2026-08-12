@@ -14,19 +14,21 @@
 # similarity block's cost the fused pass actually removed.
 #
 # The previous answer came from comparing a 2026-08-04 run to a 2026-08-08 run.
-# That comparison is unsound, and its own control says so -- the --no-metrics arm
-# is byte-identical code in both binaries and it measured 1.27-1.53x slower on
-# the older run (which, per sacct, had no SLURM allocation at all). Any absolute
-# cross-run number therefore carries an unknown machine factor of that size.
+# That comparison is unsound, and its own control says so -- the reduced-column
+# arm (--no-metrics on the pre binary, --register-equality on post -- see
+# fusion_ab.py's capability-probe docstring) is byte-identical code in both
+# binaries and it measured 1.27-1.53x slower on the older run (which, per
+# sacct, had no SLURM allocation at all). Any absolute cross-run number
+# therefore carries an unknown machine factor of that size.
 #
-# Here all four arms -- {pre, post} x {--metrics, --no-metrics} -- run against
+# Here all four arms -- {pre, post} x {--metrics, reduced-column} -- run against
 # one seeded corpus in one allocation on one node, permuted per replicate so arm
 # is not confounded with position. Every reported quantity is a within-replicate
 # ratio, so a machine factor is common-mode and cancels.
 #
-# The pre/post control on --no-metrics is the calibration: identical code, so it
-# must land at 1.00, and however far it misses is the error bar on everything
-# else in the job.
+# The pre/post control on the reduced-column arm is the calibration: identical
+# code, so it must land at 1.00, and however far it misses is the error bar on
+# everything else in the job.
 #
 # Binaries are built from 826d7b4^ (pre) and HEAD (post) with the SAME compiler
 # and cmake flags -- otherwise the comparison measures the build, not the change.

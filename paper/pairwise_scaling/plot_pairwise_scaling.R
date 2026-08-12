@@ -133,8 +133,9 @@ synthetic_bt <- synthetic_raw %>%
 
 # Uses the +IE (jaccard_similarity_ie) arm exclusively, in place of
 # register-equality -- see the file header. wall_time/comparison_time here
-# are the +IE arm's, i.e. the full 9-column metrics block, not the
-# --no-metrics timing a pre-2026-08-10 reader of this file would expect.
+# are the +IE arm's, i.e. the full metrics block (--metrics), not the
+# reduced-column arm's timing (--register-equality, was --no-metrics) a
+# pre-2026-08-10 reader of this file would expect.
 if (!"hammock_ie_B" %in% synthetic_raw$tool) {
   stop(
     "No hammock_ie_B rows in ", basename(synthetic_csv), " -- Panel A now ",
@@ -341,8 +342,9 @@ condition_of <- function(subb) case_when(
 # One bar per condition: BEDTools, then hammock at the +IE arm (full metrics
 # block) for each subB level -- in place of register-equality, same
 # rationale as Panel A. Wall time here is the +IE arm's, costlier than the
-# register-equality (--no-metrics) timing this panel plotted before
-# 2026-08-10; see plot_pairwise_scaling_supplement.R for that comparison.
+# register-equality (--register-equality, was --no-metrics) timing this
+# panel plotted before 2026-08-10; see plot_pairwise_scaling_supplement.R
+# for that comparison.
 bars <- bind_rows(
   tibble(
     condition = "BEDTools",

@@ -44,7 +44,7 @@ for spec in "${runs[@]}"; do
     --job-name="precprobe_k${k}_w${w}_p${p}" \
     --output="$cell_dir/slurm.out" \
     --error="$cell_dir/slurm.err" \
-    --wrap="set -euo pipefail; ${HAMMOCK} ${FASTA_LIST} ${FASTA_LIST} --mode D --outprefix ${cell_dir}/probe -k ${k} -w ${w} --precision ${p} --full-paths 2>${log}")
+    --wrap="set -euo pipefail; ${HAMMOCK} ${FASTA_LIST} ${FASTA_LIST} --mode D --outprefix ${cell_dir}/probe -k ${k} -w ${w} --precision ${p} --full-paths --metrics 2>${log}")
   echo "submitted k=${k} w=${w} p=${p} → SLURM ${jid}"
   jobids+=("$jid")
 done
@@ -65,7 +65,11 @@ printf "%-22s %8s %8s %8s %8s %8s\n" "cell" "min" "max" "spread" "hsa_rh" "Mmus_
 for spec in "${runs[@]}"; do
   read -r k w p <<<"$spec"
   cell_dir="$OUTDIR/k${k}_w${w}_p${p}"
-  csv=$(ls "${cell_dir}"/probe*.csv 2>/dev/null | head -1 || true)
+  # Narrow to the _full tag (matches --metrics above) rather than a bare
+  # probe*.csv glob: this needs jaccard_similarity, which only the full
+  # block/register-equality shapes have, and narrowing sidesteps any
+  # ASCII-sort ambiguity if a stale, differently-tagged file is ever present.
+  csv=$(ls "${cell_dir}"/probe*_full.csv 2>/dev/null | head -1 || true)
   if [[ -z "$csv" || ! -s "$csv" ]]; then
     printf "%-22s  (no csv)\n" "k${k}_w${w}_p${p}"
     continue

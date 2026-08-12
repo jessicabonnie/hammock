@@ -61,7 +61,9 @@ DEFAULT_SIM_COL <- "jaccard_similarity"
 experiment_dir <- file.path(repo_root, "experiments", "maurano_dhs_validation")
 default_csv <- file.path(
   experiment_dir, "results", "raw_d",
-  sprintf("hammock_mnmzr_p%d_jaccD_k%d_w%d.csv", P, K, W)
+  # "_full" tag matches --metrics (python/hammock/outprefix.py now always
+  # tags Python-CLI output _ie/_re/_full; docs/seed-metrics-column-restructure.md).
+  sprintf("hammock_mnmzr_p%d_jaccD_k%d_w%d_full.csv", P, K, W)
 )
 default_key <- file.path(experiment_dir, "data", "maurano_filenames_key.tsv")
 default_output <- file.path(repo_root, "paper", "figures", "sequence_tissue_clustering.png")

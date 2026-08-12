@@ -44,9 +44,11 @@ read_jacc <- function(path) {
     select(file1, file2, jaccard_similarity)
 }
 
-mode_a <- read_jacc(file.path(abc_dir, sprintf("hammock_hll_p%d_jaccA.csv", P))) %>%
+# "_full" tag matches --metrics (python/hammock/outprefix.py now always tags
+# Python-CLI output _ie/_re/_full; docs/seed-metrics-column-restructure.md).
+mode_a <- read_jacc(file.path(abc_dir, sprintf("hammock_hll_p%d_jaccA_full.csv", P))) %>%
   rename(j_A = jaccard_similarity)
-mode_b <- read_jacc(file.path(abc_dir, sprintf("hammock_hll_p%d_jaccB.csv", P))) %>%
+mode_b <- read_jacc(file.path(abc_dir, sprintf("hammock_hll_p%d_jaccB_full.csv", P))) %>%
   rename(j_B = jaccard_similarity)
 
 # Helper: build the d_A / d_B aggregate from a list of (param_value, csv) pairs.
@@ -99,10 +101,10 @@ plot_agg <- function(agg, x_label, log_x, title_suffix, out_file) {
 
 # ── subB sweep (expA = 0) ───────────────────────────────────────────────────
 subB_files <- list.files(abc_dir,
-  pattern = sprintf("^hammock_hll_p%d_jaccC_B[0-9.]+\\.csv$", P),
+  pattern = sprintf("^hammock_hll_p%d_jaccC_B[0-9.]+_full\\.csv$", P),
   full.names = TRUE)
 subB_rows <- lapply(subB_files, function(p) {
-  list(value = as.numeric(sub(".*_B([0-9.]+)\\.csv$", "\\1", p)),
+  list(value = as.numeric(sub(".*_B([0-9.]+)_full\\.csv$", "\\1", p)),
        path  = p)
 })
 agg_subB <- build_agg(subB_rows)
@@ -112,10 +114,10 @@ plot_agg(agg_subB, x_label = "subB (log)", log_x = TRUE,
 
 # ── expA sweep (subB = 1.0) ─────────────────────────────────────────────────
 expA_files <- list.files(abc_dir,
-  pattern = sprintf("^hammock_hll_p%d_jaccC_expA[0-9.]+\\.csv$", P),
+  pattern = sprintf("^hammock_hll_p%d_jaccC_expA[0-9.]+_full\\.csv$", P),
   full.names = TRUE)
 expA_rows <- lapply(expA_files, function(p) {
-  list(value = as.numeric(sub(".*_expA([0-9.]+)\\.csv$", "\\1", p)),
+  list(value = as.numeric(sub(".*_expA([0-9.]+)_full\\.csv$", "\\1", p)),
        path  = p)
 })
 if (length(expA_rows) > 0) {

@@ -111,7 +111,12 @@ def run_hammock(a_paths, b_paths, precision, tmp_dir, threads, sketch_seed=None)
     tag = f"hm_p{precision}" if sketch_seed is None else f"hm_p{precision}_s{sketch_seed}"
     prefix = os.path.join(tmp_dir, tag)
     cmd = [HAMMOCK, l1, l2, "--mode", "B", "--precision", str(precision),
-           "-o", prefix, "--threads", str(threads)]
+           "-o", prefix, "--threads", str(threads),
+           # Needs containment_AB/containment_BA and jaccard_similarity
+           # (read below), which only the full block has -- the bare
+           # default (jaccard_similarity_ie alone) and --register-equality
+           # (jaccard_similarity alone) are both insufficient.
+           "--metrics"]
     if sketch_seed is not None:
         cmd += ["--seed", str(sketch_seed)]
     subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -122,9 +127,11 @@ def run_hammock(a_paths, b_paths, precision, tmp_dir, threads, sketch_seed=None)
     # match over a shared --tmp-dir is ambiguous exactly when a seed sweep is
     # running. For sketch_type=hyperloglog, mode=B, default subA/subB and no
     # expA, get_new_prefix (python/hammock/outprefix.py:17) appends exactly
-    # "_hll_p{precision}_jacc{mode}". Since hammock rewrites this path on every
-    # run, naming it also removes any staleness question.
-    path = f"{prefix}_hll_p{precision}_jaccB.csv"
+    # "_hll_p{precision}_jacc{mode}_full" (the "_full" tag matches the
+    # --metrics flag above; docs/seed-metrics-column-restructure.md). Since
+    # hammock rewrites this path on every run, naming it also removes any
+    # staleness question.
+    path = f"{prefix}_hll_p{precision}_jaccB_full.csv"
     if not os.path.exists(path):
         raise RuntimeError(
             f"hammock did not write the expected output {path}. "

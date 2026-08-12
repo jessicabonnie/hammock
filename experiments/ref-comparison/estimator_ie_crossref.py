@@ -114,7 +114,11 @@ def main() -> int:
             os.path.basename(d) for d in glob.glob(os.path.join(args.results, "*"))
             if os.path.isdir(d)):
         for cell_dir in sorted(glob.glob(os.path.join(args.results, peak_type, "k*_w*"))):
-            csvs = sorted(glob.glob(os.path.join(cell_dir, "*.csv")))
+            # cell_stats needs containment_AB/containment_BA, present only in
+            # the "_full" (--metrics) shape -- narrow the glob so a "_ie"/"_re"
+            # file from the same directory can never be picked instead (was
+            # `sorted(glob.glob(*.csv))[0]`, order-dependent across shapes).
+            csvs = sorted(glob.glob(os.path.join(cell_dir, "*_full.csv")))
             if not csvs:
                 continue
             stats = cell_stats(csvs[0], tissue_of)

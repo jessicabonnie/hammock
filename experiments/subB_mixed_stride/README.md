@@ -18,10 +18,14 @@ and against `bedtools jaccard` on the real-data corpus.
   it's 3 × 6 × 5 × 3 = 270 runs; Maurano is one class, so 3 × 6 × 5 = 90 runs.
 - **Tool:** standalone `hammock-cpp` (Mode B, precision 18, 8 threads). No
   Python in the timing loop. `run_sweep.py` requires the binary to be ≥ 0.7.0
-  and passes `--no-metrics`, so timed runs are 3-column
-  (`query`/`reference`/`jaccard_similarity`). The archived sweeps in
-  `RESULTS.md` were taken with a pre-0.7.0 binary, where that shape was the
-  default and the flag did not exist.
+  and passes `--register-equality` (was `--no-metrics` pre-restructure; see
+  `docs/seed-metrics-column-restructure.md`'s three-shape contract — bare
+  default is `_ie`-only, `--register-equality`/`--re` is `_re`, `--metrics`
+  is the full `_full` block), so timed runs are the reduced-column shape
+  (`query`/`reference`/`jaccard_similarity`/`register_equality_similarity`).
+  The archived sweeps in `RESULTS.md` were taken with a pre-0.7.0 binary,
+  where the (pre-restructure) full shape was the default and no opt-out flag
+  existed.
 - **Accuracy column:** `jaccard_similarity` (register-equality), not
   `jaccard_similarity_ie`. See the caveat box at the top of `RESULTS.md`.
   The IE question is answered separately by `run_ie_subb.py` +

@@ -138,7 +138,10 @@ rule exp_a_hammock:
             outdir=OUTDIR, peak_type="{peak_type}", ref=EXP_A_REFS,
         ),
     output:
-        csv = f"{{outdir}}/exp_a/{{peak_type}}/k{{k}}_w{{w}}/exp_a_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}.csv",
+        # "_full" tag matches --metrics below (python/hammock/outprefix.py
+        # now always tags Python-CLI output _ie/_re/_full;
+        # docs/seed-metrics-column-restructure.md).
+        csv = f"{{outdir}}/exp_a/{{peak_type}}/k{{k}}_w{{w}}/exp_a_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}_full.csv",
     params:
         outprefix = lambda wc: f"{OUTDIR}/exp_a/{wc.peak_type}/k{wc.k}_w{wc.w}/exp_a",
     log:
@@ -158,13 +161,14 @@ rule exp_a_hammock:
             -w {wildcards.w} \
             --precision {PRECISION} \
             --full-paths \
+            --metrics \
             2>{log}
         """
 
 rule exp_a_validate_and_plot:
     """Statistical test and visualization for cross-reference similarity (Exp A)."""
     input:
-        matrix   = f"{{outdir}}/exp_a/{{peak_type}}/k{{k}}_w{{w}}/exp_a_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}.csv",
+        matrix   = f"{{outdir}}/exp_a/{{peak_type}}/k{{k}}_w{{w}}/exp_a_mnmzr_p{PRECISION}_jaccD_k{{k}}_w{{w}}_full.csv",
         metadata = "config/exp_a_metadata.tsv",
     output:
         plot  = "{outdir}/exp_a/{peak_type}/k{k}_w{w}/cross_ref_validation.png",

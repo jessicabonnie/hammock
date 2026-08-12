@@ -54,8 +54,9 @@
 # check, not a required join.
 #
 # --metrics-all (new flag, see benchmark_cpp_vs_bedtools.py's arms_for()):
-# runs EVERY subB arm with --metrics instead of --no-metrics, unlike
-# --metrics-arm which only ever adds one extra fixed arm at subB=1.0.
+# runs EVERY subB arm with --metrics instead of the reduced-column timed arm
+# (--register-equality, was --no-metrics), unlike --metrics-arm which only
+# ever adds one extra fixed arm at subB=1.0.
 # Labels: hammock_ie_B (subB=1.0, byte-compatible with the existing consumers'
 # exact-match filter) / hammock_ie_B_subB0.1 / hammock_ie_B_subB0.01 (both fail
 # every existing R consumer's filter, so this cannot corrupt an existing

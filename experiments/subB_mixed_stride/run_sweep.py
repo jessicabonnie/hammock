@@ -56,17 +56,27 @@ RESULTS_DIR = SCRIPT_DIR / "results"
 ROW_COLS = [
     "corpus", "method", "size_class", "num_intervals", "subB", "rep", "run_id",
     "file_a", "file_b", "jaccard",
-    # Populated only by the --metrics arm; empty in the 3-column shape.
+    # Populated only by the --metrics arm; empty in the register-equality shape.
     "jaccard_ie", "containment_AB", "containment_BA",
     "wall_time", "cpu_time", "max_rss_mb",
     # comparison_time keeps its historical meaning (pair loop + serial write);
     # pair_time/write_time decompose it.
     "sketch_creation_time", "comparison_time", "pair_time", "write_time",
     "precision", "threads",
-    # Which output shape was timed. False = the 3-column --no-metrics arm every
-    # published Panel B number comes from; True = the 9-column arm that emits
-    # jaccard_similarity_ie. The two are not timing-comparable, so this must be
-    # readable off the row rather than inferred from the filename.
+    # Which output shape was timed. False = the cheap --register-equality arm
+    # (renamed from --no-metrics; docs/seed-metrics-column-restructure.md)
+    # every published Panel B number comes from; True = the full-block arm
+    # that emits jaccard_similarity_ie. The two are not timing-comparable, so
+    # this must be readable off the row rather than inferred from the filename.
+    #
+    # PART9: this --metrics arm's CSV also captures jaccard_ie AND
+    # containment_AB/containment_BA -- but the only live consumer of this
+    # arm's output, summarize_synthetic_ie.py, reads neither (only
+    # wall_time/threads/subB/method/size_class/run_id/file_a/file_b) -- so
+    # this genuinely qualifies to drop the --metrics flag entirely in favour
+    # of the bare/no-flag default, which still gives jaccard_similarity_ie
+    # alone at lower cost. Settled, not just flagged: Part 9 should retarget
+    # and re-measure, not re-derive whether this site qualifies.
     "metrics",
 ]
 
@@ -111,11 +121,11 @@ def parse_hammock_csv(path: str) -> List[Dict[str, Any]]:
             if j is None:
                 continue
             # Capturing the IE column is the entire point of the --metrics arm.
-            # Without it that arm pays for the 9-column block, discards it, and
+            # Without it that arm pays for the full block, discards it, and
             # writes a file whose only similarity column is register-equality --
-            # verified bit-identical to the no-metrics arm across all 17,100
-            # cells of the 20260808 run, under a filename containing "ie".
-            # Absent (3-column shape) these stay None and reach the CSV empty.
+            # verified bit-identical to the register-equality arm across all
+            # 17,100 cells of the 20260808 run, under a filename containing "ie".
+            # Absent (register-equality shape) these stay None and reach the CSV empty.
             j_ie = r.get("jaccard_similarity_ie")
             c_ab = r.get("containment_AB")
             c_ba = r.get("containment_BA")
@@ -163,14 +173,15 @@ def run_one(
             "-t", str(threads),
             "-o", out_prefix,
             "--verbose",
-            # Explicit in both directions: since 0.7.0 the binary emits the
-            # metrics block by default, and these wall times feed a published
-            # figure, so the shape of a timed pass must never be implicit.
-            # --metrics is the arm that emits jaccard_similarity_ie, i.e. the
-            # column CLAUDE.md tells readers to use; it is opt-in here because
-            # the existing Panel B numbers are all --no-metrics and the two are
-            # not comparable to each other.
-            "--metrics" if metrics else "--no-metrics",
+            # Explicit in both directions: the shape of a timed pass must
+            # never be implicit, since these wall times feed a published
+            # figure. --metrics is the arm that emits jaccard_similarity_ie,
+            # i.e. the column CLAUDE.md tells readers to use; it is opt-in
+            # here because the existing Panel B numbers are all
+            # --register-equality (renamed from --no-metrics;
+            # docs/seed-metrics-column-restructure.md) and the two are not
+            # comparable to each other.
+            "--metrics" if metrics else "--register-equality",
         ]
         if verbose:
             print("  +", " ".join(cmd), file=sys.stderr)
@@ -262,9 +273,9 @@ def main() -> None:
                         help="Output CSV path (default: results/sweep_<timestamp>.csv)")
     parser.add_argument("--verbose", action="store_true", help="Print every command")
     parser.add_argument("--metrics", action="store_true",
-                        help="Time the 9-column arm (jaccard_similarity_ie plus the "
-                             "containment/cosketch block) instead of the 3-column "
-                             "--no-metrics arm. Writes to sweep_<corpus>_ie_<stamp>.csv "
+                        help="Time the full-block arm (jaccard_similarity_ie plus the "
+                             "containment/cosketch block) instead of the cheap "
+                             "--register-equality arm. Writes to sweep_<corpus>_ie_<stamp>.csv "
                              "so it cannot be mistaken for, or auto-adopted as, the "
                              "headline sweep. Not timing-comparable to a run without it.")
     parser.add_argument("--smoke", action="store_true",
@@ -288,7 +299,7 @@ def main() -> None:
     print(f"reps:         {args.reps}")
     print(f"precision:    {args.precision}")
     print(f"threads:      {args.threads}")
-    print(f"output shape: {'9-column (--metrics, incl. jaccard_similarity_ie)' if args.metrics else '3-column (--no-metrics)'}")
+    print(f"output shape: {'full block (--metrics, incl. jaccard_similarity_ie)' if args.metrics else 'register-equality (--register-equality)'}")
     print(f"system:       {get_system_info()}")
     print()
 
