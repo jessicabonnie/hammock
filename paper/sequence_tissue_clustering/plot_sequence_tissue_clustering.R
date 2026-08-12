@@ -228,7 +228,19 @@ resolve_sim_col <- function(explicit, df) {
   )
   "jaccard_similarity"
 }
-sim_col <- resolve_sim_col(sim_col_arg, raw)
+# `reg_eq_col` is the register-equality column name independent of any CLI
+# override -- resolved once here (so the fallback message, if any, logs
+# exactly once) and reused below by the "estimator agreement" diagnostic,
+# which must always compare register-equality vs IE regardless of which
+# column the dendrogram itself is drawn on. Do not inline this as
+# resolve_sim_col(sim_col_arg, raw) at the agreement site below: when
+# sim_col_arg IS "jaccard_similarity_ie" (the Supplementary Figure S5a
+# invocation), that would make the comparison set collapse to one column via
+# intersect()'s dedup, silently dropping the register-equality row from
+# estimator_agreement_stats.csv -- exactly the bug this comment now guards
+# against (found by docs/seed-jaccard-reg-eq-rename.md Step 3, fixed here).
+reg_eq_col <- resolve_sim_col(NA_character_, raw)
+sim_col <- if (!is.na(sim_col_arg)) sim_col_arg else reg_eq_col
 
 required_cols <- c("file1", "file2", sim_col)
 missing_cols <- setdiff(required_cols, names(raw))
@@ -270,12 +282,16 @@ ari <- adjusted_rand(true_tissue, predicted)
 nmi <- normalized_mi(true_tissue, predicted)
 
 # ---- estimator agreement ---------------------------------------------------
-# Figure 6 is drawn on jaccard_similarity because that is the column the
-# sequence-mode sweep emitted, but jaccard_similarity_ie is the
-# bedtools-comparable estimator (CLAUDE.md divergence #2). Record whether the
-# choice of column changes the k = n_tissues partition at all. cutree's cluster
-# ids are arbitrary, so partitions are compared as sets of member sets, not
-# elementwise.
+# Figure 6 is drawn on reg_eq_col (register-equality, whichever of
+# reg_eq_similarity/jaccard_similarity the input actually carries) because
+# that is the column the sequence-mode sweep emitted, but jaccard_similarity_ie
+# is the bedtools-comparable estimator (CLAUDE.md divergence #2). Record
+# whether the choice of column changes the k = n_tissues partition at all.
+# cutree's cluster ids are arbitrary, so partitions are compared as sets of
+# member sets, not elementwise. Deliberately keyed on reg_eq_col here, not
+# sim_col: this comparison must stay register-equality-vs-IE regardless of
+# which column the S5a invocation asks the dendrogram itself to be drawn on
+# -- see reg_eq_col's own comment above.
 partition_signature <- function(p) {
   paste(sort(vapply(split(names(p), p),
                     function(g) paste(sort(g), collapse = ","),
@@ -284,7 +300,7 @@ partition_signature <- function(p) {
 }
 
 agreement <- bind_rows(lapply(
-  intersect(c(sim_col, "jaccard_similarity_ie"), names(raw)),
+  intersect(c(reg_eq_col, "jaccard_similarity_ie"), names(raw)),
   function(cl) {
     h <- hclust(as.dist(1 - similarity_matrix(raw, cl)), method = "average")
     p <- cutree(h, k = n_tissues)
@@ -299,7 +315,7 @@ agreement <- bind_rows(lapply(
   }
 ))
 
-ref_signature <- agreement$signature[agreement$column == sim_col]
+ref_signature <- agreement$signature[agreement$column == reg_eq_col]
 agreement$partition_identical <- if (length(ref_signature) == 1) {
   agreement$signature == ref_signature
 } else {
