@@ -518,6 +518,7 @@ def run_hammock(
     sub_b: float = 1.0,
     sub_b_method: str = "mixed-stride",
     metrics: bool = False,
+    ie_only: bool = False,
 ) -> Dict[str, Any]:
     """Run hammock-cpp Mode B and return timing/RSS.
 
@@ -528,27 +529,38 @@ def run_hammock(
     mixed-stride, matching the post-9778ef8 binary default). At sub_b == 1.0
     we omit the flags to keep the cmd line byte-identical to pre-subB runs.
 
-    metrics selects the output shape explicitly: True passes --metrics (the
-    full 8-column block), False passes whatever `_metrics_off_flag(binary)`
-    resolves to for THIS binary -- --register-equality on a binary built
-    after the metrics-column restructure, --no-metrics on an older one (see
-    that function's docstring; this is not a version-number check, since the
-    two vintages can self-report the identical --version string). The
-    metrics block costs a union + cardinality per pair, so a run with it on
-    is NOT timing-comparable to the published numbers in RESULTS.md.
+    metrics/ie_only together select the output shape (three-way, matching
+    docs/seed-metrics-column-restructure.md's contract; ie_only takes
+    precedence if both happen to be True):
+      - metrics=True:  passes --metrics (the full 8-column block).
+      - ie_only=True:  passes NO flag (the bare default) -- 1 column,
+        jaccard_similarity_ie alone. Added 2026-08-11 (Part 9): this is now
+        the cheap-ish way to obtain jaccard_similarity_ie, superseding the
+        old "--metrics is the only way to get it" state of affairs. It still
+        pays the fused union pass (same compute cost as --metrics), so it is
+        NOT interchangeable with the register-equality arm below -- it is
+        cheaper than --metrics only in write cost (fewer columns), not in
+        compute. Default False so every pre-existing call site is unaffected.
+      - both False: passes whatever `_metrics_off_flag(binary)` resolves to
+        for THIS binary -- --register-equality on a binary built after the
+        metrics-column restructure, --no-metrics on an older one (see that
+        function's docstring; this is not a version-number check, since the
+        two vintages can self-report the identical --version string). This
+        is the genuinely cheap arm: it skips the union pass entirely.
+
+    The metrics/ie_only block costs a union + cardinality per pair (same cost
+    family), so a run with either on is NOT timing-comparable to the
+    published register-equality numbers in RESULTS.md.
 
     Requires hammock-cpp >= 0.7.0; an older binary rejects the disable-flag
     with exit 2 rather than silently mistiming, which is the intended failure.
 
-    PART9: --metrics-arm/--metrics-all (see arms_for/ie_tool_name_for_subb)
-    exist only to obtain jaccard_similarity_ie via this full block, which
-    predates jaccard_similarity_ie having a cheap dedicated path. The bare/
-    no-flag default now IS that cheap path (1 metric column,
-    jaccard_similarity_ie alone) -- Part 9 should retarget --metrics-arm/
-    --metrics-all to drop the flag entirely rather than pass --metrics, and
-    re-measure before updating any published number. Not done here: this
-    comment marks the site, per docs/seed-metrics-column-restructure.md
-    Part 6 item 2 ("don't act on the flag here").
+    Part 9 (docs/seed-metrics-column-restructure.md), 2026-08-11: --metrics-arm/
+    --metrics-all (see arms_for/ie_tool_name_for_subb) used to pass
+    metrics=True to obtain jaccard_similarity_ie, because --metrics was the
+    only way to get that column. Retargeted to ie_only=True instead -- see
+    arms_for's docstring and the small paired measurement recorded in
+    experiments/bedtools_benchmark/RESULTS.md / docs/bedtools-baseline-retraction.md.
     """
     with tempfile.NamedTemporaryFile(mode="w", delete=False) as tmp:
         out_prefix = tmp.name
@@ -565,13 +577,24 @@ def run_hammock(
         ]
         if sub_b < 1.0:
             cmd += ["--subB", f"{sub_b:g}", "--subB-method", sub_b_method]
-        # Explicit in both directions. Since 0.7.0 the binary emits the metrics
-        # block by default, so omitting the flag no longer means "cheap run" --
-        # a timed pass that silently gained a union plus two cardinality
-        # estimates per pair would not be comparable to RESULTS.md. The
-        # disable-flag spelling depends on THIS binary's own vintage, not on
-        # the caller's -- see _metrics_off_flag's docstring.
-        cmd += ["--metrics"] if metrics else [_metrics_off_flag(binary)]
+        # Explicit for --metrics/register-equality; ie_only stays flagless on
+        # purpose. Note this is a v0.8.0+ (post metrics-restructure) comment:
+        # omitting every flag used to mean "the always-full block" on 0.7.x
+        # binaries (hence the old warning here that a bare invocation was
+        # secretly expensive), but since v0.8.0 the bare default is the
+        # 1-column jaccard_similarity_ie shape -- cheaper to WRITE than
+        # --metrics, though not cheaper to COMPUTE (still pays the union
+        # pass; only the register-equality flag skips that). ie_only takes
+        # precedence over metrics if a caller somehow set both. The
+        # disable-flag spelling for the register-equality arm depends on
+        # THIS binary's own vintage, not on the caller's -- see
+        # _metrics_off_flag's docstring.
+        if ie_only:
+            pass  # bare default: no flag
+        elif metrics:
+            cmd += ["--metrics"]
+        else:
+            cmd += [_metrics_off_flag(binary)]
         r = run_with_time(cmd)
 
         sketch_s: Optional[float] = None
@@ -674,9 +697,12 @@ BEDTOOLS_TOOL = "bedtools"
 
 
 def ie_tool_name_for_subb(sub_b: float) -> str:
-    """Tool-column identifier for a --metrics (jaccard_similarity_ie) hammock
-    run at a given subB, for the --metrics-all sweep mode (every subB arm run
-    with --metrics, not just a single extra subB=1.0 arm).
+    """Tool-column identifier for an IE-shape (bare/no-flag default,
+    jaccard_similarity_ie) hammock run at a given subB, for the --metrics-all
+    sweep mode (every subB arm run with that shape, not just a single extra
+    subB=1.0 arm). Retargeted from --metrics to the bare default 2026-08-11
+    (Part 9) -- the name keeps saying "metrics"/"ie" since it's still the
+    arm that selects the IE column, just via a cheaper flag now.
 
     subB == 1.0 reuses IE_ARM_TOOL exactly ("hammock_ie_B") -- byte-compatible
     with every archived CSV and every consumer that does `tool ==
@@ -855,9 +881,18 @@ def run_benchmark(
                     else:
                         shown = f"subB={sub_b:g}" + (" +IE" if use_metrics else "")
                         print(f"  hammock-cpp Mode B {shown}...", end=" ", flush=True)
+                        # Part 9 (2026-08-11): use_metrics=True used to mean
+                        # "pass --metrics" -- the only way to get
+                        # jaccard_similarity_ie pre-v0.8.0. It now means "use
+                        # the bare/ie_only default", which gives the same
+                        # column for less write cost (same union-pass compute
+                        # cost, see run_hammock's docstring). The tuple/print
+                        # label keeps saying "use_metrics"/"+IE" since it's
+                        # still selecting the IE-column arm, just via a
+                        # cheaper flag than before.
                         r = run_hammock(binary, file1_list_path, file2_list_path,
                                         precision, num_threads, sub_b=sub_b,
-                                        metrics=use_metrics)
+                                        ie_only=use_metrics)
                         r["sort_time"] = sort_time
                         r["run_index"] = run_i
                         runs_by_tool[tool].append(r)
@@ -1207,21 +1242,24 @@ def main() -> int:
                              "mixed-stride. subB=1.0 emits 'hammock_cpp_B' for backwards compat; "
                              "other values emit 'hammock_cpp_B_subB<val>'.")
     parser.add_argument("--metrics-arm", action="store_true",
-                        help="Add a fourth hammock arm at subB=1.0 run WITH --metrics (the full "
-                             "8-column block), i.e. emitting jaccard_similarity_ie and the "
-                             "containment/cosketch block -- instead of the baseline arm's "
-                             "cheap register-equality flag. "
+                        help="Add a fourth hammock arm at subB=1.0 run with the bare/no-flag "
+                             "default (1 column, jaccard_similarity_ie) -- instead of the "
+                             "baseline arm's cheap register-equality flag. Still pays the fused "
+                             "union pass (same compute cost as --metrics), just not the extra "
+                             "write cost of 7 unused columns. "
                              f"Labelled '{IE_ARM_TOOL}' so it fails the "
                              "'^hammock_cpp_B' filter the R consumers use, and cannot double "
                              "rows in their joins. Ignored if --metrics-all is also given. "
-                             "PART9: this exists only to obtain jaccard_similarity_ie, which "
-                             "the bare/no-flag default now gives cheaply on its own (1 column, "
-                             "no union/containment pass) -- retargeting this arm to drop the "
-                             "flag entirely, rather than pass --metrics, is Part 9's job "
-                             "(docs/seed-metrics-column-restructure.md), not done here.")
+                             "Retargeted 2026-08-11 (Part 9, docs/seed-metrics-column-restructure.md): "
+                             "used to pass --metrics (the full 8-column block) because that was "
+                             "the only way to get jaccard_similarity_ie before v0.8.0; now uses "
+                             "ie_only in run_hammock (bare default) instead. See "
+                             "experiments/bedtools_benchmark/RESULTS.md for the paired "
+                             "measurement backing the switch.")
     parser.add_argument("--metrics-all", action="store_true",
-                        help="Run EVERY arm in --subB-list with --metrics instead of the "
-                             "cheap register-equality flag (replaces the default arms, rather "
+                        help="Run EVERY arm in --subB-list with the bare/no-flag default (1 "
+                             "column, jaccard_similarity_ie) instead of the cheap "
+                             "register-equality flag (replaces the default arms, rather "
                              "than adding one extra arm the way --metrics-arm does). Use this when "
                              "the figure needs jaccard_similarity_ie wall times at subB < 1.0, "
                              "e.g. a subB-vs-N line plot -- --metrics-arm alone can only give "

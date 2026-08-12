@@ -90,15 +90,19 @@ ROW_COLS = [
     # comparison_time keeps its historical meaning (pair loop + serial write);
     # pair_time/write_time decompose it and are blank on bedtools rows.
     "sketch_creation_time", "comparison_time", "pair_time", "write_time",
-    # Wall time of the SECOND, --metrics invocation on the precision axis --
-    # the one that produces the jaccard_ie_* columns. It used to be printed as
-    # "(not recorded)" and thrown away, which meant a frontier plot would show
-    # the *speed* of the timed arm against the *accuracy* of the full-block
-    # arm. Blank when the sweep ran --no-ie, and on every non-precision axis.
-    # Not comparable to `wall_time` as a substitute: it is a different output
-    # shape. It is there to answer "what does computing the x-axis cost?".
-    # See the PART9 marker at the --metrics call site below for the current
-    # three-shape-contract status of this arm.
+    # Wall time of the SECOND, bare-default (ie_only) invocation on the
+    # precision axis -- the one that produces the jaccard_ie_* columns. It
+    # used to be printed as "(not recorded)" and thrown away, which meant a
+    # frontier plot would show the *speed* of the timed arm against the
+    # *accuracy* of the full-block arm. Blank when the sweep ran --no-ie, and
+    # on every non-precision axis. Not comparable to `wall_time` as a
+    # substitute: it is a different output shape. It is there to answer "what
+    # does computing the x-axis cost?". Retargeted 2026-08-11 (Part 9,
+    # docs/seed-metrics-column-restructure.md): this arm used to pass
+    # --metrics (the full 8-column block) solely to obtain
+    # jaccard_similarity_ie; it now uses the bare default (ie_only=True),
+    # which is the column's dedicated cheap-to-write shape under the
+    # three-shape contract. See the call site below.
 ] + METRICS_ARM_KEYS + ACCURACY_KEYS + PROVENANCE_COLS
 
 
@@ -413,9 +417,10 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
                     _drop(hm)
 
                     if ie:
-                        # SECOND pass, in its OWN columns. --metrics adds a
-                        # cardinality estimate per pair, so folding it into the
-                        # run above would inflate comparison_time and break
+                        # SECOND pass, in its OWN columns. Computing
+                        # jaccard_similarity_ie pays a union + cardinality
+                        # estimate per pair, so folding it into the run above
+                        # would inflate comparison_time and break
                         # comparability with the published RESULTS.md numbers.
                         # Since 0.7.0 the timed pass above is explicitly
                         # --register-equality (was --no-metrics), so the split
@@ -432,17 +437,30 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
                         # metrics_* columns, never into wall_time, so no
                         # archived series changes meaning.
                         #
-                        # PART9 (docs/seed-metrics-column-restructure.md): this
-                        # pass only ever reads jaccard_similarity_ie (see the
-                        # parse_hammock_csv call below) -- under the new
-                        # three-shape contract that column is the BARE
-                        # DEFAULT's entire output, not --metrics'. Target: drop
-                        # `metrics=True` here to the bare default (no flag),
-                        # which also makes this pass cheaper (skips the
-                        # containment/cosketch/register-equality columns).
-                        print(f"    + --metrics pass...", end=" ", flush=True)
+                        # Retargeted 2026-08-11 (Part 9,
+                        # docs/seed-metrics-column-restructure.md): this pass
+                        # only ever reads jaccard_similarity_ie (see the
+                        # parse_hammock_csv call below), which under the
+                        # three-shape contract is the BARE DEFAULT's entire
+                        # output -- so it now runs with ie_only=True (no
+                        # flag) instead of metrics=True (the full 8-column
+                        # block). Same union-pass compute cost either way;
+                        # this only drops the write cost of 7 unread columns.
+                        # jaccard_similarity_ie itself is bit-identical
+                        # between the two shapes (both front ends derive it
+                        # from the same fused pass -- see CLAUDE.md's
+                        # divergence #9 / the seed's Part 4-5 notes), so this
+                        # is not expected to move any downstream number.
+                        # HEADLINE-ADJACENT: this pass' output feeds Figure 3
+                        # Panel B (sbatch_fig3_panelB.sh -> sweep_precision on
+                        # the Maurano corpus; that script's own verification
+                        # gate checks jaccard_ie_mae_vs_bt at p=18). Per
+                        # instructions this flag retarget was made WITHOUT
+                        # re-running Panel B's data here -- flag for the
+                        # parent session to decide whether/when to regenerate.
+                        print(f"    + bare-default (+IE) pass...", end=" ", flush=True)
                         hm2 = run_hammock(binary, f1, f2, p, num_threads,
-                                          keep_output=True, sub_b=sub_b, metrics=True)
+                                          keep_output=True, sub_b=sub_b, ie_only=True)
                         estimates_ie[(p, sub_b)] = parse_hammock_csv(
                             hm2.get("output_csv"), column="jaccard_similarity_ie")
                         metrics_timing[(p, sub_b)] = {
@@ -505,7 +523,7 @@ def sweep_precision(binary, precisions, num_files, num_intervals, num_threads, n
 def sweep_threads(binary, thread_list, precision, num_files, num_intervals, num_runs,
                   sub_b_list, metrics_arm=False, provenance=None):
     """metrics_arm adds a fourth-arm row per thread count, at subB=1.0, run
-    WITH the full metrics block (--metrics). Mirrors the `--metrics-arm`
+    with the bare-default (ie_only) shape. Mirrors the `--metrics-arm`
     option in benchmark_cpp_vs_bedtools.py (see IE_ARM_TOOL's docstring
     there): tagged "hammock_ie_B" specifically because it fails the
     "^hammock_cpp_B" prefix every plot_axis()/downstream consumer here filters
@@ -513,14 +531,22 @@ def sweep_threads(binary, thread_list, precision, num_files, num_intervals, num_
     until deliberately read out -- this axis never measured the +IE
     configuration at all before, so there was no plot to preserve.
 
-    PART9 (docs/seed-metrics-column-restructure.md): this arm exists only to
-    measure the "+IE" (jaccard_similarity_ie) configuration -- nothing in
-    this file reads any other column off its CSV. Under the new three-shape
-    contract that is the bare default's entire output, not --metrics'.
-    Target: change `use_metrics` for this arm from `--metrics` to the bare
-    default (no flag), which also makes it cheaper (skips
-    containment/cosketch/register-equality). Not retargeted here since this
-    file only marks per "mark PART9 only, don't retarget."
+    Retargeted 2026-08-11 (Part 9, docs/seed-metrics-column-restructure.md):
+    this arm exists only to measure the "+IE" (jaccard_similarity_ie)
+    configuration's cost -- nothing in this file reads any other column off
+    its CSV (keep_output isn't even passed, so the CSV is deleted
+    immediately; only wall/cpu/RSS timing is kept). It now runs with
+    ie_only=True (bare default, no flag) instead of the old --metrics (full
+    8-column block), which is what jaccard_similarity_ie's dedicated cheap
+    shape is for -- same union-pass compute cost, less write cost. A small
+    paired local measurement (hammock-cpp 0.8.0, N=48 synthetic files x 20k
+    intervals, p=18, threads=16, 5 interleaved reps, wall clock) found
+    ie_only 0.87% faster than the old --metrics arm (1.789 s vs 1.805 s
+    mean) -- within this repo's established noise floor (+-2-4%, see
+    docs/seed-benchmark-methodology.md), so not material enough to warrant
+    regenerating any archived CSV/figure. This arm's rows are also excluded
+    from every plot/report that reads this axis's output (see the tag note
+    above), so retargeting it changes no published number either way.
 
     The per-point arm order (bedtools, each sub_b, the IE arm if present) is
     rotated by run_i via _rotate(), same helper and same convention as
@@ -544,7 +570,7 @@ def sweep_threads(binary, thread_list, precision, num_files, num_intervals, num_
             print(f"  sort:    {sort_time:.2f}s wall (parallel, {sort_workers} workers; pre-sort, not in tool wall below)")
 
             for t in thread_list:
-                for tool, sub_b, use_metrics in _rotate(leg, run_i):
+                for tool, sub_b, ie_arm in _rotate(leg, run_i):
                     if tool == "bedtools":
                         print(f"  t={t} bedtools...", end=" ", flush=True)
                         bt = run_bedtools(f1, f2, t)
@@ -556,9 +582,9 @@ def sweep_threads(binary, thread_list, precision, num_files, num_intervals, num_
                                          run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"],
                                          provenance=provenance))
                     else:
-                        shown = f"subB={sub_b:g}" + (" +IE" if use_metrics else "")
+                        shown = f"subB={sub_b:g}" + (" +IE" if ie_arm else "")
                         print(f"  t={t} hammock-cpp p={precision} {shown}...", end=" ", flush=True)
-                        hm = run_hammock(binary, f1, f2, precision, t, sub_b=sub_b, metrics=use_metrics)
+                        hm = run_hammock(binary, f1, f2, precision, t, sub_b=sub_b, ie_only=ie_arm)
                         hm["sort_time"] = sort_time
                         print(f"{hm['wall_time']:.2f}s wall")
                         rows.append(_row("threads", tool,
@@ -576,9 +602,11 @@ def sweep_intervals(binary, intervals_list, precision, num_threads, num_files, n
 
     metrics_arm: see sweep_threads' docstring — same fourth arm, same
     IE_ARM_TOOL tag, same invisibility to plot_axis() until read out on
-    purpose, same PART9 marker (drop to bare default, not retargeted here).
-    Arm order is rotated by run_i the same way — see sweep_threads'
-    docstring for why.
+    purpose. Retargeted 2026-08-11 (Part 9,
+    docs/seed-metrics-column-restructure.md) together with sweep_threads —
+    see that function's docstring for the measurement and reasoning; both
+    are deliberately kept in parity. Arm order is rotated by run_i the same
+    way — see sweep_threads' docstring for why.
     """
     rows = []
     leg = [("bedtools", None, False)] + \
@@ -591,7 +619,7 @@ def sweep_intervals(binary, intervals_list, precision, num_threads, num_files, n
                 f1, f2, sort_time = make_data(num_files, ni, tmp_dir, num_sort_workers=num_threads)
                 print(f"  sort:    {sort_time:.2f}s wall (parallel, {num_threads} workers; pre-sort, not in tool wall below)")
 
-                for tool, sub_b, use_metrics in _rotate(leg, run_i):
+                for tool, sub_b, ie_arm in _rotate(leg, run_i):
                     if tool == "bedtools":
                         print("  bedtools...", end=" ", flush=True)
                         bt = run_bedtools(f1, f2, num_threads)
@@ -603,9 +631,9 @@ def sweep_intervals(binary, intervals_list, precision, num_threads, num_files, n
                                          run_id=run_i, result=bt, keys=METRIC_KEYS + ["sort_time"],
                                          provenance=provenance))
                     else:
-                        shown = f"subB={sub_b:g}" + (" +IE" if use_metrics else "")
+                        shown = f"subB={sub_b:g}" + (" +IE" if ie_arm else "")
                         print(f"  hammock-cpp {shown}...", end=" ", flush=True)
-                        hm = run_hammock(binary, f1, f2, precision, num_threads, sub_b=sub_b, metrics=use_metrics)
+                        hm = run_hammock(binary, f1, f2, precision, num_threads, sub_b=sub_b, ie_only=ie_arm)
                         hm["sort_time"] = sort_time
                         print(f"{hm['wall_time']:.2f}s wall")
                         rows.append(_row("intervals", tool,
@@ -877,27 +905,34 @@ def main():
                              "values emit 'hammock_cpp_B_subB<val>'.")
 
     parser.add_argument("--no-ie", dest="ie", action="store_false", default=True,
-                        help="Skip the second, untimed --metrics pass on the "
-                             "precision axis. That pass is what supplies the "
-                             "bedtools-comparable jaccard_similarity_ie "
-                             "columns; it re-sketches every input, so it "
-                             "roughly DOUBLES the axis's wall time. Recorded "
-                             "timings come only from the first pass either way. "
-                             "PART9 (docs/seed-metrics-column-restructure.md): "
-                             "under the new three-shape contract this pass "
-                             "reads only jaccard_similarity_ie, which the bare "
-                             "default now supplies on its own -- see the "
-                             "marker at its call site.")
+                        help="Skip the second, untimed bare-default (+IE) pass "
+                             "on the precision axis. That pass is what "
+                             "supplies the bedtools-comparable "
+                             "jaccard_similarity_ie columns; it re-sketches "
+                             "every input, so it roughly DOUBLES the axis's "
+                             "wall time. Recorded timings come only from the "
+                             "first pass either way. Retargeted 2026-08-11 "
+                             "(Part 9, docs/seed-metrics-column-restructure.md): "
+                             "this pass now runs with ie_only=True (no flag) "
+                             "instead of the old --metrics (full 8-column "
+                             "block), since it only ever reads "
+                             "jaccard_similarity_ie -- see the call site in "
+                             "sweep_precision.")
     parser.add_argument("--metrics-arm", action="store_true",
                         help="Threads/intervals axes only (the precision axis "
                              "always measures both via --no-ie/--ie above). "
                              "Adds ONE extra hammock invocation per point, at "
-                             "subB=1.0, run WITH the full --metrics block -- "
-                             "tagged hammock_ie_B, same convention as "
+                             "subB=1.0, run with the bare-default (ie_only) "
+                             "shape -- tagged hammock_ie_B, same convention as "
                              "benchmark_cpp_vs_bedtools.py's own --metrics-arm. "
-                             "PART9: this arm too reads only "
+                             "Retargeted 2026-08-11 (Part 9, "
+                             "docs/seed-metrics-column-restructure.md) from the "
+                             "old --metrics (full 8-column block) to ie_only=True "
+                             "(bare default), since this arm too reads only "
                              "jaccard_similarity_ie -- see sweep_threads'/"
-                             "sweep_intervals' docstrings. Cost: NOT the "
+                             "sweep_intervals' docstrings, including the small "
+                             "paired measurement (0.87%%, within noise) behind "
+                             "that decision. Cost: NOT the "
                              "--no-ie flag's "
                              "'roughly doubles' above (that flag adds an IE "
                              "twin to EVERY hammock arm; this adds ONE, "
@@ -919,7 +954,13 @@ def main():
                              "--thread-list (docs/data/sweep_threads_p18.csv): "
                              "per-point ratio ranged 1.41x (t=48) to 1.66x "
                              "(t=1), axis-total sum 1.60x -- do not assume "
-                             "this is cheap. Ignored on --axis precision.")
+                             "this is cheap. NOTE: that archived measurement "
+                             "predates this retarget and used the old --metrics "
+                             "arm; per the 0.87%% paired check above, the "
+                             "ie_only arm's true ratio is expected to be a "
+                             "little lower but was not re-measured at that "
+                             "scale/config -- treat 1.41-1.66x as an upper "
+                             "bound, not current. Ignored on --axis precision.")
 
     args = parser.parse_args()
     sub_b_list = [float(x) for x in args.sub_b_list.split(",") if x.strip()]

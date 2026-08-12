@@ -77,6 +77,36 @@ nodes), 16 cpus, 32 GB:
 > That prediction has since been measured directly: the `hammock_ie_B` arm of
 > the Aug 4 files t=16 run costs **+1.45%** of wall at N=512. Timings from a run
 > *with* the block are not comparable to the tables below.
+>
+> **Part 9 note, 2026-08-11** (`docs/seed-metrics-column-restructure.md`): the
+> `hammock_ie_B` arm above (and the p=18 sibling number in
+> `docs/bedtools-baseline-retraction.md`, "8.5%/10.0% at N=512") was measured
+> with `--metrics` — before v0.8.0, the only way to get `jaccard_similarity_ie`
+> at all. Since v0.8.0 the bare/no-flag default gives that column directly for
+> less write cost (same compute — still pays the union pass), so this number is
+> now measuring an arm that costs slightly more to write than it needs to.
+> `benchmark_cpp_vs_bedtools.py`'s `--metrics-arm`/`--metrics-all` are
+> retargeted to the bare default as of this note, so a future rerun of this
+> sweep will measure the corrected (slightly lower) number automatically.
+> **This is not a cosmetic secondary arm**: since commit `c024b9e`
+> (2026-08-10), Figure 3 Panel A's plotted headline curve and its published
+> "8.4×" number are computed *exclusively* from this `hammock_ie_B` row, not
+> from the register-equality arm (which moved to Supplementary Figure S9).
+>
+> **Confirmed by a real dedicated rerun, 2026-08-11/12 (job 29769994,
+> exclusive node, same config as the archived job 29671317)** — not left as
+> an estimate. Isolated Part 9 effect at N=512 (same-job comparison): the
+> `hammock_ie_B`/`hammock_cpp_B` overhead dropped from the archived **10.02%**
+> to a measured **9.60%**. Holding the archived bedtools baseline fixed
+> (653.41 s — this run's own bedtools draw was 2.9% lower, on a different
+> node, unrelated to Part 9, not adopted per explicit decision): headline
+> recomputes to 653.41/78.13 ≈ **8.36×**, still rounds to the published
+> **8.4×**. Full writeup, including why the bedtools redraw was deliberately
+> *not* folded into the headline: `docs/bedtools-baseline-retraction.md`'s
+> Part 9 entry (search "Real dedicated re-run"). This p=14 1.45% figure
+> above was not independently re-measured (out of scope — it's an older,
+> superseded precision), but the mechanism confirmed at p=18 (write-cost-only
+> effect, same union-pass compute) applies equally to it.
 
 - **2026-05-10 (morning)** — pre-optimization hammock-cpp, sequential pre-sort.
 - **2026-05-10 (evening)** — same sweeps with **parallel** pre-sort and the
@@ -309,6 +339,25 @@ Produces (multi-subB-aware):
 - Sort time is captured separately and parallelized (post-May-10-evening).
 - `find_hammock_cpp` picks by mtime, not lexicographically (so the
   cp310 wheel is preferred over a stale cp38 one).
+- **2026-08-11 (Part 9, `docs/seed-metrics-column-restructure.md`):**
+  `sweep.py`'s three internal call sites that existed only to obtain
+  `jaccard_similarity_ie` — the untimed second pass on the precision axis,
+  and the `--metrics-arm` `hammock_ie_B` arm shared by `sweep_threads`/
+  `sweep_intervals` — now request the bare-default (`ie_only`) shape instead
+  of the old `--metrics` (full 8-column) block, since none of them ever read
+  any other column. This is a flag/shape retarget, not a change to hammock
+  itself, and `jaccard_similarity_ie` is bit-identical either way (same
+  fused union pass computes it in both shapes). A small paired local check
+  (hammock-cpp 0.8.0, N=48 synthetic files, p=18, threads=16, 5 interleaved
+  reps) measured the bare-default arm 0.87% faster than the old `--metrics`
+  arm — within this repo's ±2–4% noise floor — so no archived CSV/figure was
+  regenerated. The `hammock_ie_B` arm's rows were already excluded from every
+  plot/table on this page (see the "`hammock_ie_B` is filtered out" note
+  above and the files-t16 section), so nothing tabulated here changes. The
+  precision axis's untimed pass feeds Figure 3 Panel B
+  (`sbatch_fig3_panelB.sh`); that site was retargeted in code only and was
+  **not** re-run as part of this change — see the code comment at its call
+  site in `sweep_precision` for the flag.
 
 ## Related docs
 

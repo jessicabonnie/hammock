@@ -65,18 +65,20 @@ ROW_COLS = [
     "precision", "threads",
     # Which output shape was timed. False = the cheap --register-equality arm
     # (renamed from --no-metrics; docs/seed-metrics-column-restructure.md)
-    # every published Panel B number comes from; True = the full-block arm
-    # that emits jaccard_similarity_ie. The two are not timing-comparable, so
-    # this must be readable off the row rather than inferred from the filename.
+    # every published Panel B number comes from; True = this script's own
+    # --metrics flag, the IE-capture arm. The two are not timing-comparable,
+    # so this must be readable off the row rather than inferred from the
+    # filename.
     #
-    # PART9: this --metrics arm's CSV also captures jaccard_ie AND
-    # containment_AB/containment_BA -- but the only live consumer of this
-    # arm's output, summarize_synthetic_ie.py, reads neither (only
-    # wall_time/threads/subB/method/size_class/run_id/file_a/file_b) -- so
-    # this genuinely qualifies to drop the --metrics flag entirely in favour
-    # of the bare/no-flag default, which still gives jaccard_similarity_ie
-    # alone at lower cost. Settled, not just flagged: Part 9 should retarget
-    # and re-measure, not re-derive whether this site qualifies.
+    # Part 9, retargeted 2026-08-11 (docs/seed-metrics-column-restructure.md):
+    # the True/IE-capture arm used to pass hammock-cpp's own --metrics (the
+    # 8-column full block, which also carries jaccard_ie/containment_AB/BA)
+    # to get at jaccard_similarity_ie. Confirmed by re-reading
+    # summarize_synthetic_ie.py -- the one live consumer of this arm's CSV --
+    # that it reads neither jaccard_ie nor containment_AB/BA (only
+    # wall_time/threads/subB/method/size_class/run_id/file_a/file_b), so it
+    # now uses hammock-cpp's bare default (no flag), which gives
+    # jaccard_similarity_ie alone at lower cost. See run_one() below.
     "metrics",
 ]
 
@@ -112,20 +114,26 @@ def groups_for_corpus(corpus: str, size_classes: List[str]):
 
 
 def parse_hammock_csv(path: str) -> List[Dict[str, Any]]:
-    """Hammock-cpp Mode B output is TAB-separated: query\\treference\\tjaccard_similarity."""
+    """Hammock-cpp Mode B output, TAB-separated. Header depends on which of the
+    three v0.8.0 output shapes was requested (docs/seed-metrics-column-
+    restructure.md): register-equality has jaccard_similarity; full has both
+    jaccard_similarity and jaccard_similarity_ie; bare default (used by this
+    script's own --metrics/IE-capture arm since the 2026-08-11 retarget) has
+    only jaccard_similarity_ie and no jaccard_similarity column at all -- so
+    the "jaccard" field below must fall back to it, or every row from that
+    arm would silently fail the `j is None` check and be dropped.
+    """
     rows: List[Dict[str, Any]] = []
     with open(path) as fh:
         reader = csv.DictReader(fh, delimiter="\t")
         for r in reader:
-            j = r.get("jaccard_similarity") or r.get("jaccard")
+            j = (r.get("jaccard_similarity") or r.get("jaccard")
+                 or r.get("jaccard_similarity_ie"))
             if j is None:
                 continue
-            # Capturing the IE column is the entire point of the --metrics arm.
-            # Without it that arm pays for the full block, discards it, and
-            # writes a file whose only similarity column is register-equality --
-            # verified bit-identical to the register-equality arm across all
-            # 17,100 cells of the 20260808 run, under a filename containing "ie".
-            # Absent (register-equality shape) these stay None and reach the CSV empty.
+            # Capturing the IE column is the entire point of this script's own
+            # --metrics arm. Absent (register-equality shape) these stay None
+            # and reach the CSV empty.
             j_ie = r.get("jaccard_similarity_ie")
             c_ab = r.get("containment_AB")
             c_ba = r.get("containment_BA")
@@ -173,16 +181,27 @@ def run_one(
             "-t", str(threads),
             "-o", out_prefix,
             "--verbose",
-            # Explicit in both directions: the shape of a timed pass must
-            # never be implicit, since these wall times feed a published
-            # figure. --metrics is the arm that emits jaccard_similarity_ie,
-            # i.e. the column CLAUDE.md tells readers to use; it is opt-in
-            # here because the existing Panel B numbers are all
-            # --register-equality (renamed from --no-metrics;
-            # docs/seed-metrics-column-restructure.md) and the two are not
-            # comparable to each other.
-            "--metrics" if metrics else "--register-equality",
         ]
+        # Explicit in both directions: the shape of a timed pass must never be
+        # implicit, since these wall times feed a published figure. This
+        # script's own --metrics flag (`metrics` param) is the arm that
+        # emits jaccard_similarity_ie, i.e. the column CLAUDE.md tells
+        # readers to use; it is opt-in here because the existing Panel B
+        # numbers are all --register-equality (renamed from --no-metrics;
+        # docs/seed-metrics-column-restructure.md) and the two are not
+        # comparable to each other.
+        #
+        # Retargeted 2026-08-11 (Part 9, docs/seed-metrics-column-
+        # restructure.md): this used to pass hammock-cpp's own --metrics
+        # (the 8-column full block) to get at jaccard_similarity_ie. The
+        # bare default (no flag) gives that column alone since v0.8.0, at
+        # lower cost, and the sole live consumer of this arm's output
+        # (summarize_synthetic_ie.py) reads neither containment_AB/BA nor
+        # jaccard_ie -- see the ROW_COLS comment above. So when `metrics` is
+        # True, pass nothing; the shape-selecting flag is only needed for
+        # the register-equality arm.
+        if not metrics:
+            cmd.append("--register-equality")
         if verbose:
             print("  +", " ".join(cmd), file=sys.stderr)
         r = run_with_time(cmd)
@@ -273,11 +292,14 @@ def main() -> None:
                         help="Output CSV path (default: results/sweep_<timestamp>.csv)")
     parser.add_argument("--verbose", action="store_true", help="Print every command")
     parser.add_argument("--metrics", action="store_true",
-                        help="Time the full-block arm (jaccard_similarity_ie plus the "
-                             "containment/cosketch block) instead of the cheap "
-                             "--register-equality arm. Writes to sweep_<corpus>_ie_<stamp>.csv "
-                             "so it cannot be mistaken for, or auto-adopted as, the "
-                             "headline sweep. Not timing-comparable to a run without it.")
+                        help="Time the jaccard_similarity_ie-capture arm (hammock-cpp's "
+                             "bare default shape, no flag; retargeted 2026-08-11, was "
+                             "hammock-cpp's --metrics full block -- see "
+                             "docs/seed-metrics-column-restructure.md Part 9) instead of "
+                             "the cheap --register-equality arm. Writes to "
+                             "sweep_<corpus>_ie_<stamp>.csv so it cannot be mistaken for, "
+                             "or auto-adopted as, the headline sweep. Not "
+                             "timing-comparable to a run without it.")
     parser.add_argument("--smoke", action="store_true",
                         help="Smoke test: one rep at one subB on smallest class")
     args = parser.parse_args()
@@ -299,7 +321,7 @@ def main() -> None:
     print(f"reps:         {args.reps}")
     print(f"precision:    {args.precision}")
     print(f"threads:      {args.threads}")
-    print(f"output shape: {'full block (--metrics, incl. jaccard_similarity_ie)' if args.metrics else 'register-equality (--register-equality)'}")
+    print(f"output shape: {'bare default (ie, jaccard_similarity_ie only)' if args.metrics else 'register-equality (--register-equality)'}")
     print(f"system:       {get_system_info()}")
     print()
 

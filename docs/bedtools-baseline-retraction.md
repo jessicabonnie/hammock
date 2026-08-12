@@ -87,8 +87,96 @@ None of these are "be more careful"; all are mechanical.
   answer is a free byproduct). The accuracy headline is p=21 on Maurano, where
   hammock is at parity or slower.
 - **The timed configuration is not the recommended one.** Headlines run
-  `--no-metrics`; `jaccard_similarity_ie`, the column the paper tells users to
-  read, costs 8.5% more at N=512 and rising.
+  `--no-metrics` (now `--register-equality`/`--re`, renamed by the v0.8.0
+  metrics-restructure); `jaccard_similarity_ie`, the column the paper tells
+  users to read, costs 8.5% more at N=512 and rising (job 29671317,
+  `docs/data/cpp_vs_bedtools_t16_p18.csv`: 78.08 s `hammock_ie_B` vs 70.97 s
+  `hammock_cpp_B`, actually a 10.0% delta at that one cell — see
+  `paper/outline.md` §4.4 for the "8.5%"/"under 1% up to N=32" framing this
+  number feeds; the two figures were never reconciled and that mismatch
+  predates Part 9, not introduced by it).
+
+  **Part 9 update, 2026-08-11 (`docs/seed-metrics-column-restructure.md`):**
+  that 78.08 s was measured with `--metrics` (the pre-restructure-equivalent
+  full 8-column block) — at the time, the *only* way to get
+  `jaccard_similarity_ie` at all. Since v0.8.0 the bare/no-flag default gives
+  that column directly for less write cost (still pays the same fused
+  union-pass compute as `--metrics` — see `run_hammock`'s docstring in
+  `benchmark_cpp_vs_bedtools.py` — so this is a write-cost effect only, not a
+  compute one). `benchmark_cpp_vs_bedtools.py`'s `--metrics-arm`/`--metrics-all`
+  are now retargeted to the bare default (`run_hammock(..., ie_only=True)`
+  instead of `metrics=True`) so the *next* rerun of job 29671317's config will
+  measure the corrected number automatically.
+
+  **Correction to the paragraph above, same day: this is NOT a harmless
+  secondary line.** An earlier draft of this note claimed "Figure 3 itself
+  plots the register-equality arm, untouched by this change" — that is
+  wrong. Since commit `c024b9e` (2026-08-10, "Simplify Figure 3 to
+  jaccard_similarity_ie only"), Panel A's plotted hammock curve, and its
+  headline "hammock is 8.4× faster than BEDTools" number (`paper/outline.md`,
+  `paper/draft.md`), is computed *exclusively* from the `hammock_ie_B` row —
+  `plot_pairwise_scaling.R` hard-fails (`stop()`) if that row is absent. The
+  register-equality arm (`hammock_cpp_B`, 70.97 s, "9.2×") moved to
+  Supplementary Figure S9 and is no longer what the main text reports. So the
+  arm Part 9 retargeted (`hammock_ie_B`, from `--metrics` to the bare
+  default) **is the literal source of Figure 3A's headline number**, not a
+  side quantity — get this right before deciding whether to skip a
+  regeneration.
+
+  Having said that, the *magnitude* is small enough that Part 1's
+  "harness-runtime, not published-number" framing holds up on the numbers,
+  just not on the mechanism: `hammock_ie_B`'s wall time (78.08 s) is
+  `hammock_cpp_B`'s (70.97 s, unaffected by Part 9) plus a ~10.0% overhead —
+  see below for the real, measured post-restructure figure.
+
+  **Real dedicated re-run, 2026-08-11/12 (job 29769994, node c700, same CPU
+  model — Xeon Gold 6248R — as the archived job 29671317's c529, exclusive
+  allocation, same `sbatch_fig3_panelA_v2.sh` config: two passes, N∈{2,4,8,16,32}
+  at 20 reps and N∈{64,128,256,512} at 3 reps).** This supersedes the
+  estimate that used to sit in this paragraph — user explicitly asked for
+  dedicated compute rather than leaving it a projection. Full table
+  (`experiments/bedtools_benchmark/results/cpp_vs_bedtools_t16_20260811_231858.csv`
+  + `..._232623.csv`, not promoted to `docs/data/` — see below for why),
+  monotonic at every N (gate 1 passes):
+
+  | N | bedtools | `hammock_cpp_B` (re) | `hammock_ie_B` (ie, retargeted) |
+  |---|---|---|---|
+  | 64 | 9.58 s | 7.73 s | 7.80 s |
+  | 128 | 37.98 s | 15.74 s | 16.08 s |
+  | 256 | 154.48 s | 32.90 s | 34.84 s |
+  | 512 | 634.61 s | 71.29 s | 78.13 s |
+
+  **Isolated Part 9 effect at N=512** (same job, same node — the only valid
+  same-run comparison): `hammock_ie_B`/`hammock_cpp_B` overhead is
+  **9.60%** (78.13/71.29), down from the archived **10.02%**
+  (78.08/70.97) — real, measured, not estimated; close to the ~9.0%
+  projection this section used to carry. Recomputing the headline holding
+  the archived, carefully-corrected bedtools baseline fixed (653.41 s, per
+  the user's explicit choice to isolate Part 9's effect rather than adopt a
+  wholesale new dataset — see next paragraph): 653.41 / 78.13 ≈ **8.36×**,
+  still rounds to the published **8.4×**. No change made to
+  `paper/outline.md`/`paper/draft.md` or the actual figure — confirmed
+  stable, not merely projected as stable.
+
+  **This run's own bedtools number (634.61 s) is 2.9% below the archived
+  653.41 s — do not attribute that to Part 9.** It's a different node
+  (c700 vs. c529, same CPU model) on a different day; this repo has
+  documented bedtools node-to-node spread up to 28% before (see "Small-N
+  cells corrected," above) — a few percent here is unremarkable noise, not
+  a regression or an improvement. Folding it into the headline (634.61/78.13
+  = 8.12×, "8.1×") would conflate an unrelated bedtools redraw with the
+  metrics-restructure's effect — exactly the mistake this document exists to
+  warn against. Per explicit user decision (2026-08-12), this run is **not**
+  adopted as the new canonical Figure 3A dataset; `docs/data/cpp_vs_bedtools_t16_p18.csv`
+  (job 29671317) remains the source of record, and only the isolated,
+  bedtools-held-fixed calculation above is used to confirm the headline is
+  unaffected. If a genuine reason arises later to re-baseline bedtools
+  itself (not a Part 9 concern), that's a separate decision with its own
+  writeup, not a byproduct of this one.
+
+  `sweep.py`'s `sweep_precision` retarget was also confirmed this session by
+  a real rerun (job 29769995) rather than left as a flagged estimate — see
+  the Figure 3 Panel B / Supplementary Fig S8 entry below for that result.
 - **`sweep.py`'s `sweep_precision` never rotates bedtools** — it runs first,
   once per replicate, before the per-precision loop. (Corrected: this used to
   say "in all three sweeps." `sweep_threads` and `sweep_intervals` were fixed
@@ -184,6 +272,52 @@ register-equality `jaccard_similarity` MAE stays flat at ≈0.138 across the
 whole range (chance-agreement floor, not sampling noise — precision cannot
 fix it, hence why the frontier's x-axis is the IE column). Cross-checked
 bit-identical against the t=8 CSV's own accuracy columns (max |ΔMAE| = 0, as
+
+**Part 9 confirmation, 2026-08-11/12, job 29769995 (`sbatch_fig3_panelB.sh` —
+misleadingly named: it generates this S8 precision-frontier data, not the
+main-text Panel B bar chart; that one is a separate arm, see below).**
+`sweep.py`'s `sweep_precision` untimed IE pass was retargeted from `--metrics`
+to the bare default (Part 9). Re-ran this exact config (Maurano, p=12–24,
+t=8 and t=16, 3 reps each, exclusive node c699) as a real dedicated rerun, not
+an estimate. Both S8's inputs are unaffected in substance: (1) the
+correctness gate — `jaccard_ie_mae_vs_bt` at p=18 must reproduce
+`1.1517e-3` — passed exactly (`0.00115165752` at both t=8 and t=16, all 3
+reps each), confirming `jaccard_similarity_ie` really is bit-identical
+between the retargeted arm and the old `--metrics` arm, as the fused-pass
+argument predicted rather than merely asserted. (2) The retargeted arm's own
+overhead over the register-equality pass is 0.2–1.25% here (not the ~9-10%
+seen at N=512 on synthetic data) — at N=20/380 pairs the sketch-construction
+phase (~9 s) completely dwarfs the pairwise union pass (~0.015 s), so there
+is essentially nothing for a write-cost saving to be a percentage *of*.
+S8's plotted speedup axis reads off the register-equality arm's `wall_time`
+(untouched by Part 9 either way), so this job changes nothing about S8's
+published numbers — it is a clean, empirical no-op confirmation, not a
+number update. `docs/data/sweep_precision_maurano_p18_t16.csv`/`_t8.csv` are
+left as-is (new run's numbers agree with them, so overwriting would be
+churn, not a correction). New run's own output:
+`experiments/bedtools_benchmark/results/sweep_precision_20260811_231858{,_pairs}.csv`
+(t=16) and `..._232719{,_pairs}.csv` (t=8), not promoted to `docs/data/`.
+
+**The real main-text Panel B bar chart is a different arm and was already
+handled — no rerun was needed for it.** Panel B (`plot_pairwise_scaling.R`'s
+`panel_b`) reads `docs/data/maurano_subB_ie_summary.csv`
+(`wall_median`/`mae_ie_vs_bedtools`), which comes from
+`experiments/subB_mixed_stride/run_sweep.py`'s own `--metrics` arm (via
+`sbatch_maurano.sh`), a completely separate script from `sweep.py`/
+`sbatch_fig3_panelB.sh` above despite the similar name. That arm's Part 9
+retarget was already measured directly (paired, 5 reps, exact p=18/t=8/subB=1
+cell): ratio 0.997–1.003, within noise floor — see
+`experiments/subB_mixed_stride/RESULTS.md`'s "`--metrics` IE-capture arm
+retargeted" entry. So Figure 3's actual "1.87×" Panel B number was already
+confirmed unaffected before this dedicated-compute round started; the
+dedicated Panel-A/B reruns launched here targeted the headline N-scaling
+curve (Panel A, still running as of this writing) and the S8 precision
+frontier (this entry, done) — not a third rerun of Panel B, which didn't need
+one.
+
+**Original S8 prose below predates the Part 9 confirmation above; numbers
+unchanged, cross-checked bit-identical against the t=8 CSV's own accuracy
+columns (max |ΔMAE| = 0, as
 it must be — accuracy doesn't depend on thread count).
 
 **Supplementary Fig S7 (catalog scale, `paper/figures/largeN_supplement.png`)**

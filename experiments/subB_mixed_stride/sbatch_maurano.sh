@@ -71,13 +71,18 @@ fi
 # hammock leg: 3 methods x 6 subB x 5 reps on the 20-sample DHS corpus.
 "$PYTHON" experiments/subB_mixed_stride/run_sweep.py --corpus maurano
 
-# Same grid again with the full metrics block (jaccard_similarity_ie plus the
-# containment/cosketch/register-equality columns) -- the configuration CLAUDE.md actually
-# recommends, which no published Panel B number has ever measured. Kept as a
-# separate arm rather than a replacement so the two are directly comparable and
-# switching the panel stays a decision, not a side effect: it lands in
-# sweep_maurano_ie_<stamp>.csv, which fails analyze.R's ^sweep_maurano_[0-9]
-# glob and so cannot be auto-adopted as the headline sweep.
+# Same grid again capturing jaccard_similarity_ie -- the column CLAUDE.md
+# actually recommends, which no published Panel B number has ever measured.
+# run_sweep.py's own --metrics flag selects hammock-cpp's bare default shape
+# here (retargeted 2026-08-11, Part 9 of docs/seed-metrics-column-
+# restructure.md; was hammock-cpp's --metrics full block until then), which
+# gives jaccard_similarity_ie alone at lower cost than the full block --
+# containment/cosketch/register-equality columns are NOT captured by this
+# leg. Kept as a separate arm rather than a replacement so the two are
+# directly comparable and switching the panel stays a decision, not a side
+# effect: it lands in sweep_maurano_ie_<stamp>.csv, which fails analyze.R's
+# ^sweep_maurano_[0-9] glob and so cannot be auto-adopted as the headline
+# sweep.
 "$PYTHON" experiments/subB_mixed_stride/run_sweep.py --corpus maurano --metrics
 
 # bedtools baseline: 190 unique pairs x 5 reps, 8-way GNU parallel fan-out.

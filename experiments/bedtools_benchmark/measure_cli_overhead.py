@@ -17,9 +17,23 @@ Both front-ends now share the three-shape metrics contract
 full 8-column block. Neither arm here reads any CSV column (this script only
 times wall-clock), so: `cli_cmd` below is always the bare/`_ie` invocation
 (previously the CLI's only option, since it had no metrics flag at all before
-this contract existed -- PART9 (docs/seed-metrics-column-restructure.md):
-this is a shape asymmetry against whatever `cpp_cmd` arm is selected below,
-not retargeted here per "mark PART9 only, don't retarget"); `cpp_cmd`'s arm is
+this contract existed -- PART9 (docs/seed-metrics-column-restructure.md)
+investigated 2026-08-11, resolved as "no change, both arms are intentional":
+`cli_cmd`'s bare shape vs. whatever `cpp_cmd` arm is selected below is a
+shape asymmetry, but unlike `measure_threads_isolation.py`'s unconditional,
+undocumented `--metrics` (retargeted to bare the same day), neither arm here
+is accidental. 'metrics' is pinned to job 29758101's exact flag choice
+because `docs/seed-hammock-cpp-file-dispatch.md` Part 2's crossover
+falsification criterion is calibrated against its ratios (0.864/0.807) and
+job 29763124's re-measurement already used it, cited from `CLAUDE.md`'s open
+seeds -- changing the flag would silently invalidate that published
+comparison. 'no-metrics' resolving to `--re` is not a leftover either: it's
+verified (`benchmark_cpp_vs_bedtools.py`'s `_metrics_off_flag`) to be the
+actual flag the headline figures pass, so this arm answers "what does the
+CLI wrapper cost on top of the exact hammock-cpp invocation production
+timing uses" -- switching it to bare would trade that real-world fidelity
+for shape-parity with `cli_cmd` that no downstream consumer needs, since
+nothing here reads a column either way); `cpp_cmd`'s arm is
 controlled by --cpp-metrics-arm: 'no-metrics' (the default, since 2026-08-11)
 matches what benchmark_cpp_vs_bedtools.py actually passes for every headline
 figure and now maps internally to hammock-cpp's `--re`/`--register-equality`
@@ -331,9 +345,11 @@ def main() -> int:
 
                     cpp_out = os.path.join(tmp_dir, "cpp_out")
                     cli_out = os.path.join(tmp_dir, "cli_out")
-                    # PART9 (docs/seed-metrics-column-restructure.md): --no-metrics
-                    # was removed; --register-equality/--re is its replacement
-                    # (the "no-metrics" --cpp-metrics-arm choice name above is
+                    # Flag-rename note, not a Part 9 retargeting question (see
+                    # the module docstring's dated 2026-08-11 resolution for
+                    # that): the old --no-metrics binary flag was removed;
+                    # --register-equality/--re is its replacement (the
+                    # "no-metrics" --cpp-metrics-arm choice name above is
                     # this script's own external surface and is kept as-is).
                     cpp_metrics_flag = ("--metrics" if args.cpp_metrics_arm == "metrics"
                                          else "--re")

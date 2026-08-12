@@ -90,16 +90,19 @@ def main():
             for rep in range(args.reps):
                 cpp_out = os.path.join(tmp, f"cpp_t{t}_r{rep}")
                 cli_out = os.path.join(tmp, f"cli_t{t}_r{rep}")
-                # PART9 (docs/seed-metrics-column-restructure.md): --metrics
-                # here vs. cli_cmd's bare invocation below is a shape
-                # mismatch (_full vs _ie) under the new three-shape contract.
-                # Neither arm reads a CSV column here (only /usr/bin/time
-                # output is parsed), so the fix is to drop --metrics from
-                # cpp_cmd to match cli_cmd's bare shape; not retargeted here
-                # per "mark PART9 only, don't retarget."
+                # PART9 (docs/seed-metrics-column-restructure.md) retargeted
+                # 2026-08-11: cpp_cmd used to pass --metrics against
+                # cli_cmd's bare invocation below -- a shape mismatch (_full
+                # vs _ie) under the three-shape contract that bought nothing,
+                # since neither arm reads a CSV column here (only
+                # /usr/bin/time output is parsed) and this script has no
+                # documented reason (unlike measure_cli_overhead.py's
+                # job-29758101-reproduction arm) to hold onto the full
+                # block's extra union/fprintf cost. Dropped --metrics so
+                # cpp_cmd is bare too, matching cli_cmd's shape.
                 cpp_cmd = [args.hammock_cpp_bin, l1, l2, "--mode", "B",
                            "-p", str(args.precision), "-o", cpp_out,
-                           "--threads", str(t), "--metrics"]
+                           "--threads", str(t)]
                 cli_cmd = [args.hammock_cli_bin, l1, l2, "--mode", "B",
                            "--precision", str(args.precision), "-o", cli_out,
                            "--threads", str(t)]
