@@ -208,7 +208,7 @@ py::array_t<double> pairwise_jaccard_hll(const py::sequence& a_seq,
             for (py::ssize_t j = 0; j < m; j++) {
                 if (err.tripped()) continue;
                 try {
-                    buf(i, j) = a[i]->jaccard_similarity(*b[j]);
+                    buf(i, j) = a[i]->reg_eq_similarity(*b[j]);
                 } catch (...) {
                     err.capture();
                 }
@@ -320,7 +320,7 @@ PYBIND11_MODULE(_core, m) {
         .def("estimate_cardinality", &HLLSketch::cardinality)
         .def("estimate_jaccard",
              [](const HLLSketch& self, const HLLSketch& other) {
-                 return self.jaccard_similarity(other);
+                 return self.reg_eq_similarity(other);
              },
              py::arg("other"))
         // Inclusion-exclusion |A| + |B| - |A u B|, clamped at 0 — the estimator

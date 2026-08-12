@@ -477,12 +477,12 @@ int main(int argc, char** argv) {
                     // Cheap arm: one register-equality pass, no union, no
                     // cardinality estimate. Must stay this way -- see the
                     // MetricsMode comment above.
-                    cell[0] = cell[1] = qsk[i]->jaccard_similarity(*rsk[j]);
+                    cell[0] = cell[1] = qsk[i]->reg_eq_similarity(*rsk[j]);
                     continue;
                 }
                 // reg_jac is the register-equality value (CSV column
-                // reg_eq_similarity; still the jaccard_similarity() C++
-                // method until Step 1b renames it), a side effect of the
+                // reg_eq_similarity, computed by the reg_eq_similarity() C++
+                // method), a side effect of the
                 // fused union pass. Ie discards it (its column is derived
                 // from containments below); Full writes it to both cell[0]
                 // (reg_eq_similarity) and cell[7] (register_equality_
@@ -493,7 +493,7 @@ int main(int argc, char** argv) {
                 if (qh[i] && rh[j]) {
                     qh[i]->jaccard_and_union_cardinality(*rh[j], reg_jac, u);
                 } else {
-                    reg_jac = qsk[i]->jaccard_similarity(*rsk[j]);
+                    reg_jac = qsk[i]->reg_eq_similarity(*rsk[j]);
                     u = qsk[i]->union_with(*rsk[j])->cardinality();
                 }
                 const double inter = std::max(0.0, qcard[i] + rcard[j] - u);

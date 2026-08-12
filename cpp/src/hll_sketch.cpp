@@ -46,7 +46,7 @@ void HLLSketch::merge_max(const HLLSketch& other) {
     }
 }
 
-double HLLSketch::jaccard_similarity(const AbstractSketch& other) const {
+double HLLSketch::reg_eq_similarity(const AbstractSketch& other) const {
     const HLLSketch* o = dynamic_cast<const HLLSketch*>(&other);
     if (!o) {
         throw std::runtime_error("Cannot compute Jaccard between different sketch types");
@@ -173,7 +173,7 @@ bool HLLSketch::ertl_from_counts(const std::vector<size_t>& counts, double& out)
 void HLLSketch::jaccard_and_union_cardinality(const HLLSketch& other,
                                               double& jaccard,
                                               double& union_cardinality) const {
-    // Same guards as jaccard_similarity() and union_with(): equal precision
+    // Same guards as reg_eq_similarity() and union_with(): equal precision
     // *and* hash size. Unequal precision would overread the operand's
     // registers; equal precision with unequal hash size gives rho values on
     // different scales.
@@ -255,7 +255,7 @@ std::unique_ptr<AbstractSketch> HLLSketch::union_with(const AbstractSketch& othe
     }
     // Without this the loop below reads o->registers_[i] for i < this->
     // num_registers_ — a heap overread (and, via the write, corruption) when
-    // the operand has the smaller precision. jaccard_similarity and merge_max
+    // the operand has the smaller precision. reg_eq_similarity and merge_max
     // both guard; this one did not.
     if (precision_ != o->precision_ || hash_size_ != o->hash_size_) {
         throw std::runtime_error("HLLs must have same precision for union");

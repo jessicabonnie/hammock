@@ -9,7 +9,7 @@ class AbstractSketch {
 public:
     virtual ~AbstractSketch() = default;
     virtual void add(uint64_t hash_val) = 0;
-    virtual double jaccard_similarity(const AbstractSketch& other) const = 0;
+    virtual double reg_eq_similarity(const AbstractSketch& other) const = 0;
     virtual double cardinality() const = 0;
     virtual double intersection_size(const AbstractSketch& other) const = 0;
     virtual std::unique_ptr<AbstractSketch> union_with(const AbstractSketch& other) const = 0;

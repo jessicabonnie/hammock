@@ -184,7 +184,7 @@ def _hash_sketch(precision: int, n: int, seed: int) -> "_core.HLLSketch":
 
 
 # The fused jaccard+union pass (HLLSketch::jaccard_and_union_cardinality) is
-# claimed bit-identical to the route it replaced -- jaccard_similarity() plus
+# claimed bit-identical to the route it replaced -- reg_eq_similarity() plus
 # union_with()->cardinality() reached via intersection_size(). That claim is an
 # integer-multiset argument, so it deserves an exact test, not an approximate
 # one: `estimate_intersection` and `estimate_cardinality` still expose the old
