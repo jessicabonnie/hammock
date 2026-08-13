@@ -243,17 +243,17 @@ synthetic_long <- bind_rows(
   ),
   synthetic %>% transmute(
     num_files, value = wall_time_hammock, error = wall_sd_hammock,
-    series = "hammock total"
+    series = "hammock total (RE)"
   ),
   synthetic %>% transmute(
     num_files, value = comparison_time, error = NA_real_,
-    series = "hammock sketch comparison"
+    series = "hammock sketch comparison (RE)"
   ),
   synthetic %>%
     filter(!is.na(comparison_time_ie)) %>%
     transmute(
       num_files, value = comparison_time_ie, error = NA_real_,
-      series = "hammock sketch comparison (+IE)"
+      series = "hammock sketch comparison (IE)"
     ),
   # See the wall_time_ie comment above -- total wall time for the +IE arm,
   # not just its comparison-phase slice.
@@ -261,7 +261,7 @@ synthetic_long <- bind_rows(
     filter(!is.na(wall_time_ie)) %>%
     transmute(
       num_files, value = wall_time_ie, error = wall_sd_ie,
-      series = "hammock total (+IE)"
+      series = "hammock total (IE)"
     )
 ) %>%
   mutate(
@@ -269,8 +269,8 @@ synthetic_long <- bind_rows(
     # warning, so the IE level is declared whether or not any row carries it.
     series = factor(
       series,
-      levels = c("BEDTools total", "hammock total", "hammock total (+IE)",
-                 "hammock sketch comparison", "hammock sketch comparison (+IE)")
+      levels = c("BEDTools total", "hammock total (RE)", "hammock total (IE)",
+                 "hammock sketch comparison (RE)", "hammock sketch comparison (IE)")
     )
   )
 
@@ -284,13 +284,13 @@ pair_labels <- format(
 largest <- synthetic %>% slice_max(num_files, n = 1, with_ties = FALSE)
 
 # Both numbers in one label, not one number next to an arrow that visually
-# terminates near BOTH the "hammock total" and "hammock total (+IE)" markers
+# terminates near BOTH the "hammock total (RE)" and "hammock total (IE)" markers
 # (they sit ~9% apart at N=512, nothing on a log axis spanning 6.6 decades --
 # 2 independent reviewers flagged the single-number label as readable as
 # belonging to either line). Stating both numbers in text removes the
 # ambiguity without having to distort the arrow's real endpoints.
 speedup_label <- if (!is.na(largest$speedup_ie)) {
-  sprintf("%.1f× faster\n(%.1f× at +IE, the recommended column)",
+  sprintf("%.1f× faster (RE)\n(%.1f× at IE, the recommended column)",
           largest$speedup, largest$speedup_ie)
 } else {
   sprintf("%.1f× faster", largest$speedup)
@@ -334,27 +334,27 @@ panel_a <- ggplot(
   ) +
   scale_color_manual(values = c(
     "BEDTools total" = COL_BEDTOOLS,
-    "hammock total" = COL_HAMMOCK,
-    "hammock total (+IE)" = COL_TOTAL_IE,
-    "hammock sketch comparison" = COL_COMPARE,
-    "hammock sketch comparison (+IE)" = COL_COMPARE_IE
+    "hammock total (RE)" = COL_HAMMOCK,
+    "hammock total (IE)" = COL_TOTAL_IE,
+    "hammock sketch comparison (RE)" = COL_COMPARE,
+    "hammock sketch comparison (IE)" = COL_COMPARE_IE
   ), drop = FALSE) +
   scale_linetype_manual(values = c(
     "BEDTools total" = "solid",
-    "hammock total" = "solid",
-    "hammock total (+IE)" = "dashed",
-    "hammock sketch comparison" = "22",
-    "hammock sketch comparison (+IE)" = "42"
+    "hammock total (RE)" = "solid",
+    "hammock total (IE)" = "dashed",
+    "hammock sketch comparison (RE)" = "22",
+    "hammock sketch comparison (IE)" = "42"
   ), drop = FALSE) +
   scale_shape_manual(values = c(
     "BEDTools total" = 16,
-    "hammock total" = 17,
-    # Not 17 (shared with "hammock total", which this line sits almost on top
+    "hammock total (RE)" = 17,
+    # Not 17 (shared with "hammock total (RE)", which this line sits almost on top
     # of at this panel's scale) -- 8 (asterisk) stays legible where the two
     # markers coincide, per the same reviewer note as COL_TOTAL_IE above.
-    "hammock total (+IE)" = 8,
-    "hammock sketch comparison" = 15,
-    "hammock sketch comparison (+IE)" = 18
+    "hammock total (IE)" = 8,
+    "hammock sketch comparison (RE)" = 15,
+    "hammock sketch comparison (IE)" = 18
   ), drop = FALSE) +
   scale_x_continuous(
     trans = log2_trans(),
@@ -518,54 +518,27 @@ bars <- bind_rows(
     ratio_txt = ifelse(speedup >= 1,
                        sprintf("%.2f× faster", speedup),
                        sprintf("%.2f× slower", 1 / speedup)),
-    # Two lines, not three: wall time + speedup share a line so the label's
-    # vertical footprint fits inside a paired bar's height gap (as small as
-    # 0.5s here) without colliding with the neighbor's label.
+    # Put the parenthetical speed comparison on its own line so each label
+    # can be centered directly over its bar without running across its pair.
     label = case_when(
       variant == "BEDTools" ~ sprintf("%.1f s\nspeed reference", wall),
-      TRUE ~ sprintf("%.1f s (%s)\n%s", wall, ratio_txt, label_extra)
+      TRUE ~ sprintf("%.1f s\n(%s)\n%s", wall, ratio_txt, label_extra)
     ),
-    # Leans each paired bar's label AWAY from its partner instead of
-    # centering it (the default) -- 2 independent reviewers (2026-08-10)
-    # found the centered version bleeding text onto the neighboring bar at
-    # this tight a padding. register-equality sits on the left of its pair,
-    # so hjust=1 (right-aligned at its own bar's center) makes the text hang
-    # leftward, into the gap toward the previous category; +IE sits on the
-    # right, so hjust=0 hangs it rightward. Standalone BEDTools stays
-    # centered (0.5).
-    # Lean each paired bar's label AWAY from its partner instead of
-    # centering it (the default) -- 2 independent reviewers (2026-08-10)
-    # found the centered version bleeding text onto the neighboring bar at
-    # this tight a padding. register-equality sits on the left of its pair,
-    # so hjust=1 (right-aligned at its own bar's center) makes the text hang
-    # leftward, into the gap toward the previous category; +IE sits on the
-    # right, so hjust=0 hangs it rightward. Standalone BEDTools stays
-    # centered (0.5). (A same-height-for-both-bars-in-a-pair variant was
-    # tried and reverted -- it fixed the vertical overlap but broke the
-    # y-axis's decimal breaks and pushed the rightmost pair's text off the
-    # panel edge; per-own-bar height plus the wider padding/margin below
-    # is the more robust fix.)
-    label_hjust = case_when(
-      variant == "BEDTools" ~ 0.5,
-      variant == "register-equality" ~ 1.0,
-      variant == "+IE" ~ 0.0
-    )
+    label_hjust = 0.5
   )
 
 panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = variant)) +
   geom_col(
     # padding is the gap WITHIN a pair, as a fraction of each bar's slot.
-    # Widened stepwise (0.06 -> 0.11 -> 0.16) after each smaller value left
-    # the hjust-leaned labels below still clipping the last pair or bleeding
-    # onto the neighbor -- still "a little space" relative to the bar width,
-    # not a wide gap. preserve="single" keeps every bar the same width
+    # Widened stepwise (0.06 -> 0.11 -> 0.16 -> 0.22) to keep paired labels visually
+    # distinct. preserve="single" keeps every bar the same width
     # whether it's alone (BEDTools) or paired (the three hammock groups),
     # rather than stretching the lone BEDTools bar to fill its slot.
-    position = position_dodge2(width = 0.82, padding = 0.16, preserve = "single")
+    position = position_dodge2(width = 0.82, padding = 0.22, preserve = "single")
   ) +
   geom_text(
     aes(label = label, hjust = label_hjust),
-    position = position_dodge2(width = 0.82, padding = 0.16, preserve = "single"),
+    position = position_dodge2(width = 0.82, padding = 0.22, preserve = "single"),
     vjust = -0.18,
     size = 1.95,
     lineheight = 0.92,
@@ -578,10 +551,8 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = variant)) +
     "+IE" = COL_TOTAL_IE
   )) +
   scale_x_discrete(
-    # Extra room past the last category specifically -- the rightmost
-    # pair's +IE label leans further right (hjust=0) than default discrete
-    # expansion (0.6 categories) left room for, and was clipping the panel
-    # edge.
+    # Retain extra room past the last category so the rightmost label has a
+    # margin matching the rest of the panel.
     expand = expansion(add = c(0.6, 1.0))
   ) +
   scale_y_continuous(
@@ -612,10 +583,7 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = variant)) +
 figure <- panel_a + panel_b +
   plot_layout(widths = c(1.35, 1)) +
   plot_annotation(
-    title = paste0(
-      "Hammock expands feasible all-pairs comparison as interval collections grow  ",
-      "(Supplement)"
-    ),
+    title = "Hammock expands feasible all-pairs comparison as interval collections grow",
     subtitle = paste0(
       "Panel B accuracy for BOTH hammock variants is MAE against exact BEDTools -- ",
       "register-equality's ~0.137 floor is chance agreement, not a subsampling effect."
