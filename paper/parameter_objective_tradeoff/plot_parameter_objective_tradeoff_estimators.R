@@ -106,8 +106,11 @@ if (length(missing_metrics) > 0) {
   raw <- bind_rows(raw, experiment_raw %>% filter(column %in% missing_metrics))
 }
 
-panel_levels <- c("A  Register equality", "B  Inclusion–exclusion Jaccard")
-panel_lookup <- setNames(panel_levels, c(REG_EQ_COL, "jaccard_similarity_ie"))
+panel_levels <- c("A  Inclusion–exclusion Jaccard", "B  Register equality")
+panel_lookup <- setNames(
+  c("B  Register equality", "A  Inclusion–exclusion Jaccard"),
+  c(REG_EQ_COL, "jaccard_similarity_ie")
+)
 
 sweep <- raw %>%
   filter(

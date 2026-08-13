@@ -262,10 +262,10 @@ compute_cluster_metrics <- function(j_hat_df) {
 }
 
 # Parse hammock filenames produced by python/hammock/outprefix.py.
-# Trailing "_full" is the metrics-shape tag (always present now that these
-# runs pass --metrics; python/hammock/outprefix.py,
-# docs/seed-metrics-column-restructure.md). Examples (stem = basename minus
-# .csv):
+# Trailing "_full" is the current metrics-shape tag
+# (python/hammock/outprefix.py, docs/seed-metrics-column-restructure.md).
+# Archived sweeps predate the suffix, so the parsers accept it optionally.
+# Examples (stem = basename minus .csv):
 #   hammock_hll_p21_jaccA_full.csv
 #   hammock_hll_p21_jaccB_B0.10_full.csv
 #   hammock_hll_p21_jaccC_expA1.50_full.csv
@@ -273,7 +273,7 @@ compute_cluster_metrics <- function(j_hat_df) {
 #   hammock_mnmzr_p24_jaccD_k10_w20_full.csv
 parse_abc_name <- function(stem) {
   m <- regmatches(stem, regexec(
-    "^hammock_hll_p(\\d+)_jacc([ABC])(?:_expA(\\d+\\.\\d+))?(?:_B(\\d+\\.\\d+))?_full$",
+    "^hammock_hll_p(\\d+)_jacc([ABC])(?:_expA(\\d+\\.\\d+))?(?:_B(\\d+\\.\\d+))?(?:_full)?$",
     stem, perl = TRUE))[[1]]
   if (length(m) == 0) return(NULL)
   tibble(precision = as.integer(m[2]),
@@ -284,7 +284,7 @@ parse_abc_name <- function(stem) {
 
 parse_d_name <- function(stem) {
   m <- regmatches(stem, regexec(
-    "^hammock_mnmzr_p(\\d+)_jaccD_k(\\d+)_w(\\d+)_full$", stem, perl = TRUE))[[1]]
+    "^hammock_mnmzr_p(\\d+)_jaccD_k(\\d+)_w(\\d+)(?:_full)?$", stem, perl = TRUE))[[1]]
   if (length(m) == 0) return(NULL)
   tibble(precision = as.integer(m[2]), k = as.integer(m[3]),
          w = as.integer(m[4]))
@@ -297,11 +297,22 @@ scan_dir <- function(dir, parser, jcols = REG_EQ_COL,
   # j_truth). Output gets one row per (file × jcol × reference). If
   # do_clustering, also attach (ari, nmi) replicated across reference rows.
   files <- list.files(dir, pattern = "\\.csv$", full.names = TRUE)
+  # Archived sweeps predate the `_full` metrics-shape suffix. Accept both
+  # generations, and prefer the newer `_full` file when both names represent
+  # the same configuration.
+  keys <- sub("_full\\.csv$", ".csv", basename(files))
+  file_order <- order(keys, -as.integer(grepl("_full\\.csv$", files)))
+  files <- files[file_order]
+  keys <- keys[file_order]
+  files <- files[!duplicated(keys)]
   out <- list()
   for (f in files) {
     stem <- tools::file_path_sans_ext(basename(f))
     meta <- parser(stem)
-    if (is.null(meta)) next
+    if (is.null(meta)) {
+      stop("Unrecognized sweep filename in ", dir, ": ", basename(f),
+           ". Refusing to write a partial summary.", call. = FALSE)
+    }
     cat("  reading", basename(f), "\n")
     for (jc in jcols) {
       j_hat <- read_hammock_csv(f, jcol = jc)
