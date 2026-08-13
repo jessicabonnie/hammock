@@ -1,11 +1,11 @@
 #!/usr/bin/env Rscript
 
-# Figure 4 — Interval-mode inclusion-exclusion Jaccard versus BEDTools
+# Figure 4 — Interval-mode accuracy and precision/runtime frontier
 #
 # Produces two figures:
 #   1. paper/figures/interval_accuracy.png
-#      Main-text, single-panel comparison of hammock inclusion-exclusion
-#      Jaccard with exact BEDTools Jaccard.
+#      Main-text, two-panel figure: inclusion-exclusion Jaccard versus exact
+#      BEDTools Jaccard (A), and the precision/runtime frontier (B).
 #   2. paper/figures/interval_accuracy_bothmetrics.png
 #      Two-panel comparison retaining both inclusion-exclusion and the legacy
 #      register-equality statistic for possible supplementary use.
@@ -47,9 +47,12 @@ repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 
 data_dir <- file.path(repo_root, "docs", "data")
 bedtools_tsv <- file.path(data_dir, "maurano_bedtools_ref.tsv")
+precision_frontier_csv <- file.path(
+  data_dir, "sweep_precision_maurano_p18_t16.csv"
+)
 PRECISIONS <- c(18, 21, 23)
 REFERENCE_PRECISION <- 21
-# "_full" tag: this script reads both jaccard_similarity (register-equality)
+# "_full" tag: this script reads both reg_eq_similarity (register equality)
 # and jaccard_similarity_ie, which only the full metrics block (--metrics)
 # emits together (python/hammock/outprefix.py; the file was renamed to match
 # in the metrics-column restructure, docs/seed-metrics-column-restructure.md
@@ -77,7 +80,7 @@ caption_txt <- file.path(
 dir.create(dirname(main_png), recursive = TRUE, showWarnings = FALSE)
 dir.create(dirname(both_png), recursive = TRUE, showWarnings = FALSE)
 
-for (path in c(bedtools_tsv, hammock_csvs)) {
+for (path in c(bedtools_tsv, hammock_csvs, precision_frontier_csv)) {
   if (!file.exists(path)) stop("Input file not found: ", path, call. = FALSE)
 }
 
@@ -520,15 +523,130 @@ main_figure <- ggplot(
   theme_paper(base_size = 11.5) +
   theme(legend.position = "none")
 
+# ---------------------------------------------------------------------------
+# Panel B: precision/runtime frontier
+# ---------------------------------------------------------------------------
+
+read_precision_frontier <- function(path) {
+  raw <- read_csv(path, show_col_types = FALSE)
+  required <- c(
+    "tool", "precision", "threads", "wall_time", "jaccard_n_pairs",
+    "jaccard_ie_mae_vs_bt"
+  )
+  missing <- setdiff(required, names(raw))
+  if (length(missing) > 0) {
+    stop(
+      basename(path), " lacks columns: ", paste(missing, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  bedtools_rows <- raw %>% filter(tool == "bedtools")
+  if (nrow(bedtools_rows) == 0) {
+    stop("No BEDTools rows in ", basename(path), call. = FALSE)
+  }
+  bedtools_wall <- median(bedtools_rows$wall_time)
+
+  frontier <- raw %>%
+    filter(tool != "bedtools", !is.na(precision)) %>%
+    group_by(precision) %>%
+    summarise(
+      wall = median(wall_time),
+      wall_min = min(wall_time),
+      wall_max = max(wall_time),
+      mae_ie = median(jaccard_ie_mae_vs_bt),
+      n_pairs = median(jaccard_n_pairs),
+      threads = first(threads),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      speedup = bedtools_wall / wall,
+      speedup_low = bedtools_wall / wall_max,
+      speedup_high = bedtools_wall / wall_min
+    )
+
+  pair_counts <- unique(frontier$n_pairs)
+  if (length(pair_counts) != 1 || pair_counts != 380) {
+    stop(
+      "Expected 380 ordered off-diagonal pairs in ", basename(path),
+      "; got ", paste(pair_counts, collapse = ", "), call. = FALSE
+    )
+  }
+  frontier
+}
+
+frontier <- read_precision_frontier(precision_frontier_csv)
+frontier_labels <- frontier %>% mutate(label = paste0("p=", precision))
+default_precision <- frontier %>% filter(precision == 18)
+frontier_threads <- paste(unique(frontier$threads), collapse = "/")
+
+x_low <- min(frontier$mae_ie) / 1.45
+x_high <- max(frontier$mae_ie) * 1.75
+y_low <- min(frontier$speedup) / 1.30
+y_high <- max(frontier$speedup) * 1.12
+
+frontier_figure <- ggplot(frontier, aes(mae_ie, speedup)) +
+  geom_linerange(
+    aes(ymin = speedup_low, ymax = speedup_high),
+    color = COL_IE, linewidth = 0.5, alpha = 0.8
+  ) +
+  geom_path(color = COL_IE, linewidth = 0.6, alpha = 0.8) +
+  geom_point(color = COL_IE, size = 2.2) +
+  geom_point(
+    data = default_precision, shape = 21, size = 5, stroke = 0.9,
+    color = "#B8420F", fill = NA
+  ) +
+  geom_text(
+    data = frontier_labels, aes(label = label), size = 3.2,
+    hjust = -0.35, vjust = -0.55, color = COL_TEXT
+  ) +
+  annotate(
+    "text", x = default_precision$mae_ie, y = default_precision$speedup,
+    label = "  CLI default", hjust = 0, vjust = 2.6, size = 3.1,
+    color = "#B8420F"
+  ) +
+  scale_x_log10(
+    breaks = breaks_log(n = 6), labels = label_scientific(digits = 2)
+  ) +
+  scale_y_log10(
+    breaks = breaks_log(n = 6),
+    labels = label_number(accuracy = 0.01, drop0trailing = TRUE)
+  ) +
+  labs(
+    title = "Precision frontier:\nwhat accuracy costs",
+    subtitle = sprintf(
+      "20 Maurano DHS files; 380 ordered pairs; %s-thread setting; subB=1.0",
+      frontier_threads
+    ),
+    x = expression(
+      "Mean absolute error of " * italic(J)[IE] * " vs exact BEDTools  (log)"
+    ),
+    y = "Speedup vs BEDTools  (log)"
+  ) +
+  coord_cartesian(
+    xlim = c(x_low, x_high), ylim = c(y_low, y_high), expand = FALSE
+  ) +
+  theme_paper(base_size = 11.5) +
+  theme(legend.position = "none")
+
+combined_figure <- main_figure + frontier_figure +
+  plot_layout(widths = c(1, 1.12)) +
+  plot_annotation(
+    tag_levels = "A",
+    theme = theme(
+      plot.tag = element_text(face = "bold", size = 15, color = COL_TEXT)
+    )
+  )
+
 CairoPNG(
   filename = main_png,
-  width = 6.7,
+  width = 13.2,
   height = 6.2,
   units = "in",
   res = 300,
   bg = "white"
 )
-print(main_figure)
+print(combined_figure)
 dev.off()
 message("Wrote: ", main_png)
 
