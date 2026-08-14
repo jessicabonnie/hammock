@@ -217,30 +217,22 @@ key <- read_tsv(key_tsv, show_col_types = FALSE) %>%
 
 raw <- add_jaccard_ie(read_csv(input_csv, show_col_types = FALSE))
 
-# Prefer the renamed register-equality column; archived pre-Step-1 CSVs only
-# have jaccard_similarity, so fall back to it and log that we did (once per
-# run, not per row) -- see docs/seed-jaccard-reg-eq-rename.md Step 2.
 resolve_sim_col <- function(explicit, df) {
   if (!is.na(explicit)) return(explicit)
+  "jaccard_similarity_ie"
+}
+
+# Resolve register equality separately for the estimator-agreement diagnostic.
+# Archived pre-rename CSVs use jaccard_similarity for this legacy statistic.
+resolve_reg_eq_col <- function(df) {
   if ("reg_eq_similarity" %in% names(df)) return("reg_eq_similarity")
   message(
     "reg_eq_similarity not found in input CSV; falling back to jaccard_similarity"
   )
   "jaccard_similarity"
 }
-# `reg_eq_col` is the register-equality column name independent of any CLI
-# override -- resolved once here (so the fallback message, if any, logs
-# exactly once) and reused below by the "estimator agreement" diagnostic,
-# which must always compare register-equality vs IE regardless of which
-# column the dendrogram itself is drawn on. Do not inline this as
-# resolve_sim_col(sim_col_arg, raw) at the agreement site below: when
-# sim_col_arg IS "jaccard_similarity_ie" (the Supplementary Figure S5a
-# invocation), that would make the comparison set collapse to one column via
-# intersect()'s dedup, silently dropping the register-equality row from
-# estimator_agreement_stats.csv -- exactly the bug this comment now guards
-# against (found by docs/seed-jaccard-reg-eq-rename.md Step 3, fixed here).
-reg_eq_col <- resolve_sim_col(NA_character_, raw)
-sim_col <- if (!is.na(sim_col_arg)) sim_col_arg else reg_eq_col
+reg_eq_col <- resolve_reg_eq_col(raw)
+sim_col <- resolve_sim_col(sim_col_arg, raw)
 
 required_cols <- c("file1", "file2", sim_col)
 missing_cols <- setdiff(required_cols, names(raw))
@@ -282,11 +274,9 @@ ari <- adjusted_rand(true_tissue, predicted)
 nmi <- normalized_mi(true_tissue, predicted)
 
 # ---- estimator agreement ---------------------------------------------------
-# Figure 6 is drawn on reg_eq_col (register-equality, whichever of
-# reg_eq_similarity/jaccard_similarity the input actually carries) because
-# that is the column the sequence-mode sweep emitted, but jaccard_similarity_ie
-# is the bedtools-comparable estimator (CLAUDE.md divergence #2). Record
-# whether the choice of column changes the k = n_tissues partition at all.
+# Figure 6 is drawn on inclusion-exclusion Jaccard by default. Record whether
+# its k = n_tissues partition differs from the archived register-equality
+# column so the local estimator agreement remains explicit.
 # cutree's cluster ids are arbitrary, so partitions are compared as sets of
 # member sets, not elementwise. Deliberately keyed on reg_eq_col here, not
 # sim_col: this comparison must stay register-equality-vs-IE regardless of
@@ -378,23 +368,20 @@ CairoPNG(
   res = 300,
   bg = "white"
 )
-op <- par(mar = c(7, 4, 3, 2), family = "sans")
+op <- par(mar = c(7, 4, 2, 2), family = "sans")
 on.exit({ par(op); dev.off() }, add = TRUE)
 
 plot(
   hc,
   hang = -1,
   labels = FALSE,
-  main = if (is.na(sim_col_arg)) {
-    "Sequence sketches recover fetal-tissue organization"
-  } else {
-    sprintf("Sequence sketches recover fetal-tissue organization (%s)", sim_col)
-  },
+  main = "",
   xlab = "",
   sub = "",
   ylab = "1 − Jaccard",
   cex = 0.85
 )
+mtext("A", side = 3, adj = 0, line = 0.15, cex = 16 / 12, font = 2)
 
 LABEL_CEX <- 0.8
 GROUP_CEX <- 0.7
