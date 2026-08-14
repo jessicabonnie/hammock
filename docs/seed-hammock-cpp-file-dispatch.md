@@ -459,15 +459,17 @@ python3 experiments/bedtools_benchmark/measure_cli_overhead.py \
 
 ## Related
 
-- A limitations-section sentence about the CLI-vs-hammock-cpp gap can now be
-  written with real numbers instead of being blocked: hammock-cpp is the
-  right speed-ceiling choice at the N the headline figures actually use
-  (N=2048: hammock-cpp ~13% faster), but the Python CLI is genuinely faster
-  in a middle band (N≈8-1024, up to ~28% faster around N=32-128) that no
-  current figure targets. A flat "CLI is ~1.5x slower" or "CLI is faster"
-  would both be wrong depending on N -- the "Part 2 update" table above is
-  the citable source.
+- **DONE, 2026-08-14.** The limitations-section sentence about the
+  CLI-vs-hammock-cpp gap is written, with real numbers, in three places:
+  `docs/paper_outline.md` §6.4, `paper/outline.md` §3.5, `paper/draft.md`
+  §3.5 (both were blank before this). hammock-cpp is the right
+  speed-ceiling choice at the N the headline figures actually use (N=2048:
+  hammock-cpp ~13% faster), but the Python CLI is genuinely faster in a
+  middle band (N≈8-1024, up to ~28% faster around N=32-128) that no current
+  figure targets. A flat "CLI is ~1.5x slower" or "CLI is faster" would both
+  have been wrong depending on N -- the "Part 2 update" table above is the
+  citable source both paper sections cite back to.
 - `docs/seed-benchmark-methodology.md` — the shared-partition noise floor;
-  Part 2's N=32/128 *magnitude* (as opposed to direction) still hasn't been
-  checked against it independently of the CPU-model confound (see "Still
-  open" above).
+  now used directly by job 29851516's exclusivity-effect measurement
+  (~2-3%, within this floor) to close the CPU-model confound -- see "CPU-model
+  confound: resolved" above.
