@@ -290,7 +290,7 @@ panel_a <- ggplot(
     expand = expansion(mult = c(0.06, 0.15))
   ) +
   labs(
-    title = "A  Sketch reuse increases the advantage as collections grow",
+    title = "A",
     x = "Number of BED files (N)",
     y = "Wall time (seconds, log scale)"
   ) +
@@ -402,7 +402,7 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
     expand = expansion(mult = c(0, 0.27))
   ) +
   labs(
-    title = "B  Subsampling further reduces runtime",
+    title = "B",
     x = NULL,
     # Deliberately not "per pairwise comparison": each bar is the median
     # TOTAL wall time to sketch all 20 files and run all 400 pairwise
@@ -420,18 +420,10 @@ figure <- panel_a + panel_b +
   plot_layout(widths = c(1.35, 1)) +
   plot_annotation(
     title = "Hammock expands feasible all-pairs comparison as interval collections grow",
-    subtitle = paste0(
-      "Reusable sketches reduce repeated full-file processing; subsampling further lowers ",
-      "sketch-construction time. Panel B accuracy is MAE against exact BEDTools."
-    ),
     theme = theme(
       plot.title = element_text(
         family = base_family, face = "bold", size = 15.5, color = COL_TEXT,
         margin = margin(b = 4)
-      ),
-      plot.subtitle = element_text(
-        family = base_family, size = 10.3, color = "#56616C",
-        margin = margin(b = 8)
       ),
       plot.margin = margin(8, 8, 8, 8)
     )
