@@ -97,7 +97,7 @@ COL_GRID <- "#D9DEE3"
 COL_TEXT <- "#20262D"
 base_family <- "sans"
 
-theme_paper <- function(base_size = 10.5) {
+theme_paper <- function(base_size = 12) {
   theme_classic(base_size = base_size, base_family = base_family) +
     theme(
       plot.title = element_text(
@@ -105,14 +105,14 @@ theme_paper <- function(base_size = 10.5) {
         lineheight = 1.05, margin = margin(b = 6)
       ),
       plot.subtitle = element_blank(),
-      axis.title = element_text(color = COL_TEXT),
-      axis.text = element_text(color = COL_TEXT),
+      axis.title = element_text(size = 12, color = COL_TEXT),
+      axis.text = element_text(size = 12, color = COL_TEXT),
       axis.line = element_line(color = "#6B747D", linewidth = 0.35),
       axis.ticks = element_line(color = "#6B747D", linewidth = 0.35),
       panel.grid.major.y = element_line(color = COL_GRID, linewidth = 0.35),
       panel.grid.minor = element_blank(),
       legend.title = element_blank(),
-      legend.text = element_text(size = rel(0.8), color = COL_TEXT),
+      legend.text = element_text(size = 12, color = COL_TEXT),
       legend.key.width = grid::unit(1.1, "lines"),
       plot.margin = margin(6, 8, 6, 6)
     )
@@ -204,12 +204,7 @@ synthetic_long <- bind_rows(
   )
 
 n_breaks <- synthetic$num_files
-pair_labels <- format(
-  synthetic$cross_pairs,
-  scientific = FALSE,
-  big.mark = ",",
-  trim = TRUE
-)
+pair_power_labels <- parse(text = paste0("2^", 2 * seq_along(n_breaks)))
 largest <- synthetic %>% slice_max(num_files, n = 1, with_ties = FALSE)
 
 speedup_label <- sprintf("%.1f× faster", largest$speedup)
@@ -270,7 +265,7 @@ panel_a <- ggplot(
     breaks = n_breaks,
     labels = n_breaks,
     sec.axis = sec_axis(
-      ~ ., breaks = n_breaks, labels = pair_labels,
+      ~ ., breaks = n_breaks, labels = pair_power_labels,
       name = "File pairs compared, N²"
     )
   ) +
@@ -301,12 +296,14 @@ panel_a <- ggplot(
   ) +
   theme_paper() +
   theme(
-    axis.text.x.top = element_text(size = 7.7, color = "#59636D"),
-    axis.title.x.top = element_text(size = 8.5, color = "#59636D"),
-    legend.position = "top",
-    legend.justification = "left",
-    legend.box.just = "left",
-    legend.margin = margin(b = 2)
+    axis.text.x.top = element_text(size = 12, color = COL_TEXT),
+    axis.title.x.top = element_text(size = 12, color = COL_TEXT),
+    legend.position = "bottom",
+    legend.justification = "center",
+    legend.box.just = "center",
+    legend.margin = margin(t = 5),
+    plot.title = element_text(size = 16, lineheight = 1.05, margin = margin(b = 6)),
+    plot.margin = margin(28, 8, 6, 6)
   )
 
 # Panel B: Maurano real-data benchmark ----------------------------------------
@@ -335,8 +332,8 @@ if (nrow(maurano_ie_summary) != 3) {
 
 condition_of <- function(subb) case_when(
   subb == 1 ~ "no\nsubsampling",
-  subb == 0.1 ~ "subB = 0.1",
-  subb == 0.01 ~ "subB = 0.01"
+  subb == 0.1 ~ "0.1\nsubsample",
+  subb == 0.01 ~ "0.01\nsubsample"
 )
 
 # One bar per condition: BEDTools, then hammock at the +IE arm (full metrics
@@ -362,7 +359,7 @@ bars <- bind_rows(
   mutate(
     condition = factor(
       condition,
-      levels = c("BEDTools", "no\nsubsampling", "subB = 0.1", "subB = 0.01")
+      levels = c("BEDTools", "no\nsubsampling", "0.1\nsubsample", "0.01\nsubsample")
     ),
     tool = factor(tool, levels = c("BEDTools", "hammock (+IE)")),
     speedup = bt_wall / wall,
@@ -372,13 +369,12 @@ bars <- bind_rows(
     ratio_txt = ifelse(speedup >= 1,
                        sprintf("%.2f× faster", speedup),
                        sprintf("%.2f× slower", 1 / speedup)),
-    # Two lines, not three: a 3-line label on the rightmost bar (subB=0.01)
-    # ran its longest line past the panel's right edge. "(vs bedtools)" moves
-    # to the panel subtitle/caption instead of repeating on every bar.
+    # Keep the speed comparison on its own line so the larger annotation text
+    # remains centered over the rightmost bar without clipping the panel edge.
     label = case_when(
       tool == "BEDTools" ~ sprintf("%.1f s\nspeed reference", wall),
       TRUE ~ sprintf(
-        "%.1f s (%s)\nMAE %s",
+        "%.1f s\n(%s)\nMAE %s",
         wall, ratio_txt, formatC(mae, format = "e", digits = 1)
       )
     )
@@ -389,7 +385,7 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
   geom_text(
     aes(label = label),
     vjust = -0.22,
-    size = 2.9,
+    size = 4.1,
     lineheight = 0.95,
     color = COL_TEXT
   ) +
@@ -399,7 +395,7 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
   )) +
   scale_y_continuous(
     labels = label_number(accuracy = 1),
-    expand = expansion(mult = c(0, 0.27))
+    expand = expansion(mult = c(0, 0.32))
   ) +
   labs(
     title = "B",
@@ -411,23 +407,14 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
   ) +
   theme_paper() +
   theme(
-    axis.text.x = element_text(size = 8.8, lineheight = 0.95),
+    axis.text.x = element_text(size = 12, lineheight = 0.95),
     legend.position = "none",
-    plot.title = element_text(size = 10.5, lineheight = 1.05)
+    plot.title = element_text(size = 16, lineheight = 1.05, margin = margin(b = 6)),
+    plot.margin = margin(28, 8, 6, 6)
   )
 
 figure <- panel_a + panel_b +
-  plot_layout(widths = c(1.35, 1)) +
-  plot_annotation(
-    title = "Hammock expands feasible all-pairs comparison as interval collections grow",
-    theme = theme(
-      plot.title = element_text(
-        family = base_family, face = "bold", size = 15.5, color = COL_TEXT,
-        margin = margin(b = 4)
-      ),
-      plot.margin = margin(8, 8, 8, 8)
-    )
-  )
+  plot_layout(widths = c(1.35, 1))
 
 CairoPNG(
   filename = out_png,

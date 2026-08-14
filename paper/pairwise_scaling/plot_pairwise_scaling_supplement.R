@@ -115,7 +115,7 @@ COL_GRID <- "#D9DEE3"
 COL_TEXT <- "#20262D"
 base_family <- "sans"
 
-theme_paper <- function(base_size = 10.5) {
+theme_paper <- function(base_size = 12) {
   theme_classic(base_size = base_size, base_family = base_family) +
     theme(
       plot.title = element_text(
@@ -123,14 +123,14 @@ theme_paper <- function(base_size = 10.5) {
         lineheight = 1.05, margin = margin(b = 6)
       ),
       plot.subtitle = element_blank(),
-      axis.title = element_text(color = COL_TEXT),
-      axis.text = element_text(color = COL_TEXT),
+      axis.title = element_text(size = 12, color = COL_TEXT),
+      axis.text = element_text(size = 12, color = COL_TEXT),
       axis.line = element_line(color = "#6B747D", linewidth = 0.35),
       axis.ticks = element_line(color = "#6B747D", linewidth = 0.35),
       panel.grid.major.y = element_line(color = COL_GRID, linewidth = 0.35),
       panel.grid.minor = element_blank(),
       legend.title = element_blank(),
-      legend.text = element_text(size = rel(0.8), color = COL_TEXT),
+      legend.text = element_text(size = 12, color = COL_TEXT),
       legend.key.width = grid::unit(1.1, "lines"),
       plot.margin = margin(6, 8, 6, 6)
     )
@@ -275,12 +275,7 @@ synthetic_long <- bind_rows(
   )
 
 n_breaks <- synthetic$num_files
-pair_labels <- format(
-  synthetic$cross_pairs,
-  scientific = FALSE,
-  big.mark = ",",
-  trim = TRUE
-)
+pair_power_labels <- parse(text = paste0("2^", 2 * seq_along(n_breaks)))
 largest <- synthetic %>% slice_max(num_files, n = 1, with_ties = FALSE)
 
 # Both numbers in one label, not one number next to an arrow that visually
@@ -361,7 +356,7 @@ panel_a <- ggplot(
     breaks = n_breaks,
     labels = n_breaks,
     sec.axis = sec_axis(
-      ~ ., breaks = n_breaks, labels = pair_labels,
+      ~ ., breaks = n_breaks, labels = pair_power_labels,
       name = "File pairs compared, N²"
     )
   ) +
@@ -381,7 +376,7 @@ panel_a <- ggplot(
     expand = expansion(mult = c(0.06, 0.15))
   ) +
   labs(
-    title = "A  Sketch reuse increases the advantage as collections grow",
+    title = "A",
     x = "Number of BED files (N)",
     y = "Wall time (seconds, log scale)"
   ) +
@@ -392,12 +387,14 @@ panel_a <- ggplot(
   ) +
   theme_paper() +
   theme(
-    axis.text.x.top = element_text(size = 7.7, color = "#59636D"),
-    axis.title.x.top = element_text(size = 8.5, color = "#59636D"),
-    legend.position = "top",
-    legend.justification = "left",
-    legend.box.just = "left",
-    legend.margin = margin(b = 2)
+    axis.text.x.top = element_text(size = 12, color = COL_TEXT),
+    axis.title.x.top = element_text(size = 12, color = COL_TEXT),
+    legend.position = "bottom",
+    legend.justification = "center",
+    legend.box.just = "center",
+    legend.margin = margin(t = 5),
+    plot.title = element_text(size = 16, lineheight = 1.05, margin = margin(b = 6)),
+    plot.margin = margin(28, 8, 6, 6)
   )
 
 # Panel B: Maurano real-data benchmark ----------------------------------------
@@ -461,8 +458,8 @@ if (anyNA(mixed_stride$mae_re_vs_bedtools)) {
 
 condition_of <- function(subb) case_when(
   subb == 1 ~ "no\nsubsampling",
-  subb == 0.1 ~ "subB = 0.1",
-  subb == 0.01 ~ "subB = 0.01"
+  subb == 0.1 ~ "0.1\nsubsample",
+  subb == 0.01 ~ "0.01\nsubsample"
 )
 
 # Two bars per condition, paired tightly (see position_dodge2's padding
@@ -497,7 +494,7 @@ bars <- bind_rows(
   ),
   maurano_ie_summary %>% transmute(
     condition = condition_of(subB),
-    variant = "+IE",
+    variant = "inclusion-exclusion",
     wall = wall_median,
     label_extra = sprintf(
       "MAE %s", formatC(mae_ie_vs_bedtools, format = "e", digits = 1)
@@ -507,9 +504,12 @@ bars <- bind_rows(
   mutate(
     condition = factor(
       condition,
-      levels = c("BEDTools", "no\nsubsampling", "subB = 0.1", "subB = 0.01")
+      levels = c("BEDTools", "no\nsubsampling", "0.1\nsubsample", "0.01\nsubsample")
     ),
-    variant = factor(variant, levels = c("BEDTools", "register-equality", "+IE")),
+    variant = factor(
+      variant,
+      levels = c("BEDTools", "register-equality", "inclusion-exclusion")
+    ),
     speedup = bt_wall / wall,
     # Never hardcode "faster" -- word it from the sign (see the original note
     # this replaced: the corrected BEDTools baseline flips the unsubsampled
@@ -524,21 +524,22 @@ bars <- bind_rows(
       variant == "BEDTools" ~ sprintf("%.1f s\nspeed reference", wall),
       TRUE ~ sprintf("%.1f s\n(%s)\n%s", wall, ratio_txt, label_extra)
     ),
+    label_y = wall,
     label_hjust = 0.5
   )
 
 panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = variant)) +
   geom_col(
     # padding is the gap WITHIN a pair, as a fraction of each bar's slot.
-    # Widened stepwise (0.06 -> 0.11 -> 0.16 -> 0.22) to keep paired labels visually
+    # Widened stepwise to keep paired labels visually
     # distinct. preserve="single" keeps every bar the same width
     # whether it's alone (BEDTools) or paired (the three hammock groups),
     # rather than stretching the lone BEDTools bar to fill its slot.
-    position = position_dodge2(width = 0.82, padding = 0.22, preserve = "single")
+    position = position_dodge2(width = 0.95, padding = 0.28, preserve = "single")
   ) +
   geom_text(
-    aes(label = label, hjust = label_hjust),
-    position = position_dodge2(width = 0.82, padding = 0.22, preserve = "single"),
+    aes(y = label_y, label = label, hjust = label_hjust),
+    position = position_dodge2(width = 0.95, padding = 0.28, preserve = "single"),
     vjust = -0.18,
     size = 1.95,
     lineheight = 0.92,
@@ -548,7 +549,7 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = variant)) +
   scale_fill_manual(values = c(
     "BEDTools" = COL_BEDTOOLS,
     "register-equality" = COL_HAMMOCK,
-    "+IE" = COL_TOTAL_IE
+    "inclusion-exclusion" = COL_TOTAL_IE
   )) +
   scale_x_discrete(
     # Retain extra room past the last category so the rightmost label has a
@@ -558,10 +559,10 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = variant)) +
   scale_y_continuous(
     labels = label_number(accuracy = 1),
     breaks = scales::breaks_pretty(n = 5),
-    expand = expansion(mult = c(0, 0.30))
+    expand = expansion(mult = c(0, 0.36))
   ) +
   labs(
-    title = "B  Subsampling further reduces runtime",
+    title = "B",
     x = NULL,
     # Deliberately not "per pairwise comparison": each bar is the median
     # TOTAL wall time to sketch all 20 files and run all 400 pairwise
@@ -571,35 +572,18 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = variant)) +
   guides(fill = guide_legend(nrow = 1, byrow = TRUE)) +
   theme_paper() +
   theme(
-    axis.text.x = element_text(size = 8.8, lineheight = 0.95),
-    legend.position = "top",
-    legend.justification = "left",
-    legend.box.just = "left",
-    legend.margin = margin(b = 2),
+    axis.text.x = element_text(size = 12, lineheight = 0.95),
+    legend.position = "bottom",
+    legend.justification = "center",
+    legend.box.just = "center",
+    legend.margin = margin(t = 5),
     legend.title = element_blank(),
-    plot.title = element_text(size = 10.5, lineheight = 1.05)
+    plot.title = element_text(size = 16, lineheight = 1.05, margin = margin(b = 6)),
+    plot.margin = margin(28, 8, 6, 6)
   )
 
 figure <- panel_a + panel_b +
-  plot_layout(widths = c(1.35, 1)) +
-  plot_annotation(
-    title = "Hammock expands feasible all-pairs comparison as interval collections grow",
-    subtitle = paste0(
-      "Panel B accuracy for BOTH hammock variants is MAE against exact BEDTools -- ",
-      "register-equality's ~0.137 floor is chance agreement, not a subsampling effect."
-    ),
-    theme = theme(
-      plot.title = element_text(
-        family = base_family, face = "bold", size = 15.5, color = COL_TEXT,
-        margin = margin(b = 4)
-      ),
-      plot.subtitle = element_text(
-        family = base_family, size = 10.3, color = "#56616C",
-        margin = margin(b = 8)
-      ),
-      plot.margin = margin(8, 8, 8, 8)
-    )
-  )
+  plot_layout(widths = c(1.35, 1))
 
 CairoPNG(
   filename = out_png,
