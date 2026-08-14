@@ -298,11 +298,16 @@ establishing. Read the seed before re-litigating the question.
   the N that matters; that concern is resolved for now. The N≈8–1024 result
   is real (reproduced on two different node/CPU configurations) but doesn't
   affect any currently published number, since nothing targets that band.
-  One residual confound (different CPU model between the original and
-  re-measurement jobs, affecting only the *magnitude* of the N=32/128 shift,
-  not its direction) and one unverified mechanism (pairwise-phase dilution
-  as the candidate explanation for the N=2048 reversal) remain open — see
-  the seed doc's "Part 2 update" section and "Still open."
+  The CPU-model confound (different node/CPU between the original and
+  re-measurement jobs) is **closed, 2026-08-14 (job 29851516)**: a
+  same-CPU-model exclusive-vs-contended comparison found exclusivity's own
+  effect is ~2-3% (within this repo's established noise floor), 6-10x
+  smaller than the ~13-18% gap to the original job — the falsification
+  criterion is answered with no CPU-model confound in it, and a 3-day
+  same-node test to pin down the confound further isn't necessary. One
+  unverified mechanism remains open: pairwise-phase dilution as the
+  candidate explanation for the N=2048 reversal — see the seed doc's "Part 2
+  update" and "Still open" sections.
 
 - `docs/seed-benchmark-methodology.md` — **read this before quoting or
   generating any performance number.** Comparing one benchmark run to another in

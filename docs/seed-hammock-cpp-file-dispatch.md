@@ -343,11 +343,51 @@ nor `bindings/` -- so it did not affect either tool's measured behavior. Full
 run otherwise clean (no other warnings, no errors).
 
 **Still open**: job-level n=1 on `--exclusive` (one allocation, one node);
-the CPU-model confound on the N=32/128 *magnitude* shift specifically; and
-the N=1024→2048 reversal mechanism above is a plausible, code-consistent
+and the N=1024→2048 reversal mechanism above is a plausible, code-consistent
 candidate, not a checked one -- nobody has yet timed the sketch phase and
 pairwise phase separately at N=2048 on both tools to confirm the pairwise
 share is actually large enough to explain an 11-13-percentage-point swing.
+
+## CPU-model confound: resolved by a cheaper test than expected (2026-08-14)
+
+A truly clean same-node test (`sbatch --partition=shared --nodelist=sr15
+--exclusive`, matching job 29758101's exact node) was priced out first: the
+request is accepted (sr15 is idle) but SLURM's own `--test-only` estimate is
+**~3 days out** for any whole-node-exclusive request on `shared`, node
+targeted or not -- not specific to sr15. Node-naming/hardware evidence (`sr*`
+64-core 6448Y-class vs. `parallel`'s `c*` 48-core 6248R-class, confirmed
+6248R on 5 independent `parallel` placements across two jobs: c664, c639,
+c192, c594, c710) suggests `parallel` and `shared`'s dedicated pool are
+non-overlapping hardware generations, so there's no fast path to 6448Y-class
+exclusive access either.
+
+**Cheaper fix that answers the load-bearing question directly**: instead of
+holding node identity constant, hold CPU model constant (stay on
+`parallel`'s 6248R pool, matching job 29763124 exactly) and vary only
+exclusivity -- job 29851516, `sbatch_cli_overhead_contention_check.sh`,
+N=32/128 only, otherwise identical to Arm B's config (`--cpp-metrics-arm
+metrics`, corpus-seed 20260811, 6 runs), `--cpus-per-task=16` on `parallel`
+with no `--exclusive` (a 16-of-48-core slice, contended by construction, on
+node c710):
+
+| N | contended, 6248R (29851516) | exclusive, 6248R (29763124) | shared, 6448Y (orig., 29758101) |
+|---|---|---|---|
+| 32 | 0.743 | 0.722 | 0.864 |
+| 128 | 0.718 | 0.706 | 0.807 |
+
+**Exclusivity's own effect, CPU model held fixed, is ~2-3% relative** (0.743
+-> 0.722 at N=32, 0.718 -> 0.706 at N=128) -- inside the ±2-4% noise floor
+job 29628907 already established for this kind of paired comparison. The
+residual gap to the original job (~13-18% relative) is **6-10x larger** than
+that. This is enough to close the question that actually mattered: **the
+falsification criterion is answered directly, with no CPU-model confound at
+all**, since job 29851516 vs. job 29763124 is a same-CPU-model,
+exclusive-vs-contended comparison on its own -- contention is not the
+explanation for the N≈8-1024 crossover, full stop. Attributing the remaining
+gap to the original job precisely (CPU model vs. some other era difference)
+is not pursued further, since nothing currently written into this seed or
+`CLAUDE.md` depends on that finer number. The 3-day same-node test is
+therefore **not needed** and this item is closed.
 
 ## Next steps
 
@@ -374,10 +414,14 @@ share is actually large enough to explain an 11-13-percentage-point swing.
    time `_sketch_many` vs the pairwise call directly). This is the check the
    mechanism claim is missing -- don't treat item 4's "hammock-cpp is faster
    at N=2048" as mechanistically understood, only as measured.
-6. **Not yet started.** Replicate Arm B (or a smaller N=32/128-only rerun) on
-   a second `--exclusive` allocation to separate the CPU-model confound from
-   exclusivity itself, if the N=32/128 *magnitude* (as opposed to direction)
-   ever becomes load-bearing for a claim.
+6. ~~**Replicate Arm B... to separate the CPU-model confound from
+   exclusivity**~~ — **closed, job 29851516 (2026-08-14), see "CPU-model
+   confound" section above.** A same-CPU-model, exclusive-vs-contended
+   comparison (not a same-node one -- that would need a ~3-day queue and
+   isn't necessary) found exclusivity's own effect is ~2-3%, within noise,
+   6-10x smaller than the gap to the original job. The falsification
+   criterion is answered directly by that comparison alone, with no
+   CPU-model confound in it. Not pursuing the 3-day same-node test further.
 
 ## Reproducing the measurements above
 
