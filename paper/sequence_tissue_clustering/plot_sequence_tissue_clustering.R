@@ -8,8 +8,8 @@
 # the code and inputs needed to reproduce the manuscript figure.
 #
 # Default analysis:
-#   similarity = jaccard_similarity (minimizer-only / no ends)
-#   k = 10, w = 30, p = 24
+#   similarity = jaccard_similarity_ie (inclusion-exclusion Jaccard)
+#   k = 10, w = 30, p = 18
 #   linkage = average
 #   number of displayed clusters = number of annotated tissue labels (10)
 #
@@ -55,14 +55,14 @@ repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 
 K <- 10
 W <- 30
-P <- 24
+P <- 18
 
 experiment_dir <- file.path(repo_root, "experiments", "maurano_dhs_validation")
 default_csv <- file.path(
   experiment_dir, "results", "raw_d",
-  # "_full" tag matches --metrics (python/hammock/outprefix.py now always
-  # tags Python-CLI output _ie/_re/_full; docs/seed-metrics-column-restructure.md).
-  sprintf("hammock_mnmzr_p%d_jaccD_k%d_w%d_full.csv", P, K, W)
+  # This archived extended-sweep output predates the current _full filename
+  # tag but contains the directional containments needed to reconstruct IE.
+  sprintf("hammock_mnmzr_p%d_jaccD_k%d_w%d.csv", P, K, W)
 )
 default_key <- file.path(experiment_dir, "data", "maurano_filenames_key.tsv")
 default_output <- file.path(repo_root, "paper", "figures", "sequence_tissue_clustering.png")
@@ -71,9 +71,8 @@ argv <- commandArgs(trailingOnly = TRUE)
 input_csv <- if (length(argv) >= 1) argv[1] else default_csv
 key_tsv <- if (length(argv) >= 2) argv[2] else default_key
 out_png <- if (length(argv) >= 3) argv[3] else default_output
-# Resolved below, once `raw` is loaded, so the reg_eq_similarity/
-# jaccard_similarity fallback (see resolve_sim_col()) can inspect the actual
-# columns present in the input CSV. An explicit CLI override always wins.
+# Resolved below after `raw` is loaded. An explicit CLI override always wins;
+# otherwise the figure uses inclusion-exclusion Jaccard.
 sim_col_arg <- if (length(argv) >= 4 && nzchar(argv[4])) argv[4] else NA_character_
 
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)

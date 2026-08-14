@@ -13,7 +13,7 @@
 #
 # Default analysis matches Figure 6 exactly:
 #   similarity = jaccard_similarity_ie (inclusion-exclusion Jaccard)
-#   k = 10, w = 30, p = 24; linkage = average. The heatmap is ordered by the
+#   k = 10, w = 30, p = 18; linkage = average. The heatmap is ordered by the
 #   dendrogram leaves and outlines the k=10 cut used for the reported ARI.
 #
 # Usage:
@@ -52,12 +52,12 @@ repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 
 K <- 10
 W <- 30
-P <- 24
+P <- 18
 
 experiment_dir <- file.path(repo_root, "experiments", "maurano_dhs_validation")
 default_csv <- file.path(
   experiment_dir, "results", "raw_d",
-  sprintf("hammock_mnmzr_p%d_jaccD_k%d_w%d_full.csv", P, K, W)
+  sprintf("hammock_mnmzr_p%d_jaccD_k%d_w%d.csv", P, K, W)
 )
 default_key <- file.path(experiment_dir, "data", "maurano_filenames_key.tsv")
 default_output <- file.path(repo_root, "paper", "figures",
