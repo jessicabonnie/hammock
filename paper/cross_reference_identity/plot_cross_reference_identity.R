@@ -46,12 +46,13 @@ out_png <- if (length(argv) >= 1) {
 } else {
   file.path(repo_root, "paper", "figures", "cross_reference_identity.png")
 }
-# argv[2] selects the similarity column explicitly. `jaccard_similarity_ie` is
-# accepted even though this CSV predates that column: it carries
-# containment_AB and containment_BA, from which it is exactly recoverable
-# (see below). When not given, resolved below (after raw is loaded) preferring
-# reg_eq_similarity and falling back to jaccard_similarity for archived
-# pre-Step-1 CSVs -- see docs/seed-jaccard-reg-eq-rename.md Step 2.
+# argv[2] selects the similarity column explicitly. Default (no arg) is now
+# jaccard_similarity_ie, matching every other main-text sequence-mode figure;
+# this CSV predates that column but carries containment_AB and containment_BA,
+# from which it is exactly recoverable (see below). Pass "reg_eq_similarity"
+# explicitly to render the register-equality supplementary companion instead
+# -- see docs/seed-jaccard-reg-eq-rename.md Step 2 for why the column was
+# ever named jaccard_similarity in older CSVs.
 SIM_COL_ARG <- if (length(argv) >= 2 && nzchar(argv[2])) argv[2] else NA_character_
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 
@@ -108,11 +109,11 @@ if (!("jaccard_similarity_ie" %in% names(raw)) &&
 }
 resolve_sim_col <- function(explicit, df) {
   if (!is.na(explicit)) return(explicit)
-  if ("reg_eq_similarity" %in% names(df)) return("reg_eq_similarity")
+  if ("jaccard_similarity_ie" %in% names(df)) return("jaccard_similarity_ie")
   message(
-    "reg_eq_similarity not found in input CSV; falling back to jaccard_similarity"
+    "jaccard_similarity_ie not found in input CSV; falling back to reg_eq_similarity"
   )
-  "jaccard_similarity"
+  "reg_eq_similarity"
 }
 SIM_COL <- resolve_sim_col(SIM_COL_ARG, raw)
 if (!SIM_COL %in% names(raw)) {
