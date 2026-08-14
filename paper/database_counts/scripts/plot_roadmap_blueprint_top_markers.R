@@ -11,6 +11,7 @@
 suppressPackageStartupMessages({
   library(ggplot2)
   library(scales)
+  library(Cairo)
 })
 
 input_path <- "paper/database_counts/results/roadmap_blueprint_top5_markers.tsv"
@@ -122,6 +123,19 @@ blocked_labels <- data.frame(
   stringsAsFactors = FALSE
 )
 
+within_labels <- plot_data[
+  plot_data$comparison_class !=
+    "Blocked Roadmap hg19 x BLUEPRINT hg38 pairs",
+]
+within_labels$marker_x <-
+  match(within_labels$marker, levels(counts$marker)) +
+  ifelse(
+    within_labels$comparison_class ==
+      "Roadmap hg19: within-resource pairs",
+    -third_bar_offset,
+    0
+  )
+
 file_labels <- data.frame(
   marker = counts$marker,
   label = paste0(
@@ -144,18 +158,26 @@ pairwise_plot <- ggplot(
     width = 0.72
   ) +
   geom_text(
+    data = within_labels,
+    aes(x = marker_x, y = pair_count, label = comma(pair_count)),
+    inherit.aes = FALSE,
+    vjust = -0.35,
+    size = 3.5,
+    show.legend = FALSE
+  ) +
+  geom_text(
     data = blocked_labels,
     aes(x = marker_x, y = pair_count, label = label),
     inherit.aes = FALSE,
     vjust = -0.25,
-    size = 3.2,
+    size = 3.5,
     lineheight = 0.95
   ) +
   geom_text(
     data = file_labels,
     aes(x = marker, y = -lower_room * 0.32, label = label),
     inherit.aes = FALSE,
-    size = 3.0,
+    size = 3.3,
     lineheight = 0.95,
     vjust = 1
   ) +
@@ -173,49 +195,33 @@ pairwise_plot <- ggplot(
   ) +
   labs(
     title = "Reference mismatch blocks histone-mark ChIP-seq peak comparisons",
-    subtitle = paste0(
-      "Processed peak BED files from Roadmap (hg19) and BLUEPRINT (hg38); ",
-      "top five shared histone marks ranked by blocked cross-reference pairs"
-    ),
     x = NULL,
     y = "Number of pairwise ChIP-seq peak BED-file comparisons",
-    fill = NULL,
-    caption = paste0(
-      "Subset shown: processed histone-mark ChIP-seq peak BED files, including ",
-      "BED/narrowPeak/broadPeak/gappedPeak-like outputs, deduplicated by download URL. ",
-      "Green and blue bars count within-resource file pairs that share a native reference. ",
-      "Red bars count Roadmap hg19 x BLUEPRINT hg38 pairs that cannot be compared ",
-      "directly by coordinate overlap without remapping or coordinate conversion."
-    )
+    fill = NULL
   ) +
   theme_minimal(base_size = 12) +
   theme(
     panel.grid.major.x = element_blank(),
     panel.grid.minor = element_blank(),
-    axis.text.x = element_text(face = "bold", size = 10),
+    axis.text.x = element_text(face = "bold", size = 12.5),
     axis.title.y = element_text(margin = margin(r = 10)),
     legend.position = "bottom",
-    legend.text = element_text(size = 9),
+    legend.text = element_text(size = 10),
     plot.title = element_text(face = "bold", size = 15, lineheight = 1.05),
-    plot.subtitle = element_text(
-      size = 10.5,
-      lineheight = 1.1,
-      margin = margin(b = 12)
-    ),
-    plot.caption = element_text(hjust = 0, size = 8.6, lineheight = 1.1),
-    plot.margin = margin(16, 18, 24, 18)
+    plot.margin = margin(16, 18, 16, 18)
   )
 
 print(pairwise_plot)
 
-ggsave(
+CairoPNG(
   filename = output_path,
-  plot = pairwise_plot,
   width = 10.8,
   height = 7.2,
   units = "in",
-  dpi = 300,
+  res = 300,
   bg = "white"
 )
+print(pairwise_plot)
+dev.off()
 
 message("Wrote: ", output_path)
