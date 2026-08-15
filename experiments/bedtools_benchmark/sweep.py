@@ -200,6 +200,30 @@ def _is_self_pair(key) -> bool:
     return os.path.basename(q) == os.path.basename(r)
 
 
+def _unique_unordered_pairs(values: dict) -> dict:
+    """Collapse reciprocal same-list comparisons to one value per file pair.
+
+    Jaccard and both hammock estimators are symmetric.  Treating A--B and B--A
+    as separate observations doubles the apparent sample count without adding
+    information.  Fail if reciprocal rows ever disagree rather than silently
+    choosing one direction.
+    """
+    unique = {}
+    for (q, r), value in values.items():
+        q_name = os.path.basename(q)
+        r_name = os.path.basename(r)
+        if q_name == r_name:
+            continue
+        key = tuple(sorted((q_name, r_name)))
+        if key in unique and not np.isclose(unique[key], value, rtol=0, atol=0):
+            raise ValueError(
+                f"Reciprocal values disagree for {key}: "
+                f"{unique[key]!r} versus {value!r}"
+            )
+        unique[key] = value
+    return unique
+
+
 def jaccard_error_stats(est: dict, *, vs_bt: dict, vs_hll: dict, prefix: str = "jaccard",
                         drop_self_pairs: bool = False):
     """Compare hammock estimates against TWO ground truths.
@@ -213,16 +237,17 @@ def jaccard_error_stats(est: dict, *, vs_bt: dict, vs_hll: dict, prefix: str = "
     register-equality p_max reference would report the definitional gap as if
     it were precision error.
 
-    drop_self_pairs excludes file-vs-itself comparisons. With one 20-file list
-    passed twice, 20 of the 400 ordered pairs are self-comparisons where both
-    tools return ~1.0 at zero error -- free correctness that dilutes MAE by
-    ~5% (1.152e-3 -> 1.094e-3 at p=18 on Maurano) without measuring anything.
-    Off by default so the synthetic path, where the two lists are disjoint and
-    no key can match, keeps producing byte-identical numbers to the archive.
+    drop_self_pairs excludes file-vs-itself comparisons and collapses reciprocal
+    same-list rows to one unique unordered pair. With one 20-file list passed
+    twice, this yields C(20,2)=190 observations rather than 380 duplicate
+    directions. Off by default so the synthetic path, where the two lists are
+    disjoint, keeps producing byte-identical numbers to the archive.
     """
     out = {}
     if drop_self_pairs:
-        est = {k: v for k, v in est.items() if not _is_self_pair(k)}
+        est = _unique_unordered_pairs(est)
+        vs_bt = _unique_unordered_pairs(vs_bt)
+        vs_hll = _unique_unordered_pairs(vs_hll) if vs_hll else {}
     common_bt = set(est.keys()) & set(vs_bt.keys())
     common_hll = set(est.keys()) & set(vs_hll.keys()) if vs_hll else set()
     if prefix == "jaccard":

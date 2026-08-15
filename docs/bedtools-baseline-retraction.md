@@ -260,7 +260,7 @@ literal 123 exec/s ceiling (that framing is separately retracted above).
 
 **Supplementary Fig S8 (precision frontier, `paper/figures/precision_frontier.png`).**
 Job 29670793, node c432, `docs/data/sweep_precision_maurano_p18_t16.csv` +
-`..._t8.csv` (Maurano, 380 ordered pairs, subB=1.0; replaces the pre-fix pair
+`..._t8.csv` (Maurano, 190 unique off-diagonal pairs, subB=1.0; the raw output contains both reciprocal directions; replaces the pre-fix pair
 generated 18:00, job 29651773). At the CLI default p=18, t=16: hammock 6.41 s
 vs bedtools 4.40 s reference (**0.69×**, i.e. slower — N=20 is below the N≈64
 crossover, consistent with Panel B); at t=8, 0.81×. hammock does not beat
@@ -286,7 +286,8 @@ reps each), confirming `jaccard_similarity_ie` really is bit-identical
 between the retargeted arm and the old `--metrics` arm, as the fused-pass
 argument predicted rather than merely asserted. (2) The retargeted arm's own
 overhead over the register-equality pass is 0.2–1.25% here (not the ~9-10%
-seen at N=512 on synthetic data) — at N=20/380 pairs the sketch-construction
+seen at N=512 on synthetic data) — at N=20/400 timed ordered pairs (190 unique
+off-diagonal accuracy observations) the sketch-construction
 phase (~9 s) completely dwarfs the pairwise union pass (~0.015 s), so there
 is essentially nothing for a write-cost saving to be a percentage *of*.
 S8's plotted speedup axis reads off the register-equality arm's `wall_time`

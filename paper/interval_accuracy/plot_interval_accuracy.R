@@ -51,7 +51,6 @@ precision_frontier_csv <- file.path(
   data_dir, "sweep_precision_maurano_p18_t16.csv"
 )
 PRECISIONS <- c(18, 21, 23)
-REFERENCE_PRECISION <- 21
 # "_full" tag: this script reads both reg_eq_similarity (register equality)
 # and jaccard_similarity_ie, which only the full metrics block (--metrics)
 # emits together (python/hammock/outprefix.py; the file was renamed to match
@@ -73,9 +72,19 @@ both_png <- if (length(argv) >= 2) {
 } else {
   file.path(repo_root, "paper", "figures", "interval_accuracy_bothmetrics.png")
 }
-caption_txt <- file.path(
-  script_dir, "interval_accuracy_bothmetrics_caption.txt"
-)
+REFERENCE_PRECISION <- if (length(argv) >= 3) as.integer(argv[3]) else 21L
+if (is.na(REFERENCE_PRECISION) || !REFERENCE_PRECISION %in% PRECISIONS) {
+  stop("Reference precision must be one of: ", paste(PRECISIONS, collapse = ", "),
+       call. = FALSE)
+}
+caption_txt <- if (REFERENCE_PRECISION == 21L) {
+  file.path(script_dir, "interval_accuracy_bothmetrics_caption.txt")
+} else {
+  file.path(
+    script_dir,
+    sprintf("interval_accuracy_bothmetrics_caption_p%d.txt", REFERENCE_PRECISION)
+  )
+}
 
 dir.create(dirname(main_png), recursive = TRUE, showWarnings = FALSE)
 dir.create(dirname(both_png), recursive = TRUE, showWarnings = FALSE)
@@ -508,17 +517,8 @@ main_figure <- ggplot(
     expand = expansion(mult = 0.04)
   ) +
   labs(
-    title = paste(
-      "Hammock inclusion–exclusion Jaccard",
-      "reproduces exact interval overlap",
-      sep = "\n"
-    ),
-    subtitle = sprintf(
-      "Maurano fetal DNase hypersensitivity data; HLL precision p = %d",
-      REFERENCE_PRECISION
-    ),
     x = "BEDTools exact base-pair Jaccard",
-    y = "Hammock inclusion–exclusion Jaccard"
+    y = "hammock Jaccard estimate"
   ) +
   theme_paper(base_size = 11.5) +
   theme(legend.position = "none")
@@ -566,9 +566,9 @@ read_precision_frontier <- function(path) {
     )
 
   pair_counts <- unique(frontier$n_pairs)
-  if (length(pair_counts) != 1 || pair_counts != 380) {
+  if (length(pair_counts) != 1 || pair_counts != 190) {
     stop(
-      "Expected 380 ordered off-diagonal pairs in ", basename(path),
+      "Expected 190 unique off-diagonal pairs in ", basename(path),
       "; got ", paste(pair_counts, collapse = ", "), call. = FALSE
     )
   }
@@ -578,7 +578,6 @@ read_precision_frontier <- function(path) {
 frontier <- read_precision_frontier(precision_frontier_csv)
 frontier_labels <- frontier %>% mutate(label = paste0("p=", precision))
 default_precision <- frontier %>% filter(precision == 18)
-frontier_threads <- paste(unique(frontier$threads), collapse = "/")
 
 x_low <- min(frontier$mae_ie) / 1.45
 x_high <- max(frontier$mae_ie) * 1.75
@@ -600,11 +599,6 @@ frontier_figure <- ggplot(frontier, aes(mae_ie, speedup)) +
     data = frontier_labels, aes(label = label), size = 3.2,
     hjust = -0.35, vjust = -0.55, color = COL_TEXT
   ) +
-  annotate(
-    "text", x = default_precision$mae_ie, y = default_precision$speedup,
-    label = "  CLI default", hjust = 0, vjust = 2.6, size = 3.1,
-    color = "#B8420F"
-  ) +
   scale_x_log10(
     breaks = breaks_log(n = 6), labels = label_scientific(digits = 2)
   ) +
@@ -613,11 +607,6 @@ frontier_figure <- ggplot(frontier, aes(mae_ie, speedup)) +
     labels = label_number(accuracy = 0.01, drop0trailing = TRUE)
   ) +
   labs(
-    title = "Precision frontier:\nwhat accuracy costs",
-    subtitle = sprintf(
-      "20 Maurano DHS files; 380 ordered pairs; %s-thread setting; subB=1.0",
-      frontier_threads
-    ),
     x = expression(
       "Mean absolute error of " * italic(J)[IE] * " vs exact BEDTools  (log)"
     ),

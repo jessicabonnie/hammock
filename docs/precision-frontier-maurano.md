@@ -5,7 +5,7 @@ Job 29651773, node c718, one exclusive allocation, 2026-08-09. Data:
 (`sweep.py --axis precision --corpus maurano`, 20 real fetal DHS files passed as
 both operands, 3 replicates, means).
 
-**400 ordered pairs are timed; 380 carry the accuracy.** The 20 self-pairs are
+**400 ordered pairs are timed; 190 unique off-diagonal pairs carry the accuracy.** The 20 self-pairs are
 excluded from MAE — both tools return ~1.0 there at zero error, which is free
 correctness that dilutes MAE ~5% without measuring anything. They are still part
 of the timed workload, which is why the two counts differ.
@@ -28,8 +28,8 @@ of the timed workload, which is why the two counts differ.
 (renamed to `..._full.csv` in the metrics-column restructure,
 `docs/seed-metrics-column-restructure.md` — same file content, tag added).
 But note what that does and does not show: `jaccard_ie` is *exactly* symmetric
-(0 of 190 pairs asymmetric, exact comparison), so MAE over 380 ordered pairs is
-**algebraically guaranteed** to equal MAE over 190 unordered pairs. It confirms
+(0 of 190 pairs asymmetric, exact comparison), so the MAE over 190 unique pairs
+is **algebraically guaranteed** to equal the former MAE over 380 ordered rows. It confirms
 the corpus, the self-pair filter and the column parse — a count-and-identity
 check, not an independent statistical validation. Do not cite it as the latter.
 

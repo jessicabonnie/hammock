@@ -84,17 +84,17 @@ load_one <- function(path) {
     stop("Pair count varies across precisions in ", basename(path),
          " (", paste(np, collapse = ", "), "); the accuracy series is not ",
          "comparable across p.", call. = FALSE)
-  if (np != 380)
-    stop("Expected 380 ordered pairs (400 minus 20 self-pairs), got ", np,
-         " in ", basename(path), ". If this is 400 the self-pair filter did ",
-         "not fire and every MAE here is ~5% low.", call. = FALSE)
+  if (np != 190)
+    stop("Expected 190 unique off-diagonal pairs, got ", np,
+         " in ", basename(path), ". Same-list Jaccard is symmetric: reciprocal ",
+         "directions must be collapsed after removing self-pairs.", call. = FALSE)
   hm
 }
 
 d <- load_one(in_csv)
 threads_used <- unique(d$threads)
 
-cat(sprintf("\n=== precision frontier, %d files, %d ordered pairs, t=%s ===\n",
+cat(sprintf("\n=== precision frontier, %d files, %d unique pairs, t=%s ===\n",
             20L, as.integer(unique(d$n_pairs)), paste(threads_used, collapse = "/")))
 cat(sprintf("bedtools reference: %.2f s\n\n", d$bt_wall[1]))
 d %>% transmute(p = precision, wall = round(wall, 2), speedup = round(speedup, 2),
