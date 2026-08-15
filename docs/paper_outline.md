@@ -60,7 +60,7 @@ In this study, we present \program{hammock}, a command-line tool for scalable co
 
 - Motivation: compare nucleotide content of intervals; full k-mer set is large/redundant.
 - **Minimizer** scheme [@Roberts2004; @Schleimer2003]: smallest-hash k-mer per length-`w` window; subsamples k-mers ~`2/(w+1)` while preserving shared-substring minimizers (local similarity survives).
-- Minimizer hashes feed the HLL of §3.3 → register-equality Jaccard again.
+- Minimizer hashes feed the HLL of §3.3 → the register-equality statistic and inclusion–exclusion Jaccard estimate.
 - Parameters as sweep axes: `k` = token specificity, `w` = density/compression; the (k, w) axes of the Results heatmaps.
 
 ## 4. Results
@@ -123,8 +123,11 @@ Two things to communicate in this section:
    dominated by sketching, which is Θ(N); bedtools re-reads every file for
    every pair, which is Θ(N²). Below N = 32 bedtools wins, reliably (20
    replicates, monotonic); the crossover falls between N=32 and N=64; from
-   there the gap opens monotonically to **9.2× at N=512** (Supplementary
-   Fig S7 projects this same curve out to N=2048).
+   there the gap opens monotonically to **8.4× at N=512** for the
+   inclusion–exclusion output shown in main Figure 3 (the register-equality-only
+   total is 9.2× in Supplementary Fig S9). Supplementary Figure S7 shows
+   measured register-equality-only hammock timings through N=2048 and a
+   BEDTools projection beyond its measured N=512 point.
    **Do not write "faster at every scale tested"** — hammock is slower than
    bedtools below N≈64 on synthetic data, and slower on Maurano without
    subsampling regardless of N (1.16× slower at t=8, see table above) since
@@ -179,7 +182,7 @@ At the ARI-best config, sequence mode's predicted Jaccards sit on the y = x diag
 ![Fig 5a — sequence mode best dendrogram](../experiments/maurano_dhs_validation/figures/mode_d_best_dendrogram.png)
 ![Fig 5b — bedtools reference dendrogram](../experiments/maurano_dhs_validation/figures/bedtools_dendrogram.png)
 
-**Fig 6:** The headline methodological point: **best-Pearson cell ≠ best-ARI cell**. Pearson-best (large-k, large-w) clusters at ARI ≈ 0.69; ARI-best (k=10, w=30) at Pearson ≈ 0.946. Numerical perfection and clustering quality are non-coincident knobs. Holds under both Jaccard columns: reading `_ie` moves the Pearson optimum to k=20, w=20, p=20 and leaves its ARI at 0.693 against the ARI optimum's 0.910.
+**Fig 6:** The headline methodological point: **best-Pearson cell ≠ best-ARI cell**. In the p=24 inclusion–exclusion slice shown in current Figure 7, the Pearson optimum is k=20, w=20 (r=0.99997; ARI=0.693), whereas the ARI optimum is k=10, w=30 (ARI=0.910; r=0.946). Numerical agreement and clustering quality are non-coincident knobs. The exact reference was independently regenerated with BEDTools 2.30.0 over all 400 ordered pairs and matched the checked-in reference byte-for-byte, with 0 of 190 unique pairs asymmetric.
 
 ![Fig 6 — sequence mode Pearson vs ARI tradeoff](figures/mode_d_metric_tradeoff.png)
 
@@ -193,9 +196,10 @@ At the ARI-best config, sequence mode's predicted Jaccards sit on the y = x diag
 
 Ranked by effect size (Δ = median same-tissue cross-reference − median
 different-tissue) on `jaccard_similarity_ie` across all 20 (k, w) cells,
-broad peaks: **k20_w30 leads** (Δ = 0.561), closely followed by k20_w20
-(0.563), k15_w30 (0.508), k15_w20 (0.510), and k15_w15 (0.510). The top five
-sit within 0.06 of each other, so this reads as a **k ≥ 15 plateau** rather
+broad peaks: **k20_w20 has the largest observed Δ** (0.563), closely followed
+by k20_w30 (0.561), k15_w15 (0.510), k15_w20 (0.510), and k15_w30 (0.508).
+The top five sit within 0.06 of each other and the top two within 0.008, so
+this reads as a **k ≥ 15 plateau** rather
 than a single best cell — full separation (min(same-tissue) > max
 (different-tissue)) holds throughout it, and by k = 10 it already holds too
 (broad min(xref) 0.988 > max(diff) 0.935; narrow 0.985 > 0.927).
@@ -255,7 +259,7 @@ Sequence mode now emits exactly one similarity block, on the minimizer HLL.
 
 ### 5.1 hammock implementation
 
-- Python orchestrator + C++ extension (pybind11); HLL with register-equality Jaccard, Ertl 2017 estimator, xxh64 ingestion.
+- Python orchestrator + C++ extension (pybind11); HLL with a register-equality statistic and inclusion–exclusion Jaccard estimate, Ertl 2017 estimator, xxh64 ingestion.
 - Interval mode: per-bp HLL with optional `subB` subsampling. Sequence mode: minimizer-HLL on FASTA (§4.5 covers a since-removed second, flank-based column). (The implementation also carries two interval-coordinate variants — a coordinate-only sketch and an interpolation between it and per-bp interval mode — but neither is evaluated in this paper.)
 - Similarity is reported as **register-equality Jaccard**: the fraction of active registers (nonzero in at least one sketch) whose values are equal, matching the original `hammock`'s estimator. Note this is not exact set-Jaccard — it is a *near*-affine transform of it (§3.3), order-preserving at a fixed cardinality ratio, with an offset that is flat in precision only while the sketch stays saturated (`m ≪ n`) and that varies with `|A|/|B|`. Alongside it, `jaccard_similarity_ie` reports the inclusion–exclusion estimate of set-Jaccard, which carries no chance floor. Both modes sketch the same base-pair (interval) or k-mer (sequence) universe that the exact reference does.
 - Output per-pair similarity columns: `reg_eq_similarity`, `jaccard_similarity_ie`, `containment_AB`, `containment_BA`, `cosketch_{geom,arith,max}` — 7 metrics per pair in both interval and sequence mode. (Sequence mode emitted a second `_with_ends` copy of this block through v0.5.0; removed in v0.6.0, §4.5.) The `jaccard_*` columns are the analyses' default; the cosketch/containment columns are reported for transparency and inform Section 6. Through v0.6.x the standalone C++ benchmark binary omitted six of these seven unless `--metrics` was passed, so it and the Python CLI did not in fact emit the same set; since v0.7.0 both emit all seven by default and `--no-metrics` is the opt-out for timing runs.
@@ -407,7 +411,8 @@ sketching as a viable default for large-scale epigenome comparison.
 Generated by `paper/pairwise_scaling/plot_threading_supplement.R` from
 `docs/data/sweep_threads_p18.csv` (one exclusive node allocation; synthetic
 corpus, 64 files/side, 10k intervals/file, p=18, subB=1.0, 3 replicates,
-means).
+medians). The hammock curve uses the historical register-equality-only output
+mode; this run did not measure inclusion--exclusion output.
 
 **Separate from Figure 3 on purpose.** Figure 3 is about how cost scales with
 the number of files; this is about what each tool does with the cores it is
@@ -517,7 +522,7 @@ vertical line and "slower than BEDTools" is the shaded region below y=1.
 
 | p | 12 | 14 | 16 | **18** | 20 | 22 | 24 |
 |---|---|---|---|---|---|---|---|
-| speedup vs BEDTools (t=16) | 0.77× | 0.77× | 0.74× | **0.69×** | 0.45× | 0.22× | 0.08× |
+| speedup vs BEDTools (t=16) | 0.744× | 0.742× | 0.709× | **0.659×** | 0.435× | 0.210× | 0.0726× |
 | MAE of *J*<sub>IE</sub> | 8.8e-3 | 4.0e-3 | 2.7e-3 | **1.15e-3** | 5.9e-4 | 2.8e-4 | 1.5e-4 |
 
 At no precision in this sweep does hammock beat BEDTools on this corpus.
@@ -526,8 +531,8 @@ At no precision in this sweep does hammock beat BEDTools on this corpus.
   toward on this corpus — speed only gets worse with precision, so the choice
   of p here is purely an accuracy decision.
 - **This panel must be read together with Figure 3A, not against it.** At N=20
-  hammock is slower than BEDTools at every precision tested (0.08×–0.77×);
-  Figure 3A reports 9.2× at N=512. Both are true: Maurano is 20 files, below
+  hammock is slower than BEDTools at every precision tested (0.0726×–0.744×);
+  Figure 3A reports 8.4× at N=512 for inclusion–exclusion output. Both are true: Maurano is 20 files, below
   the N≈64 crossover, so sketching cost has not yet been amortised over enough
   pairs. The x-axis here is *precision at fixed N*; Figure 3A's is *N at fixed
   precision*.
