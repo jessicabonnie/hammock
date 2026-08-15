@@ -194,10 +194,14 @@ def main() -> int:
         # identity of the single best cell.
         hi = [r for r in sub if r["k"] >= 15]
         lo = [r for r in sub if r["k"] <= 10]
-        for tag in ("reg", "ie"):
-            gap = min(r[f"delta_{tag}"] for r in hi) - max(r[f"delta_{tag}"] for r in lo)
-            print(f"  k>=15 vs k<=10 delta gap ({tag}): {gap:+.4f} "
-                  f"({'disjoint' if gap > 0 else 'OVERLAPPING'})")
+        if hi and lo:
+            for tag in ("reg", "ie"):
+                gap = min(r[f"delta_{tag}"] for r in hi) - max(r[f"delta_{tag}"] for r in lo)
+                print(f"  k>=15 vs k<=10 delta gap ({tag}): {gap:+.4f} "
+                      f"({'disjoint' if gap > 0 else 'OVERLAPPING'})")
+        else:
+            print("  k>=15 vs k<=10 delta gap: not reported "
+                  "(input does not contain both groups)")
 
     if args.csv:
         with open(args.csv, "w", newline="") as fh:

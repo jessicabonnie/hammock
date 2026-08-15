@@ -15,19 +15,20 @@ nfcore_outdir: "/vast/blangme2/jbonnie/hammock/claude-ref-comparison/nfcore"
 # we don't re-run alignments / hammock for the existing 3-sample sweep)
 outdir: "/vast/blangme2/jbonnie/hammock/claude-ref-comparison/results"
 
-# Hammock entrypoint (console script in the claude-ref-comparison conda env)
-sketch_bin: "hammock"
+# Pinned hammock 0.9.0 entrypoint in the claude-ref-comparison environment.
+# Its compiled extension is built from this checkout and provides the full
+# Mode D metrics API used by --metrics.
+sketch_bin: "/home/jbonnie1/.conda/envs/claude-ref-comparison/bin/hammock"
 
-# Primary similarity column. The `_with_ends` family was removed in hammock
-# v0.6.0 (CLAUDE.md divergence #8), so jaccard_similarity is the only Mode D
-# register-equality Jaccard. NOTE: workflow/Snakefile hardcodes sim_col rather
-# than reading this key — keep the two in sync.
-primary_sim_col: "jaccard_similarity"
+# Primary similarity column for the validation plots and sweep summaries.
+primary_sim_col: "jaccard_similarity_ie"
 
 # Minimizer parameter sweep — all (k, w) pairs where w >= k will be run.
 # w < k causes silent degenerate sketches so those combos are skipped.
-kmer_sizes:   [5, 8, 10, 15, 20]
-window_sizes: [5, 8, 10, 15, 20, 30]
+# Focused extension beyond the former k=20 boundary. k=20 is retained as an
+# overlap check against the archived sweep; existing FASTAs are reused.
+kmer_sizes:   [20, 25, 30, 35, 40, 50]
+window_sizes: [20, 25, 30, 35, 40, 50, 60, 75]
 precision:    24
 
 # =============================================================================

@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
-# Figure 5 — Sequence sketches group samples by tissue rather than by reference
-# Single-panel dendrogram rendered to PNG using CairoPNG.
+# Figure 5A — sequence sketches group samples by tissue rather than by reference.
+# Title-free dendrogram rendered to PNG using CairoPNG.
 
 required_packages <- c(
   "dplyr", "readr", "stringr", "ggplot2", "scales", "ggdendro", "png", "Cairo"
@@ -37,14 +37,14 @@ script_dir <- dirname(normalizePath(script_path, mustWork = TRUE))
 repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 
 data_dir <- file.path(repo_root, "docs", "data")
-peaks_csv <- file.path(data_dir, "exp_a_broad_k10_w10.csv")
+default_peaks_csv <- file.path(data_dir, "exp_a_broad_k20_w20_full.csv")
 meta_tsv <- file.path(data_dir, "exp_a_metadata.tsv")
 
 argv <- commandArgs(trailingOnly = TRUE)
 out_png <- if (length(argv) >= 1) {
   normalizePath(argv[1], mustWork = FALSE)
 } else {
-  file.path(repo_root, "paper", "figures", "cross_reference_identity.png")
+  file.path(repo_root, "paper", "figures", "cross_reference_identity_panel_a.png")
 }
 # argv[2] selects the similarity column explicitly. Default (no arg) is now
 # jaccard_similarity_ie, matching every other main-text sequence-mode figure;
@@ -54,6 +54,11 @@ out_png <- if (length(argv) >= 1) {
 # -- see docs/seed-jaccard-reg-eq-rename.md Step 2 for why the column was
 # ever named jaccard_similarity in older CSVs.
 SIM_COL_ARG <- if (length(argv) >= 2 && nzchar(argv[2])) argv[2] else NA_character_
+peaks_csv <- if (length(argv) >= 3 && nzchar(argv[3])) {
+  normalizePath(argv[3], mustWork = TRUE)
+} else {
+  default_peaks_csv
+}
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 
 for (path in c(peaks_csv, meta_tsv)) {
@@ -299,10 +304,6 @@ panel <- ggplot() +
     expand = expansion(mult = c(0, 0))
   ) +
   labs(
-    title = "Sequence sketches group samples by tissue across references",
-    # Named only on the non-default column, so the manuscript figure is
-    # unchanged. It goes in the subtitle rather than the title because the
-    # title is already near the panel width and appending to it clips.
     subtitle = if (is.na(SIM_COL_ARG)) NULL else {
       sprintf("similarity = %s", SIM_COL)
     },
@@ -311,9 +312,6 @@ panel <- ggplot() +
   ) +
   theme_classic(base_size = 11, base_family = base_family) +
   theme(
-    plot.title = element_text(
-      size = 12, face = "bold", color = COL_TEXT, margin = margin(b = 8)
-    ),
     axis.title = element_text(color = COL_TEXT),
     # Centre the x title under the tree, not under the label gutter.
     axis.title.x = element_text(

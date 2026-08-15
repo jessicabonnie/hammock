@@ -108,8 +108,15 @@ snakemake --profile workflow/slurm_profile/      # submit to SLURM
 | Lung  | ENCSR954JMZ | GRCh37, GRCh38, CHM13 |
 
 3 samples × 3 references = 9 sample × ref combinations. Two peak types
-(MACS3 broad + narrow). Parameter sweep over `k ∈ {5, 8, 10, 15, 20}`
-× `w ∈ {5, 8, 10, 15, 20, 30}` filtered to `w ≥ k` (20 cells).
+(MACS3 broad + narrow). The archived sweep used `k ∈ {5, 8, 10, 15, 20}`
+× `w ∈ {5, 8, 10, 15, 20, 30}` filtered to `w ≥ k` (20 cells). The current
+focused extension uses `k ∈ {20, 25, 30, 35, 40, 50}` ×
+`w ∈ {20, 25, 30, 35, 40, 50, 60, 75}` with the same filter (33 cells),
+retaining k=20 as an overlap check because the prior maximum occurred at the
+boundary of the archived grid. Targeted follow-up runs added `w ∈ {25, 50,
+75}` at `k ∈ {5, 8, 10, 15}` to make the low-k and k=15 trajectories directly
+comparable. The merged table contains 63 unique cells per peak type and is
+staged at `docs/data/exp_a_estimator_delta_expanded.csv`.
 
 ---
 
@@ -118,7 +125,7 @@ snakemake --profile workflow/slurm_profile/      # submit to SLURM
 | Step | CPUs | RAM | Est. walltime |
 |---|---|---|---|
 | nf-core download + alignment (per sample × ref) | 16 | 32 GB | ~4 h |
-| hammock per (k, w) | 8 | 16 GB | 10 min – 12 h |
+| hammock per (k, w) | 1 | 16 GB | re-baseline on the extended grid |
 | R plotting (per cell, sweep summary) | 1 | 8 GB | <2 min |
 
 > **Mode D timing note, 2026-08-06.** The hammock row was measured at

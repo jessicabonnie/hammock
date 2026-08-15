@@ -23,6 +23,7 @@ SAMPLES    = config["samples"]
 OUTDIR     = config["outdir"]
 HAMMOCK    = config["sketch_bin"]
 PRECISION  = config["precision"]
+SIM_COL    = config["primary_sim_col"]
 KMER_SIZES = config["kmer_sizes"]
 WIND_SIZES = config["window_sizes"]
 NFCORE_OUT = config["nfcore_outdir"]
@@ -146,7 +147,9 @@ rule exp_a_hammock:
         outprefix = lambda wc: f"{OUTDIR}/exp_a/{wc.peak_type}/k{wc.k}_w{wc.w}/exp_a",
     log:
         "{outdir}/logs/exp_a/{peak_type}/hammock_k{k}_w{w}.log"
-    threads: 8
+    # Mode D is single-threaded: using a Python thread pool caused a measured
+    # slowdown, so request and pass exactly one thread.
+    threads: 1
     resources:
         mem_mb  = 16000,
         runtime = 720,
@@ -160,6 +163,7 @@ rule exp_a_hammock:
             -k {wildcards.k} \
             -w {wildcards.w} \
             --precision {PRECISION} \
+            --threads {threads} \
             --full-paths \
             --metrics \
             2>{log}
@@ -174,10 +178,7 @@ rule exp_a_validate_and_plot:
         plot  = "{outdir}/exp_a/{peak_type}/k{k}_w{w}/cross_ref_validation.png",
         stats = "{outdir}/exp_a/{peak_type}/k{k}_w{w}/cross_ref_stats.tsv",
     params:
-        # Was jaccard_similarity_with_ends; that column family was removed in
-        # hammock v0.6.0 (CLAUDE.md divergence #8). Prior Exp A results were
-        # computed on the old column and have NOT been regenerated.
-        sim_col = "jaccard_similarity",
+        sim_col = SIM_COL,
     log:
         "{outdir}/logs/exp_a/{peak_type}/validate_plot_k{k}_w{w}.log"
     envmodules:
@@ -204,4 +205,3 @@ rule exp_a_sweep_summary:
         "libjpeg/9c"
     script:
         "../scripts/exp_a_sweep_summary.R"
-
