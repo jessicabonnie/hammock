@@ -79,19 +79,19 @@ W_LEVELS <- sort(unique(d$w))
 
 p <- ggplot(d, aes(x = factor(w, levels = W_LEVELS))) +
   geom_segment(
+    data = d %>% filter(!optimum),
     aes(y = different_tissue, yend = same_tissue, xend = factor(w)),
     color = "#AEB7BF", linewidth = 0.35, alpha = 0.78
+  ) +
+  geom_segment(
+    data = d %>% filter(optimum),
+    aes(y = different_tissue, yend = same_tissue, xend = factor(w)),
+    color = "#D81B60", linewidth = 1.0, alpha = 1
   ) +
   geom_point(
     data = points,
     aes(y = median_similarity, color = comparison),
     size = 3.0, alpha = 1
-  ) +
-  geom_point(
-    data = points %>% filter(optimum, comparison == "Different tissues"),
-    aes(y = median_similarity),
-    shape = 21, fill = "#65727E", color = "#D81B60", size = 3.8,
-    stroke = 1.2
   ) +
   facet_grid(. ~ k, scales = "free_x", space = "free_x", labeller = label_both) +
   scale_color_manual(
