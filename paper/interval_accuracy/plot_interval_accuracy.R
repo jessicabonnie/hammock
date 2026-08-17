@@ -498,15 +498,6 @@ main_figure <- ggplot(
     method = "loess", formula = y ~ x, span = 0.95,
     se = FALSE, linewidth = 0.9, color = COL_IE
   ) +
-  annotate(
-    "label",
-    x = main_limits[1] + 0.025 * diff(main_limits),
-    y = main_limits[2] - 0.025 * diff(main_limits),
-    label = format_stats(main_stats),
-    hjust = 0, vjust = 1,
-    size = 3.05, lineheight = 1.08,
-    linewidth = 0, fill = alpha("white", 0.90), color = COL_TEXT
-  ) +
   coord_equal(xlim = main_limits, ylim = main_limits) +
   scale_x_continuous(
     labels = label_number(accuracy = 0.02),
@@ -597,7 +588,7 @@ frontier_figure <- ggplot(frontier, aes(mae_ie, relative_wall)) +
   geom_point(color = COL_IE, size = 2.2) +
   geom_point(
     data = default_precision, shape = 21, size = 5, stroke = 0.9,
-    color = "#B8420F", fill = NA
+    color = "#D81B60", fill = NA
   ) +
   geom_text(
     data = frontier_labels, aes(label = label), size = 3.2,
@@ -605,7 +596,7 @@ frontier_figure <- ggplot(frontier, aes(mae_ie, relative_wall)) +
   ) +
   scale_x_log10(
     breaks = c(1e-4, 1e-3, 1e-2),
-    labels = c("0.0001", "0.001", "0.01")
+    labels = trans_format("log10", math_format(10^.x))
   ) +
   scale_y_continuous(
     trans = "log2", breaks = c(1, 2, 4, 8, 16),
@@ -614,9 +605,9 @@ frontier_figure <- ggplot(frontier, aes(mae_ie, relative_wall)) +
   labs(
     x = expression(
       "Mean absolute error of " * italic(J)[IE] *
-        " vs exact BEDTools  (log10)"
+        " vs exact BEDTools"
     ),
-    y = "Relative wall time: hammock / BEDTools  (log2)"
+    y = "Relative wall time: hammock / BEDTools"
   ) +
   coord_cartesian(
     xlim = c(x_low, x_high), ylim = c(y_low, y_high), expand = FALSE
