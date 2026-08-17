@@ -72,7 +72,7 @@ both_png <- if (length(argv) >= 2) {
 } else {
   file.path(repo_root, "paper", "figures", "interval_accuracy_bothmetrics.png")
 }
-REFERENCE_PRECISION <- if (length(argv) >= 3) as.integer(argv[3]) else 21L
+REFERENCE_PRECISION <- if (length(argv) >= 3) as.integer(argv[3]) else 18L
 if (is.na(REFERENCE_PRECISION) || !REFERENCE_PRECISION %in% PRECISIONS) {
   stop("Reference precision must be one of: ", paste(PRECISIONS, collapse = ", "),
        call. = FALSE)
@@ -560,9 +560,9 @@ read_precision_frontier <- function(path) {
       .groups = "drop"
     ) %>%
     mutate(
-      speedup = bedtools_wall / wall,
-      speedup_low = bedtools_wall / wall_max,
-      speedup_high = bedtools_wall / wall_min
+      relative_wall = wall / bedtools_wall,
+      relative_wall_low = wall_min / bedtools_wall,
+      relative_wall_high = wall_max / bedtools_wall
     )
 
   pair_counts <- unique(frontier$n_pairs)
@@ -579,14 +579,18 @@ frontier <- read_precision_frontier(precision_frontier_csv)
 frontier_labels <- frontier %>% mutate(label = paste0("p=", precision))
 default_precision <- frontier %>% filter(precision == 18)
 
-x_low <- min(frontier$mae_ie) / 1.45
+x_low <- 0.9e-4
 x_high <- max(frontier$mae_ie) * 1.75
-y_low <- min(frontier$speedup) / 1.30
-y_high <- max(frontier$speedup) * 1.12
+y_low <- min(0.9, min(frontier$relative_wall) / 1.12)
+y_high <- max(16.5, max(frontier$relative_wall) * 1.12)
 
-frontier_figure <- ggplot(frontier, aes(mae_ie, speedup)) +
+frontier_figure <- ggplot(frontier, aes(mae_ie, relative_wall)) +
+  geom_hline(
+    yintercept = 1, color = "#69747D", linewidth = 0.45,
+    linetype = "dashed"
+  ) +
   geom_linerange(
-    aes(ymin = speedup_low, ymax = speedup_high),
+    aes(ymin = relative_wall_low, ymax = relative_wall_high),
     color = COL_IE, linewidth = 0.5, alpha = 0.8
   ) +
   geom_path(color = COL_IE, linewidth = 0.6, alpha = 0.8) +
@@ -600,17 +604,19 @@ frontier_figure <- ggplot(frontier, aes(mae_ie, speedup)) +
     hjust = -0.35, vjust = -0.55, color = COL_TEXT
   ) +
   scale_x_log10(
-    breaks = breaks_log(n = 6), labels = label_scientific(digits = 2)
+    breaks = c(1e-4, 1e-3, 1e-2),
+    labels = c("0.0001", "0.001", "0.01")
   ) +
-  scale_y_log10(
-    breaks = breaks_log(n = 6),
-    labels = label_number(accuracy = 0.01, drop0trailing = TRUE)
+  scale_y_continuous(
+    trans = "log2", breaks = c(1, 2, 4, 8, 16),
+    labels = label_number(accuracy = 1)
   ) +
   labs(
     x = expression(
-      "Mean absolute error of " * italic(J)[IE] * " vs exact BEDTools  (log)"
+      "Mean absolute error of " * italic(J)[IE] *
+        " vs exact BEDTools  (log10)"
     ),
-    y = "Speedup vs BEDTools  (log)"
+    y = "Relative wall time: hammock / BEDTools  (log2)"
   ) +
   coord_cartesian(
     xlim = c(x_low, x_high), ylim = c(y_low, y_high), expand = FALSE
