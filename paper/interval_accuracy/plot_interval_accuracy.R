@@ -596,7 +596,7 @@ frontier_figure <- ggplot(frontier, aes(mae_ie, relative_wall)) +
   ) +
   scale_x_log10(
     breaks = c(1e-4, 1e-3, 1e-2),
-    labels = trans_format("log10", math_format(10^.x))
+    labels = c("1e-4", "1e-3", "1e-2")
   ) +
   scale_y_continuous(
     trans = "log2", breaks = c(1, 2, 4, 8, 16),
