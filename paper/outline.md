@@ -106,6 +106,8 @@ At the maximum-ARI setting, the same ten-cluster partition was recovered at p=12
 
 **Figure 8 generation.** Panels A–C are generated with `paper/sequence_tissue_clustering/plot_sequence_tissue_clustering.R` from the p=12, p=18, and p=24 k=10, w=30 Mode D outputs using `jaccard_similarity_ie` and an axis break at 1−J=0.05. `paper/sequence_tissue_clustering/combine_precision_dendrograms.R` trims repeated outer margins and stacks the three panels as rows in `paper/figures/sequence_tissue_clustering_precision.png`.
 
+Because arm, back, and leg samples all represent muscle tissue, we also evaluated an eight-class labeling in which these annotations were merged into a single muscle class. At p=18, the maximum eight-class agreement was ARI=0.905 and NMI=0.952, attained by 19 of 37 parameter configurations. This broad optimum indicates that recovery of the merged tissue classes was not dependent on a narrowly selected parameter setting. The original ten-class biological optimum, k=10 and w=30, achieved ARI=0.862 and NMI=0.946 under the alternative labeling. The highest-scoring eight-class partitions unified the muscle samples but still separated the two brain samples and grouped kidney with lung, showing that inferred biological organization remains partly sensitive to the tissue ontology and cluster cut.
+
 ### Supplementary Figure S1 — interval accuracy at higher precision
 
 ![Figure S1](figures/interval_accuracy_p21.png)
@@ -139,6 +141,8 @@ Discuss both layers of the computational contribution: reusable sketches reduce 
 ### 3.5 Limitations and future work
 
 The present analysis selected sequence-mode parameters retrospectively by either agreement with exact coordinate Jaccard or recovery of known tissue labels. A practical extension will be to develop automatic parameter-selection procedures that optimize a user-specified objective, quantify uncertainty, and avoid requiring labeled biological groups when such annotations are unavailable.
+
+More generally, validation against a single flat set of tissue labels cannot fully represent hierarchical biological relationships. Future evaluations should compare inferred dendrograms with independently specified tissue ontologies and test sensitivity across plausible cluster cuts.
 
 Every wall-time result reported here, including Figure 3 and its supplements, times the standalone \texttt{hammock-cpp} binary rather than the \program{hammock} Python command-line interface most users invoke directly (the installed wheel provides \texttt{hammock-cpp} but does not place it on \texttt{PATH}). We measured the gap between the two front-ends directly, at the same precision and thread count used throughout this study (p=18, 16 threads, synthetic catalogs of N=2 to N=2048 files per side, \texttt{--exclusive} SLURM allocation). The gap is not a fixed overhead: the two front-ends differ in how they dispatch per-file sketch construction — \texttt{hammock-cpp} sketches files serially, one dedicated thread team at a time, while the Python CLI dispatches multiple files concurrently through a thread pool. This makes the CLI faster than \texttt{hammock-cpp} across a middle range of catalog sizes (N≈8–1024 files per side, peaking near 28\% faster at N=32–128), converging back toward parity by N=1024 and reversing by N=2048, where \texttt{hammock-cpp} is roughly 13\% faster — the catalog size closest to the scaling regime Figure 3 addresses. Because \texttt{hammock-cpp} is the faster of the two tools specifically in the N≥1024 regime this study's scaling claims target, the wall times reported here are not shown to understate what the CLI most users run would achieve at that scale. At smaller-to-moderate catalog sizes, users invoking the CLI directly may see somewhat faster wall times than the \texttt{hammock-cpp} results presented here would suggest. A candidate explanation for the reversal — that the pairwise-comparison phase, identical compiled code in both front-ends and quadratic in N, comes to dominate wall time at large N and dilutes a dispatch advantage confined to the sketching phase — is consistent with the data but has not been confirmed by timing the two phases separately. Combining both front-ends' advantages, by parallelizing \texttt{hammock-cpp}'s per-file sketch dispatch to match the CLI's, is a natural direction for future work.
 
@@ -227,6 +231,10 @@ Include the direct comparison of no subsampling and mixed-stride `subB = 0.1` an
 ### 4.7 Interval-mode accuracy evaluation
 
 ### 4.8 Sequence-mode biological evaluation
+
+\begin{comment}
+To test sensitivity to the tissue ontology and cluster cut, the arm-, back-, and leg-muscle annotations were collapsed into a single muscle class. For each of the 37 sequence-mode parameter configurations evaluated at p=18, average-linkage agglomerative hierarchical clustering was performed on one minus the inclusion--exclusion Jaccard estimate, and the resulting hierarchy was cut into eight clusters. Adjusted Rand index and normalized mutual information were then calculated against the eight merged tissue labels. The analysis was implemented in `paper/sequence_tissue_clustering/score_muscle_merged_sensitivity.py`, with per-configuration scores recorded in `paper/sequence_tissue_clustering/muscle_merged_p18_sensitivity.csv`.
+\end{comment}
 
 ## Data and code availability
 
