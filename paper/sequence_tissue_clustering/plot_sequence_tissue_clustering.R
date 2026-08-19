@@ -17,7 +17,7 @@
 #   Rscript paper/sequence_tissue_clustering/plot_sequence_tissue_clustering.R
 #
 # Optional overrides:
-#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column]
+#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label]
 #
 # `jaccard_similarity_ie` is accepted as the similarity column even though the
 # archived sweep predates it: the CSVs carry containment_AB/containment_BA, from
@@ -74,6 +74,7 @@ out_png <- if (length(argv) >= 3) argv[3] else default_output
 # Resolved below after `raw` is loaded. An explicit CLI override always wins;
 # otherwise the figure uses inclusion-exclusion Jaccard.
 sim_col_arg <- if (length(argv) >= 4 && nzchar(argv[4])) argv[4] else NA_character_
+panel_label <- if (length(argv) >= 5 && nzchar(argv[5])) argv[5] else "A"
 
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 for (path in c(input_csv, key_tsv)) {
@@ -380,7 +381,7 @@ plot(
   ylab = "1 − Jaccard",
   cex = 0.85
 )
-mtext("A", side = 3, adj = 0, line = 0.15, cex = 16 / 12, font = 2)
+mtext(panel_label, side = 3, adj = 0, line = 0.15, cex = 16 / 12, font = 2)
 
 LABEL_CEX <- 0.8
 GROUP_CEX <- 0.7
@@ -435,6 +436,29 @@ group_tissues <- vapply(group_runs, function(run) ordered_groups[run[1]], charac
 group_labels <- display_group(group_tissues)
 group_centers <- vapply(group_runs, function(run) mean(range(run)), numeric(1))
 
+# Apply the organ bracket only within contiguous runs of muscle subtypes. A
+# separated subtype (as for Arm at p=12) receives a complete two-line label
+# instead of being connected by a bracket across unrelated tissues.
+muscle_groups <- which(group_tissues %in% names(BRACKET_GROUP))
+group_brackets <- rep(NA_character_, length(group_tissues))
+if (length(muscle_groups) > 0) {
+  muscle_runs <- split(
+    muscle_groups,
+    cumsum(c(1, diff(muscle_groups) != 1))
+  )
+  for (members in muscle_runs) {
+    if (length(members) >= 2) {
+      group_brackets[members] <- "Muscle"
+    } else {
+      subtype <- sub("^fMuscle_", "", group_tissues[members])
+      group_labels[members] <- paste0(
+        toupper(substr(subtype, 1, 1)), substr(subtype, 2, nchar(subtype)),
+        "\nmuscle"
+      )
+    }
+  }
+}
+
 user_x <- function(inches) inches * diff(usr[1:2]) / par("pin")[1]
 line_h <- par("cin")[2] * GROUP_CEX * 1.15  # inches per line of a name
 name_parts <- strsplit(group_labels, "\n", fixed = TRUE)
@@ -483,7 +507,6 @@ for (i in seq_along(group_labels)) {
 
 # Organ bracket. Ends tick up towards the names it spans; the organ word sits in
 # a gap left in the middle of the horizontal line.
-group_brackets <- unname(BRACKET_GROUP[group_tissues])
 for (organ in unique(group_brackets[!is.na(group_brackets)])) {
   members <- which(group_brackets %in% organ)
   leaves <- unlist(group_runs[members])
