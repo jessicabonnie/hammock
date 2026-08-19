@@ -41,9 +41,24 @@ if (length(unique(panel_dims)) != 1) {
 }
 
 dir.create(dirname(output), recursive = TRUE, showWarnings = FALSE)
-Cairo::CairoPNG(output, width = 3300, height = 5400, bg = "white")
+# Trim only outer white rows. Retaining a small fixed pad keeps panel letters
+# clear while removing the repeated device margins between stacked rows.
+trim_vertical <- function(img, pad = 18L) {
+  rgb <- img[, , seq_len(min(3, dim(img)[3])), drop = FALSE]
+  nonwhite <- apply(rgb < 0.995, 1, any)
+  occupied <- which(nonwhite)
+  lo <- max(1L, min(occupied) - pad)
+  hi <- min(dim(img)[1], max(occupied) + pad)
+  img[lo:hi, , , drop = FALSE]
+}
+panels <- lapply(panels, trim_vertical)
+row_heights <- vapply(panels, function(x) dim(x)[1], integer(1))
+
+Cairo::CairoPNG(output, width = 3300, height = sum(row_heights), bg = "white")
 grid::grid.newpage()
-grid::pushViewport(grid::viewport(layout = grid::grid.layout(3, 1)))
+grid::pushViewport(grid::viewport(
+  layout = grid::grid.layout(3, 1, heights = grid::unit(row_heights, "null"))
+))
 for (i in seq_along(panels)) {
   grid::grid.raster(
     panels[[i]], interpolate = FALSE,

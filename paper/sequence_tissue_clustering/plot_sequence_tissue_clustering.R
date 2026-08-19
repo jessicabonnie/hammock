@@ -17,7 +17,7 @@
 #   Rscript paper/sequence_tissue_clustering/plot_sequence_tissue_clustering.R
 #
 # Optional overrides:
-#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label]
+#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [axis_break] [height_inches]
 #
 # `jaccard_similarity_ie` is accepted as the similarity column even though the
 # archived sweep predates it: the CSVs carry containment_AB/containment_BA, from
@@ -75,6 +75,14 @@ out_png <- if (length(argv) >= 3) argv[3] else default_output
 # otherwise the figure uses inclusion-exclusion Jaccard.
 sim_col_arg <- if (length(argv) >= 4 && nzchar(argv[4])) argv[4] else NA_character_
 panel_label <- if (length(argv) >= 5 && nzchar(argv[5])) argv[5] else "A"
+axis_break <- if (length(argv) >= 6 && nzchar(argv[6])) as.numeric(argv[6]) else NA_real_
+device_height <- if (length(argv) >= 7 && nzchar(argv[7])) as.numeric(argv[7]) else 6
+if (!is.na(axis_break) && (axis_break <= 0 || axis_break >= 1)) {
+  stop("axis_break must be between 0 and 1.", call. = FALSE)
+}
+if (is.na(device_height) || device_height <= 0) {
+  stop("height_inches must be positive.", call. = FALSE)
+}
 
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 for (path in c(input_csv, key_tsv)) {
@@ -360,10 +368,23 @@ for (run in group_runs) {
 
 hc$labels <- short_label(hc$labels)
 
+# For the multi-precision supplement, compress the uninformative basal portion
+# of every leaf stem while preserving the original distance scale above the
+# stated break. The transformed axis is drawn explicitly below.
+original_heights <- hc$height
+break_display <- if (!is.na(axis_break)) 0.008 else NA_real_
+if (!is.na(axis_break)) {
+  hc$height <- ifelse(
+    original_heights <= axis_break,
+    original_heights / axis_break * break_display,
+    original_heights - axis_break + break_display
+  )
+}
+
 CairoPNG(
   filename = out_png,
   width = 11,
-  height = 6,
+  height = device_height,
   units = "in",
   res = 300,
   bg = "white"
@@ -378,9 +399,32 @@ plot(
   main = "",
   xlab = "",
   sub = "",
-  ylab = "1 − Jaccard",
+  ylab = "",
+  axes = FALSE,
   cex = 0.85
 )
+if (is.na(axis_break)) {
+  axis(2)
+} else {
+  original_ticks <- pretty(c(axis_break, max(original_heights)))
+  original_ticks <- original_ticks[
+    original_ticks >= axis_break & original_ticks <= max(original_heights)
+  ]
+  transformed_ticks <- original_ticks - axis_break + break_display
+  axis(2, at = transformed_ticks, labels = format(original_ticks, trim = TRUE))
+  usr_break <- par("usr")
+  break_x <- usr_break[1]
+  break_dx <- diff(usr_break[1:2]) * 0.006
+  break_dy <- diff(usr_break[3:4]) * 0.012
+  segments(
+    x0 = c(break_x - break_dx, break_x - break_dx),
+    y0 = c(break_display * 0.28, break_display * 0.62),
+    x1 = c(break_x + break_dx, break_x + break_dx),
+    y1 = c(break_display * 0.28 + break_dy, break_display * 0.62 + break_dy),
+    xpd = NA
+  )
+}
+mtext("1 − Jaccard", side = 2, line = 2.6)
 mtext(panel_label, side = 3, adj = 0, line = 0.15, cex = 16 / 12, font = 2)
 
 LABEL_CEX <- 0.8
@@ -436,9 +480,9 @@ group_tissues <- vapply(group_runs, function(run) ordered_groups[run[1]], charac
 group_labels <- display_group(group_tissues)
 group_centers <- vapply(group_runs, function(run) mean(range(run)), numeric(1))
 
-# Apply the organ bracket only within contiguous runs of muscle subtypes. A
-# separated subtype (as for Arm at p=12) receives a complete two-line label
-# instead of being connected by a bracket across unrelated tissues.
+# Apply a separate organ bracket to each contiguous run of muscle subtypes.
+# Thus, a displaced subtype (as for Arm at p=12) receives its own short Muscle
+# bracket instead of being connected across unrelated tissues to Back and Leg.
 muscle_groups <- which(group_tissues %in% names(BRACKET_GROUP))
 group_brackets <- rep(NA_character_, length(group_tissues))
 if (length(muscle_groups) > 0) {
@@ -446,16 +490,9 @@ if (length(muscle_groups) > 0) {
     muscle_groups,
     cumsum(c(1, diff(muscle_groups) != 1))
   )
-  for (members in muscle_runs) {
-    if (length(members) >= 2) {
-      group_brackets[members] <- "Muscle"
-    } else {
-      subtype <- sub("^fMuscle_", "", group_tissues[members])
-      group_labels[members] <- paste0(
-        toupper(substr(subtype, 1, 1)), substr(subtype, 2, nchar(subtype)),
-        "\nmuscle"
-      )
-    }
+  for (i in seq_along(muscle_runs)) {
+    members <- muscle_runs[[i]]
+    group_brackets[members] <- paste0("Muscle_", i)
   }
 }
 
@@ -509,6 +546,7 @@ for (i in seq_along(group_labels)) {
 # a gap left in the middle of the horizontal line.
 for (organ in unique(group_brackets[!is.na(group_brackets)])) {
   members <- which(group_brackets %in% organ)
+  organ_label <- sub("_[0-9]+$", "", organ)
   leaves <- unlist(group_runs[members])
   # Clear the deepest name in the span: the lower-left corner of its last line.
   depth <- max(vapply(members, function(i) {
@@ -519,7 +557,7 @@ for (organ in unique(group_brackets[!is.na(group_brackets)])) {
   x_left <- min(leaves) - 0.45
   x_right <- max(leaves) + 0.45
   x_mid <- (x_left + x_right) / 2
-  gap_half <- user_x(strwidth(organ, units = "inches", cex = GROUP_CEX) / 2 + 0.05)
+  gap_half <- user_x(strwidth(organ_label, units = "inches", cex = GROUP_CEX) / 2 + 0.05)
   segments(
     x0 = c(x_left, x_right, x_left, x_mid + gap_half),
     y0 = c(y_line, y_line, y_line, y_line),
@@ -527,7 +565,7 @@ for (organ in unique(group_brackets[!is.na(group_brackets)])) {
     y1 = c(y_line + tick, y_line + tick, y_line, y_line),
     xpd = NA
   )
-  text(x_mid, y_line, organ, adj = c(0.5, 0.5), cex = GROUP_CEX, xpd = NA)
+  text(x_mid, y_line, organ_label, adj = c(0.5, 0.5), cex = GROUP_CEX, xpd = NA)
 }
 
 message(sprintf("ARI = %.3f; NMI = %.3f", ari, nmi))
