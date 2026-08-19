@@ -3,7 +3,7 @@
 # Figure 7 — sequence-mode parameter objective trade-off
 #
 # Show the numerical-agreement and biological-recovery objectives for the
-# inclusion–exclusion Jaccard estimate at a selected precision (default p=24).
+# inclusion–exclusion Jaccard estimate at a selected precision (default p=18).
 #
 # Each point is one (k, w) configuration:
 #   x = Pearson r with exact BEDTools Jaccard
@@ -51,7 +51,7 @@ out_png <- if (length(argv) >= 1) {
 }
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 
-PRECISION <- if (length(argv) >= 2) as.integer(argv[2]) else 24L
+PRECISION <- if (length(argv) >= 2) as.integer(argv[2]) else 18L
 if (is.na(PRECISION)) stop("Precision must be an integer.", call. = FALSE)
 REFERENCE <- "bedtools"
 FIG6_K <- 10
@@ -131,15 +131,6 @@ message(sprintf(
 p <- ggplot(sweep, aes(x = pearson, y = ari)) +
   geom_hline(yintercept = 0, linewidth = 0.55, color = "#707981") +
   geom_point(aes(color = k_label, size = w), alpha = 0.76, stroke = 0.25) +
-  # The two highlighted configurations are the only non-dominated points in
-  # this objective space; connect them to show the empirical Pareto trade-off.
-  annotate(
-    "segment",
-    x = fig6_points$pearson, y = fig6_points$ari,
-    xend = best_numeric$pearson, yend = best_numeric$ari,
-    linewidth = 0.8, linetype = "dashed", color = "#6B747D",
-    alpha = 0.72
-  ) +
   # Numerical optimum: saturated-orange outline on the underlying point.
   geom_point(
     data = best_numeric,
