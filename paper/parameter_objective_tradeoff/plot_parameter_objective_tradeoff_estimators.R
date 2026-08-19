@@ -3,7 +3,7 @@
 # Figure 7 — sequence-mode parameter objective trade-off
 #
 # Show the numerical-agreement and biological-recovery objectives for the
-# inclusion–exclusion Jaccard estimate at p=24.
+# inclusion–exclusion Jaccard estimate at a selected precision (default p=24).
 #
 # Each point is one (k, w) configuration:
 #   x = Pearson r with exact BEDTools Jaccard
@@ -12,7 +12,7 @@
 #   size = minimizer window w
 #
 # Usage:
-#   Rscript paper/parameter_objective_tradeoff/plot_parameter_objective_tradeoff_estimators.R [output.png]
+#   Rscript paper/parameter_objective_tradeoff/plot_parameter_objective_tradeoff_estimators.R [output.png] [precision]
 
 required_packages <- c("dplyr", "readr", "ggplot2", "scales", "Cairo")
 missing_packages <- required_packages[
@@ -51,15 +51,16 @@ out_png <- if (length(argv) >= 1) {
 }
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 
-PRECISION <- 24
+PRECISION <- if (length(argv) >= 2) as.integer(argv[2]) else 24L
+if (is.na(PRECISION)) stop("Precision must be an integer.", call. = FALSE)
 REFERENCE <- "bedtools"
 FIG6_K <- 10
 FIG6_W <- 30
 
 COL_TEXT <- "#20262D"
 COL_GRID <- "#D9DEE3"
-COL_NUMERIC <- "#168A45"
-COL_BIO <- "#E3B505"
+COL_NUMERIC <- "#E69F00"
+COL_BIO <- "#D81B60"
 K_COLORS <- c("#B3DDF2", "#6DB7E3", "#2F8FD3", "#1764A0", "#08345E")
 base_family <- "sans"
 
@@ -139,22 +140,20 @@ p <- ggplot(sweep, aes(x = pearson, y = ari)) +
     linewidth = 0.8, linetype = "dashed", color = "#6B747D",
     alpha = 0.72
   ) +
-  # Numerical optimum: a separate green ring around the underlying point.
+  # Numerical optimum: saturated-orange outline on the underlying point.
   geom_point(
     data = best_numeric,
-    aes(x = pearson, y = ari),
+    aes(x = pearson, y = ari, size = w),
     inherit.aes = FALSE,
-    shape = 1, size = 7.2, stroke = 1.35,
-    color = COL_NUMERIC,
+    shape = 21, fill = NA, stroke = 1.35, color = COL_NUMERIC,
     show.legend = FALSE
   ) +
-  # Manuscript biological optimum: yellow circular outline.
+  # Manuscript biological optimum: magenta outline on the underlying point.
   geom_point(
     data = fig6_points,
-    aes(x = pearson, y = ari),
+    aes(x = pearson, y = ari, size = w),
     inherit.aes = FALSE,
-    shape = 21, size = 6.2, stroke = 1.35,
-    fill = NA, color = COL_BIO,
+    shape = 21, fill = NA, stroke = 1.35, color = COL_BIO,
     show.legend = FALSE
   ) +
   scale_color_manual(values = k_colors, name = "k-mer size (k)") +
