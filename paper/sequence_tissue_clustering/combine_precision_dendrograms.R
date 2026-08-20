@@ -42,7 +42,8 @@ if (length(argv) < 3) {
     )
     plot_args <- c(
       plot_script, input_csv, key_tsv, inputs[i],
-      "jaccard_similarity_ie", panel_labels[i], "0.05", "4.5", "true"
+      "jaccard_similarity_ie", panel_labels[i], "0.05", "4.5", "true",
+      as.character(precisions[i])
     )
     status <- system2(
       "Rscript",

@@ -75,7 +75,10 @@ show_cluster_strip <- if (length(argv) >= 6 && nzchar(argv[6])) {
 show_legend <- if (length(argv) >= 7 && nzchar(argv[7])) {
   tolower(argv[7]) %in% c("1", "true", "yes", "legend")
 } else TRUE
-precision_label <- if (length(argv) >= 8 && nzchar(argv[8])) argv[8] else NULL
+precision_label <- if (length(argv) >= 8 && nzchar(argv[8])) {
+  precision_value <- suppressWarnings(as.integer(argv[8]))
+  if (is.na(precision_value)) argv[8] else bquote(italic(p) == .(precision_value))
+} else NULL
 black_accession_labels <- if (length(argv) >= 9 && nzchar(argv[9])) {
   tolower(argv[9]) %in% c("1", "true", "yes", "black")
 } else FALSE

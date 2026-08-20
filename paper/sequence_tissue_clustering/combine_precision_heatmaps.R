@@ -44,7 +44,7 @@ if (generated_inputs) {
     plot_args <- c(
       plot_script, input_csv, key_tsv, inputs[i],
       "jaccard_similarity_ie", panel_labels[i],
-      "true", "false", sprintf("p = %d", precisions[i]), "true"
+      "true", "false", as.character(precisions[i]), "true"
     )
     status <- system2(
       "Rscript",
@@ -122,23 +122,23 @@ grid::grid.raster(
 # One shared continuous legend for all three panels. The component plots are
 # rendered without legends so their heatmap matrices retain identical sizes.
 legend_vp <- grid::viewport(
-  x = 0.86, y = 0.50, width = 0.18, height = 0.48
+  x = 0.86, y = 0.50, width = 0.18, height = 0.88
 )
 grid::pushViewport(legend_vp)
 legend_colours <- viridisLite::viridis(256, option = "C", direction = 1)
 grid::grid.raster(
   matrix(legend_colours, ncol = 1),
-  x = 0.28, y = 0.46, width = 0.22, height = 0.52,
+  x = 0.28, y = 0.45, width = 0.22, height = 0.76,
   interpolate = TRUE
 )
 grid::grid.text(
   "1 − Jaccard\n(distance)",
-  x = 0.05, y = 0.82, just = c("left", "bottom"),
-  gp = grid::gpar(fontsize = 28)
+  x = 0.28, y = 0.88, just = c("center", "bottom"),
+  gp = grid::gpar(fontsize = 30)
 )
 legend_max <- 0.18
 tick_values <- c(0, 0.05, 0.10, 0.15)
-tick_y <- 0.20 + 0.52 * tick_values / legend_max
+tick_y <- 0.07 + 0.76 * tick_values / legend_max
 for (i in seq_along(tick_values)) {
   grid::grid.segments(
     x0 = 0.39, x1 = 0.45, y0 = tick_y[i], y1 = tick_y[i],
@@ -147,7 +147,7 @@ for (i in seq_along(tick_values)) {
   grid::grid.text(
     sprintf("%.2f", tick_values[i]),
     x = 0.50, y = tick_y[i], just = "left",
-    gp = grid::gpar(fontsize = 23)
+    gp = grid::gpar(fontsize = 30)
   )
 }
 grid::popViewport()

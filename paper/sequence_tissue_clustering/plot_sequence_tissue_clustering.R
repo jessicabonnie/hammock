@@ -13,12 +13,13 @@
 #   linkage = average
 #   number of displayed clusters = number of annotated tissue labels (10)
 #   inferred ten-cluster annotation strip = shown
+#   terminal distance range 0--0.05 = compressed at a marked axis break
 #
 # Usage:
 #   Rscript paper/sequence_tissue_clustering/plot_sequence_tissue_clustering.R
 #
 # Optional overrides:
-#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [axis_break] [height_inches] [cluster_strip]
+#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [axis_break] [height_inches] [cluster_strip] [precision]
 #
 # `jaccard_similarity_ie` is accepted as the similarity column even though the
 # archived sweep predates it: the CSVs carry containment_AB/containment_BA, from
@@ -76,11 +77,14 @@ out_png <- if (length(argv) >= 3) argv[3] else default_output
 # otherwise the figure uses inclusion-exclusion Jaccard.
 sim_col_arg <- if (length(argv) >= 4 && nzchar(argv[4])) argv[4] else NA_character_
 panel_label <- if (length(argv) >= 5 && nzchar(argv[5])) argv[5] else "A"
-axis_break <- if (length(argv) >= 6 && nzchar(argv[6])) as.numeric(argv[6]) else NA_real_
+axis_break <- if (length(argv) >= 6 && nzchar(argv[6])) as.numeric(argv[6]) else 0.05
 device_height <- if (length(argv) >= 7 && nzchar(argv[7])) as.numeric(argv[7]) else 6
 show_cluster_strip <- if (length(argv) >= 8 && nzchar(argv[8])) {
   tolower(argv[8]) %in% c("1", "true", "yes", "cluster-strip")
 } else TRUE
+precision_value <- if (length(argv) >= 9 && nzchar(argv[9])) {
+  suppressWarnings(as.integer(argv[9]))
+} else NA_integer_
 if (!is.na(axis_break) && (axis_break <= 0 || axis_break >= 1)) {
   stop("axis_break must be between 0 and 1.", call. = FALSE)
 }
@@ -435,6 +439,12 @@ if (is.na(axis_break)) {
 }
 mtext("1 − Jaccard", side = 2, line = 2.6)
 mtext(panel_label, side = 3, adj = 0, line = 0.15, cex = 16 / 12, font = 2)
+if (!is.na(precision_value)) {
+  mtext(
+    bquote(italic(p) == .(precision_value)),
+    side = 3, adj = 0.5, line = 0.15, cex = 13 / 12
+  )
+}
 
 LABEL_CEX <- 0.8
 GROUP_CEX <- 0.7
