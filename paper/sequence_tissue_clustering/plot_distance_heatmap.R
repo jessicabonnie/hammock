@@ -20,7 +20,7 @@
 #   Rscript paper/sequence_tissue_clustering/plot_distance_heatmap.R
 #
 # Optional overrides:
-#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column]
+#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [cluster_strip] [legend] [precision_label] [black_accession_labels]
 
 required_packages <- c("dplyr", "readr", "ggplot2", "scales", "Cairo")
 missing_packages <- required_packages[
@@ -68,6 +68,17 @@ input_csv <- if (length(argv) >= 1) argv[1] else default_csv
 key_tsv <- if (length(argv) >= 2) argv[2] else default_key
 out_png <- if (length(argv) >= 3) argv[3] else default_output
 sim_col_arg <- if (length(argv) >= 4 && nzchar(argv[4])) argv[4] else NA_character_
+panel_label <- if (length(argv) >= 5 && nzchar(argv[5])) argv[5] else "B"
+show_cluster_strip <- if (length(argv) >= 6 && nzchar(argv[6])) {
+  tolower(argv[6]) %in% c("1", "true", "yes", "cluster-strip")
+} else FALSE
+show_legend <- if (length(argv) >= 7 && nzchar(argv[7])) {
+  tolower(argv[7]) %in% c("1", "true", "yes", "legend")
+} else TRUE
+precision_label <- if (length(argv) >= 8 && nzchar(argv[8])) argv[8] else NULL
+black_accession_labels <- if (length(argv) >= 9 && nzchar(argv[9])) {
+  tolower(argv[9]) %in% c("1", "true", "yes", "black")
+} else FALSE
 
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 for (path in c(input_csv, key_tsv)) {
@@ -177,10 +188,23 @@ predicted_runs <- split(
 predicted_boxes <- data.frame(
   xmin = vapply(predicted_runs, min, numeric(1)) - 0.5,
   xmax = vapply(predicted_runs, max, numeric(1)) + 0.5,
+  cluster = vapply(predicted_runs, function(run) predicted_ordered[run[1]], numeric(1)),
   stringsAsFactors = FALSE
 )
 predicted_boxes$ymin <- length(ord) + 1 - predicted_boxes$xmax
 predicted_boxes$ymax <- length(ord) + 1 - predicted_boxes$xmin
+
+# A narrow dark-green strip makes the inferred ten-cluster cut visible next to
+# the existing annotated-tissue strip. Small gaps distinguish adjacent inferred
+# clusters without assigning biologically suggestive colours to arbitrary
+# cluster IDs.
+predicted_annotations <- predicted_boxes %>%
+  transmute(
+    start = xmin + 0.10,
+    end = xmax - 0.10,
+    center = (xmin + xmax) / 2,
+    cluster = cluster
+  )
 
 tissue_levels <- unique(tissue_by_stem[stems])
 pal <- setNames(hue_pal()(length(tissue_levels)), tissue_levels)
@@ -192,7 +216,11 @@ dist_long <- expand.grid(row = ord, col = ord, stringsAsFactors = FALSE) %>%
     col_lab = factor(short_label(col), levels = rev(short_label(ord)))
   )
 
-row_colors <- pal[tissue_by_stem[ord]]
+row_colors <- if (black_accession_labels) {
+  rep("black", length(ord))
+} else {
+  pal[tissue_by_stem[ord]]
+}
 col_colors <- rev(row_colors)
 
 # Build annotations from contiguous tissue runs in the computed leaf order.
@@ -217,17 +245,35 @@ group_annotations <- data.frame(
 )
 
 n_samples <- length(ord)
-top_group_y <- n_samples + 0.55
-top_label_y <- n_samples + 1.00
-right_group_x <- n_samples + 0.55
-right_label_x <- n_samples + 1.00
+# Tiles end at n + 0.5. Leave a visible white gutter before the inferred-cut
+# strip, then place the annotated-tissue strip and labels farther outward.
+top_cluster_y <- n_samples + 0.68
+top_group_y <- n_samples + 1.03
+top_label_y <- n_samples + 1.48
+right_cluster_x <- n_samples + 0.68
+right_group_x <- n_samples + 1.03
+right_label_x <- n_samples + 1.48
+top_bracket_y <- n_samples + 2.62
+top_bracket_tick_y <- n_samples + 2.49
+top_bracket_label_y <- n_samples + 3.02
+right_bracket_x <- n_samples + 2.62
+right_bracket_tick_x <- n_samples + 2.49
+right_bracket_label_x <- n_samples + 3.02
 
+# Apply one Muscle bracket to each contiguous run of muscle subtypes. At p=12,
+# Arm is displaced from Back/Leg and therefore receives its own short bracket,
+# matching the corresponding dendrogram panel.
 muscle_members <- which(group_annotations$bracket == "Muscle")
-muscle_span <- if (length(muscle_members) > 0) {
-  c(
-    min(group_annotations$start[muscle_members]),
-    max(group_annotations$end[muscle_members])
+muscle_spans <- if (length(muscle_members) > 0) {
+  muscle_runs <- split(
+    muscle_members,
+    cumsum(c(1, diff(muscle_members) != 1))
   )
+  bind_rows(lapply(muscle_runs, function(members) {
+    start <- min(group_annotations$start[members])
+    end <- max(group_annotations$end[members])
+    data.frame(start = start, end = end, center = mean(c(start, end)))
+  }))
 } else NULL
 
 p <- ggplot(dist_long, aes(x = row_lab, y = col_lab, fill = distance)) +
@@ -241,14 +287,14 @@ p <- ggplot(dist_long, aes(x = row_lab, y = col_lab, fill = distance)) +
     data = group_annotations,
     aes(x = start, xend = end, y = top_group_y, yend = top_group_y,
         colour = colour),
-    inherit.aes = FALSE, linewidth = 2.2, show.legend = FALSE
+    inherit.aes = FALSE, linewidth = 1.8, show.legend = FALSE
   ) +
   geom_segment(
     data = group_annotations,
     aes(x = right_group_x, xend = right_group_x,
         y = n_samples + 1 - end, yend = n_samples + 1 - start,
         colour = colour),
-    inherit.aes = FALSE, linewidth = 2.2, show.legend = FALSE
+    inherit.aes = FALSE, linewidth = 1.8, show.legend = FALSE
   ) +
   geom_text(
     data = group_annotations,
@@ -264,13 +310,14 @@ p <- ggplot(dist_long, aes(x = row_lab, y = col_lab, fill = distance)) +
   scale_fill_viridis_c(name = "1 − Jaccard\n(distance)", option = "C", direction = -1) +
   scale_colour_identity() +
   coord_cartesian(
-    xlim = c(0.5, n_samples + 2.7),
-    ylim = c(0.5, n_samples + 2.7),
+    xlim = c(0.5, n_samples + 3.25),
+    ylim = c(0.5, n_samples + 3.25),
     clip = "off",
     expand = FALSE
   ) +
   labs(
-    x = NULL, y = NULL, title = NULL, subtitle = NULL, tag = "B"
+    x = NULL, y = NULL, title = NULL, subtitle = precision_label,
+    tag = panel_label
   ) +
   theme_minimal(base_size = 11) +
   theme(
@@ -278,43 +325,65 @@ p <- ggplot(dist_long, aes(x = row_lab, y = col_lab, fill = distance)) +
     axis.text.y = element_text(colour = col_colors, size = 8),
     panel.grid = element_blank(),
     aspect.ratio = 1,
+    legend.position = if (show_legend) "right" else "none",
+    plot.subtitle = element_text(face = "bold", size = 13, hjust = 0.5),
     plot.tag = element_text(face = "bold", size = 16),
     plot.tag.position = c(0, 1),
     plot.margin = margin(t = 50, r = 95, b = 10, l = 10)
   )
 
-if (!is.null(muscle_span)) {
-  muscle_mid <- mean(muscle_span)
+if (show_cluster_strip) {
   p <- p +
-    annotate(
-      "segment", x = muscle_span[1], xend = muscle_span[2],
-      y = n_samples + 2.15, yend = n_samples + 2.15, linewidth = 0.4
+    geom_segment(
+      data = predicted_annotations,
+      aes(x = start, xend = end, y = top_cluster_y, yend = top_cluster_y),
+      inherit.aes = FALSE, colour = "#166534", linewidth = 1.8,
+      show.legend = FALSE
     ) +
-    annotate(
-      "segment", x = c(muscle_span[1], muscle_span[2]),
-      xend = c(muscle_span[1], muscle_span[2]),
-      y = n_samples + 2.15, yend = n_samples + 2.02, linewidth = 0.4
-    ) +
-    annotate(
-      "text", x = muscle_mid, y = n_samples + 2.55,
-      label = "Muscle", size = 3.2
-    ) +
-    annotate(
-      "segment", x = n_samples + 2.15, xend = n_samples + 2.15,
-      y = n_samples + 1 - muscle_span[2],
-      yend = n_samples + 1 - muscle_span[1], linewidth = 0.4
-    ) +
-    annotate(
-      "segment", x = n_samples + 2.15, xend = n_samples + 2.02,
-      y = c(n_samples + 1 - muscle_span[2], n_samples + 1 - muscle_span[1]),
-      yend = c(n_samples + 1 - muscle_span[2], n_samples + 1 - muscle_span[1]),
-      linewidth = 0.4
-    ) +
-    annotate(
-      "text", x = n_samples + 2.55,
-      y = n_samples + 1 - muscle_mid,
-      label = "Muscle", angle = 270, size = 3.2
+    geom_segment(
+      data = predicted_annotations,
+      aes(x = right_cluster_x, xend = right_cluster_x,
+          y = n_samples + 1 - end, yend = n_samples + 1 - start),
+      inherit.aes = FALSE, colour = "#166534", linewidth = 1.8,
+      show.legend = FALSE
     )
+}
+
+if (!is.null(muscle_spans)) {
+  for (i in seq_len(nrow(muscle_spans))) {
+    muscle_span <- unlist(muscle_spans[i, c("start", "end")])
+    muscle_mid <- muscle_spans$center[i]
+    p <- p +
+      annotate(
+        "segment", x = muscle_span[1], xend = muscle_span[2],
+        y = top_bracket_y, yend = top_bracket_y, linewidth = 0.4
+      ) +
+      annotate(
+        "segment", x = c(muscle_span[1], muscle_span[2]),
+        xend = c(muscle_span[1], muscle_span[2]),
+        y = top_bracket_y, yend = top_bracket_tick_y, linewidth = 0.4
+      ) +
+      annotate(
+        "text", x = muscle_mid, y = top_bracket_label_y,
+        label = "Muscle", size = 3.2
+      ) +
+      annotate(
+        "segment", x = right_bracket_x, xend = right_bracket_x,
+        y = n_samples + 1 - muscle_span[2],
+        yend = n_samples + 1 - muscle_span[1], linewidth = 0.4
+      ) +
+      annotate(
+        "segment", x = right_bracket_x, xend = right_bracket_tick_x,
+        y = c(n_samples + 1 - muscle_span[2], n_samples + 1 - muscle_span[1]),
+        yend = c(n_samples + 1 - muscle_span[2], n_samples + 1 - muscle_span[1]),
+        linewidth = 0.4
+      ) +
+      annotate(
+        "text", x = right_bracket_label_x,
+        y = n_samples + 1 - muscle_mid,
+        label = "Muscle", angle = 270, size = 3.2
+      )
+  }
 }
 
 CairoPNG(out_png, width = 9, height = 8, units = "in", res = 300, bg = "white")

@@ -12,12 +12,13 @@
 #   k = 10, w = 30, p = 18
 #   linkage = average
 #   number of displayed clusters = number of annotated tissue labels (10)
+#   inferred ten-cluster annotation strip = shown
 #
 # Usage:
 #   Rscript paper/sequence_tissue_clustering/plot_sequence_tissue_clustering.R
 #
 # Optional overrides:
-#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [axis_break] [height_inches]
+#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [axis_break] [height_inches] [cluster_strip]
 #
 # `jaccard_similarity_ie` is accepted as the similarity column even though the
 # archived sweep predates it: the CSVs carry containment_AB/containment_BA, from
@@ -77,6 +78,9 @@ sim_col_arg <- if (length(argv) >= 4 && nzchar(argv[4])) argv[4] else NA_charact
 panel_label <- if (length(argv) >= 5 && nzchar(argv[5])) argv[5] else "A"
 axis_break <- if (length(argv) >= 6 && nzchar(argv[6])) as.numeric(argv[6]) else NA_real_
 device_height <- if (length(argv) >= 7 && nzchar(argv[7])) as.numeric(argv[7]) else 6
+show_cluster_strip <- if (length(argv) >= 8 && nzchar(argv[8])) {
+  tolower(argv[8]) %in% c("1", "true", "yes", "cluster-strip")
+} else TRUE
 if (!is.na(axis_break) && (axis_break <= 0 || axis_break >= 1)) {
   stop("axis_break must be between 0 and 1.", call. = FALSE)
 }
@@ -347,6 +351,11 @@ ord <- hc$order
 coph <- as.matrix(cophenetic(hc))
 ordered_stems <- hc$labels[ord]
 ordered_groups <- tissues[ord]
+predicted_ordered <- unname(predicted[ordered_stems])
+predicted_runs <- split(
+  seq_along(predicted_ordered),
+  cumsum(c(1, predicted_ordered[-1] != predicted_ordered[-length(predicted_ordered)]))
+)
 group_runs <- split(
   seq_along(ordered_groups),
   cumsum(c(1, diff(as.integer(factor(ordered_groups, levels = unique(ordered_groups)))) != 0))
@@ -437,7 +446,21 @@ GROUP_CEX <- 0.7
 usr <- par("usr")
 user_y <- function(inches) inches * diff(usr[3:4]) / par("pin")[2]
 
-gap <- user_y(0.10)  # tree tips to the top of the label block
+# When requested, place the inferred-cluster strip between the tree tips and
+# accession labels. Dark-green segments are separated by small white gaps at
+# the ten-cluster boundaries, matching the companion heatmap annotation.
+if (show_cluster_strip) {
+  strip_y <- -user_y(0.08)
+  for (run in predicted_runs) {
+    segments(
+      x0 = min(run) - 0.40, x1 = max(run) + 0.40,
+      y0 = strip_y, y1 = strip_y,
+      col = "#166534", lwd = 5, xpd = NA
+    )
+  }
+}
+
+gap <- user_y(if (show_cluster_strip) 0.20 else 0.10)
 pad <- user_y(0.04)  # box padding around the labels
 label_top <- -gap
 # Labels are rotated, so their vertical extent is the string *width*.
