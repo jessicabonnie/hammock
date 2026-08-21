@@ -14,7 +14,7 @@ import subprocess
 import sys
 
 from hammock import __version__
-from hammock.runner import run
+from hammock.runner import ModeDSketchWorkerError, run
 
 
 # User-facing mode names → canonical single-letter code used everywhere
@@ -508,7 +508,18 @@ def main(argv=None) -> int:
               f"bytes of HLL state (see docs/seed-mode-d-threading.md).",
               file=sys.stderr)
     _apply_memory_limit(args.memory_limit_gb)
-    return run(args)
+    try:
+        return run(args)
+    except ModeDSketchWorkerError as exc:
+        # The worker traceback is retained on the exception for Python callers,
+        # but a normal CLI failure should identify the path without dumping a
+        # multiprocessing traceback into a user's terminal or log parser.
+        print(f"Error: Mode D sketch worker failed for {exc.path}: "
+              f"{exc.worker_type}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("Interrupted.", file=sys.stderr)
+        return 130
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from hammock import _core, runner
+from hammock import _core, cli, runner
 
 
 DATA = Path(__file__).parent / "data"
@@ -48,6 +48,24 @@ def test_mode_d_worker_failure_identifies_path_and_leaves_no_child(tmp_path: Pat
         runner._sketch_many([missing, str(DATA / "tiny.fa")], _args(2), "query")
 
     assert not mp.active_children()
+
+
+def test_cli_worker_failure_is_concise_and_publishes_no_csv(tmp_path: Path, capsys) -> None:
+    missing = tmp_path / "missing.fa"
+    paths = tmp_path / "paths.txt"
+    paths.write_text(f"{missing}\n{DATA / 'tiny.fa'}\n")
+
+    rc = cli.main([
+        str(paths), str(paths), "--mode", "D", "--threads", "2",
+        "-p", "12", "-k", "8", "-w", "40", "-o", str(tmp_path / "out"),
+    ])
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "missing.fa" in captured.err
+    assert "Traceback" not in captured.err
+    assert not list(tmp_path.glob("out*.csv"))
+    assert not list(tmp_path.glob(".*.tmp"))
 
 
 def test_mode_d_spawn_processes_support_gzipped_fasta(tmp_path: Path) -> None:
