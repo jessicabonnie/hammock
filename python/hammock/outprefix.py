@@ -11,6 +11,7 @@ def get_new_prefix(outprefix: str,
                    expA: Optional[float] = None,
                    kmer_size: Optional[int] = None,
                    window_size: Optional[int] = None,
+                   sequence_hll_hash: Optional[str] = None,
                    metrics_tag: Optional[str] = None) -> str:
     if sketch_type == "minhash":
         outprefix = f"{outprefix}_mh_n{num_hashes}_jacc{mode}"
@@ -36,6 +37,10 @@ def get_new_prefix(outprefix: str,
 
     if mode == "D" and kmer_size is not None and window_size is not None:
         outprefix = f"{outprefix}_k{kmer_size}_w{window_size}"
+        # Preserve legacy filenames exactly while preventing an experimental
+        # rehash output from overwriting an otherwise identical legacy CSV.
+        if sequence_hll_hash and sequence_hll_hash != "legacy-selector32":
+            outprefix = f"{outprefix}_{sequence_hll_hash}"
 
     # Output-shape tag ("ie"/"re"/"full", see cli.py's --metrics/
     # --register-equality), appended last -- the position `_j3` occupied on
