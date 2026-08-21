@@ -5,17 +5,38 @@ The output format (header + columns) matches the original hammock for parity.
 from __future__ import annotations
 
 import csv
+import multiprocessing as mp
 import os
+import queue
 import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from typing import List
 
 import numpy as np
 
 from hammock import _core
 from hammock.outprefix import get_new_prefix
+
+
+@dataclass
+class ModeDSketchWorkerError(RuntimeError):
+    """A spawned Mode D worker failed while sketching ``path``.
+
+    Python cannot reliably preserve arbitrary worker exception objects across a
+    process boundary.  This deliberately stable exception preserves the input
+    path, remote exception type, and formatted traceback instead of replacing
+    failures with an uninformative executor error.
+    """
+
+    path: str
+    worker_type: str
+    worker_traceback: str
+
+    def __str__(self) -> str:
+        return f"Mode D sketch worker failed for {self.path}: {self.worker_type}\n{self.worker_traceback}"
 
 
 # Containment + co-sketch columns for any pair of HLL sketch lists.
@@ -297,6 +318,157 @@ def _sketch_one_file(path: str, args, sketch_threads: int = 0):
     )
 
 
+def _sketch_mode_d_worker(tasks, results) -> None:
+    """Spawn-safe, one-task-at-a-time Mode D worker.
+
+    Tasks contain only immutable scalar values and a path.  The parent owns
+    ordering, progress output, HLL reconstruction, and all process lifecycle
+    decisions; a child never receives an argparse Namespace or creates a pool.
+    """
+    import traceback
+
+    from types import SimpleNamespace
+    from hammock.modes.sequence import sketch_fasta
+
+    while True:
+        task = tasks.get()
+        if task is None:
+            return
+        index, path, kmer_size, window_size, seed, precision = task
+        try:
+            worker_args = SimpleNamespace(
+                kmer_size=kmer_size,
+                window_size=window_size,
+                seed=seed,
+                precision=precision,
+            )
+            sketch = sketch_fasta(path, worker_args)
+            results.put(("ok", index, path,
+                         _core._hll_transport_state(sketch.minimizer_hll)))
+        except BaseException as exc:
+            # `KeyboardInterrupt` belongs to the parent process; a child-side
+            # interrupt is still reported as a worker failure with its path.
+            results.put(("error", index, path, type(exc).__name__,
+                         traceback.format_exc()))
+
+
+def _stop_mode_d_workers(workers, tasks, results, *, graceful: bool) -> None:
+    """Bound worker shutdown; escalate from join to terminate to kill."""
+    if graceful:
+        for _ in workers:
+            tasks.put(None)
+    for proc in workers:
+        proc.join(timeout=2)
+    for proc in workers:
+        if proc.is_alive():
+            proc.terminate()
+    for proc in workers:
+        if proc.is_alive():
+            proc.join(timeout=2)
+    for proc in workers:
+        if proc.is_alive() and hasattr(proc, "kill"):
+            proc.kill()
+    for proc in workers:
+        if proc.is_alive():
+            proc.join(timeout=2)
+    tasks.close()
+    results.close()
+    tasks.join_thread()
+    results.join_thread()
+
+
+def _restore_mode_d_sketch(state, kmer_size: int, window_size: int,
+                           seed: int, precision: int):
+    """Rebuild the existing Mode D wrapper around validated HLL state."""
+    from hammock.modes.sequence import MinimizerSketch
+
+    sketch = MinimizerSketch(
+        kmer_size=kmer_size, window_size=window_size,
+        seed=seed, precision=precision,
+    )
+    sketch.minimizer_hll = _core._hll_from_transport_state(state)
+    return sketch
+
+
+def _sketch_many_mode_d_processes(paths: List[str], args, label: str) -> list:
+    """Spawn bounded Mode D workers and return sketches in input order.
+
+    At most one task and one result per worker can be outstanding.  That caps
+    raw HLL result payloads at ``workers * 2**precision`` bytes before the
+    parent reconstructs the final sketch list.
+    """
+    n = len(paths)
+    workers_requested = int(args.threads or 1)
+    workers_count = min(workers_requested, n)
+    if workers_count <= 1 or n <= 1:
+        return [_sketch_one_file(path, args) for path in paths]
+
+    context = mp.get_context("spawn")
+    tasks = context.Queue(maxsize=workers_count)
+    results_queue = context.Queue(maxsize=workers_count)
+    workers = [
+        context.Process(target=_sketch_mode_d_worker, args=(tasks, results_queue))
+        for _ in range(workers_count)
+    ]
+    for proc in workers:
+        proc.start()
+
+    def task_for(index: int) -> tuple:
+        return (index, paths[index], args.kmer_size, args.window_size,
+                args.seed, args.precision)
+
+    next_index = 0
+    pending = {}
+    for _ in workers:
+        task = task_for(next_index)
+        tasks.put(task)
+        pending[next_index] = task[1]
+        next_index += 1
+
+    sketches = [None] * n
+    completed = 0
+    t0 = time.monotonic()
+    try:
+        while pending:
+            try:
+                message = results_queue.get(timeout=0.2)
+            except queue.Empty:
+                if any(not proc.is_alive() for proc in workers):
+                    index, path = next(iter(pending.items()))
+                    raise ModeDSketchWorkerError(
+                        path, "WorkerExited",
+                        "A Mode D worker exited before returning its result.")
+                continue
+
+            kind, index, path, *payload = message
+            pending.pop(index, None)
+            if kind == "error":
+                raise ModeDSketchWorkerError(path, payload[0], payload[1])
+            if kind != "ok":
+                raise RuntimeError(f"invalid Mode D worker message for {path}")
+
+            sketches[index] = _restore_mode_d_sketch(
+                payload[0], args.kmer_size, args.window_size,
+                args.seed, args.precision)
+            completed += 1
+            if args.verbose:
+                print(f"  [{completed}/{n}] {label}: {os.path.basename(path)} "
+                      f"({time.monotonic() - t0:.1f}s)",
+                      file=sys.stderr, flush=True)
+
+            if next_index < n:
+                task = task_for(next_index)
+                tasks.put(task)
+                pending[next_index] = task[1]
+                next_index += 1
+    except BaseException:
+        _stop_mode_d_workers(workers, tasks, results_queue, graceful=False)
+        raise
+    else:
+        _stop_mode_d_workers(workers, tasks, results_queue, graceful=True)
+    return sketches
+
+
 def _parallel_map(n: int, fn, threads: int) -> list:
     """Run ``fn(i)`` for ``i`` in ``range(n)``, returning results in index
     order. Uses a thread pool when ``threads > 1`` and ``n > 1``; otherwise
@@ -341,11 +513,11 @@ def _split_thread_budget(total_threads: int, n: int) -> tuple:
 
 
 def _sketch_many(paths: List[str], args, label: str) -> list:
-    """Sketch each path; parallelize with threads if --threads > 1.
+    """Sketch each path; dispatch Mode D with spawn processes, A/B/C with threads.
 
-    Threads are sound here: `_core.sketch_bed_file_hll` already releases the
-    GIL (A/B/C), and `digest.window_minimizer` is a C++ extension that does
-    too (Mode D), so we get real parallelism for the sketch phase.
+    A/B/C use the existing thread pool because `_core.sketch_bed_file_hll`
+    releases the GIL. Mode D's Python-heavy per-record loop instead uses
+    bounded spawn workers when explicitly given more than one worker.
 
     When `args.verbose` is set, prints `[i/N] <basename> (<elapsed>s)` to
     stderr as each file finishes (results stay in original order regardless).
@@ -362,6 +534,8 @@ def _sketch_many(paths: List[str], args, label: str) -> list:
     measured up to 1459% CPU at requested `--threads` values of 2-16).
     """
     n = len(paths)
+    if args.mode == "D":
+        return _sketch_many_mode_d_processes(paths, args, label)
     total_threads = args.threads or 1
     _outer_workers, sketch_threads = _split_thread_budget(total_threads, n)
     progress_lock = threading.Lock()
@@ -461,21 +635,41 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches,
     # the Mode D header stays fixed and cross-reference provenance is recorded.
     header = _build_header(args, similarity_measures) + ["ref1", "ref2"]
 
-    with open(out_path, "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(header)
-        for i, qlabel in enumerate(query_labels):
-            for j, rlabel in enumerate(ref_labels):
-                row = _row_prefix(args, qlabel, rlabel)
-                row.extend(_metrics_row_values(
-                    metrics_mode, jac, jac_ie, c_ab, c_ba,
-                    cs_geom, cs_arith, cs_max, i, j))
-                # ref1/ref2 trailing columns are Mode-D-specific (see
-                # _build_header above) and independent of metrics_mode --
-                # always appended after the similarity columns, for every
-                # shape, matching the header built above.
-                row.extend([ref1, ref2])
-                w.writerow(row)
+    # A process failure or SIGINT before this point must not leave a
+    # plausible-looking partial CSV at the requested path.  Use the same
+    # directory so os.replace is atomic on the target filesystem.
+    import tempfile
+    output_dir = os.path.dirname(os.path.abspath(out_path)) or "."
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", newline="", dir=output_dir,
+            prefix=f".{os.path.basename(out_path)}.", suffix=".tmp",
+            delete=False,
+        ) as f:
+            temp_path = f.name
+            w = csv.writer(f)
+            w.writerow(header)
+            for i, qlabel in enumerate(query_labels):
+                for j, rlabel in enumerate(ref_labels):
+                    row = _row_prefix(args, qlabel, rlabel)
+                    row.extend(_metrics_row_values(
+                        metrics_mode, jac, jac_ie, c_ab, c_ba,
+                        cs_geom, cs_arith, cs_max, i, j))
+                    # ref1/ref2 trailing columns are Mode-D-specific (see
+                    # _build_header above) and independent of metrics_mode --
+                    # always appended after the similarity columns, for every
+                    # shape, matching the header built above.
+                    row.extend([ref1, ref2])
+                    w.writerow(row)
+        os.replace(temp_path, out_path)
+        temp_path = None
+    finally:
+        if temp_path is not None:
+            try:
+                os.unlink(temp_path)
+            except FileNotFoundError:
+                pass
 
     if args.verbose:
         print(f"Wrote {out_path}", file=sys.stderr)

@@ -201,11 +201,12 @@ def parse_args(argv=None):
                         "autodetect choose mode C, and takes the place of --subA in "
                         "the output filename.")
     p.add_argument("--threads", type=int, default=None,
-                   help="Threads for the sketching phase. Default: 1 in sequence mode "
-                        "(D), whose per-record loop is Python and gets slower under a "
-                        "pool, and min(8, cpu_count()) in interval modes, which sketch "
-                        "in C++ with the GIL released. An explicit value >1 in "
-                        "sequence mode is honored with a stderr warning. In a BED→FASTA "
+                   help="Sketch workers. Default: 1 in sequence mode (D), whose "
+                        "per-record loop is Python, and min(8, cpu_count()) in interval "
+                        "modes, which sketch in C++ with the GIL released. An explicit "
+                        "value >1 in sequence mode starts that many spawned worker "
+                        "processes; it increases memory use by one HLL payload per worker. "
+                        "In a BED→FASTA "
                         "run this value also sizes the bedtools getfasta pool; left "
                         "unset, that extraction pool still uses min(8, cpu_count()) "
                         "even though sketching stays single-threaded.")
@@ -502,9 +503,9 @@ def main(argv=None) -> int:
     if args.threads is None:
         args.threads = _default_threads(args.mode)
     elif args.mode == "D" and args.threads > 1:
-        print(f"hammock: --threads {args.threads} in sequence mode (D) is "
-              f"usually SLOWER than --threads 1 (GIL convoy; see "
-              f"docs/seed-mode-d-threading.md). Proceeding as asked.",
+        print(f"hammock: --threads {args.threads} in sequence mode (D) uses "
+              f"spawned sketch worker processes; each can return up to 2**p "
+              f"bytes of HLL state (see docs/seed-mode-d-threading.md).",
               file=sys.stderr)
     _apply_memory_limit(args.memory_limit_gb)
     return run(args)
