@@ -1,4 +1,6 @@
 #include <doctest/doctest.h>
+#include <string>
+#include <vector>
 #include "hammock/hll_sketch.hpp"
 #include "hammock/stride.hpp"
 
@@ -72,6 +74,55 @@ TEST_CASE("add_interval_points_to_sketch: mixed-stride phase is independent of i
 
     CHECK(partitioned_count == whole_count);
     CHECK(partitioned.registers() == whole.registers());
+}
+
+TEST_CASE("add_interval_points_to_sketch: mixed-stride-v2 mixes gaps within a chromosome") {
+    HLLSketch legacy(12), v2(12);
+    const size_t legacy_count = add_interval_points_to_sketch(
+        "chrX", 0, 3600, legacy, "-", 0.3, SubBMethod::MixedStride, 42);
+    const size_t v2_count = add_interval_points_to_sketch(
+        "chrX", 0, 3600, v2, "-", 0.3, SubBMethod::MixedStrideV2, 42);
+
+    // v1 uses either 3 or 4 everywhere (1200 or 900 points). v2's mean
+    // gap is 10/3, so it retains 1080 points up to phase-boundary error.
+    CHECK(v2_count >= 1078);
+    CHECK(v2_count <= 1082);
+    CHECK(v2_count != legacy_count);
+}
+
+TEST_CASE("add_interval_points_to_sketch: mixed-stride-v2 preserves legacy integral grids") {
+    for (const double rate : {0.1, 0.01}) {
+        HLLSketch legacy(12), v2(12);
+        const size_t legacy_count = add_interval_points_to_sketch(
+            "chr7", -135, 3017, legacy, "-", rate, SubBMethod::MixedStride, 42);
+        const size_t v2_count = add_interval_points_to_sketch(
+            "chr7", -135, 3017, v2, "-", rate, SubBMethod::MixedStrideV2, 42);
+        CHECK(v2_count == legacy_count);
+        CHECK(v2.registers() == legacy.registers());
+    }
+}
+
+TEST_CASE("add_interval_points_to_sketch: mixed-stride-v2 is partition invariant for long names") {
+    const std::string long_chr(80, 'x');
+    HLLSketch whole(12), partitioned(12);
+    const size_t whole_count = add_interval_points_to_sketch(
+        long_chr, -51, 8000, whole, "-", 0.15, SubBMethod::MixedStrideV2, 42);
+    const size_t split_count =
+        add_interval_points_to_sketch(long_chr, -51, 1777, partitioned, "-", 0.15,
+                                      SubBMethod::MixedStrideV2, 42) +
+        add_interval_points_to_sketch(long_chr, 1777, 5291, partitioned, "-", 0.15,
+                                      SubBMethod::MixedStrideV2, 42) +
+        add_interval_points_to_sketch(long_chr, 5291, 8000, partitioned, "-", 0.15,
+                                      SubBMethod::MixedStrideV2, 42);
+    CHECK(split_count == whole_count);
+    CHECK(partitioned.registers() == whole.registers());
+}
+
+TEST_CASE("add_interval_points_to_sketch: zero subB retains no points") {
+    HLLSketch sketch(12);
+    CHECK(add_interval_points_to_sketch("chr1", 0, 100, sketch, "-", 0.0,
+                                        SubBMethod::MixedStrideV2, 42) == 0);
+    CHECK(sketch.registers() == std::vector<uint8_t>(sketch.registers().size(), 0));
 }
 
 TEST_CASE("add_interval_points_to_sketch: single-hash gates with high 32 bits") {

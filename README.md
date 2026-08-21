@@ -200,6 +200,7 @@ hammock <queries.txt> <refs.txt> [--mode MODE] [options]
                             mixed-stride (default; deterministic chr-keyed stride,
                             fastest at low subB), hash-threshold (random gate; use
                             this for byte-for-byte parity with the original hammock),
+                            experimental mixed-stride-v2 (within-chromosome mixed gaps),
                             or single-hash. NOTE: the mixed-stride default means subB
                             output is NOT byte-equal to orig unless you pass
                             --subB-method hash-threshold.
