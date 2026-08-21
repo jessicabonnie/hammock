@@ -13,7 +13,11 @@ from __future__ import annotations
 import pytest
 
 from hammock.modes import sequence as seqmod
-from hammock.modes.sequence import MinimizerSketch, _DIGEST_AVAILABLE
+from hammock.modes.sequence import (
+    MinimizerSketch,
+    _DIGEST_AVAILABLE,
+    _rehash_selector64,
+)
 
 digest_only = pytest.mark.skipif(not _DIGEST_AVAILABLE, reason="digest not installed")
 
@@ -58,3 +62,34 @@ def test_sketch_fasta_errors_loudly_without_digest(tmp_path, monkeypatch) -> Non
     monkeypatch.setattr(seqmod, "_DIGEST_AVAILABLE", False)
     with pytest.raises(RuntimeError, match="requires the `digest` module"):
         seqmod.sketch_fasta(str(fa), _Args())
+
+
+def test_rehash_selector64_is_fixed_width_seeded_and_domain_separated() -> None:
+    """The experimental selector rehash has a stable binary feature contract."""
+    # Seed sensitivity is intentional for the rehashed mode; fixed-width
+    # encoding distinguishes selector 1 from an accidental textual ambiguity.
+    assert _rehash_selector64(1, 42) == _rehash_selector64(1, 42)
+    assert _rehash_selector64(1, 42) != _rehash_selector64(1, 43)
+    assert _rehash_selector64(1, 42) != _rehash_selector64(256, 42)
+    with pytest.raises(ValueError, match="not uint32"):
+        _rehash_selector64(2**32, 42)
+
+
+def test_rehash_selector_mode_uses_seed(monkeypatch) -> None:
+    """Raw-selector compatibility mode ignores seed; the experimental mode does not."""
+    monkeypatch.setattr(
+        seqmod, "window_minimizer", lambda *_args, **_kwargs: [(0, 17), (4, 23)]
+    )
+    legacy_a = MinimizerSketch(kmer_size=3, window_size=4, precision=12, seed=1)
+    legacy_b = MinimizerSketch(kmer_size=3, window_size=4, precision=12, seed=2)
+    rehash_a = MinimizerSketch(kmer_size=3, window_size=4, precision=12, seed=1,
+                               hash_mode="rehash-selector64")
+    rehash_b = MinimizerSketch(kmer_size=3, window_size=4, precision=12, seed=2,
+                               hash_mode="rehash-selector64")
+    for sketch in (legacy_a, legacy_b, rehash_a, rehash_b):
+        sketch.add_string("ACGTACGTACGT")
+
+    assert legacy_a.minimizer_hll.estimate_reg_eq_similarity(
+        legacy_b.minimizer_hll) == pytest.approx(1.0)
+    assert rehash_a.minimizer_hll.estimate_reg_eq_similarity(
+        rehash_b.minimizer_hll) < 1.0
