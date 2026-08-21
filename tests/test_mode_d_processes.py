@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from hammock import _core, cli, runner
+from hammock import _core, bed2fasta, cli, runner
 
 
 DATA = Path(__file__).parent / "data"
@@ -127,3 +127,28 @@ def test_cli_interrupt_exits_130_without_traceback(tmp_path: Path, monkeypatch, 
     captured = capsys.readouterr()
     assert rc == 130
     assert captured.err == "Interrupted.\n"
+
+
+def test_bed2fasta_then_spawn_sketching_keeps_io_budget(tmp_path: Path, monkeypatch) -> None:
+    """Extraction can use its own pool before Mode D starts spawn workers."""
+    ref = tmp_path / "ref.fa"
+    ref.write_text(">chr1\nACGTACGTACGTACGT\n")
+    list1 = tmp_path / "list1.txt"
+    list2 = tmp_path / "list2.txt"
+    list1.write_text("first.bed\nsecond.bed\n")
+    list2.write_text("third.bed\nfourth.bed\n")
+    seen_threads = []
+
+    def fake_convert_list(_beds, _ref, _outdir, threads, _verbose):
+        seen_threads.append(threads)
+        return [str(DATA / "tiny.fa"), str(DATA / "tiny2.fa")]
+
+    monkeypatch.setattr(bed2fasta, "convert_list", fake_convert_list)
+    rc = cli.main([
+        str(list1), str(list2), "--ref", str(ref), "--threads", "2",
+        "-p", "12", "-k", "8", "-w", "40", "-o", str(tmp_path / "out"),
+    ])
+
+    assert rc == 0
+    assert seen_threads == [2, 2]
+    assert list(tmp_path.glob("out*.csv"))
