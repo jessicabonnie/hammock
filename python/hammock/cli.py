@@ -503,10 +503,15 @@ def main(argv=None) -> int:
     if args.threads is None:
         args.threads = _default_threads(args.mode)
     elif args.mode == "D" and args.threads > 1:
-        raw_result_mib = args.threads * (1 << args.precision) / (1024 * 1024)
+        raw_result_bytes = args.threads * (1 << args.precision)
+        raw_result_budget = (
+            f"{raw_result_bytes / (1024 * 1024):.0f} MiB"
+            if raw_result_bytes >= 1024 * 1024
+            else f"{raw_result_bytes // 1024} KiB"
+        )
         print(f"hammock: --threads {args.threads} in sequence mode (D) uses "
               f"spawned sketch worker processes; their raw HLL return payloads "
-              f"can total {raw_result_mib:.0f} MiB at p={args.precision} "
+              f"can total {raw_result_budget} at p={args.precision} "
               f"(actual process RSS is higher; see docs/seed-mode-d-threading.md).",
               file=sys.stderr)
     _apply_memory_limit(args.memory_limit_gb)

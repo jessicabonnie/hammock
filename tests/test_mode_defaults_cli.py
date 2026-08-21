@@ -53,7 +53,7 @@ def _fasta_list(tmp_path: Path) -> Path:
     return f
 
 
-_CONVOY_WARNING = "GIL convoy"
+_MODE_D_WORKER_WARNING = "spawned sketch worker processes"
 
 
 def test_mode_d_default_threads_is_silent(tmp_path: Path) -> None:
@@ -63,7 +63,7 @@ def test_mode_d_default_threads_is_silent(tmp_path: Path) -> None:
                         "-p", "12", "-k", "8", "-w", "40", "-o", str(tmp_path / "d")],
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
-    assert _CONVOY_WARNING not in r.stderr
+    assert _MODE_D_WORKER_WARNING not in r.stderr
     assert _mode_col(next(tmp_path.glob("d*.csv"))) == "D"
 
 
@@ -74,17 +74,18 @@ def test_mode_d_explicit_threads_warns_but_runs(tmp_path: Path) -> None:
                         "-p", "12", "-k", "8", "-w", "40", "-o", str(tmp_path / "t")],
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
-    assert _CONVOY_WARNING in r.stderr
+    assert _MODE_D_WORKER_WARNING in r.stderr
+    assert "16 KiB at p=12" in r.stderr
 
 
 def test_interval_mode_threads_never_warn(tmp_path: Path) -> None:
-    """The convoy note is Mode D only — A/B/C threading is real parallelism."""
+    """The process-worker note is Mode D only — A/B/C keep thread dispatch."""
     beds = _bed_list(tmp_path)
     r = subprocess.run([OURS, str(beds), str(beds), "--mode", "B", "--threads", "4",
                         "-p", "12", "-o", str(tmp_path / "b")],
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
-    assert _CONVOY_WARNING not in r.stderr
+    assert _MODE_D_WORKER_WARNING not in r.stderr
 
 
 def _resolved_args(argv, monkeypatch):
