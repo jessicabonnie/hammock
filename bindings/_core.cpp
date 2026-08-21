@@ -27,6 +27,66 @@ namespace py = pybind11;
 
 namespace {
 
+constexpr const char* kHLLTransportMagic = "hammock.HLLSketch.transport";
+constexpr int kHLLTransportVersion = 1;
+
+// This is deliberately an invocation-local transport, not a persistent cache
+// format.  It carries only HLL state; callers that need to persist a Mode D
+// result must also version its k/w/seed/feature semantics and provenance.
+py::tuple hll_transport_state(const HLLSketch& self) {
+    const auto& registers = self.registers();
+    return py::make_tuple(
+        kHLLTransportMagic,
+        kHLLTransportVersion,
+        self.precision(),
+        self.hash_size_bits(),
+        py::bytes(reinterpret_cast<const char*>(registers.data()), registers.size()));
+}
+
+HLLSketch hll_from_transport_state(py::tuple state) {
+    if (state.size() != 5) {
+        throw py::value_error("invalid HLL transport state length");
+    }
+    if (!py::isinstance<py::str>(state[0]) ||
+        !py::isinstance<py::int_>(state[1]) ||
+        !py::isinstance<py::int_>(state[2]) ||
+        !py::isinstance<py::int_>(state[3]) ||
+        !py::isinstance<py::bytes>(state[4]) ||
+        PyBool_Check(state[1].ptr()) || PyBool_Check(state[2].ptr()) ||
+        PyBool_Check(state[3].ptr())) {
+        throw py::type_error("invalid HLL transport state types");
+    }
+    if (state[0].cast<std::string>() != kHLLTransportMagic) {
+        throw py::value_error("invalid HLL transport magic");
+    }
+    if (state[1].cast<int>() != kHLLTransportVersion) {
+        throw py::value_error("unsupported HLL transport version");
+    }
+
+    // Use the two-argument C++ constructor: Python intentionally exposes only
+    // the normal 64-bit constructor, while transport must round-trip both
+    // valid hash widths.  The constructor validates precision and hash width
+    // before allocating its register vector.
+    HLLSketch sketch(state[2].cast<size_t>(), state[3].cast<size_t>());
+    const std::string encoded = state[4].cast<std::string>();
+    if (encoded.size() != sketch.num_registers()) {
+        throw py::value_error("HLL transport register length does not match precision");
+    }
+
+    const size_t max_register =
+        sketch.hash_size_bits() - sketch.precision() + 1;
+    auto& registers = sketch.registers();
+    for (size_t i = 0; i < encoded.size(); ++i) {
+        const auto value = static_cast<uint8_t>(
+            static_cast<unsigned char>(encoded[i]));
+        if (value > max_register) {
+            throw py::value_error("HLL transport contains an out-of-range register");
+        }
+        registers[i] = value;
+    }
+    return sketch;
+}
+
 SubBMethod parse_subB_method(const std::string& s) {
     if (s == "hash-threshold") return SubBMethod::HashThreshold;
     if (s == "mixed-stride")   return SubBMethod::MixedStride;
@@ -342,6 +402,13 @@ PYBIND11_MODULE(_core, m) {
         .def("__repr__", [](const HLLSketch& self) {
             return "<HLLSketch precision=" + std::to_string(self.precision()) + ">";
         });
+
+    m.def("_hll_transport_state", &hll_transport_state,
+          py::arg("sketch"),
+          "Internal invocation-local HLL transport state for multiprocessing.");
+    m.def("_hll_from_transport_state", &hll_from_transport_state,
+          py::arg("state"),
+          "Internal validated HLL reconstruction for multiprocessing.");
 
     m.def("sketch_bed_file_hll", &sketch_bed_file_hll,
           py::arg("path"),
