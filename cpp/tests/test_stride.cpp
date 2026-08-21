@@ -34,6 +34,46 @@ TEST_CASE("add_interval_points_to_sketch: mixed-stride is deterministic per chro
     CHECK(sa < 300);
 }
 
+TEST_CASE("add_interval_points_to_sketch: mixed-stride interpolates non-integral reciprocal rates") {
+    // At p=0.3, S0=floor(1/p)=3 and S1=ceil(1/p)=4. With the default
+    // gate seed, chromosome 1 selects S0 and chrX selects S1. An interval
+    // whose length is divisible by both strides makes the expected counts
+    // exact regardless of the chromosome-specific residue.
+    HLLSketch s0_sketch(12), s1_sketch(12);
+    const size_t sampled_s0 = add_interval_points_to_sketch(
+        "1", 0, 1200, s0_sketch, "-", 0.3,
+        SubBMethod::MixedStride, 42);
+    const size_t sampled_s1 = add_interval_points_to_sketch(
+        "chrX", 0, 1200, s1_sketch, "-", 0.3,
+        SubBMethod::MixedStride, 42);
+
+    CHECK(sampled_s0 == 400);
+    CHECK(sampled_s1 == 300);
+}
+
+TEST_CASE("add_interval_points_to_sketch: mixed-stride phase is independent of interval boundaries") {
+    // Splitting a chromosome span into adjacent BED intervals must retain the
+    // same genomic coordinates as sketching that span as one interval.
+    HLLSketch whole(12), partitioned(12);
+    const size_t whole_count = add_interval_points_to_sketch(
+        "chrX", 0, 1200, whole, "-", 0.3,
+        SubBMethod::MixedStride, 42);
+
+    size_t partitioned_count = 0;
+    partitioned_count += add_interval_points_to_sketch(
+        "chrX", 0, 317, partitioned, "-", 0.3,
+        SubBMethod::MixedStride, 42);
+    partitioned_count += add_interval_points_to_sketch(
+        "chrX", 317, 811, partitioned, "-", 0.3,
+        SubBMethod::MixedStride, 42);
+    partitioned_count += add_interval_points_to_sketch(
+        "chrX", 811, 1200, partitioned, "-", 0.3,
+        SubBMethod::MixedStride, 42);
+
+    CHECK(partitioned_count == whole_count);
+    CHECK(partitioned.registers() == whole.registers());
+}
+
 TEST_CASE("add_interval_points_to_sketch: single-hash gates with high 32 bits") {
     HLLSketch sk(14);
     const size_t sampled = add_interval_points_to_sketch("1", 0, 10000, sk, "-",
