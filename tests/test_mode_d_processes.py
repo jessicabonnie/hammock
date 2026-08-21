@@ -112,3 +112,18 @@ def test_bounded_shutdown_terminates_a_blocked_spawn_worker() -> None:
 
     assert not worker.is_alive()
     assert worker.exitcode is not None
+
+
+def test_cli_interrupt_exits_130_without_traceback(tmp_path: Path, monkeypatch, capsys) -> None:
+    paths = tmp_path / "paths.txt"
+    paths.write_text(f"{DATA / 'tiny.fa'}\n")
+
+    def interrupt(_args):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "run", interrupt)
+    rc = cli.main([str(paths), str(paths), "--mode", "D"])
+
+    captured = capsys.readouterr()
+    assert rc == 130
+    assert captured.err == "Interrupted.\n"
