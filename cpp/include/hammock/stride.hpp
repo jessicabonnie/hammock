@@ -11,10 +11,13 @@
 //   HashThreshold — orig-parity: hash each position with xxh32 seed=31337
 //                   and keep those below subsample * UINT32_MAX. One gate
 //                   hash + one ingestion hash per accepted point.
-//   MixedStride   — deterministic stride S ≈ 1/p chosen per chromosome via
-//                   xxh32 seed=31337 hash of the chr. No per-position gate;
-//                   only accepted positions are hashed at all. Hammock_claude
-//                   addition; not byte-equal to orig.
+//   MixedStride   — legacy deterministic stride S ≈ 1/p chosen per chromosome
+//                   via xxh32 seed=31337 hash of the chr. No per-position
+//                   gate; only accepted positions are hashed at all.
+//   MixedStrideV2 — experimental chromosome-anchored fractional-interval
+//                   grid. Non-integral reciprocal rates mix the adjacent
+//                   integer gaps within each chromosome. Integral rates use
+//                   the legacy grid exactly, preserving published results.
 //   SingleHash    — one xxh64 per position with seed=hll_seed; high 32 bits
 //                   decide the gate, full 64 are the HLL ingestion hash.
 //                   Opt-in parity divergence (different accepted-position set
@@ -25,6 +28,7 @@
 enum class SubBMethod {
     HashThreshold,
     MixedStride,
+    MixedStrideV2,
     SingleHash,
 };
 
