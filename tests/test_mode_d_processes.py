@@ -14,6 +14,13 @@ from hammock import _core, cli, runner
 DATA = Path(__file__).parent / "data"
 
 
+def _block_forever() -> None:
+    """Picklable spawn target for shutdown escalation coverage."""
+    import time
+
+    time.sleep(60)
+
+
 def _args(threads: int) -> SimpleNamespace:
     return SimpleNamespace(
         mode="D",
@@ -92,3 +99,16 @@ def test_cli_process_csv_is_byte_identical_and_atomic(tmp_path: Path) -> None:
     process = tmp_path / "process_mnmzr_p12_jaccD_k8_w40_ie.csv"
     assert serial.read_bytes() == process.read_bytes()
     assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_bounded_shutdown_terminates_a_blocked_spawn_worker() -> None:
+    context = mp.get_context("spawn")
+    tasks = context.Queue(maxsize=1)
+    results = context.Queue(maxsize=1)
+    worker = context.Process(target=_block_forever)
+    worker.start()
+
+    runner._stop_mode_d_workers([worker], tasks, results, graceful=False)
+
+    assert not worker.is_alive()
+    assert worker.exitcode is not None
