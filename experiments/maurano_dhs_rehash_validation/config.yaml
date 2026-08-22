@@ -1,0 +1,30 @@
+experiment: maurano_dhs_rehash_validation
+hash_scheme: rehash-selector64
+primary_precision: 18
+precisions: [12, 18, 22, 24]
+seeds: [1, 2, 3, 17, 42, 43, 99, 31337]
+k_values: [8, 10, 15, 20, 25]
+w_values: [8, 10, 20, 30, 50, 100, 200, 300, 500]
+threads: 1
+samples_expected: 20
+pairs_expected: 400
+resources:
+  cpus_per_job: 1
+  memory_mb: 8192
+  time_minutes: 240
+  max_concurrent_jobs: 1
+inputs:
+  source_experiment: ../maurano_dhs_validation
+  fasta_list: ../maurano_dhs_validation/data/maurano_fastas.txt
+  filename_key: ../maurano_dhs_validation/data/maurano_filenames_key.tsv
+  bedtools_reference: ../maurano_dhs_validation/data/maurano_bedtools_ref.tsv
+  historical_grid: ../../paper/sequence_tissue_clustering/muscle_merged_p18_sensitivity.csv
+selection:
+  exact: [ari_10class_desc, nmi_10class_desc, report_remaining_ties]
+  robustness: [median_ari_desc, ari_range_asc, exact_partition_frequency_desc,
+    median_nmi_desc, median_exact_mae_asc]
+  coordinate_agreement: [spearman_desc, mae_asc]
+followup:
+  historical_cells:
+    - {k: 10, w: 30}
+  leaders_file: results/summaries/leaders.json

@@ -1,0 +1,11 @@
+{
+  "runtime": "R 4.3.0",
+  "comparison": "pairwise co-clustering equality against Python/SciPy partitions",
+  "cases": {
+    "exact_k10_w30": {"pairs": 400, "matches": 400, "exact_match": true},
+    "rehash_p12_seed42_k10_w30": {"pairs": 400, "matches": 400, "exact_match": true},
+    "rehash_p18_seed42_k10_w30": {"pairs": 400, "matches": 400, "exact_match": true},
+    "rehash_p22_seed42_k10_w30": {"pairs": 400, "matches": 400, "exact_match": true},
+    "rehash_p24_seed42_k10_w30": {"pairs": 400, "matches": 400, "exact_match": true}
+  }
+}
