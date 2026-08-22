@@ -70,19 +70,34 @@ def followup_cells(config) -> list[tuple[int, int]]:
     return cells
 
 
+def extension_seeds(config) -> list[int]:
+    """Return only the new seeds, leaving the frozen eight-seed phases intact."""
+    spec = config["extension"]
+    requested = set(range(int(spec["seed_start"]), int(spec["seed_stop"]) + 1))
+    requested.update(map(int, spec.get("additional_seeds", [])))
+    return sorted(requested - set(map(int, config["seeds"])))
+
+
 def jobs(config, base: Path, hammock: Path, commit: str, phase: str):
     list_path = (base / config["inputs"]["fasta_list"]).resolve()
     short_commit = commit[:12]
     if phase == "primary":
         precisions = [int(config["primary_precision"])]
         cells = grid(config)
-    else:
+        seeds = list(map(int, config["seeds"]))
+    elif phase == "followup":
         # p=18 is already complete for every possible leader in the primary sweep.
         precisions = [int(value) for value in config["precisions"]
                       if int(value) != int(config["primary_precision"])]
         cells = followup_cells(config)
+        seeds = list(map(int, config["seeds"]))
+    else:
+        precisions = list(map(int, config["extension"]["precisions"]))
+        cells = [(int(cell["k"]), int(cell["w"])) for cell in config["extension"]["cells"]]
+        seeds = extension_seeds(config)
+    resources = config["extension"].get("resources", config["resources"]) if phase == "extension" else config["resources"]
     for precision in precisions:
-        for seed in map(int, config["seeds"]):
+        for seed in seeds:
             for k, w in cells:
                 job_id = f"rehash_p{precision}_seed{seed:05d}_k{k}_w{w}_{short_commit}"
                 result = (EXPERIMENT / "results" / "rehash" / f"p{precision}" /
@@ -95,9 +110,9 @@ def jobs(config, base: Path, hammock: Path, commit: str, phase: str):
                            "--outprefix", outprefix]
                 yield {"job_id": job_id, "phase": phase, "hash_scheme": config["hash_scheme"],
                        "source_commit": commit, "seed": seed, "precision": precision,
-                       "k": k, "w": w, "cpus": config["resources"]["cpus_per_job"],
-                       "memory_mb": config["resources"]["memory_mb"],
-                       "time_minutes": config["resources"]["time_minutes"],
+                       "k": k, "w": w, "cpus": resources["cpus_per_job"],
+                       "memory_mb": resources["memory_mb"],
+                       "time_minutes": resources["time_minutes"],
                        "output": str(result), "command": command}
 
 
@@ -136,7 +151,7 @@ def run_job(job, fastas: list[Path], samples: list[str]) -> None:
             process = subprocess.run(timed, stdout=stdout, stderr=stderr)
         elapsed = time.monotonic() - before
         timing = parse_time_report(log_dir / "time.txt")
-        status = {**{key: job[key] for key in ("job_id", "hash_scheme", "source_commit", "seed", "precision", "k", "w")},
+        status = {**{key: job[key] for key in ("job_id", "phase", "hash_scheme", "source_commit", "seed", "precision", "k", "w")},
                   "command": command, "started_utc": started.isoformat(), "elapsed_s": elapsed,
                   "returncode": process.returncode, "quarantined": quarantined,
                   "timing": timing, "stdout_log": str(log_dir / "stdout.txt"),
@@ -168,7 +183,7 @@ def main() -> int:
                         help="console script installed from this disposable clone")
     parser.add_argument("--source-commit", required=True,
                         help="full git commit of the disposable source build")
-    parser.add_argument("--phase", choices=["primary", "followup"], default="primary")
+    parser.add_argument("--phase", choices=["primary", "followup", "extension"], default="primary")
     parser.add_argument("--dry-run", action="store_true")
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--job-id", help="run exactly one planned job")
@@ -194,6 +209,11 @@ def main() -> int:
     planned = list(jobs(config, base, args.hammock, args.source_commit, args.phase))
     if args.phase == "primary" and len(planned) != 296:
         raise SystemExit("primary job-plan gate failed: expected 296 jobs")
+    if args.phase == "extension":
+        expected = (len(config["extension"]["precisions"]) *
+                    len(config["extension"]["cells"]) * len(extension_seeds(config)))
+        if len(planned) != expected:
+            raise SystemExit(f"extension job-plan gate failed: expected {expected} jobs")
     if not planned or len({job["output"] for job in planned}) != len(planned):
         raise SystemExit(f"{args.phase} job-plan gate failed: outputs are empty or collide")
     rows = [{**{key: value for key, value in job.items() if key != "command"},

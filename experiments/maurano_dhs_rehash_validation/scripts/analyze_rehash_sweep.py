@@ -108,6 +108,26 @@ def errors(estimate: np.ndarray, target: np.ndarray) -> dict[str, float]:
             "kendall": float(kendalltau(observed, expected).statistic)}
 
 
+def completion_phase(metadata: dict, config: dict) -> str:
+    """Recover phase for old manifests and use explicit phase for new ones."""
+    if metadata.get("phase"):
+        return str(metadata["phase"])
+    if int(metadata["seed"]) in set(map(int, config["seeds"])):
+        return ("primary" if int(metadata["precision"]) == int(config["primary_precision"])
+                else "followup")
+    return "extension"
+
+
+def wilson_interval(successes: int, total: int, z: float = 1.959963984540054) -> tuple[float, float]:
+    if total <= 0:
+        return math.nan, math.nan
+    proportion = successes / total
+    denominator = 1 + z * z / total
+    centre = (proportion + z * z / (2 * total)) / denominator
+    half_width = z * math.sqrt(proportion * (1 - proportion) / total + z * z / (4 * total * total)) / denominator
+    return centre - half_width, centre + half_width
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=EXPERIMENT / "config.yaml")
@@ -148,7 +168,8 @@ def main() -> int:
         metadata = json.loads(completion.read_text())
         if metadata.get("status") != "complete":
             continue
-        if int(metadata["precision"]) == int(config["primary_precision"]):
+        phase = completion_phase(metadata, config)
+        if phase == "primary":
             observed_primary_outputs += 1
         k, w = int(metadata["k"]), int(metadata["w"])
         if (k, w) not in exact_matrices:
@@ -163,7 +184,7 @@ def main() -> int:
         partition = scores.pop("partition")
         exact_error = errors(matrix, exact_matrices[(k, w)])
         bed_error = errors(matrix, bed_matrix)
-        run_rows.append({"hash_scheme": metadata["hash_scheme"], "source_commit": metadata["source_commit"],
+        run_rows.append({"phase": phase, "hash_scheme": metadata["hash_scheme"], "source_commit": metadata["source_commit"],
                          "precision": int(metadata["precision"]), "seed": int(metadata["seed"]),
                          "k": k, "w": w, **scores,
                          "exact_partition_equal": bool(np.array_equal(
@@ -185,14 +206,19 @@ def main() -> int:
             min_ari=("ari_10class", "min"), max_ari=("ari_10class", "max"),
             median_nmi=("nmi_10class", "median"), min_nmi=("nmi_10class", "min"),
             max_nmi=("nmi_10class", "max"),
+            exact_partition_count=("exact_partition_equal", "sum"),
             exact_partition_frequency=("exact_partition_equal", "mean"),
             min_partition_ari_vs_exact=("partition_ari_vs_exact", "min"),
             median_exact_mae=("exact_mae", "median"), max_exact_mae=("exact_mae", "max"),
             max_exact_max_abs_error=("exact_max_abs_error", "max"))
+        intervals = [wilson_interval(int(row.exact_partition_count), int(row.seeds_observed))
+                     for row in precision_aggregates.itertuples()]
+        precision_aggregates["exact_partition_wilson95_low"] = [bounds[0] for bounds in intervals]
+        precision_aggregates["exact_partition_wilson95_high"] = [bounds[1] for bounds in intervals]
         precision_aggregates.to_csv(summary_dir / "rehash_precision_aggregates.csv", index=False)
 
     aggregates = pd.DataFrame()
-    primary = run_scores[run_scores["precision"] == int(config["primary_precision"])] if not run_scores.empty else run_scores
+    primary = run_scores[run_scores["phase"] == "primary"] if not run_scores.empty else run_scores
     if not primary.empty:
         aggregates = primary.groupby(["k", "w"], as_index=False).agg(
             seeds_observed=("seed", "nunique"), median_ari=("ari_10class", "median"),
@@ -234,6 +260,7 @@ def main() -> int:
         followup_precisions = {int(value) for value in config["precisions"]
                                if int(value) != int(config["primary_precision"])}
         followup = run_scores[
+            (run_scores["phase"] == "followup") &
             run_scores["precision"].isin(followup_precisions) &
             pd.Series(list(zip(run_scores["k"], run_scores["w"])), index=run_scores.index).isin(followup_cells)]
         expected_followup_runs = len(followup_cells) * len(followup_precisions) * len(config["seeds"])
@@ -244,14 +271,27 @@ def main() -> int:
 
         historical_precision = precision_aggregates[
             (precision_aggregates.k == 10) & (precision_aggregates.w == 30)].sort_values("precision")
-        table_lines = ["| p | seeds | ARI min | ARI median | ARI max | NMI min | NMI median | NMI max | exact partition | median exact MAE |",
+        table_lines = ["| p | seeds | ARI min | ARI median | ARI max | NMI min | NMI median | NMI max | exact partition (95% CI) | median exact MAE |",
                        "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
         for row in historical_precision.itertuples():
             table_lines.append(
                 f"| {int(row.precision)} | {int(row.seeds_observed)} | {row.min_ari:.6f} | "
                 f"{row.median_ari:.6f} | {row.max_ari:.6f} | "
                 f"{row.min_nmi:.6f} | {row.median_nmi:.6f} | {row.max_nmi:.6f} | "
-                f"{int(round(8 * row.exact_partition_frequency))}/8 | {row.median_exact_mae:.8g} |")
+                f"{int(row.exact_partition_count)}/{int(row.seeds_observed)} "
+                f"({row.exact_partition_wilson95_low:.3f}–{row.exact_partition_wilson95_high:.3f}) | "
+                f"{row.median_exact_mae:.8g} |")
+
+        extension_expected = (len(config["extension"]["precisions"]) *
+                              len(config["extension"]["cells"]) *
+                              (len(set(range(int(config["extension"]["seed_start"]),
+                                             int(config["extension"]["seed_stop"]) + 1)) |
+                                   set(map(int, config["extension"].get("additional_seeds", [])))) -
+                               set(map(int, config["seeds"]))))
+        extension_observed = len(run_scores[run_scores["phase"] == "extension"])
+        extension_text = (f"The exploratory seed extension is complete ({extension_observed}/{extension_expected} "
+                          "new runs; 101 total seeds per precision)." if extension_observed == extension_expected else
+                          f"The exploratory seed extension is incomplete ({extension_observed}/{extension_expected} new runs).")
 
         if not followup_complete:
             classification = "unresolved"
@@ -264,7 +304,8 @@ def main() -> int:
             classification = "not the exact-feature optimum"
             gate_text = "All prespecified exact, p=18 seed, and precision-follow-up gates passed."
         else:
-            historical_runs = run_scores[(run_scores.k == 10) & (run_scores.w == 30)]
+            historical_runs = run_scores[(run_scores.phase.isin(["primary", "followup"])) &
+                                         (run_scores.k == 10) & (run_scores.w == 30)]
             estimator_stable = (len(historical_runs) == len(config["precisions"]) * len(config["seeds"]) and
                                 historical_runs["exact_partition_equal"].all())
             classification = "exact and robust" if estimator_stable else "exact but estimator-sensitive"
@@ -272,7 +313,7 @@ def main() -> int:
         decision = ("# Decision report\n\n"
                     f"**Classification: {classification}.**\n\n"
                     f"{gate_text} The historical `k=10,w=30` cell is "
-                    f"{'an' if historical_exact else 'not an'} exact-feature leader.\n\n"
+                    f"{'an' if historical_exact else 'not an'} exact-feature leader. {extension_text}\n\n"
                     "## Historical-cell precision evidence\n\n" + "\n".join(table_lines) +
                     "\n\nTissue rankings are exploratory because selection and recovery use the same "
                     "20 labelled samples. No compatibility default or manuscript text was changed.\n")

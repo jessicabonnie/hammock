@@ -28,3 +28,15 @@ followup:
   historical_cells:
     - {k: 10, w: 30}
   leaders_file: results/summaries/leaders.json
+extension:
+  seed_start: 0
+  seed_stop: 99
+  additional_seeds: [31337]
+  cells:
+    - {k: 10, w: 30}
+  precisions: [12, 18, 22, 24]
+  resources:
+    cpus_per_job: 1
+    memory_mb: 1024
+    time_minutes: 60
+    max_concurrent_jobs: 32

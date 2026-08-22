@@ -8,7 +8,8 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from validation import METRICS, validate_hll_csv
-from run_rehash_sweep import normalize_csv_lf, parse_time_report
+from run_rehash_sweep import extension_seeds, normalize_csv_lf, parse_time_report
+from analyze_rehash_sweep import completion_phase, wilson_interval
 from common import strip_fasta
 
 
@@ -57,3 +58,26 @@ def test_sample_stem_preserves_biological_merge_suffix():
     assert strip_fasta(stem) == stem
     assert strip_fasta(stem + ".fa") == stem
     assert strip_fasta(stem + ".bed") == stem
+
+
+def test_extension_adds_93_seeds_without_changing_frozen_eight():
+    config = {"seeds": [1, 2, 3, 17, 42, 43, 99, 31337],
+              "extension": {"seed_start": 0, "seed_stop": 99,
+                            "additional_seeds": [31337]}}
+    seeds = extension_seeds(config)
+    assert len(seeds) == 93
+    assert 0 in seeds and 98 in seeds
+    assert not set(seeds) & set(config["seeds"])
+
+
+def test_completion_phase_preserves_old_manifests():
+    config = {"seeds": [1, 2], "primary_precision": 18}
+    assert completion_phase({"seed": 1, "precision": 18}, config) == "primary"
+    assert completion_phase({"seed": 1, "precision": 24}, config) == "followup"
+    assert completion_phase({"seed": 0, "precision": 18}, config) == "extension"
+    assert completion_phase({"phase": "extension", "seed": 1, "precision": 18}, config) == "extension"
+
+
+def test_wilson_interval_contains_observed_proportion():
+    low, high = wilson_interval(50, 101)
+    assert low < 50 / 101 < high

@@ -25,6 +25,11 @@ follow-up at `p={12,18,22,24}` is generated only after p=18 leaders are frozen,
 for historical `k=10,w=30`, every exact leader, and any distinct robustness
 leader.
 
+An exploratory extension evaluates 101 total seeds (0 through 99 plus 31337)
+at the historical `k=10,w=30` cell for all four precisions. The original eight
+seeds remain the frozen confirmatory phases; only the other 93 seeds are run by
+`--phase extension`. Exact-partition frequencies include Wilson 95% intervals.
+
 Because parameter selection and recovery use the same 20 labelled samples,
 all tissue rankings are exploratory and are not estimates of generalization.
 
