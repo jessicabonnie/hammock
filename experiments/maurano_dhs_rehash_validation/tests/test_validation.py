@@ -8,9 +8,11 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from validation import METRICS, validate_hll_csv
-from run_rehash_sweep import extension_seeds, normalize_csv_lf, parse_time_report, requested_seeds
-from analyze_rehash_sweep import (completion_phase, extension_run_count, hierarchy_agreement,
-                                  hierarchy_clades, interpolation_run_count, wilson_interval)
+from run_rehash_sweep import (extension_seeds, normalize_csv_lf, parse_time_report,
+                              plan_fingerprint, requested_seeds)
+from analyze_rehash_sweep import (cochrans_q, completion_phase, expected_phase_keys,
+                                  extension_run_count, hierarchy_agreement, hierarchy_clades,
+                                  interpolation_run_count, wilson_interval)
 import numpy as np
 from common import strip_fasta
 
@@ -111,3 +113,22 @@ def test_hierarchy_agreement_detects_clade_reorganization():
     assert same["clade_distance_vs_exact"] == 0
     assert np.isclose(same["cophenetic_pearson_vs_exact"], 1)
     assert changed["clade_distance_vs_exact"] == 1
+
+
+def test_plan_fingerprint_changes_when_an_index_identity_changes():
+    job = {"phase": "interpolation", "precision": 13, "seed": 0,
+           "output": "/tmp/result.csv", "command": ["hammock", "--precision", "13"]}
+    changed = {**job, "precision": 14}
+    assert plan_fingerprint([job]) != plan_fingerprint([changed])
+
+
+def test_expected_interpolation_keys_are_exact_and_cochrans_q_is_paired():
+    config = {"seeds": [1], "interpolation": {
+        "seed_start": 0, "seed_stop": 1, "additional_seeds": [31337],
+        "precisions": [13, 14], "cells": [{"k": 10, "w": 30}]}}
+    keys = expected_phase_keys(config, "interpolation")
+    assert len(keys) == 6
+    assert (14, 31337, 10, 30) in keys
+    statistic, pvalue = cochrans_q(np.array([[0, 1], [0, 1], [1, 1]]))
+    assert np.isclose(statistic, 2)
+    assert 0 < pvalue < 1

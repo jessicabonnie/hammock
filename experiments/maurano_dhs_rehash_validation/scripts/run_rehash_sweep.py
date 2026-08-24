@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import re
@@ -124,6 +125,12 @@ def jobs(config, base: Path, hammock: Path, commit: str, phase: str):
                        "output": str(result), "command": command}
 
 
+def plan_fingerprint(planned: list[dict]) -> str:
+    payload = [{key: value for key, value in job.items() if key != "command"} |
+               {"command": job["command"]} for job in planned]
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def quarantine(path: Path) -> Path:
     destination = (EXPERIMENT / "results" / "rehash" / "quarantine" /
                    f"{path.name}.{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}")
@@ -138,7 +145,9 @@ def run_job(job, fastas: list[Path], samples: list[str]) -> None:
     if output.exists() and completion.exists():
         validate_hll_csv(output, samples, k=job["k"], w=job["w"], precision=job["precision"])
         recorded = json.loads(completion.read_text())
-        if recorded.get("sha256") == sha256(output) and recorded.get("seed") == job["seed"]:
+        identity_keys = ("phase", "hash_scheme", "source_commit", "seed", "precision", "k", "w")
+        if (recorded.get("sha256") == sha256(output) and
+                all(recorded.get(key) == job[key] for key in identity_keys)):
             print(f"[skip validated] {job['job_id']}")
             return
     quarantined = []
@@ -194,6 +203,8 @@ def main() -> int:
     parser.add_argument("--phase", choices=["primary", "followup", "extension", "interpolation"],
                         default="primary")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--plan-sha256",
+                        help="required for execution; fingerprint printed by the reviewed dry run")
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--job-id", help="run exactly one planned job")
     selection.add_argument("--job-index", type=int,
@@ -231,14 +242,18 @@ def main() -> int:
             raise SystemExit(f"interpolation job-plan gate failed: expected {expected} jobs")
     if not planned or len({job["output"] for job in planned}) != len(planned):
         raise SystemExit(f"{args.phase} job-plan gate failed: outputs are empty or collide")
+    fingerprint = plan_fingerprint(planned)
     rows = [{**{key: value for key, value in job.items() if key != "command"},
              "command": shlex.join(job["command"])} for job in planned]
-    write_csv(EXPERIMENT / "results" / "manifests" / f"rehash_{args.phase}_jobs.csv",
-              ["job_id", "phase", "hash_scheme", "source_commit", "seed", "precision", "k", "w",
-               "cpus", "memory_mb", "time_minutes", "output", "command"], rows)
     if args.dry_run:
-        print(f"planned {len(planned)} unique {args.phase} jobs; scheduler submission not performed")
+        write_csv(EXPERIMENT / "results" / "manifests" / f"rehash_{args.phase}_jobs.csv",
+                  ["job_id", "phase", "hash_scheme", "source_commit", "seed", "precision", "k", "w",
+                   "cpus", "memory_mb", "time_minutes", "output", "command"], rows)
+        print(f"planned {len(planned)} unique {args.phase} jobs; plan_sha256={fingerprint}; "
+              "scheduler submission not performed")
         return 0
+    if args.plan_sha256 != fingerprint:
+        raise SystemExit(f"reviewed plan fingerprint mismatch: expected {fingerprint}")
     if args.job_index is not None:
         if not 0 <= args.job_index < len(planned):
             raise SystemExit(f"job index out of range: {args.job_index}")

@@ -2,6 +2,7 @@
 set -euo pipefail
 : "${HAMMOCK_REHASH_RUN_ROOT:?set HAMMOCK_REHASH_RUN_ROOT}"
 : "${HAMMOCK_REHASH_SOURCE_COMMIT:?set HAMMOCK_REHASH_SOURCE_COMMIT}"
+: "${HAMMOCK_REHASH_PLAN_SHA256:?set HAMMOCK_REHASH_PLAN_SHA256}"
 : "${SLURM_ARRAY_TASK_ID:?submit as an array}"
 phase="${HAMMOCK_REHASH_PHASE:-primary}"
 repo="${HAMMOCK_REHASH_RUN_ROOT}/hammock"
@@ -15,4 +16,5 @@ exec /usr/bin/time -v -o "${experiment}/logs/slurm/rehash_${SLURM_ARRAY_JOB_ID}_
   "${experiment}/scripts/run_rehash_sweep.py" --config "${experiment}/config.yaml" \
   --hammock "${experiment}/workflow/hammock_runtime.sh" \
   --source-commit "${HAMMOCK_REHASH_SOURCE_COMMIT}" --phase "${phase}" \
+  --plan-sha256 "${HAMMOCK_REHASH_PLAN_SHA256}" \
   --job-index "${SLURM_ARRAY_TASK_ID}"
