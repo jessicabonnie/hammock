@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render experiment-only figures after the complete p=18 evidence gate."""
+"""Render experiment-only figures after the complete evidence gates."""
 from __future__ import annotations
 
 import argparse
@@ -43,7 +43,9 @@ def main() -> int:
     exact = pd.read_csv(summary / "exact_scores.csv")
     runs = pd.read_csv(summary / "rehash_run_scores.csv")
     aggregates = pd.read_csv(summary / "rehash_cell_aggregates.csv")
-    primary = runs[runs["precision"] == int(config["primary_precision"])]
+    precision = pd.read_csv(summary / "rehash_precision_aggregates.csv")
+    primary = (runs[runs["phase"] == "primary"] if "phase" in runs else
+               runs[runs["precision"] == int(config["primary_precision"])])
     if len(exact) != 37 or len(primary) != 296 or len(aggregates) != 37:
         raise SystemExit("refusing partial figures: expected 37 exact cells and 296 p=18 runs")
     output = EXPERIMENT / "figures"
@@ -81,7 +83,38 @@ def main() -> int:
     axis.set_title("Exact and rehashed clustering margins")
     figure.savefig(output / "cut_margin_comparison.png", dpi=180)
     plt.close(figure)
-    print(f"wrote five figures to {output}")
+
+    historical = runs[(runs.k == 10) & (runs.w == 30)]
+    historical_precision = precision[(precision.k == 10) & (precision.w == 30)].sort_values("precision")
+    expected_seeds = 101
+    if (len(historical_precision) == len(config["precisions"]) and
+            (historical_precision["seeds_observed"] == expected_seeds).all()):
+        precisions = historical_precision["precision"].astype(int).tolist()
+        ari_values = [historical[historical.precision == value]["ari_10class"].to_numpy()
+                      for value in precisions]
+        figure, axes = plt.subplots(1, 2, figsize=(10, 4.5), constrained_layout=True)
+        axes[0].boxplot(ari_values, tick_labels=precisions, showmeans=True, meanline=True)
+        rng = np.random.default_rng(0)
+        for position, values in enumerate(ari_values, start=1):
+            axes[0].scatter(position + rng.uniform(-0.12, 0.12, len(values)), values,
+                            s=12, alpha=0.25, color="black", linewidths=0)
+        axes[0].set_xlabel("HLL precision p")
+        axes[0].set_ylabel("ten-class ARI")
+        axes[0].set_title("Seed-dependent tissue recovery")
+        frequency = historical_precision["exact_partition_frequency"].to_numpy()
+        lower = historical_precision["exact_partition_wilson95_low"].to_numpy()
+        upper = historical_precision["exact_partition_wilson95_high"].to_numpy()
+        axes[1].errorbar(precisions, frequency, yerr=[frequency - lower, upper - frequency],
+                         fmt="o-", capsize=4)
+        axes[1].axhline(0.5, color="0.6", linestyle="--", linewidth=1)
+        axes[1].set_xticks(precisions)
+        axes[1].set_ylim(0, 1)
+        axes[1].set_xlabel("HLL precision p")
+        axes[1].set_ylabel("exact-partition recovery")
+        axes[1].set_title("101 seeds; Wilson 95% intervals")
+        figure.savefig(output / "historical_precision_extension.png", dpi=180)
+        plt.close(figure)
+    print(f"wrote figures to {output}")
     return 0
 
 

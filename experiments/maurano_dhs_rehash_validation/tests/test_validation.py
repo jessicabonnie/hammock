@@ -9,7 +9,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 from validation import METRICS, validate_hll_csv
 from run_rehash_sweep import extension_seeds, normalize_csv_lf, parse_time_report
-from analyze_rehash_sweep import completion_phase, wilson_interval
+from analyze_rehash_sweep import completion_phase, extension_run_count, wilson_interval
 from common import strip_fasta
 
 
@@ -81,3 +81,11 @@ def test_completion_phase_preserves_old_manifests():
 def test_wilson_interval_contains_observed_proportion():
     low, high = wilson_interval(50, 101)
     assert low < 50 / 101 < high
+
+
+def test_extension_run_count_excludes_the_frozen_seeds():
+    config = {"seeds": [1, 2, 3, 17, 42, 43, 99, 31337],
+              "extension": {"seed_start": 0, "seed_stop": 99,
+                            "additional_seeds": [31337],
+                            "precisions": [12, 18, 22, 24], "cells": [{"k": 10, "w": 30}]}}
+    assert extension_run_count(config) == 372

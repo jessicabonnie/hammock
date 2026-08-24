@@ -128,6 +128,14 @@ def wilson_interval(successes: int, total: int, z: float = 1.959963984540054) ->
     return centre - half_width, centre + half_width
 
 
+def extension_run_count(config: dict) -> int:
+    requested = set(range(int(config["extension"]["seed_start"]),
+                          int(config["extension"]["seed_stop"]) + 1))
+    requested.update(map(int, config["extension"].get("additional_seeds", [])))
+    new_seeds = requested - set(map(int, config["seeds"]))
+    return len(config["extension"]["precisions"]) * len(config["extension"]["cells"]) * len(new_seeds)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=EXPERIMENT / "config.yaml")
@@ -282,12 +290,7 @@ def main() -> int:
                 f"({row.exact_partition_wilson95_low:.3f}–{row.exact_partition_wilson95_high:.3f}) | "
                 f"{row.median_exact_mae:.8g} |")
 
-        extension_expected = (len(config["extension"]["precisions"]) *
-                              len(config["extension"]["cells"]) *
-                              (len(set(range(int(config["extension"]["seed_start"]),
-                                             int(config["extension"]["seed_stop"]) + 1)) |
-                                   set(map(int, config["extension"].get("additional_seeds", [])))) -
-                               set(map(int, config["seeds"]))))
+        extension_expected = extension_run_count(config)
         extension_observed = len(run_scores[run_scores["phase"] == "extension"])
         extension_text = (f"The exploratory seed extension is complete ({extension_observed}/{extension_expected} "
                           "new runs; 101 total seeds per precision)." if extension_observed == extension_expected else

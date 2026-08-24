@@ -1,6 +1,7 @@
 # Validation record
 
-The exact-feature and independent-rehash validation completed on 2026-08-21
+The exact-feature and independent-rehash validation completed on 2026-08-21,
+with the exploratory 101-seed extension completed on 2026-08-24,
 without changing production code, compatibility defaults, or manuscript text.
 The isolated production source commit was
 `008e9f24653cf4f40d10305c3b56ef29979ea6ae`.
@@ -11,8 +12,10 @@ The isolated production source commit was
 - Remaining exact grid: Slurm array `30131710`.
 - Primary p=18 sweep: Slurm array `30131720`, 296 jobs.
 - Frozen-leader precision follow-up: Slurm array `30133142`, 24 jobs.
+- Seed-0 extension gate: Slurm array `30134192`, 4 jobs.
+- Remaining seed extension: Slurm array `30134268`, 368 jobs.
 - Exact matrices: 37/37 cells, each with 20 samples and 400 ordered pairs.
-- Rehash matrices: 320/320 outputs passed the named-column, finite-value,
+- Rehash matrices: 692/692 outputs passed the named-column, finite-value,
   boundedness, symmetry, and unit-diagonal checks; reported clamps were zero.
 - Scheduler terminal-state audits found no failed, cancelled, timed-out,
   out-of-memory, or node-failure tasks.
@@ -33,16 +36,20 @@ scores (up to the final displayed floating-point digit for NMI).
 
 | p | seeds | ARI min | ARI median | ARI max | NMI min | NMI median | NMI max | exact partition |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 12 | 8 | 0.641703 | 0.766154 | 0.910180 | 0.886126 | 0.911405 | 0.960988 | 3/8 |
-| 18 | 8 | 0.766154 | 0.910180 | 0.910180 | 0.911405 | 0.960988 | 0.960988 | 6/8 |
-| 22 | 8 | 0.766154 | 0.910180 | 0.910180 | 0.911405 | 0.960988 | 0.960988 | 5/8 |
-| 24 | 8 | 0.766154 | 0.766154 | 0.910180 | 0.911405 | 0.911405 | 0.960988 | 2/8 |
+| 12 | 101 | 0.590924 | 0.766154 | 0.910180 | 0.866958 | 0.911405 | 0.960988 | 44/101 |
+| 18 | 101 | 0.766154 | 0.910180 | 0.910180 | 0.911405 | 0.960988 | 0.960988 | 52/101 |
+| 22 | 101 | 0.766154 | 0.910180 | 0.910180 | 0.911405 | 0.960988 | 0.960988 | 54/101 |
+| 24 | 101 | 0.766154 | 0.766154 | 0.910180 | 0.911405 | 0.911405 | 0.960988 | 44/101 |
 
-The final classification is **exact but estimator-sensitive**. At p=24,
-seeds 1 and 3 recover the exact ARI and partition; the other six prespecified
-seeds yield ARI `0.7661538461538462`. This sensitivity persists even though
-median exact-Jaccard MAE falls with precision, consistent with the very small
-exact ten-cluster cut gap (`4.106835699915767e-06`).
+The final classification is **exact but estimator-sensitive**. At p>=18 the
+result is nearly bistable: seeds produce either ARI `0.9101796407185628` or
+`0.7661538461538462`. Exact-partition recovery is 52/101 at p=18, 54/101 at
+p=22, and 44/101 at p=24. Thus the median changes when the recovery fraction
+crosses 50%, not because ARI approaches a precision plateau. Wilson 95%
+intervals overlap, and an exploratory chi-squared homogeneity test across all
+four precisions gives p=0.349. Seed sensitivity persists even though median
+exact-Jaccard MAE falls monotonically with precision, consistent with the very
+small exact ten-cluster cut gap (`4.106835699915767e-06`).
 
 ## Independent clustering cross-check
 
