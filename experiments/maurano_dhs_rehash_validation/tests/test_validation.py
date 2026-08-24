@@ -93,12 +93,13 @@ def test_extension_run_count_excludes_the_frozen_seeds():
     assert extension_run_count(config) == 372
 
 
-def test_interpolation_uses_all_101_seeds_at_five_precisions():
+def test_interpolation_uses_all_101_seeds_at_nine_precisions():
     spec = {"seed_start": 0, "seed_stop": 99, "additional_seeds": [31337],
-            "precisions": [13, 14, 15, 16, 17], "cells": [{"k": 10, "w": 30}]}
+            "precisions": [13, 14, 15, 16, 17, 19, 20, 21, 23],
+            "cells": [{"k": 10, "w": 30}]}
     config = {"interpolation": spec}
     assert len(requested_seeds(spec)) == 101
-    assert interpolation_run_count(config) == 505
+    assert interpolation_run_count(config) == 909
 
 
 def test_hierarchy_agreement_detects_clade_reorganization():

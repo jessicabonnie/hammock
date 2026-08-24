@@ -29,8 +29,9 @@ An exploratory extension evaluates 101 total seeds (0 through 99 plus 31337)
 at the historical `k=10,w=30` cell for all four precisions. The original eight
 seeds remain the frozen confirmatory phases; only the other 93 seeds are run by
 `--phase extension`. Exact-partition frequencies include Wilson 95% intervals.
-An additional interpolation phase evaluates p=13 through p=17 over all 101
-seeds and reports seed-to-seed ARI/NMI dispersion and discrete partition-state
+An additional interpolation phase evaluates the missing p=13–17, p=19–21,
+and p=23 values over all 101 seeds, completing the p=12–24 series. It reports
+seed-to-seed ARI/NMI dispersion and discrete partition and hierarchy-state
 frequencies, rather than relying on medians alone.
 
 Because parameter selection and recovery use the same 20 labelled samples,

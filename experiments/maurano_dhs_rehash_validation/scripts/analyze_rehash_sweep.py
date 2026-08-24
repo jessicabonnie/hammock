@@ -364,9 +364,9 @@ def main() -> int:
         interpolation_expected = interpolation_run_count(config)
         interpolation_observed = len(run_scores[run_scores["phase"] == "interpolation"])
         interpolation_text = (
-            f"The p=13–17 interpolation is complete ({interpolation_observed}/{interpolation_expected} runs)."
+            f"The missing-precision interpolation is complete ({interpolation_observed}/{interpolation_expected} runs)."
             if interpolation_observed == interpolation_expected else
-            f"The p=13–17 interpolation is incomplete ({interpolation_observed}/{interpolation_expected} runs).")
+            f"The missing-precision interpolation is incomplete ({interpolation_observed}/{interpolation_expected} runs).")
 
         if not followup_complete:
             classification = "unresolved"
