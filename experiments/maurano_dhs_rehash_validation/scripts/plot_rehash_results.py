@@ -125,7 +125,9 @@ def main() -> int:
             axes[0].plot(right_precision, transitions["partition_changed"] / paired,
                          "o-", label="ten-class partition changed")
             axes[0].plot(right_precision, transitions["hierarchy_changed"] / paired,
-                         "o-", label="binary hierarchy changed")
+                         "o-", label="ranked hierarchy changed")
+            axes[0].plot(right_precision, transitions["unranked_topology_changed"] / paired,
+                         "o-", label="unranked topology changed")
             axes[0].plot(right_precision,
                          transitions["ari_unchanged_hierarchy_changed"] / paired,
                          "o-", label="hierarchy changed, ARI unchanged")

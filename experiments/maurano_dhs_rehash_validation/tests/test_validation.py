@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import sys
 from pathlib import Path
 
@@ -113,6 +114,14 @@ def test_hierarchy_agreement_detects_clade_reorganization():
     assert same["clade_distance_vs_exact"] == 0
     assert np.isclose(same["cophenetic_pearson_vs_exact"], 1)
     assert changed["clade_distance_vs_exact"] == 1
+    reordered = left_first[[1, 0, 2]].copy()
+    reordered[0, 0:2] = [2, 3]
+    reordered[1, 0:2] = [0, 1]
+    reordered[:, 2] = [0.1, 0.2, 0.5]
+    ranked = hierarchy_agreement(reordered, left_first, 4)
+    assert ranked["clade_distance_vs_exact"] == 0
+    assert ranked["hierarchy_signature"] != same["hierarchy_signature"]
+    assert ranked["unranked_topology_signature"] == same["unranked_topology_signature"]
 
 
 def test_plan_fingerprint_changes_when_an_index_identity_changes():
@@ -132,3 +141,5 @@ def test_expected_interpolation_keys_are_exact_and_cochrans_q_is_paired():
     statistic, pvalue = cochrans_q(np.array([[0, 1], [0, 1], [1, 1]]))
     assert np.isclose(statistic, 2)
     assert 0 < pvalue < 1
+    json.dumps({"precisions": sorted(map(int, np.array([12, 13]))),
+                "cochrans_q": statistic, "pvalue": pvalue})

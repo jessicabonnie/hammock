@@ -110,28 +110,35 @@ def errors(estimate: np.ndarray, target: np.ndarray) -> dict[str, float]:
             "kendall": float(kendalltau(observed, expected).statistic)}
 
 
-def hierarchy_clades(hierarchy: np.ndarray, sample_count: int) -> set[frozenset[int]]:
+def hierarchy_clade_sequence(hierarchy: np.ndarray, sample_count: int) -> list[frozenset[int]]:
     nodes = {index: frozenset([index]) for index in range(sample_count)}
-    clades = set()
+    clades = []
     for offset, row in enumerate(hierarchy):
         clade = nodes[int(row[0])] | nodes[int(row[1])]
         nodes[sample_count + offset] = clade
         if len(clade) < sample_count:
-            clades.add(clade)
+            clades.append(clade)
     return clades
+
+
+def hierarchy_clades(hierarchy: np.ndarray, sample_count: int) -> set[frozenset[int]]:
+    return set(hierarchy_clade_sequence(hierarchy, sample_count))
 
 
 def hierarchy_agreement(estimate: np.ndarray, target: np.ndarray,
                         sample_count: int) -> dict[str, float | str]:
-    estimate_clades = hierarchy_clades(estimate, sample_count)
+    estimate_sequence = hierarchy_clade_sequence(estimate, sample_count)
+    estimate_clades = set(estimate_sequence)
     target_clades = hierarchy_clades(target, sample_count)
     denominator = max(sample_count - 2, 1)
-    signature = ";".join(
+    unranked_signature = ";".join(
         ",".join(map(str, sorted(clade)))
         for clade in sorted(estimate_clades, key=lambda value: (len(value), tuple(sorted(value)))))
+    ranked_signature = ";".join(",".join(map(str, sorted(clade))) for clade in estimate_sequence)
     estimate_cophenetic, target_cophenetic = cophenet(estimate), cophenet(target)
     return {
-        "hierarchy_signature": hashlib.sha256(signature.encode()).hexdigest()[:16],
+        "hierarchy_signature": hashlib.sha256(ranked_signature.encode()).hexdigest()[:16],
+        "unranked_topology_signature": hashlib.sha256(unranked_signature.encode()).hexdigest()[:16],
         "clade_distance_vs_exact": 1 - len(estimate_clades & target_clades) / denominator,
         "cophenetic_pearson_vs_exact": float(pearsonr(estimate_cophenetic, target_cophenetic).statistic),
         "cophenetic_spearman_vs_exact": float(spearmanr(estimate_cophenetic, target_cophenetic).statistic),
@@ -301,6 +308,7 @@ def main() -> int:
             distinct_ari_values=("ari_10class", "nunique"),
             distinct_partitions=("partition_signature", "nunique"),
             distinct_hierarchies=("hierarchy_signature", "nunique"),
+            distinct_unranked_topologies=("unranked_topology_signature", "nunique"),
             median_clade_distance_vs_exact=("clade_distance_vs_exact", "median"),
             max_clade_distance_vs_exact=("clade_distance_vs_exact", "max"),
             median_cophenetic_pearson_vs_exact=("cophenetic_pearson_vs_exact", "median"),
@@ -323,7 +331,7 @@ def main() -> int:
 
         historical = run_scores[(run_scores.k == 10) & (run_scores.w == 30)]
         transition_rows = []
-        precision_values = sorted(historical["precision"].unique())
+        precision_values = sorted(map(int, historical["precision"].unique()))
         for left_precision, right_precision in zip(precision_values, precision_values[1:]):
             left = historical[historical.precision == left_precision].set_index("seed")
             right = historical[historical.precision == right_precision].set_index("seed")
@@ -342,6 +350,8 @@ def main() -> int:
                     run_hierarchies[(int(left_precision), int(seed), 10, 30)], len(samples))
                 for seed in common_seeds]
             hierarchy_changed = left["hierarchy_signature"] != right["hierarchy_signature"]
+            topology_changed = (left["unranked_topology_signature"] !=
+                                right["unranked_topology_signature"])
             ari_unchanged = np.isclose(left["ari_10class"], right["ari_10class"], rtol=0, atol=1e-15)
             transition_rows.append({
                 "precision_left": int(left_precision), "precision_right": int(right_precision),
@@ -355,7 +365,10 @@ def main() -> int:
                 if discordant else 1.0,
                 "partition_changed": int((left["partition_signature"] != right["partition_signature"]).sum()),
                 "hierarchy_changed": int(hierarchy_changed.sum()),
+                "unranked_topology_changed": int(topology_changed.sum()),
                 "ari_unchanged_hierarchy_changed": int((ari_unchanged & hierarchy_changed).sum()),
+                "ari_unchanged_unranked_topology_changed": int(
+                    (ari_unchanged & topology_changed).sum()),
                 "median_adjacent_clade_distance": float(np.median(
                     [item["clade_distance_vs_exact"] for item in adjacent_hierarchy])),
                 "median_adjacent_cophenetic_pearson": float(np.median(
@@ -428,7 +441,7 @@ def main() -> int:
 
         historical_precision = precision_aggregates[
             (precision_aggregates.k == 10) & (precision_aggregates.w == 30)].sort_values("precision")
-        table_lines = ["| p | seeds | ARI median [IQR] | ARI range | NMI median [IQR] | partitions / hierarchies | median clade distance | exact partition (95% CI) | median exact MAE |",
+        table_lines = ["| p | seeds | ARI median [IQR] | ARI range | NMI median [IQR] | partitions / ranked hierarchies / topologies | median clade distance | exact partition (95% CI) | median exact MAE |",
                        "|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
         for row in historical_precision.itertuples():
             table_lines.append(
@@ -436,7 +449,8 @@ def main() -> int:
                 f"[{row.q25_ari:.6f}, {row.q75_ari:.6f}] | "
                 f"{row.min_ari:.6f}–{row.max_ari:.6f} | {row.median_nmi:.6f} "
                 f"[{row.q25_nmi:.6f}, {row.q75_nmi:.6f}] | {int(row.distinct_partitions)} / "
-                f"{int(row.distinct_hierarchies)} | {row.median_clade_distance_vs_exact:.3f} | "
+                f"{int(row.distinct_hierarchies)} / {int(row.distinct_unranked_topologies)} | "
+                f"{row.median_clade_distance_vs_exact:.3f} | "
                 f"{int(row.exact_partition_count)}/{int(row.seeds_observed)} "
                 f"({row.exact_partition_wilson95_low:.3f}–{row.exact_partition_wilson95_high:.3f}) | "
                 f"{row.median_exact_mae:.8g} |")
