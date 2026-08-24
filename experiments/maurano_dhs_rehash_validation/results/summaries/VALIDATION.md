@@ -46,10 +46,13 @@ result is nearly bistable: seeds produce either ARI `0.9101796407185628` or
 `0.7661538461538462`. Exact-partition recovery is 52/101 at p=18, 54/101 at
 p=22, and 44/101 at p=24. Thus the median changes when the recovery fraction
 crosses 50%, not because ARI approaches a precision plateau. Wilson 95%
-intervals overlap, and an exploratory chi-squared homogeneity test across all
-four precisions gives p=0.349. Seed sensitivity persists even though median
-exact-Jaccard MAE falls monotonically with precision, consistent with the very
-small exact ten-cluster cut gap (`4.106835699915767e-06`).
+intervals overlap. Because the same seeds are reused across precisions, the
+ordinary chi-squared homogeneity calculation previously reported here was not
+appropriate and has been removed; the complete p=12–24 analysis uses paired
+transitions, exact McNemar tests, and Cochran's Q. Seed sensitivity persists
+even though median exact-Jaccard MAE falls monotonically with precision,
+consistent with the very small exact ten-cluster cut gap
+(`4.106835699915767e-06`).
 
 ## Independent clustering cross-check
 

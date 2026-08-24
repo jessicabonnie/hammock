@@ -116,6 +116,37 @@ def main() -> int:
         axes[1].set_title("101 seeds; Wilson 95% intervals")
         figure.savefig(output / "historical_precision_extension.png", dpi=180)
         plt.close(figure)
+        transitions = pd.read_csv(summary / "rehash_precision_transitions.csv")
+        if (len(transitions) == len(plotted_precisions) - 1 and
+                (transitions["paired_seeds"] == expected_seeds).all()):
+            right_precision = transitions["precision_right"].astype(int)
+            paired = transitions["paired_seeds"]
+            figure, axes = plt.subplots(1, 2, figsize=(11, 4.5), constrained_layout=True)
+            axes[0].plot(right_precision, transitions["partition_changed"] / paired,
+                         "o-", label="ten-class partition changed")
+            axes[0].plot(right_precision, transitions["hierarchy_changed"] / paired,
+                         "o-", label="binary hierarchy changed")
+            axes[0].plot(right_precision,
+                         transitions["ari_unchanged_hierarchy_changed"] / paired,
+                         "o-", label="hierarchy changed, ARI unchanged")
+            axes[0].set_ylim(0, 1.03)
+            axes[0].set_xticks(right_precision)
+            axes[0].set_xlabel("right precision in adjacent pair")
+            axes[0].set_ylabel("fraction of paired seeds")
+            axes[0].set_title("Same-seed state transitions")
+            axes[0].legend(fontsize=8)
+            axes[1].plot(right_precision, transitions["median_adjacent_clade_distance"],
+                         "o-", label="normalized clade distance")
+            axes[1].plot(right_precision,
+                         1 - transitions["median_adjacent_cophenetic_pearson"],
+                         "o-", label="1 − cophenetic Pearson r")
+            axes[1].set_xticks(right_precision)
+            axes[1].set_xlabel("right precision in adjacent pair")
+            axes[1].set_ylabel("median same-seed dissimilarity")
+            axes[1].set_title("Adjacent-precision hierarchy dispersion")
+            axes[1].legend(fontsize=8)
+            figure.savefig(output / "adjacent_precision_hierarchy_dispersion.png", dpi=180)
+            plt.close(figure)
     print(f"wrote figures to {output}")
     return 0
 
