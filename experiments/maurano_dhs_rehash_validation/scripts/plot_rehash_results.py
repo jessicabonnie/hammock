@@ -87,7 +87,9 @@ def main() -> int:
     historical = runs[(runs.k == 10) & (runs.w == 30)]
     historical_precision = precision[(precision.k == 10) & (precision.w == 30)].sort_values("precision")
     expected_seeds = 101
-    if (len(historical_precision) == len(config["precisions"]) and
+    plotted_precisions = sorted(set(map(int, config["precisions"])) |
+                                set(map(int, config["interpolation"]["precisions"])))
+    if (historical_precision["precision"].astype(int).tolist() == plotted_precisions and
             (historical_precision["seeds_observed"] == expected_seeds).all()):
         precisions = historical_precision["precision"].astype(int).tolist()
         ari_values = [historical[historical.precision == value]["ari_10class"].to_numpy()

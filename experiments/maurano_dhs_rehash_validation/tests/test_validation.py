@@ -8,8 +8,9 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from validation import METRICS, validate_hll_csv
-from run_rehash_sweep import extension_seeds, normalize_csv_lf, parse_time_report
-from analyze_rehash_sweep import completion_phase, extension_run_count, wilson_interval
+from run_rehash_sweep import extension_seeds, normalize_csv_lf, parse_time_report, requested_seeds
+from analyze_rehash_sweep import (completion_phase, extension_run_count,
+                                  interpolation_run_count, wilson_interval)
 from common import strip_fasta
 
 
@@ -89,3 +90,11 @@ def test_extension_run_count_excludes_the_frozen_seeds():
                             "additional_seeds": [31337],
                             "precisions": [12, 18, 22, 24], "cells": [{"k": 10, "w": 30}]}}
     assert extension_run_count(config) == 372
+
+
+def test_interpolation_uses_all_101_seeds_at_five_precisions():
+    spec = {"seed_start": 0, "seed_stop": 99, "additional_seeds": [31337],
+            "precisions": [13, 14, 15, 16, 17], "cells": [{"k": 10, "w": 30}]}
+    config = {"interpolation": spec}
+    assert len(requested_seeds(spec)) == 101
+    assert interpolation_run_count(config) == 505

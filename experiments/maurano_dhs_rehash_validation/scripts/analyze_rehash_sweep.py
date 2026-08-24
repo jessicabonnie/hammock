@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -136,6 +137,14 @@ def extension_run_count(config: dict) -> int:
     return len(config["extension"]["precisions"]) * len(config["extension"]["cells"]) * len(new_seeds)
 
 
+def interpolation_run_count(config: dict) -> int:
+    requested = set(range(int(config["interpolation"]["seed_start"]),
+                          int(config["interpolation"]["seed_stop"]) + 1))
+    requested.update(map(int, config["interpolation"].get("additional_seeds", [])))
+    return (len(config["interpolation"]["precisions"]) *
+            len(config["interpolation"]["cells"]) * len(requested))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=EXPERIMENT / "config.yaml")
@@ -190,13 +199,15 @@ def main() -> int:
         stem = f"rehash_p{metadata['precision']}_seed{int(metadata['seed']):05d}_k{k}_w{w}"
         scores = cluster(matrix, samples, truth, cluster_dir, stem)
         partition = scores.pop("partition")
+        co_clustering = np.equal.outer(partition, partition)
         exact_error = errors(matrix, exact_matrices[(k, w)])
         bed_error = errors(matrix, bed_matrix)
         run_rows.append({"phase": phase, "hash_scheme": metadata["hash_scheme"], "source_commit": metadata["source_commit"],
                          "precision": int(metadata["precision"]), "seed": int(metadata["seed"]),
                          "k": k, "w": w, **scores,
+                         "partition_signature": hashlib.sha256(co_clustering.tobytes()).hexdigest()[:16],
                          "exact_partition_equal": bool(np.array_equal(
-                             np.equal.outer(partition, partition),
+                             co_clustering,
                              np.equal.outer(exact_partitions[(k, w)], exact_partitions[(k, w)]))),
                          "partition_ari_vs_exact": adjusted_rand_score(exact_partitions[(k, w)], partition),
                          **{f"exact_{key}": value for key, value in exact_error.items()},
@@ -210,10 +221,19 @@ def main() -> int:
     precision_aggregates = pd.DataFrame()
     if not run_scores.empty:
         precision_aggregates = run_scores.groupby(["precision", "k", "w"], as_index=False).agg(
-            seeds_observed=("seed", "nunique"), median_ari=("ari_10class", "median"),
+            seeds_observed=("seed", "nunique"), mean_ari=("ari_10class", "mean"),
+            std_ari=("ari_10class", "std"), q25_ari=("ari_10class", lambda values: values.quantile(0.25)),
+            median_ari=("ari_10class", "median"),
+            q75_ari=("ari_10class", lambda values: values.quantile(0.75)),
             min_ari=("ari_10class", "min"), max_ari=("ari_10class", "max"),
-            median_nmi=("nmi_10class", "median"), min_nmi=("nmi_10class", "min"),
+            mean_nmi=("nmi_10class", "mean"), std_nmi=("nmi_10class", "std"),
+            q25_nmi=("nmi_10class", lambda values: values.quantile(0.25)),
+            median_nmi=("nmi_10class", "median"),
+            q75_nmi=("nmi_10class", lambda values: values.quantile(0.75)),
+            min_nmi=("nmi_10class", "min"),
             max_nmi=("nmi_10class", "max"),
+            distinct_ari_values=("ari_10class", "nunique"),
+            distinct_partitions=("partition_signature", "nunique"),
             exact_partition_count=("exact_partition_equal", "sum"),
             exact_partition_frequency=("exact_partition_equal", "mean"),
             min_partition_ari_vs_exact=("partition_ari_vs_exact", "min"),
@@ -224,6 +244,11 @@ def main() -> int:
         precision_aggregates["exact_partition_wilson95_low"] = [bounds[0] for bounds in intervals]
         precision_aggregates["exact_partition_wilson95_high"] = [bounds[1] for bounds in intervals]
         precision_aggregates.to_csv(summary_dir / "rehash_precision_aggregates.csv", index=False)
+        outcome_counts = run_scores.groupby(
+            ["precision", "k", "w", "ari_10class", "nmi_10class", "partition_signature"],
+            as_index=False).agg(seed_count=("seed", "nunique"),
+                                exact_partition=("exact_partition_equal", "all"))
+        outcome_counts.to_csv(summary_dir / "rehash_precision_outcomes.csv", index=False)
 
     aggregates = pd.DataFrame()
     primary = run_scores[run_scores["phase"] == "primary"] if not run_scores.empty else run_scores
@@ -279,13 +304,14 @@ def main() -> int:
 
         historical_precision = precision_aggregates[
             (precision_aggregates.k == 10) & (precision_aggregates.w == 30)].sort_values("precision")
-        table_lines = ["| p | seeds | ARI min | ARI median | ARI max | NMI min | NMI median | NMI max | exact partition (95% CI) | median exact MAE |",
-                       "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+        table_lines = ["| p | seeds | ARI median [IQR] | ARI range | NMI median [IQR] | partitions | exact partition (95% CI) | median exact MAE |",
+                       "|---:|---:|---:|---:|---:|---:|---:|---:|"]
         for row in historical_precision.itertuples():
             table_lines.append(
-                f"| {int(row.precision)} | {int(row.seeds_observed)} | {row.min_ari:.6f} | "
-                f"{row.median_ari:.6f} | {row.max_ari:.6f} | "
-                f"{row.min_nmi:.6f} | {row.median_nmi:.6f} | {row.max_nmi:.6f} | "
+                f"| {int(row.precision)} | {int(row.seeds_observed)} | {row.median_ari:.6f} "
+                f"[{row.q25_ari:.6f}, {row.q75_ari:.6f}] | "
+                f"{row.min_ari:.6f}–{row.max_ari:.6f} | {row.median_nmi:.6f} "
+                f"[{row.q25_nmi:.6f}, {row.q75_nmi:.6f}] | {int(row.distinct_partitions)} | "
                 f"{int(row.exact_partition_count)}/{int(row.seeds_observed)} "
                 f"({row.exact_partition_wilson95_low:.3f}–{row.exact_partition_wilson95_high:.3f}) | "
                 f"{row.median_exact_mae:.8g} |")
@@ -295,6 +321,12 @@ def main() -> int:
         extension_text = (f"The exploratory seed extension is complete ({extension_observed}/{extension_expected} "
                           "new runs; 101 total seeds per precision)." if extension_observed == extension_expected else
                           f"The exploratory seed extension is incomplete ({extension_observed}/{extension_expected} new runs).")
+        interpolation_expected = interpolation_run_count(config)
+        interpolation_observed = len(run_scores[run_scores["phase"] == "interpolation"])
+        interpolation_text = (
+            f"The p=13–17 interpolation is complete ({interpolation_observed}/{interpolation_expected} runs)."
+            if interpolation_observed == interpolation_expected else
+            f"The p=13–17 interpolation is incomplete ({interpolation_observed}/{interpolation_expected} runs).")
 
         if not followup_complete:
             classification = "unresolved"
@@ -316,7 +348,8 @@ def main() -> int:
         decision = ("# Decision report\n\n"
                     f"**Classification: {classification}.**\n\n"
                     f"{gate_text} The historical `k=10,w=30` cell is "
-                    f"{'an' if historical_exact else 'not an'} exact-feature leader. {extension_text}\n\n"
+                    f"{'an' if historical_exact else 'not an'} exact-feature leader. "
+                    f"{extension_text} {interpolation_text}\n\n"
                     "## Historical-cell precision evidence\n\n" + "\n".join(table_lines) +
                     "\n\nTissue rankings are exploratory because selection and recovery use the same "
                     "20 labelled samples. No compatibility default or manuscript text was changed.\n")

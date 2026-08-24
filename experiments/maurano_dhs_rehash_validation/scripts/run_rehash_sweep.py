@@ -70,12 +70,15 @@ def followup_cells(config) -> list[tuple[int, int]]:
     return cells
 
 
-def extension_seeds(config) -> list[int]:
-    """Return only the new seeds, leaving the frozen eight-seed phases intact."""
-    spec = config["extension"]
+def requested_seeds(spec) -> list[int]:
     requested = set(range(int(spec["seed_start"]), int(spec["seed_stop"]) + 1))
     requested.update(map(int, spec.get("additional_seeds", [])))
-    return sorted(requested - set(map(int, config["seeds"])))
+    return sorted(requested)
+
+
+def extension_seeds(config) -> list[int]:
+    """Return only the new seeds, leaving the frozen eight-seed phases intact."""
+    return sorted(set(requested_seeds(config["extension"])) - set(map(int, config["seeds"])))
 
 
 def jobs(config, base: Path, hammock: Path, commit: str, phase: str):
@@ -91,11 +94,16 @@ def jobs(config, base: Path, hammock: Path, commit: str, phase: str):
                       if int(value) != int(config["primary_precision"])]
         cells = followup_cells(config)
         seeds = list(map(int, config["seeds"]))
-    else:
+    elif phase == "extension":
         precisions = list(map(int, config["extension"]["precisions"]))
         cells = [(int(cell["k"]), int(cell["w"])) for cell in config["extension"]["cells"]]
         seeds = extension_seeds(config)
-    resources = config["extension"].get("resources", config["resources"]) if phase == "extension" else config["resources"]
+    else:
+        precisions = list(map(int, config["interpolation"]["precisions"]))
+        cells = [(int(cell["k"]), int(cell["w"])) for cell in config["interpolation"]["cells"]]
+        seeds = requested_seeds(config["interpolation"])
+    resources = (config[phase].get("resources", config["resources"])
+                 if phase in {"extension", "interpolation"} else config["resources"])
     for precision in precisions:
         for seed in seeds:
             for k, w in cells:
@@ -183,7 +191,8 @@ def main() -> int:
                         help="console script installed from this disposable clone")
     parser.add_argument("--source-commit", required=True,
                         help="full git commit of the disposable source build")
-    parser.add_argument("--phase", choices=["primary", "followup", "extension"], default="primary")
+    parser.add_argument("--phase", choices=["primary", "followup", "extension", "interpolation"],
+                        default="primary")
     parser.add_argument("--dry-run", action="store_true")
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--job-id", help="run exactly one planned job")
@@ -214,6 +223,12 @@ def main() -> int:
                     len(config["extension"]["cells"]) * len(extension_seeds(config)))
         if len(planned) != expected:
             raise SystemExit(f"extension job-plan gate failed: expected {expected} jobs")
+    if args.phase == "interpolation":
+        expected = (len(config["interpolation"]["precisions"]) *
+                    len(config["interpolation"]["cells"]) *
+                    len(requested_seeds(config["interpolation"])))
+        if len(planned) != expected:
+            raise SystemExit(f"interpolation job-plan gate failed: expected {expected} jobs")
     if not planned or len({job["output"] for job in planned}) != len(planned):
         raise SystemExit(f"{args.phase} job-plan gate failed: outputs are empty or collide")
     rows = [{**{key: value for key, value in job.items() if key != "command"},
