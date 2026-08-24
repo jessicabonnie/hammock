@@ -9,8 +9,9 @@ sys.path.insert(0, str(SCRIPTS))
 
 from validation import METRICS, validate_hll_csv
 from run_rehash_sweep import extension_seeds, normalize_csv_lf, parse_time_report, requested_seeds
-from analyze_rehash_sweep import (completion_phase, extension_run_count,
-                                  interpolation_run_count, wilson_interval)
+from analyze_rehash_sweep import (completion_phase, extension_run_count, hierarchy_agreement,
+                                  hierarchy_clades, interpolation_run_count, wilson_interval)
+import numpy as np
 from common import strip_fasta
 
 
@@ -98,3 +99,14 @@ def test_interpolation_uses_all_101_seeds_at_five_precisions():
     config = {"interpolation": spec}
     assert len(requested_seeds(spec)) == 101
     assert interpolation_run_count(config) == 505
+
+
+def test_hierarchy_agreement_detects_clade_reorganization():
+    left_first = np.array([[0, 1, 0.1, 2], [2, 3, 0.2, 2], [4, 5, 0.5, 4]], dtype=float)
+    crossed = np.array([[0, 2, 0.1, 2], [1, 3, 0.2, 2], [4, 5, 0.5, 4]], dtype=float)
+    assert len(hierarchy_clades(left_first, 4)) == 2
+    same = hierarchy_agreement(left_first, left_first, 4)
+    changed = hierarchy_agreement(crossed, left_first, 4)
+    assert same["clade_distance_vs_exact"] == 0
+    assert np.isclose(same["cophenetic_pearson_vs_exact"], 1)
+    assert changed["clade_distance_vs_exact"] == 1

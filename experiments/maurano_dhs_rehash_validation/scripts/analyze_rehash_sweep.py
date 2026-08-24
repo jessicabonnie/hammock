@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.cluster.hierarchy import cut_tree, dendrogram, linkage
+from scipy.cluster.hierarchy import cophenet, cut_tree, dendrogram, linkage
 from scipy.spatial.distance import squareform
 from scipy.stats import kendalltau, pearsonr, spearmanr
 from common import EXPERIMENT, atomic_json, fasta_paths, grid, load_config, resolve, strip_fasta
@@ -90,7 +90,8 @@ def cluster(matrix: np.ndarray, samples: list[str], truth: list[str], artifact_d
     atomic_json(artifact_dir / f"{stem}_cluster.json", {
         "leaf_order": [samples[i] for i in leaf_order], "cut_clusters": 10,
         "height_below_cut": lower, "height_above_cut": upper, "cut_gap": upper - lower})
-    return {"partition": partition, "ari_10class": adjusted_rand_score(truth, partition),
+    return {"partition": partition, "hierarchy": hierarchy,
+            "ari_10class": adjusted_rand_score(truth, partition),
             "nmi_10class": normalized_mutual_info_score(truth, partition),
             "cut_height_lower": lower, "cut_height_upper": upper, "cut_gap": upper - lower}
 
@@ -107,6 +108,35 @@ def errors(estimate: np.ndarray, target: np.ndarray) -> dict[str, float]:
             "pearson": float(pearsonr(observed, expected).statistic),
             "spearman": float(spearmanr(observed, expected).statistic),
             "kendall": float(kendalltau(observed, expected).statistic)}
+
+
+def hierarchy_clades(hierarchy: np.ndarray, sample_count: int) -> set[frozenset[int]]:
+    nodes = {index: frozenset([index]) for index in range(sample_count)}
+    clades = set()
+    for offset, row in enumerate(hierarchy):
+        clade = nodes[int(row[0])] | nodes[int(row[1])]
+        nodes[sample_count + offset] = clade
+        if len(clade) < sample_count:
+            clades.add(clade)
+    return clades
+
+
+def hierarchy_agreement(estimate: np.ndarray, target: np.ndarray,
+                        sample_count: int) -> dict[str, float | str]:
+    estimate_clades = hierarchy_clades(estimate, sample_count)
+    target_clades = hierarchy_clades(target, sample_count)
+    denominator = max(sample_count - 2, 1)
+    signature = ";".join(
+        ",".join(map(str, sorted(clade)))
+        for clade in sorted(estimate_clades, key=lambda value: (len(value), tuple(sorted(value)))))
+    estimate_cophenetic, target_cophenetic = cophenet(estimate), cophenet(target)
+    return {
+        "hierarchy_signature": hashlib.sha256(signature.encode()).hexdigest()[:16],
+        "clade_distance_vs_exact": 1 - len(estimate_clades & target_clades) / denominator,
+        "cophenetic_pearson_vs_exact": float(pearsonr(estimate_cophenetic, target_cophenetic).statistic),
+        "cophenetic_spearman_vs_exact": float(spearmanr(estimate_cophenetic, target_cophenetic).statistic),
+        "cophenetic_mae_vs_exact": float(np.abs(estimate_cophenetic - target_cophenetic).mean()),
+    }
 
 
 def completion_phase(metadata: dict, config: dict) -> str:
@@ -162,7 +192,7 @@ def main() -> int:
     bed_frame = pd.read_csv(resolve(base, config["inputs"]["bedtools_reference"]), sep="\t")
     bed_matrix = frame_matrix(bed_frame.rename(columns={"jaccard": "bedtools_jaccard"}),
                               "bedtools_jaccard", samples)
-    exact_rows, exact_matrices, exact_partitions = [], {}, {}
+    exact_rows, exact_matrices, exact_partitions, exact_hierarchies = [], {}, {}, {}
     for k, w in grid(config):
         path = EXPERIMENT / "results" / "exact" / f"k{k}_w{w}" / "pairs.csv"
         if not path.is_file():
@@ -171,6 +201,7 @@ def main() -> int:
         scores = cluster(matrix, samples, truth, cluster_dir, f"exact_k{k}_w{w}")
         exact_matrices[(k, w)] = matrix
         exact_partitions[(k, w)] = scores.pop("partition")
+        exact_hierarchies[(k, w)] = scores.pop("hierarchy")
         exact_rows.append({"k": k, "w": w, **scores,
                            **{f"bedtools_{key}": value for key, value in errors(matrix, bed_matrix).items()}})
     exact_scores = pd.DataFrame(exact_rows)
@@ -199,9 +230,11 @@ def main() -> int:
         stem = f"rehash_p{metadata['precision']}_seed{int(metadata['seed']):05d}_k{k}_w{w}"
         scores = cluster(matrix, samples, truth, cluster_dir, stem)
         partition = scores.pop("partition")
+        hierarchy = scores.pop("hierarchy")
         co_clustering = np.equal.outer(partition, partition)
         exact_error = errors(matrix, exact_matrices[(k, w)])
         bed_error = errors(matrix, bed_matrix)
+        hierarchy_scores = hierarchy_agreement(hierarchy, exact_hierarchies[(k, w)], len(samples))
         run_rows.append({"phase": phase, "hash_scheme": metadata["hash_scheme"], "source_commit": metadata["source_commit"],
                          "precision": int(metadata["precision"]), "seed": int(metadata["seed"]),
                          "k": k, "w": w, **scores,
@@ -210,6 +243,7 @@ def main() -> int:
                              co_clustering,
                              np.equal.outer(exact_partitions[(k, w)], exact_partitions[(k, w)]))),
                          "partition_ari_vs_exact": adjusted_rand_score(exact_partitions[(k, w)], partition),
+                         **hierarchy_scores,
                          **{f"exact_{key}": value for key, value in exact_error.items()},
                          **{f"bedtools_{key}": value for key, value in bed_error.items()},
                          "elapsed_s": metadata.get("elapsed_s"), "output": str(output)})
@@ -234,6 +268,11 @@ def main() -> int:
             max_nmi=("nmi_10class", "max"),
             distinct_ari_values=("ari_10class", "nunique"),
             distinct_partitions=("partition_signature", "nunique"),
+            distinct_hierarchies=("hierarchy_signature", "nunique"),
+            median_clade_distance_vs_exact=("clade_distance_vs_exact", "median"),
+            max_clade_distance_vs_exact=("clade_distance_vs_exact", "max"),
+            median_cophenetic_pearson_vs_exact=("cophenetic_pearson_vs_exact", "median"),
+            min_cophenetic_pearson_vs_exact=("cophenetic_pearson_vs_exact", "min"),
             exact_partition_count=("exact_partition_equal", "sum"),
             exact_partition_frequency=("exact_partition_equal", "mean"),
             min_partition_ari_vs_exact=("partition_ari_vs_exact", "min"),
@@ -304,14 +343,15 @@ def main() -> int:
 
         historical_precision = precision_aggregates[
             (precision_aggregates.k == 10) & (precision_aggregates.w == 30)].sort_values("precision")
-        table_lines = ["| p | seeds | ARI median [IQR] | ARI range | NMI median [IQR] | partitions | exact partition (95% CI) | median exact MAE |",
-                       "|---:|---:|---:|---:|---:|---:|---:|---:|"]
+        table_lines = ["| p | seeds | ARI median [IQR] | ARI range | NMI median [IQR] | partitions / hierarchies | median clade distance | exact partition (95% CI) | median exact MAE |",
+                       "|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
         for row in historical_precision.itertuples():
             table_lines.append(
                 f"| {int(row.precision)} | {int(row.seeds_observed)} | {row.median_ari:.6f} "
                 f"[{row.q25_ari:.6f}, {row.q75_ari:.6f}] | "
                 f"{row.min_ari:.6f}–{row.max_ari:.6f} | {row.median_nmi:.6f} "
-                f"[{row.q25_nmi:.6f}, {row.q75_nmi:.6f}] | {int(row.distinct_partitions)} | "
+                f"[{row.q25_nmi:.6f}, {row.q75_nmi:.6f}] | {int(row.distinct_partitions)} / "
+                f"{int(row.distinct_hierarchies)} | {row.median_clade_distance_vs_exact:.3f} | "
                 f"{int(row.exact_partition_count)}/{int(row.seeds_observed)} "
                 f"({row.exact_partition_wilson95_low:.3f}–{row.exact_partition_wilson95_high:.3f}) | "
                 f"{row.median_exact_mae:.8g} |")
