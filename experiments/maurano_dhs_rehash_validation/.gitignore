@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+logs/*
+!logs/.gitkeep
+results/exact/*
+!results/exact/.gitkeep
+results/manifests/*
+!results/manifests/.gitkeep
+results/rehash/*
+!results/rehash/.gitkeep
+results/rehash/quarantine/
+results/summaries/clusters/
+results/summaries/r_crosscheck/*.csv
+*.tmp.*

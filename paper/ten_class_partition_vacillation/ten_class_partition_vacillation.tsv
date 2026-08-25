@@ -1,0 +1,4 @@
+family	left_label	right_label	left_y	right_y
+Heart	Heart: 15643, 15839, 16621	Heart: 15839\nHeart: 15643, 16621	0.76	0.76
+Muscle	Muscle arm: 19053	Muscle arm: 19053\nMuscle back: 18454\nMuscle leg: 19115, 19158	0.56	0.45
+Muscle	Muscle back: 18454\nMuscle leg: 19115, 19158	Muscle arm: 19053\nMuscle back: 18454\nMuscle leg: 19115, 19158	0.34	0.45

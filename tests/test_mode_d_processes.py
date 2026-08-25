@@ -21,7 +21,7 @@ def _block_forever() -> None:
     time.sleep(60)
 
 
-def _args(threads: int) -> SimpleNamespace:
+def _args(threads: int, sequence_hll_hash: str = "rehash-selector64") -> SimpleNamespace:
     return SimpleNamespace(
         mode="D",
         threads=threads,
@@ -29,16 +29,22 @@ def _args(threads: int) -> SimpleNamespace:
         window_size=40,
         seed=42,
         precision=12,
+        sequence_hll_hash=sequence_hll_hash,
         sketch_type="minimizer",
         verbose=False,
     )
 
 
-def test_mode_d_spawn_processes_match_serial_and_keep_order() -> None:
+@pytest.mark.parametrize(
+    "sequence_hll_hash", ["rehash-selector64", "legacy-selector32"]
+)
+def test_mode_d_spawn_processes_match_serial_and_keep_order(
+    sequence_hll_hash: str,
+) -> None:
     # Repetition makes completion order potentially differ from input order.
     paths = [str(DATA / "tiny2.fa"), str(DATA / "tiny.fa"), str(DATA / "tiny2.fa")]
-    serial = runner._sketch_many(paths, _args(1), "query")
-    spawned = runner._sketch_many(paths, _args(2), "query")
+    serial = runner._sketch_many(paths, _args(1, sequence_hll_hash), "query")
+    spawned = runner._sketch_many(paths, _args(2, sequence_hll_hash), "query")
 
     assert [
         _core._hll_transport_state(sketch.minimizer_hll)
@@ -47,6 +53,7 @@ def test_mode_d_spawn_processes_match_serial_and_keep_order() -> None:
         _core._hll_transport_state(sketch.minimizer_hll)
         for sketch in serial
     ]
+    assert all(sketch.hash_mode == sequence_hll_hash for sketch in spawned)
 
 
 def test_mode_d_worker_failure_identifies_path_and_leaves_no_child(tmp_path: Path) -> None:
@@ -95,8 +102,8 @@ def test_cli_process_csv_is_byte_identical_and_atomic(tmp_path: Path) -> None:
     assert cli.main([*common, "--threads", "1", "-o", str(tmp_path / "serial")]) == 0
     assert cli.main([*common, "--threads", "2", "-o", str(tmp_path / "process")]) == 0
 
-    serial = tmp_path / "serial_mnmzr_p12_jaccD_k8_w40_ie.csv"
-    process = tmp_path / "process_mnmzr_p12_jaccD_k8_w40_ie.csv"
+    serial = tmp_path / "serial_mnmzr_p12_jaccD_k8_w40_rehash-selector64_ie.csv"
+    process = tmp_path / "process_mnmzr_p12_jaccD_k8_w40_rehash-selector64_ie.csv"
     assert serial.read_bytes() == process.read_bytes()
     assert not list(tmp_path.glob(".*.tmp"))
 

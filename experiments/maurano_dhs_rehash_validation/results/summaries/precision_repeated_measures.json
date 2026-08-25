@@ -1,0 +1,22 @@
+{
+  "cochrans_q": 21.78798586572438,
+  "complete_paired_seeds": 101,
+  "degrees_of_freedom": 12,
+  "precisions": [
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24
+  ],
+  "pvalue": 0.03996583312193763,
+  "status": "complete"
+}

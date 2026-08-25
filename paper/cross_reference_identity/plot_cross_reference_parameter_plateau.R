@@ -78,14 +78,26 @@ points <- d %>%
 W_LEVELS <- sort(unique(d$w))
 
 p <- ggplot(d, aes(x = factor(w, levels = W_LEVELS))) +
+  # Train every free-x facet on its complete ordered w set before the optimum
+  # and non-optimum rows are split across drawing layers. Otherwise k=20 is
+  # first trained without its highlighted w=20 row and appends that tick last.
+  geom_blank(aes(y = same_tissue)) +
   geom_segment(
     data = d %>% filter(!optimum),
-    aes(y = different_tissue, yend = same_tissue, xend = factor(w)),
+    aes(
+      y = different_tissue,
+      yend = same_tissue,
+      xend = factor(w, levels = W_LEVELS)
+    ),
     color = "#AEB7BF", linewidth = 0.35, alpha = 0.78
   ) +
   geom_segment(
     data = d %>% filter(optimum),
-    aes(y = different_tissue, yend = same_tissue, xend = factor(w)),
+    aes(
+      y = different_tissue,
+      yend = same_tissue,
+      xend = factor(w, levels = W_LEVELS)
+    ),
     color = "#D81B60", linewidth = 1.0, alpha = 1
   ) +
   geom_point(

@@ -1,13 +1,14 @@
 """Mode D: FASTA sequence sketching.
 
 `MinimizerSketch` holds one HLL over a FASTA's (k, w) window minimizers.
-Selector hashes come from `digest.window_minimizer` and go straight into
-`_core.HLLSketch.add_hash64` as raw 64-bit values — *not* through orig's
-hash → str → re-hash-as-kmers idiom, which silently dropped most minimizers
-(see divergence #6 in CLAUDE.md). Mode D is therefore deliberately **not**
-byte-identical to orig.
+Selector identities come from `digest.window_minimizer`. By default they are
+domain-separated and rehashed to uniform 64-bit values before
+`_core.HLLSketch.add_hash64`; `legacy-selector32` feeds the raw selector hash
+for compatibility. Neither path uses orig's hash → str → re-hash-as-kmers
+idiom, which silently dropped most minimizers (see divergence #6 in
+CLAUDE.md). Mode D is therefore deliberately **not** byte-identical to orig.
 
-`xxhash.xxh64(seed)` survives on exactly one path: the no-minimizer fallback
+`xxhash.xxh64(seed)` survives on exactly one path in the legacy mode: the no-minimizer fallback
 for records shorter than `k + w - 1`, which hashes the whole record as a single
 element. That makes such records exact-match indicators rather than graded
 similarity — one substitution and they stop matching.
@@ -46,6 +47,39 @@ def _xxh64(s: str, seed: int) -> int:
     return h.intdigest()
 
 
+# This is deliberately bytes, rather than a decimal rendering of the selector
+# value: its width and byte order are part of the feature-hash contract.
+_SELECTOR64_DOMAIN = b"hammock:sequence:minimizer-selector:v1\0"
+_WHOLE_RECORD64_DOMAIN = b"hammock:sequence:whole-record:v1\0"
+
+
+def _rehash_selector64(selector_hash: int, seed: int) -> int:
+    """Domain-separate and uniformly rehash a digest 32-bit selector hash.
+
+    The selector remains the feature identity. A
+    collision already present in digest's 32-bit selector hash is therefore
+    intentionally retained; this function only prevents its order-statistic
+    distribution from being used as an HLL hash.
+    """
+    value = int(selector_hash)
+    if not 0 <= value < 2**32:
+        raise ValueError(f"digest selector hash is not uint32: {value}")
+    h = xxhash.xxh64(seed=seed)
+    h.update(_SELECTOR64_DOMAIN)
+    h.update(value.to_bytes(4, byteorder="little", signed=False))
+    return h.intdigest()
+
+
+def _hash_whole_record64(sequence: str, seed: int, *, domain_separated: bool) -> int:
+    """Hash a sub-threshold record, optionally in its own feature domain."""
+    if not domain_separated:
+        return _xxh64(sequence, seed)
+    h = xxhash.xxh64(seed=seed)
+    h.update(_WHOLE_RECORD64_DOMAIN)
+    h.update(sequence.upper().encode())
+    return h.intdigest()
+
+
 class MinimizerSketch:
     """Single-HLL sequence sketch over a FASTA's (k, w) window minimizers.
 
@@ -60,16 +94,23 @@ class MinimizerSketch:
         window_size: int = 40,
         seed: int = 42,
         precision: int = 16,
+        hash_mode: str = "rehash-selector64",
     ) -> None:
         self.kmer_size = int(kmer_size)
         self.window_size = int(window_size)
         self.seed = int(seed)
         self.precision = int(precision)
+        if hash_mode not in ("legacy-selector32", "rehash-selector64"):
+            raise ValueError(f"unsupported sequence HLL hash mode: {hash_mode}")
+        self.hash_mode = hash_mode
         self.minimizer_hll = _core.HLLSketch(precision=self.precision)
 
     def _process_kmer_to(self, hll: "_core.HLLSketch", kmer: str) -> None:
         """Replicates HyperLogLog._process_kmer: hash kmer once, no length check."""
-        hll.add_hash64(_xxh64(kmer, self.seed))
+        hll.add_hash64(_hash_whole_record64(
+            kmer, self.seed,
+            domain_separated=self.hash_mode == "rehash-selector64",
+        ))
 
     def add_string(self, s: str) -> None:
         """Mirror hammock/lib/minimizer.py:83-135."""
@@ -91,7 +132,8 @@ class MinimizerSketch:
             self._process_kmer_to(self.minimizer_hll, s)
             return
 
-        # Feed each minimizer's selector hash directly to the HLL. This matches
+        # Feed each minimizer's selector hash directly to the HLL in legacy
+        # mode. This matches
         # orig minimizer.py:118-119 (FAST_HLL path: `add_hash64(np.uint64(hash_val))`).
         # The prior refactor ported only orig's str(hash_val) slow fallback, which
         # silently dropped any minimizer whose decimal representation was shorter
@@ -99,7 +141,11 @@ class MinimizerSketch:
         # empty and J=0 on random-ACGT FASTAs. See memory note
         # [[project_modeD_no_ends_zero_bug]] for full repro.
         for _, hash_val in minimizers:
-            self.minimizer_hll.add_hash64(hash_val)
+            if self.hash_mode == "legacy-selector32":
+                self.minimizer_hll.add_hash64(hash_val)
+            else:
+                self.minimizer_hll.add_hash64(
+                    _rehash_selector64(hash_val, self.seed))
 
 
 def sketch_fasta(path: str, args) -> MinimizerSketch:
@@ -129,6 +175,7 @@ def sketch_fasta(path: str, args) -> MinimizerSketch:
         window_size=args.window_size,
         seed=args.seed,
         precision=args.precision,
+        hash_mode=getattr(args, "sequence_hll_hash", "rehash-selector64"),
     )
     if path.endswith('.gz'):
         import gzip

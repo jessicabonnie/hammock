@@ -220,8 +220,10 @@ def parse_args(argv=None):
                         "A record shorter than k + w - 1 yields no minimizer and is "
                         "hashed whole, so it matches only an identical record.")
     p.add_argument("--seed", type=int, default=42,
-                   help="Seed for the xxh64 hash ingested by the HLL (default: 42). "
-                        "Changes every sketch but not the expected estimate; useful "
+                   help="Seed for xxh64 HLL hashes (default: 42). Sequence mode "
+                        "rehashes selector identities by default; legacy-selector32 "
+                        "bypasses this seed. Changes every rehashed "
+                        "sketch but not the expected estimate; useful "
                         "for re-rolling estimator noise. With "
                         "--subB-method=single-hash this same hash also decides which "
                         "base positions are kept.")
@@ -233,6 +235,15 @@ def parse_args(argv=None):
                         "independently of --seed. Under "
                         "--subB-method=single-hash the point gate uses --seed instead, "
                         "but the mode C --subA gate still uses this one.")
+    p.add_argument("--sequence-hll-hash",
+                   choices=["legacy-selector32", "rehash-selector64"],
+                   default="rehash-selector64",
+                   help="Sequence-mode HLL ingestion: rehash-selector64 (default) "
+                        "domain-separates digest's "
+                        "fixed-width little-endian uint32 encoding and hashes it with "
+                        "seeded xxh64 before HLL ingestion; legacy-selector32 feeds "
+                        "the raw selector hash to reproduce older results. Ignored "
+                        "outside sequence mode.")
     p.add_argument("--verbose", action="store_true",
                    help="Progress on stderr: per-file sketching lines, interval/point "
                         "counts from the sketcher, the output path, and a reminder "

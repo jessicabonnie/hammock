@@ -3,9 +3,8 @@
 # Figure 6 — Sequence-mode recovery of fetal-tissue organization
 #
 # This is the paper-local version of the tissue-coloured, cluster-boxed
-# dendrogram produced in experiments/maurano_dhs_validation/analyze.R.
-# It intentionally preserves the original visual logic while isolating only
-# the code and inputs needed to reproduce the manuscript figure.
+# dendrogram. It intentionally preserves the original visual logic while
+# isolating the code and inputs needed to reproduce the manuscript figure.
 #
 # Default analysis:
 #   similarity = jaccard_similarity_ie (inclusion-exclusion Jaccard)
@@ -19,14 +18,11 @@
 #   Rscript paper/sequence_tissue_clustering/plot_sequence_tissue_clustering.R
 #
 # Optional overrides:
-#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [axis_break] [height_inches] [cluster_strip] [precision]
+#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [axis_break] [height_inches] [cluster_strip] [precision] [clusters]
 #
-# `jaccard_similarity_ie` is accepted as the similarity column even though the
-# archived sweep predates it: the CSVs carry containment_AB/containment_BA, from
-# which it is exactly recoverable (see jaccard_ie_from_containments below). Every
-# run also writes estimator_agreement_stats.csv next to this script, scoring both
-# columns on the same clustering and recording whether they induce the same
-# partition.
+# Every run also writes estimator_agreement_stats.csv next to this script,
+# scoring register-equality and inclusion-exclusion columns on the same
+# clustering and recording whether they induce the same partition.
 
 required_packages <- c("dplyr", "readr", "scales", "Cairo")
 missing_packages <- required_packages[
@@ -59,14 +55,12 @@ K <- 10
 W <- 30
 P <- 18
 
-experiment_dir <- file.path(repo_root, "experiments", "maurano_dhs_validation")
+data_dir <- file.path(script_dir, "data")
 default_csv <- file.path(
-  experiment_dir, "results", "raw_d",
-  # This archived extended-sweep output predates the current _full filename
-  # tag but contains the directional containments needed to reconstruct IE.
-  sprintf("hammock_mnmzr_p%d_jaccD_k%d_w%d.csv", P, K, W)
+  data_dir,
+  sprintf("p%d_seed00000_k%d_w%d.csv", P, K, W)
 )
-default_key <- file.path(experiment_dir, "data", "maurano_filenames_key.tsv")
+default_key <- file.path(data_dir, "maurano_filenames_key.tsv")
 default_output <- file.path(repo_root, "paper", "figures", "sequence_tissue_clustering.png")
 
 argv <- commandArgs(trailingOnly = TRUE)
@@ -85,6 +79,12 @@ show_cluster_strip <- if (length(argv) >= 8 && nzchar(argv[8])) {
 precision_value <- if (length(argv) >= 9 && nzchar(argv[9])) {
   suppressWarnings(as.integer(argv[9]))
 } else NA_integer_
+cluster_count <- if (length(argv) >= 10 && nzchar(argv[10])) {
+  suppressWarnings(as.integer(argv[10]))
+} else NA_integer_
+if (!is.na(cluster_count) && cluster_count < 2) {
+  stop("clusters must be an integer of at least 2.", call. = FALSE)
+}
 if (!is.na(axis_break) && (axis_break <= 0 || axis_break >= 1)) {
   stop("axis_break must be between 0 and 1.", call. = FALSE)
 }
@@ -119,6 +119,7 @@ TISSUE_DISPLAY <- c(
   fMuscle_arm = "Muscle (arm)",
   fMuscle_back = "Muscle (back)",
   fMuscle_leg = "Muscle (leg)",
+  fMuscle = "Muscle",
   fSkin_fibro_bicep_R = "Skin fibroblast (bicep)",
   fStomach = "Stomach"
 )
@@ -141,6 +142,7 @@ GROUP_DISPLAY <- c(
   fMuscle_arm = "Arm",
   fMuscle_back = "Back",
   fMuscle_leg = "Leg",
+  fMuscle = "Muscle",
   fSkin_fibro_bicep_R = "Skin",
   fStomach = "Stomach"
 )
@@ -230,6 +232,9 @@ add_jaccard_ie <- function(df) {
 
 key <- read_tsv(key_tsv, show_col_types = FALSE) %>%
   transmute(stem = strip_ext(File), tissue = Biosample_term_name)
+if (identical(cluster_count, 8L)) {
+  key <- key %>% mutate(tissue = if_else(grepl("^fMuscle_", tissue), "fMuscle", tissue))
+}
 
 raw <- add_jaccard_ie(read_csv(input_csv, show_col_types = FALSE))
 
@@ -284,7 +289,7 @@ similarity_matrix <- function(df, column) {
 mat <- similarity_matrix(raw, sim_col)
 hc <- hclust(as.dist(1 - mat), method = "average")
 true_tissue <- tissue_by_stem[hc$labels]
-n_tissues <- length(unique(true_tissue))
+n_tissues <- if (is.na(cluster_count)) length(unique(true_tissue)) else cluster_count
 predicted <- cutree(hc, k = n_tissues)
 ari <- adjusted_rand(true_tissue, predicted)
 nmi <- normalized_mi(true_tissue, predicted)
@@ -334,7 +339,11 @@ agreement <- cbind(
   agreement
 )
 
-stats_csv <- file.path(script_dir, "estimator_agreement_stats.csv")
+stats_csv <- file.path(
+  script_dir,
+  if (n_tissues == 10) "estimator_agreement_stats.csv" else
+    sprintf("estimator_agreement_stats_%dclass.csv", n_tissues)
+)
 write_csv(agreement, stats_csv)
 message("Wrote: ", stats_csv)
 print(agreement, row.names = FALSE)

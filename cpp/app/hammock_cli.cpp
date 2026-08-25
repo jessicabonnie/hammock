@@ -116,6 +116,8 @@ void print_help(const char* prog) {
         "                          effect at --subB 1.0, where all three keep every base).\n"
         "                          mixed-stride   deterministic ~1/subB stride, stride and\n"
         "                                         phase keyed by chromosome name; fastest.\n"
+        "                          mixed-stride-v2 experimental within-chromosome mixed gaps;\n"
+        "                                         integral reciprocal rates match legacy.\n"
         "                          hash-threshold keep when xxh32(point, --gate-seed) is\n"
         "                                         under the rate; orig-hammock parity.\n"
         "                          single-hash    one xxh64 is both gate and HLL input;\n"
@@ -199,10 +201,11 @@ bool parse_args(int argc, char** argv, Args& out) {
             std::string m = argv[++i];
             if (m == "hash-threshold")      out.subB_method = SubBMethod::HashThreshold;
             else if (m == "mixed-stride")   out.subB_method = SubBMethod::MixedStride;
+            else if (m == "mixed-stride-v2") out.subB_method = SubBMethod::MixedStrideV2;
             else if (m == "single-hash") out.subB_method = SubBMethod::SingleHash;
             else {
                 std::cerr << "Error: --subB-method must be one of hash-threshold, "
-                             "mixed-stride, single-hash (got '" << m << "')\n";
+                             "mixed-stride, mixed-stride-v2, single-hash (got '" << m << "')\n";
                 return false;
             }
         } else if (a == "--mode" && i + 1 < argc) {

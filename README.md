@@ -200,11 +200,14 @@ hammock <queries.txt> <refs.txt> [--mode MODE] [options]
                             mixed-stride (default; deterministic chr-keyed stride,
                             fastest at low subB), hash-threshold (random gate; use
                             this for byte-for-byte parity with the original hammock),
+                            experimental mixed-stride-v2 (within-chromosome mixed gaps),
                             or single-hash. NOTE: the mixed-stride default means subB
                             output is NOT byte-equal to orig unless you pass
                             --subB-method hash-threshold.
   -k, --kmer_size N         sequence mode: k-mer length (default 8)
   -w, --window_size N       sequence mode: window size (default 40)
+  --sequence-hll-hash M     sequence HLL hash: rehash-selector64 (default) or
+                            legacy-selector32 for reproducing pre-v0.12 results
   --seed N                  HLL ingestion seed (xxh64, default 42)
   --gate-seed N             Seed for the subB sampling-decision hash (xxh32) and the
                             mixed-stride stride assignment (default 31337 = orig
@@ -251,11 +254,12 @@ Requires `bedtools` — see [Installation](#installation).
 The output filename embeds the parameters so runs with different settings don't
 collide — e.g. `-o out` gives `out_hll_p18_jaccB_ie.csv` (interval, bare
 default), or `out_hll_p18_jaccC_expA0.50_B0.30_ie.csv` with hybrid subsampling.
-Sequence-mode outputs also embed `_k<k>_w<w>`
-(`out_mnmzr_p18_jaccD_k8_w40_ie.csv`), and BED→FASTA runs insert
+Sequence-mode outputs also embed `_k<k>_w<w>_rehash-selector64`
+(`out_mnmzr_p18_jaccD_k8_w40_rehash-selector64_ie.csv`); explicit legacy
+hashing retains the pre-v0.12 `_k<k>_w<w>` filename. BED→FASTA runs insert
 `_<ref1>-vs-<ref2>` right after your prefix, so cross-reference runs to the
 same `-o` don't overwrite each other
-(`out_hg38-vs-mm10_mnmzr_p18_jaccD_k8_w40_ie.csv`). The trailing `_ie`/`_re`/
+(`out_hg38-vs-mm10_mnmzr_p18_jaccD_k8_w40_rehash-selector64_ie.csv`). The trailing `_ie`/`_re`/
 `_full` always names the output shape (see
 [Output shapes and columns](#output-shapes-and-columns)) — `--register-equality`/
 `--re` gives `..._re.csv`, `--metrics` gives `..._full.csv`. Run with
@@ -394,6 +398,10 @@ and `register_equality_similarity` (the 0.8.0-era literal duplicate of it)
 is gone — `reg_eq_similarity` is self-describing on its own now, so `re`
 drops from 4 columns to 3 and `full` from 8 to 7
 (`docs/seed-jaccard-reg-eq-rename.md`).
+
+The current Mode D parallelism limitations and the preferred C++ implementation
+boundary are documented in
+[`docs/mode-d-parallelism.md`](docs/mode-d-parallelism.md).
 
 ## Testing
 

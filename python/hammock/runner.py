@@ -334,13 +334,15 @@ def _sketch_mode_d_worker(tasks, results) -> None:
         task = tasks.get()
         if task is None:
             return
-        index, path, kmer_size, window_size, seed, precision = task
+        (index, path, kmer_size, window_size, seed, precision,
+         sequence_hll_hash) = task
         try:
             worker_args = SimpleNamespace(
                 kmer_size=kmer_size,
                 window_size=window_size,
                 seed=seed,
                 precision=precision,
+                sequence_hll_hash=sequence_hll_hash,
             )
             sketch = sketch_fasta(path, worker_args)
             results.put(("ok", index, path,
@@ -378,13 +380,14 @@ def _stop_mode_d_workers(workers, tasks, results, *, graceful: bool) -> None:
 
 
 def _restore_mode_d_sketch(state, kmer_size: int, window_size: int,
-                           seed: int, precision: int):
+                           seed: int, precision: int,
+                           sequence_hll_hash: str):
     """Rebuild the existing Mode D wrapper around validated HLL state."""
     from hammock.modes.sequence import MinimizerSketch
 
     sketch = MinimizerSketch(
         kmer_size=kmer_size, window_size=window_size,
-        seed=seed, precision=precision,
+        seed=seed, precision=precision, hash_mode=sequence_hll_hash,
     )
     sketch.minimizer_hll = _core._hll_from_transport_state(state)
     return sketch
@@ -415,7 +418,8 @@ def _sketch_many_mode_d_processes(paths: List[str], args, label: str) -> list:
 
     def task_for(index: int) -> tuple:
         return (index, paths[index], args.kmer_size, args.window_size,
-                args.seed, args.precision)
+                args.seed, args.precision,
+                getattr(args, "sequence_hll_hash", "rehash-selector64"))
 
     next_index = 0
     pending = {}
@@ -449,7 +453,8 @@ def _sketch_many_mode_d_processes(paths: List[str], args, label: str) -> list:
 
             sketches[index] = _restore_mode_d_sketch(
                 payload[0], args.kmer_size, args.window_size,
-                args.seed, args.precision)
+                args.seed, args.precision,
+                getattr(args, "sequence_hll_hash", "rehash-selector64"))
             completed += 1
             if args.verbose:
                 print(f"  [{completed}/{n}] {label}: {os.path.basename(path)} "
@@ -628,6 +633,7 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches,
         expA=args.expA,
         kmer_size=args.kmer_size,
         window_size=args.window_size,
+        sequence_hll_hash=getattr(args, "sequence_hll_hash", "rehash-selector64"),
         metrics_tag=tag,
     ) + ".csv"
 
@@ -841,6 +847,7 @@ def run(args) -> int:
         expA=args.expA,
         kmer_size=args.kmer_size,
         window_size=args.window_size,
+        sequence_hll_hash=getattr(args, "sequence_hll_hash", "rehash-selector64"),
         metrics_tag=tag,
     ) + ".csv"
 

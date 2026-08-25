@@ -2,17 +2,18 @@
 
 # Figure 7 — sequence-mode parameter objective trade-off
 #
-# Show the numerical-agreement and biological-recovery objectives for the
-# inclusion–exclusion Jaccard estimate at a selected precision (default p=18).
+# Show the numerical-agreement and biological-recovery objectives for exact
+# selected sequence features. The p=18 argument is retained for compatibility
+# with earlier invocations but no longer filters the source table.
 #
 # Each point is one (k, w) configuration:
-#   x = Pearson r with exact BEDTools Jaccard
+#   x = Pearson r with exact BEDTools coordinate Jaccard
 #   y = adjusted Rand index (ARI) for the 10-tissue clustering
 #   color = k-mer size k
 #   size = minimizer window w
 #
 # Usage:
-#   Rscript paper/parameter_objective_tradeoff/plot_parameter_objective_tradeoff_estimators.R [output.png] [precision]
+#   Rscript paper/parameter_objective_tradeoff/plot_parameter_objective_tradeoff_estimators.R [output.png] [precision] [classes]
 
 required_packages <- c("dplyr", "readr", "ggplot2", "scales", "Cairo")
 missing_packages <- required_packages[
@@ -39,10 +40,7 @@ script_path <- sub("^--file=", "", script_arg)
 script_dir <- dirname(normalizePath(script_path, mustWork = TRUE))
 repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 
-summary_csv <- file.path(repo_root, "docs", "data", "mode_d_summary.csv")
-experiment_summary_csv <- file.path(
-  repo_root, "experiments", "maurano_dhs_validation", "results", "mode_d_summary.csv"
-)
+summary_csv <- file.path(script_dir, "exact_scores.csv")
 argv <- commandArgs(trailingOnly = TRUE)
 out_png <- if (length(argv) >= 1) {
   normalizePath(argv[1], mustWork = FALSE)
@@ -53,7 +51,8 @@ dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 
 PRECISION <- if (length(argv) >= 2) as.integer(argv[2]) else 18L
 if (is.na(PRECISION)) stop("Precision must be an integer.", call. = FALSE)
-REFERENCE <- "bedtools"
+CLASSES <- if (length(argv) >= 3) as.integer(argv[3]) else 10L
+if (!CLASSES %in% c(8L, 10L)) stop("Classes must be 8 or 10.", call. = FALSE)
 FIG6_K <- 10
 FIG6_W <- 30
 
@@ -66,39 +65,30 @@ base_family <- "sans"
 
 if (!file.exists(summary_csv)) stop("Input file not found: ", summary_csv, call. = FALSE)
 raw <- read_csv(summary_csv, show_col_types = FALSE)
-required_cols <- c("precision", "k", "w", "column", "reference", "pearson", "ari")
+required_cols <- c(
+  "k", "w", "bedtools_pearson", "ari_10class", "ari_8class"
+)
 missing_cols <- setdiff(required_cols, names(raw))
 if (length(missing_cols) > 0) {
   stop(basename(summary_csv), " lacks columns: ", paste(missing_cols, collapse = ", "), call. = FALSE)
 }
 
-SIM_COLUMN <- "jaccard_similarity_ie"
-if (!SIM_COLUMN %in% unique(raw$column)) {
-  if (!file.exists(experiment_summary_csv)) {
-    stop("No rows available for ", SIM_COLUMN, call. = FALSE)
-  }
-  experiment_raw <- read_csv(experiment_summary_csv, show_col_types = FALSE)
-  if (!SIM_COLUMN %in% unique(experiment_raw$column)) {
-    stop("No rows available for ", SIM_COLUMN, call. = FALSE)
-  }
-  message("Supplementing staged summary from experiment results for ", SIM_COLUMN)
-  raw <- bind_rows(raw, experiment_raw %>% filter(column == SIM_COLUMN))
-}
-
 sweep <- raw %>%
-  filter(
-    precision == PRECISION,
-    reference == REFERENCE,
-    column == SIM_COLUMN,
-    k >= 8
-  ) %>%
+  filter(k >= 8) %>%
   mutate(
-    pearson = as.numeric(pearson),
-    ari = as.numeric(ari),
+    pearson = as.numeric(bedtools_pearson),
+    ari = as.numeric(ari_10class),
+    ari_8class = as.numeric(ari_8class),
     k = as.integer(k),
     w = as.numeric(w)
   ) %>%
   filter(!is.na(pearson), !is.na(ari))
+
+if (CLASSES == 8L) {
+  sweep <- sweep %>%
+    select(-ari) %>%
+    rename(ari = ari_8class)
+}
 
 k_levels <- sort(unique(sweep$k))
 if (length(k_levels) > length(K_COLORS)) {
@@ -115,36 +105,37 @@ fig6_points <- sweep %>% filter(k == FIG6_K, w == FIG6_W)
 if (nrow(fig6_points) != 1) {
   stop("Expected one k=10, w=30 inclusion–exclusion cell.", call. = FALSE)
 }
-if (fig6_points$ari < max(sweep$ari) - 1e-12) {
+if (CLASSES == 10L && fig6_points$ari < max(sweep$ari) - 1e-12) {
   warning("k=10, w=30 is not a maximum-ARI inclusion–exclusion cell.")
 }
+bio_points <- if (CLASSES == 8L) {
+  sweep %>% filter(abs(ari - max(ari)) <= 1e-12)
+} else fig6_points
 
 message(sprintf(
   "Numerical optimum: k=%d w=%g r=%.6f ARI=%.3f",
   best_numeric$k, best_numeric$w, best_numeric$pearson, best_numeric$ari
 ))
-message(sprintf(
-  "Biological optimum shown: k=%d w=%g r=%.6f ARI=%.3f",
-  fig6_points$k, fig6_points$w, fig6_points$pearson, fig6_points$ari
-))
+message(sprintf("Biological optimum contains %d cell(s); maximum ARI=%.6f",
+                nrow(bio_points), max(sweep$ari)))
 
 p <- ggplot(sweep, aes(x = pearson, y = ari)) +
   geom_hline(yintercept = 0, linewidth = 0.55, color = "#707981") +
   geom_point(aes(color = k_label, size = w), alpha = 0.76, stroke = 0.25) +
-  # Numerical optimum: saturated-orange outline on the underlying point.
+  # Biological optimum: magenta outline (all tied cells for the eight-class endpoint).
+  geom_point(
+    data = bio_points,
+    aes(x = pearson, y = ari, size = w),
+    inherit.aes = FALSE,
+    shape = 21, fill = NA, stroke = 1.35, color = COL_BIO,
+    show.legend = FALSE
+  ) +
+  # Numerical optimum: orange outline; for eight classes it lies on the plateau.
   geom_point(
     data = best_numeric,
     aes(x = pearson, y = ari, size = w),
     inherit.aes = FALSE,
     shape = 21, fill = NA, stroke = 1.35, color = COL_NUMERIC,
-    show.legend = FALSE
-  ) +
-  # Manuscript biological optimum: magenta outline on the underlying point.
-  geom_point(
-    data = fig6_points,
-    aes(x = pearson, y = ari, size = w),
-    inherit.aes = FALSE,
-    shape = 21, fill = NA, stroke = 1.35, color = COL_BIO,
     show.legend = FALSE
   ) +
   scale_color_manual(values = k_colors, name = "k-mer size (k)") +
@@ -165,7 +156,8 @@ p <- ggplot(sweep, aes(x = pearson, y = ari)) +
   ) +
   labs(
     x = "Agreement with exact BEDTools Jaccard (Pearson r)",
-    y = "Tissue recovery (adjusted Rand index)"
+    y = if (CLASSES == 8L) "Eight-class tissue recovery (adjusted Rand index)" else
+      "Tissue recovery (adjusted Rand index)"
   ) +
   theme_classic(base_size = 11, base_family = base_family) +
   theme(
