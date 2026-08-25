@@ -95,23 +95,14 @@ p <- ggplot() +
            fontface = "bold", size = 3.2) +
   annotate("text", x = 0.765, y = 0.93, label = "Alternate p=18 seed partition",
            fontface = "bold", size = 3.2) +
-  annotate("text", x = 0.02, y = 1.10,
-           label = "Ten-class partition vacillation at k=10, w=30",
-           fontface = "bold", size = 4.8, hjust = 0) +
-  annotate("text", x = 0.02, y = 1.03,
-           label = paste(
-             "Alternate state: heart sample 15839 splits off, while the muscle",
-             "clusters merge.\nOther samples retain the same co-clustering."
-           ),
-           size = 3.15, hjust = 0) +
   scale_fill_manual(values = family_fill, guide = "none") +
   scale_color_manual(values = family_border, guide = "none") +
-  coord_cartesian(xlim = c(0, 1), ylim = c(0.17, 1.13), clip = "off") +
+  coord_cartesian(xlim = c(0, 1), ylim = c(0.17, 0.98), clip = "off") +
   theme_void() +
   theme(plot.margin = margin(10, 12, 10, 12))
 
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
-CairoPNG(out_png, width = 7.2, height = 4.8, units = "in", res = 300,
+CairoPNG(out_png, width = 7.2, height = 3.8, units = "in", res = 300,
          bg = "white")
 print(p)
 dev.off()
