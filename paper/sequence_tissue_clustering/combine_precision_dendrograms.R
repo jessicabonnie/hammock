@@ -22,6 +22,7 @@ repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 argv <- commandArgs(trailingOnly = TRUE)
 precisions <- c(12, 18, 24)
 panel_labels <- c("A", "B", "C")
+cluster_count <- if (length(argv) == 2) as.integer(argv[2]) else 10L
 if (length(argv) < 3) {
   plot_script <- file.path(script_dir, "plot_sequence_tissue_clustering.R")
   experiment_dir <- file.path(repo_root, "experiments", "maurano_dhs_validation")
@@ -43,7 +44,7 @@ if (length(argv) < 3) {
     plot_args <- c(
       plot_script, input_csv, key_tsv, inputs[i],
       "jaccard_similarity_ie", panel_labels[i], "0.05", "4.5", "true",
-      as.character(precisions[i])
+      as.character(precisions[i]), as.character(cluster_count)
     )
     status <- system2(
       "Rscript",
@@ -57,9 +58,16 @@ if (length(argv) < 3) {
 } else {
   inputs <- argv[1:3]
 }
-output <- if (length(argv) >= 4) argv[4] else file.path(
+default_output <- file.path(
   repo_root, "paper", "figures", "sequence_tissue_clustering_precision.png"
 )
+output <- if (length(argv) >= 4) {
+  argv[4]
+} else if (length(argv) < 3 && length(argv) >= 1) {
+  argv[1]
+} else {
+  default_output
+}
 
 missing_inputs <- inputs[!file.exists(inputs)]
 if (length(missing_inputs) > 0) {

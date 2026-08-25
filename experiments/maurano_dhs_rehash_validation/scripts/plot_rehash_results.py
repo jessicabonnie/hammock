@@ -44,6 +44,7 @@ def main() -> int:
     runs = pd.read_csv(summary / "rehash_run_scores.csv")
     aggregates = pd.read_csv(summary / "rehash_cell_aggregates.csv")
     precision = pd.read_csv(summary / "rehash_precision_aggregates.csv")
+    precision_8 = pd.read_csv(summary / "rehash_precision_aggregates_8class.csv")
     primary = (runs[runs["phase"] == "primary"] if "phase" in runs else
                runs[runs["precision"] == int(config["primary_precision"])])
     if len(exact) != 37 or len(primary) != 296 or len(aggregates) != 37:
@@ -116,6 +117,35 @@ def main() -> int:
         axes[1].set_title("101 seeds; Wilson 95% intervals")
         figure.savefig(output / "historical_precision_extension.png", dpi=180)
         plt.close(figure)
+        historical_precision_8 = precision_8[
+            (precision_8.k == 10) & (precision_8.w == 30)].sort_values("precision")
+        if (historical_precision_8["precision"].astype(int).tolist() == precisions and
+                (historical_precision_8["seeds_observed"] == expected_seeds).all()):
+            ari_values_8 = [historical[historical.precision == value]["ari_8class"].to_numpy()
+                            for value in precisions]
+            figure, axes = plt.subplots(1, 2, figsize=(10, 4.5), constrained_layout=True)
+            axes[0].boxplot(ari_values_8, tick_labels=precisions, showmeans=True, meanline=True)
+            rng = np.random.default_rng(0)
+            for position, values in enumerate(ari_values_8, start=1):
+                axes[0].scatter(position + rng.uniform(-0.12, 0.12, len(values)), values,
+                                s=12, alpha=0.25, color="black", linewidths=0)
+            axes[0].set_xlabel("HLL precision p")
+            axes[0].set_ylabel("eight-class ARI")
+            axes[0].set_title("Muscle-merged tissue recovery")
+            frequency_8 = historical_precision_8["exact_partition_frequency"].to_numpy()
+            lower_8 = historical_precision_8["exact_partition_wilson95_low"].to_numpy()
+            upper_8 = historical_precision_8["exact_partition_wilson95_high"].to_numpy()
+            axes[1].errorbar(precisions, frequency_8,
+                             yerr=[frequency_8 - lower_8, upper_8 - frequency_8],
+                             fmt="o-", capsize=4)
+            axes[1].axhline(0.5, color="0.6", linestyle="--", linewidth=1)
+            axes[1].set_xticks(precisions)
+            axes[1].set_ylim(0, 1)
+            axes[1].set_xlabel("HLL precision p")
+            axes[1].set_ylabel("exact eight-cluster recovery")
+            axes[1].set_title("101 paired seeds; Wilson 95% intervals")
+            figure.savefig(output / "historical_precision_extension_8class.png", dpi=180)
+            plt.close(figure)
         transitions = pd.read_csv(summary / "rehash_precision_transitions.csv")
         if (len(transitions) == len(plotted_precisions) - 1 and
                 (transitions["paired_seeds"] == expected_seeds).all()):
@@ -130,23 +160,27 @@ def main() -> int:
                          "o-", label="unranked topology changed")
             axes[0].plot(right_precision,
                          transitions["ari_unchanged_hierarchy_changed"] / paired,
-                         "o-", label="hierarchy changed, ARI unchanged")
+                         "o-", label="ranked hierarchy changed, ARI unchanged")
             axes[0].set_ylim(0, 1.03)
             axes[0].set_xticks(right_precision)
             axes[0].set_xlabel("right precision in adjacent pair")
             axes[0].set_ylabel("fraction of paired seeds")
             axes[0].set_title("Same-seed state transitions")
             axes[0].legend(fontsize=8)
-            axes[1].plot(right_precision, transitions["median_adjacent_clade_distance"],
-                         "o-", label="normalized clade distance")
-            axes[1].plot(right_precision,
-                         1 - transitions["median_adjacent_cophenetic_pearson"],
-                         "o-", label="1 − cophenetic Pearson r")
+            clade_line = axes[1].plot(
+                right_precision, transitions["median_adjacent_clade_distance"],
+                "o-", label="normalized clade distance")
+            cophenetic_axis = axes[1].twinx()
+            cophenetic_line = cophenetic_axis.semilogy(
+                right_precision, 1 - transitions["median_adjacent_cophenetic_pearson"],
+                "o-", color="tab:orange", label="1 − cophenetic Pearson r")
             axes[1].set_xticks(right_precision)
             axes[1].set_xlabel("right precision in adjacent pair")
-            axes[1].set_ylabel("median same-seed dissimilarity")
+            axes[1].set_ylabel("median normalized clade distance")
+            cophenetic_axis.set_ylabel("median 1 − cophenetic Pearson r (log scale)")
             axes[1].set_title("Adjacent-precision hierarchy dispersion")
-            axes[1].legend(fontsize=8)
+            axes[1].legend(clade_line + cophenetic_line,
+                           [line.get_label() for line in clade_line + cophenetic_line], fontsize=8)
             figure.savefig(output / "adjacent_precision_hierarchy_dispersion.png", dpi=180)
             plt.close(figure)
     print(f"wrote figures to {output}")

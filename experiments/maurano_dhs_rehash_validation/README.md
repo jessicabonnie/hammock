@@ -5,7 +5,9 @@ This experiment asks whether the historical ten-class Mode D optimum at
 HLL rehashing. It deliberately separates three targets: exact selector-feature
 Jaccard (estimator truth), ten-class tissue recovery (an exploratory biological
 objective), and BEDTools coordinate Jaccard (an external application target).
-The eight-class muscle-merged analysis is out of scope.
+The prespecified ten-class endpoint remains primary. A secondary eight-class sensitivity endpoint
+collapses `fMuscle_arm`, `fMuscle_back`, and `fMuscle_leg` into `fMuscle` and cuts the same average-linkage
+hierarchy into eight groups. It is scored seed-for-seed from the completed matrices; it does not add HLL runs.
 
 ## Frozen design
 

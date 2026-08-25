@@ -20,7 +20,7 @@
 #   Rscript paper/sequence_tissue_clustering/plot_distance_heatmap.R
 #
 # Optional overrides:
-#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [cluster_strip] [legend] [precision_label] [black_accession_labels]
+#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [cluster_strip] [legend] [precision_label] [black_accession_labels] [clusters]
 
 required_packages <- c("dplyr", "readr", "ggplot2", "scales", "Cairo")
 missing_packages <- required_packages[
@@ -82,6 +82,12 @@ precision_label <- if (length(argv) >= 8 && nzchar(argv[8])) {
 black_accession_labels <- if (length(argv) >= 9 && nzchar(argv[9])) {
   tolower(argv[9]) %in% c("1", "true", "yes", "black")
 } else FALSE
+cluster_count <- if (length(argv) >= 10 && nzchar(argv[10])) {
+  suppressWarnings(as.integer(argv[10]))
+} else NA_integer_
+if (!is.na(cluster_count) && cluster_count < 2) {
+  stop("clusters must be an integer of at least 2.", call. = FALSE)
+}
 
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 for (path in c(input_csv, key_tsv)) {
@@ -100,6 +106,7 @@ GROUP_DISPLAY <- c(
   fMuscle_arm = "Arm",
   fMuscle_back = "Back",
   fMuscle_leg = "Leg",
+  fMuscle = "Muscle",
   fSkin_fibro_bicep_R = "Skin",
   fStomach = "Stomach"
 )
@@ -134,6 +141,9 @@ add_jaccard_ie <- function(df) {
 
 key <- read_tsv(key_tsv, show_col_types = FALSE) %>%
   transmute(stem = strip_ext(File), tissue = Biosample_term_name)
+if (identical(cluster_count, 8L)) {
+  key <- key %>% mutate(tissue = if_else(grepl("^fMuscle_", tissue), "fMuscle", tissue))
+}
 tissue_by_stem <- setNames(key$tissue, key$stem)
 
 raw <- add_jaccard_ie(read_csv(input_csv, show_col_types = FALSE))
@@ -181,7 +191,7 @@ ord <- hc$labels[hc$order]
 # clusters are contiguous in leaf order, so each becomes a square on the
 # heatmap diagonal. Outlining those squares exposes tissue groups that the cut
 # splits even when their samples sit next to one another in the dendrogram.
-n_tissues <- length(unique(tissue_by_stem[stems]))
+n_tissues <- if (is.na(cluster_count)) length(unique(tissue_by_stem[stems])) else cluster_count
 predicted <- cutree(hc, k = n_tissues)
 predicted_ordered <- unname(predicted[ord])
 predicted_runs <- split(

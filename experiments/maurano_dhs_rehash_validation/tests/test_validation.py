@@ -11,9 +11,9 @@ sys.path.insert(0, str(SCRIPTS))
 from validation import METRICS, validate_hll_csv
 from run_rehash_sweep import (extension_seeds, normalize_csv_lf, parse_time_report,
                               plan_fingerprint, requested_seeds)
-from analyze_rehash_sweep import (cochrans_q, completion_phase, expected_phase_keys,
+from analyze_rehash_sweep import (cochrans_q, completion_phase, expected_phase_keys, holm_adjust,
                                   extension_run_count, hierarchy_agreement, hierarchy_clades,
-                                  interpolation_run_count, wilson_interval)
+                                  interpolation_run_count, muscle_merged_labels, wilson_interval)
 import numpy as np
 from common import strip_fasta
 
@@ -63,6 +63,11 @@ def test_sample_stem_preserves_biological_merge_suffix():
     assert strip_fasta(stem) == stem
     assert strip_fasta(stem + ".fa") == stem
     assert strip_fasta(stem + ".bed") == stem
+
+
+def test_eight_class_endpoint_only_merges_fetal_muscle_labels():
+    labels = ["fMuscle_arm", "fMuscle_back", "fMuscle_leg", "fHeart", "Muscle"]
+    assert muscle_merged_labels(labels) == ["fMuscle", "fMuscle", "fMuscle", "fHeart", "Muscle"]
 
 
 def test_extension_adds_93_seeds_without_changing_frozen_eight():
@@ -143,3 +148,4 @@ def test_expected_interpolation_keys_are_exact_and_cochrans_q_is_paired():
     assert 0 < pvalue < 1
     json.dumps({"precisions": sorted(map(int, np.array([12, 13]))),
                 "cochrans_q": statistic, "pvalue": pvalue})
+    assert np.allclose(holm_adjust([0.01, 0.04, 0.03]), [0.03, 0.06, 0.06])

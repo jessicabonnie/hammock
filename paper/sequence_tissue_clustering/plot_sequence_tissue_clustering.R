@@ -19,7 +19,7 @@
 #   Rscript paper/sequence_tissue_clustering/plot_sequence_tissue_clustering.R
 #
 # Optional overrides:
-#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [axis_break] [height_inches] [cluster_strip] [precision]
+#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [axis_break] [height_inches] [cluster_strip] [precision] [clusters]
 #
 # `jaccard_similarity_ie` is accepted as the similarity column even though the
 # archived sweep predates it: the CSVs carry containment_AB/containment_BA, from
@@ -85,6 +85,12 @@ show_cluster_strip <- if (length(argv) >= 8 && nzchar(argv[8])) {
 precision_value <- if (length(argv) >= 9 && nzchar(argv[9])) {
   suppressWarnings(as.integer(argv[9]))
 } else NA_integer_
+cluster_count <- if (length(argv) >= 10 && nzchar(argv[10])) {
+  suppressWarnings(as.integer(argv[10]))
+} else NA_integer_
+if (!is.na(cluster_count) && cluster_count < 2) {
+  stop("clusters must be an integer of at least 2.", call. = FALSE)
+}
 if (!is.na(axis_break) && (axis_break <= 0 || axis_break >= 1)) {
   stop("axis_break must be between 0 and 1.", call. = FALSE)
 }
@@ -119,6 +125,7 @@ TISSUE_DISPLAY <- c(
   fMuscle_arm = "Muscle (arm)",
   fMuscle_back = "Muscle (back)",
   fMuscle_leg = "Muscle (leg)",
+  fMuscle = "Muscle",
   fSkin_fibro_bicep_R = "Skin fibroblast (bicep)",
   fStomach = "Stomach"
 )
@@ -141,6 +148,7 @@ GROUP_DISPLAY <- c(
   fMuscle_arm = "Arm",
   fMuscle_back = "Back",
   fMuscle_leg = "Leg",
+  fMuscle = "Muscle",
   fSkin_fibro_bicep_R = "Skin",
   fStomach = "Stomach"
 )
@@ -230,6 +238,9 @@ add_jaccard_ie <- function(df) {
 
 key <- read_tsv(key_tsv, show_col_types = FALSE) %>%
   transmute(stem = strip_ext(File), tissue = Biosample_term_name)
+if (identical(cluster_count, 8L)) {
+  key <- key %>% mutate(tissue = if_else(grepl("^fMuscle_", tissue), "fMuscle", tissue))
+}
 
 raw <- add_jaccard_ie(read_csv(input_csv, show_col_types = FALSE))
 
@@ -284,7 +295,7 @@ similarity_matrix <- function(df, column) {
 mat <- similarity_matrix(raw, sim_col)
 hc <- hclust(as.dist(1 - mat), method = "average")
 true_tissue <- tissue_by_stem[hc$labels]
-n_tissues <- length(unique(true_tissue))
+n_tissues <- if (is.na(cluster_count)) length(unique(true_tissue)) else cluster_count
 predicted <- cutree(hc, k = n_tissues)
 ari <- adjusted_rand(true_tissue, predicted)
 nmi <- normalized_mi(true_tissue, predicted)
@@ -334,7 +345,11 @@ agreement <- cbind(
   agreement
 )
 
-stats_csv <- file.path(script_dir, "estimator_agreement_stats.csv")
+stats_csv <- file.path(
+  script_dir,
+  if (n_tissues == 10) "estimator_agreement_stats.csv" else
+    sprintf("estimator_agreement_stats_%dclass.csv", n_tissues)
+)
 write_csv(agreement, stats_csv)
 message("Wrote: ", stats_csv)
 print(agreement, row.names = FALSE)
