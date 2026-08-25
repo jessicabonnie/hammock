@@ -81,8 +81,11 @@ def test_mode_b_shape_header_and_filename(tmp_path: Path, flags, tag, tail) -> N
 @pytest.mark.parametrize("flags,tag,tail", _SHAPES)
 def test_mode_d_shape_header_filename_and_ref_columns(tmp_path: Path, flags, tag, tail) -> None:
     csv_path = _run_shape(tmp_path, flags, "D", "tiny.fa", "tiny2.fa")
-    # Tag comes after the Mode D k/w component in the filename.
-    assert csv_path.name.endswith(f"_k8_w40_{tag}.csv"), csv_path.name
+    # The hash contract is explicit between the Mode D k/w component and the
+    # output-shape tag.
+    assert csv_path.name.endswith(
+        f"_k8_w40_rehash-selector64_{tag}.csv"
+    ), csv_path.name
     header, rows = _read_csv(csv_path)
     # ref1/ref2 are Mode-D-specific trailing columns, present in every shape,
     # appended after the similarity block -- not dropped by any shape.

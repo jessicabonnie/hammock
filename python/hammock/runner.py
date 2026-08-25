@@ -454,7 +454,7 @@ def _write_mode_d_csv(args, queries, refs, query_sketches, ref_sketches,
         expA=args.expA,
         kmer_size=args.kmer_size,
         window_size=args.window_size,
-        sequence_hll_hash=getattr(args, "sequence_hll_hash", "legacy-selector32"),
+        sequence_hll_hash=getattr(args, "sequence_hll_hash", "rehash-selector64"),
         metrics_tag=tag,
     ) + ".csv"
 
@@ -648,7 +648,7 @@ def run(args) -> int:
         expA=args.expA,
         kmer_size=args.kmer_size,
         window_size=args.window_size,
-        sequence_hll_hash=getattr(args, "sequence_hll_hash", "legacy-selector32"),
+        sequence_hll_hash=getattr(args, "sequence_hll_hash", "rehash-selector64"),
         metrics_tag=tag,
     ) + ".csv"
 

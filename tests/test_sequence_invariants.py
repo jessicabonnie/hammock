@@ -80,8 +80,10 @@ def test_rehash_selector_mode_uses_seed(monkeypatch) -> None:
     monkeypatch.setattr(
         seqmod, "window_minimizer", lambda *_args, **_kwargs: [(0, 17), (4, 23)]
     )
-    legacy_a = MinimizerSketch(kmer_size=3, window_size=4, precision=12, seed=1)
-    legacy_b = MinimizerSketch(kmer_size=3, window_size=4, precision=12, seed=2)
+    legacy_a = MinimizerSketch(kmer_size=3, window_size=4, precision=12, seed=1,
+                               hash_mode="legacy-selector32")
+    legacy_b = MinimizerSketch(kmer_size=3, window_size=4, precision=12, seed=2,
+                               hash_mode="legacy-selector32")
     rehash_a = MinimizerSketch(kmer_size=3, window_size=4, precision=12, seed=1,
                                hash_mode="rehash-selector64")
     rehash_b = MinimizerSketch(kmer_size=3, window_size=4, precision=12, seed=2,
@@ -93,3 +95,7 @@ def test_rehash_selector_mode_uses_seed(monkeypatch) -> None:
         legacy_b.minimizer_hll) == pytest.approx(1.0)
     assert rehash_a.minimizer_hll.estimate_reg_eq_similarity(
         rehash_b.minimizer_hll) < 1.0
+
+
+def test_rehash_selector64_is_the_sequence_default() -> None:
+    assert MinimizerSketch().hash_mode == "rehash-selector64"

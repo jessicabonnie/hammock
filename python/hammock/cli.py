@@ -219,9 +219,9 @@ def parse_args(argv=None):
                         "A record shorter than k + w - 1 yields no minimizer and is "
                         "hashed whole, so it matches only an identical record.")
     p.add_argument("--seed", type=int, default=42,
-                   help="Seed for xxh64 HLL hashes (default: 42). In legacy sequence "
-                        "mode selector hashes bypass it; --sequence-hll-hash "
-                        "rehash-selector64 makes it active. Changes every rehashed "
+                   help="Seed for xxh64 HLL hashes (default: 42). Sequence mode "
+                        "rehashes selector identities by default; legacy-selector32 "
+                        "bypasses this seed. Changes every rehashed "
                         "sketch but not the expected estimate; useful "
                         "for re-rolling estimator noise. With "
                         "--subB-method=single-hash this same hash also decides which "
@@ -236,12 +236,13 @@ def parse_args(argv=None):
                         "but the mode C --subA gate still uses this one.")
     p.add_argument("--sequence-hll-hash",
                    choices=["legacy-selector32", "rehash-selector64"],
-                   default="legacy-selector32",
-                   help="Experimental sequence-mode HLL ingestion: legacy-selector32 "
-                        "feeds digest's raw 32-bit selector hash (default, preserving "
-                        "existing results); rehash-selector64 domain-separates its "
+                   default="rehash-selector64",
+                   help="Sequence-mode HLL ingestion: rehash-selector64 (default) "
+                        "domain-separates digest's "
                         "fixed-width little-endian uint32 encoding and hashes it with "
-                        "seeded xxh64 before HLL ingestion. Ignored outside sequence mode.")
+                        "seeded xxh64 before HLL ingestion; legacy-selector32 feeds "
+                        "the raw selector hash to reproduce older results. Ignored "
+                        "outside sequence mode.")
     p.add_argument("--verbose", action="store_true",
                    help="Progress on stderr: per-file sketching lines, interval/point "
                         "counts from the sketcher, the output path, and a reminder "

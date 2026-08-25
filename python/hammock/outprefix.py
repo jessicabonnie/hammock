@@ -37,8 +37,8 @@ def get_new_prefix(outprefix: str,
 
     if mode == "D" and kmer_size is not None and window_size is not None:
         outprefix = f"{outprefix}_k{kmer_size}_w{window_size}"
-        # Preserve legacy filenames exactly while preventing an experimental
-        # rehash output from overwriting an otherwise identical legacy CSV.
+        # Preserve pre-v0.12 legacy filenames while keeping the default rehash
+        # output visibly distinct from an otherwise identical legacy CSV.
         if sequence_hll_hash and sequence_hll_hash != "legacy-selector32":
             outprefix = f"{outprefix}_{sequence_hll_hash}"
 

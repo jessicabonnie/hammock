@@ -1,11 +1,12 @@
 """Mode D: FASTA sequence sketching.
 
 `MinimizerSketch` holds one HLL over a FASTA's (k, w) window minimizers.
-Selector hashes come from `digest.window_minimizer` and go straight into
-`_core.HLLSketch.add_hash64` as raw 64-bit values — *not* through orig's
-hash → str → re-hash-as-kmers idiom, which silently dropped most minimizers
-(see divergence #6 in CLAUDE.md). Mode D is therefore deliberately **not**
-byte-identical to orig.
+Selector identities come from `digest.window_minimizer`. By default they are
+domain-separated and rehashed to uniform 64-bit values before
+`_core.HLLSketch.add_hash64`; `legacy-selector32` feeds the raw selector hash
+for compatibility. Neither path uses orig's hash → str → re-hash-as-kmers
+idiom, which silently dropped most minimizers (see divergence #6 in
+CLAUDE.md). Mode D is therefore deliberately **not** byte-identical to orig.
 
 `xxhash.xxh64(seed)` survives on exactly one path in the legacy mode: the no-minimizer fallback
 for records shorter than `k + w - 1`, which hashes the whole record as a single
@@ -55,7 +56,7 @@ _WHOLE_RECORD64_DOMAIN = b"hammock:sequence:whole-record:v1\0"
 def _rehash_selector64(selector_hash: int, seed: int) -> int:
     """Domain-separate and uniformly rehash a digest 32-bit selector hash.
 
-    The selector remains the feature identity in this experimental mode.  A
+    The selector remains the feature identity. A
     collision already present in digest's 32-bit selector hash is therefore
     intentionally retained; this function only prevents its order-statistic
     distribution from being used as an HLL hash.
@@ -93,7 +94,7 @@ class MinimizerSketch:
         window_size: int = 40,
         seed: int = 42,
         precision: int = 16,
-        hash_mode: str = "legacy-selector32",
+        hash_mode: str = "rehash-selector64",
     ) -> None:
         self.kmer_size = int(kmer_size)
         self.window_size = int(window_size)
@@ -174,7 +175,7 @@ def sketch_fasta(path: str, args) -> MinimizerSketch:
         window_size=args.window_size,
         seed=args.seed,
         precision=args.precision,
-        hash_mode=getattr(args, "sequence_hll_hash", "legacy-selector32"),
+        hash_mode=getattr(args, "sequence_hll_hash", "rehash-selector64"),
     )
     if path.endswith('.gz'):
         import gzip

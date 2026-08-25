@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "hammock"
-version = "0.11.0"
+version = "0.12.0"
 description = "Pairwise Jaccard similarity for BED intervals (modes A/B/C) and FASTA sequences (mode D)."
 requires-python = ">=3.8"
 dependencies = [

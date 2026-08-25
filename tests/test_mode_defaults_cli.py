@@ -64,7 +64,20 @@ def test_mode_d_default_threads_is_silent(tmp_path: Path) -> None:
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert _CONVOY_WARNING not in r.stderr
-    assert _mode_col(next(tmp_path.glob("d*.csv"))) == "D"
+    csv_path = next(tmp_path.glob("d*.csv"))
+    assert _mode_col(csv_path) == "D"
+    assert "_rehash-selector64_" in csv_path.name
+
+
+def test_mode_d_legacy_hashing_remains_explicitly_available(tmp_path: Path) -> None:
+    fas = _fasta_list(tmp_path)
+    r = subprocess.run([
+        OURS, str(fas), str(fas), "--mode", "D",
+        "--sequence-hll-hash", "legacy-selector32",
+        "-p", "12", "-k", "8", "-w", "40", "-o", str(tmp_path / "legacy"),
+    ], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "rehash-selector64" not in next(tmp_path.glob("legacy*.csv")).name
 
 
 def test_mode_d_explicit_threads_warns_but_runs(tmp_path: Path) -> None:
