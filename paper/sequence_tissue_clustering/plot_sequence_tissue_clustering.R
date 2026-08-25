@@ -3,9 +3,8 @@
 # Figure 6 — Sequence-mode recovery of fetal-tissue organization
 #
 # This is the paper-local version of the tissue-coloured, cluster-boxed
-# dendrogram produced in experiments/maurano_dhs_validation/analyze.R.
-# It intentionally preserves the original visual logic while isolating only
-# the code and inputs needed to reproduce the manuscript figure.
+# dendrogram. It intentionally preserves the original visual logic while
+# isolating the code and inputs needed to reproduce the manuscript figure.
 #
 # Default analysis:
 #   similarity = jaccard_similarity_ie (inclusion-exclusion Jaccard)
@@ -21,12 +20,9 @@
 # Optional overrides:
 #   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [axis_break] [height_inches] [cluster_strip] [precision] [clusters]
 #
-# `jaccard_similarity_ie` is accepted as the similarity column even though the
-# archived sweep predates it: the CSVs carry containment_AB/containment_BA, from
-# which it is exactly recoverable (see jaccard_ie_from_containments below). Every
-# run also writes estimator_agreement_stats.csv next to this script, scoring both
-# columns on the same clustering and recording whether they induce the same
-# partition.
+# Every run also writes estimator_agreement_stats.csv next to this script,
+# scoring register-equality and inclusion-exclusion columns on the same
+# clustering and recording whether they induce the same partition.
 
 required_packages <- c("dplyr", "readr", "scales", "Cairo")
 missing_packages <- required_packages[
@@ -59,14 +55,12 @@ K <- 10
 W <- 30
 P <- 18
 
-experiment_dir <- file.path(repo_root, "experiments", "maurano_dhs_validation")
+data_dir <- file.path(script_dir, "data")
 default_csv <- file.path(
-  experiment_dir, "results", "raw_d",
-  # This archived extended-sweep output predates the current _full filename
-  # tag but contains the directional containments needed to reconstruct IE.
-  sprintf("hammock_mnmzr_p%d_jaccD_k%d_w%d.csv", P, K, W)
+  data_dir,
+  sprintf("p%d_seed00000_k%d_w%d.csv", P, K, W)
 )
-default_key <- file.path(experiment_dir, "data", "maurano_filenames_key.tsv")
+default_key <- file.path(data_dir, "maurano_filenames_key.tsv")
 default_output <- file.path(repo_root, "paper", "figures", "sequence_tissue_clustering.png")
 
 argv <- commandArgs(trailingOnly = TRUE)

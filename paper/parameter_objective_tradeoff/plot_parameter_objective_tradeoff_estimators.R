@@ -2,11 +2,12 @@
 
 # Figure 7 — sequence-mode parameter objective trade-off
 #
-# Show the numerical-agreement and biological-recovery objectives for the
-# inclusion–exclusion Jaccard estimate at a selected precision (default p=18).
+# Show the numerical-agreement and biological-recovery objectives for exact
+# selected sequence features. The p=18 argument is retained for compatibility
+# with earlier invocations but no longer filters the source table.
 #
 # Each point is one (k, w) configuration:
-#   x = Pearson r with exact BEDTools Jaccard
+#   x = Pearson r with exact BEDTools coordinate Jaccard
 #   y = adjusted Rand index (ARI) for the 10-tissue clustering
 #   color = k-mer size k
 #   size = minimizer window w
@@ -39,10 +40,7 @@ script_path <- sub("^--file=", "", script_arg)
 script_dir <- dirname(normalizePath(script_path, mustWork = TRUE))
 repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 
-summary_csv <- file.path(repo_root, "docs", "data", "mode_d_summary.csv")
-experiment_summary_csv <- file.path(
-  repo_root, "experiments", "maurano_dhs_validation", "results", "mode_d_summary.csv"
-)
+summary_csv <- file.path(script_dir, "exact_scores.csv")
 argv <- commandArgs(trailingOnly = TRUE)
 out_png <- if (length(argv) >= 1) {
   normalizePath(argv[1], mustWork = FALSE)
@@ -55,7 +53,6 @@ PRECISION <- if (length(argv) >= 2) as.integer(argv[2]) else 18L
 if (is.na(PRECISION)) stop("Precision must be an integer.", call. = FALSE)
 CLASSES <- if (length(argv) >= 3) as.integer(argv[3]) else 10L
 if (!CLASSES %in% c(8L, 10L)) stop("Classes must be 8 or 10.", call. = FALSE)
-REFERENCE <- "bedtools"
 FIG6_K <- 10
 FIG6_W <- 30
 
@@ -68,51 +65,28 @@ base_family <- "sans"
 
 if (!file.exists(summary_csv)) stop("Input file not found: ", summary_csv, call. = FALSE)
 raw <- read_csv(summary_csv, show_col_types = FALSE)
-required_cols <- c("precision", "k", "w", "column", "reference", "pearson", "ari")
+required_cols <- c(
+  "k", "w", "bedtools_pearson", "ari_10class", "ari_8class"
+)
 missing_cols <- setdiff(required_cols, names(raw))
 if (length(missing_cols) > 0) {
   stop(basename(summary_csv), " lacks columns: ", paste(missing_cols, collapse = ", "), call. = FALSE)
 }
 
-SIM_COLUMN <- "jaccard_similarity_ie"
-if (!SIM_COLUMN %in% unique(raw$column)) {
-  if (!file.exists(experiment_summary_csv)) {
-    stop("No rows available for ", SIM_COLUMN, call. = FALSE)
-  }
-  experiment_raw <- read_csv(experiment_summary_csv, show_col_types = FALSE)
-  if (!SIM_COLUMN %in% unique(experiment_raw$column)) {
-    stop("No rows available for ", SIM_COLUMN, call. = FALSE)
-  }
-  message("Supplementing staged summary from experiment results for ", SIM_COLUMN)
-  raw <- bind_rows(raw, experiment_raw %>% filter(column == SIM_COLUMN))
-}
-
 sweep <- raw %>%
-  filter(
-    precision == PRECISION,
-    reference == REFERENCE,
-    column == SIM_COLUMN,
-    k >= 8
-  ) %>%
+  filter(k >= 8) %>%
   mutate(
-    pearson = as.numeric(pearson),
-    ari = as.numeric(ari),
+    pearson = as.numeric(bedtools_pearson),
+    ari = as.numeric(ari_10class),
+    ari_8class = as.numeric(ari_8class),
     k = as.integer(k),
     w = as.numeric(w)
   ) %>%
   filter(!is.na(pearson), !is.na(ari))
 
 if (CLASSES == 8L) {
-  eight_csv <- file.path(
-    repo_root, "paper", "sequence_tissue_clustering", "muscle_merged_p18_sensitivity.csv"
-  )
-  if (PRECISION != 18L) stop("Eight-class parameter scores are available only at p=18.", call. = FALSE)
-  if (!file.exists(eight_csv)) stop("Input file not found: ", eight_csv, call. = FALSE)
-  eight <- read_csv(eight_csv, show_col_types = FALSE) %>%
-    select(k, w, ari_8class, nmi_8class)
   sweep <- sweep %>%
     select(-ari) %>%
-    inner_join(eight, by = c("k", "w")) %>%
     rename(ari = ari_8class)
 }
 

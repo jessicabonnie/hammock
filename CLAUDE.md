@@ -886,3 +886,21 @@ to `"NA"` to preserve orig row layout.
   GIL release.
 - Parity tests over invented goldens, not the other way around. If we find
   a parity drift, fix our code or document the divergence here.
+
+## Rockfish R PNG rendering
+
+For manuscript-style R figures on Rockfish, use the same pattern as the existing
+`paper/` figure scripts: load `libjpeg/9c` with `r/4.3.0`, import the R `Cairo`
+package, and write PNGs with `CairoPNG(...)`.
+
+```bash
+ml libjpeg/9c r/4.3.0
+Rscript path/to/plot_script.R
+```
+
+The user-level R 4.3 library contains `Cairo`, but it fails without
+`libjpeg/9c` because `Cairo.so` needs `libjpeg.so.9`. Do not conclude PNG
+output is impossible just because base R reports `capabilities("png") == FALSE`
+or `capabilities("cairo") == FALSE`; those are expected for this build. Avoid
+leaving intermediate PDFs in repo figure directories when the requested artifact
+is a PNG.

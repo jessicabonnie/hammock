@@ -54,12 +54,12 @@ K <- 10
 W <- 30
 P <- 18
 
-experiment_dir <- file.path(repo_root, "experiments", "maurano_dhs_validation")
+data_dir <- file.path(script_dir, "data")
 default_csv <- file.path(
-  experiment_dir, "results", "raw_d",
-  sprintf("hammock_mnmzr_p%d_jaccD_k%d_w%d.csv", P, K, W)
+  data_dir,
+  sprintf("p%d_seed00000_k%d_w%d.csv", P, K, W)
 )
-default_key <- file.path(experiment_dir, "data", "maurano_filenames_key.tsv")
+default_key <- file.path(data_dir, "maurano_filenames_key.tsv")
 default_output <- file.path(repo_root, "paper", "figures",
                             "sequence_tissue_distance_heatmap.png")
 

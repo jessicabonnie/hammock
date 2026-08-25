@@ -25,8 +25,8 @@ panel_labels <- c("A", "B", "C")
 generated_inputs <- length(argv) < 3
 if (generated_inputs) {
   plot_script <- file.path(script_dir, "plot_distance_heatmap.R")
-  experiment_dir <- file.path(repo_root, "experiments", "maurano_dhs_validation")
-  key_tsv <- file.path(experiment_dir, "data", "maurano_filenames_key.tsv")
+  data_dir <- file.path(script_dir, "data")
+  key_tsv <- file.path(data_dir, "maurano_filenames_key.tsv")
   inputs <- vapply(
     precisions,
     function(p) tempfile(
@@ -38,8 +38,8 @@ if (generated_inputs) {
   on.exit(unlink(inputs), add = TRUE)
   for (i in seq_along(precisions)) {
     input_csv <- file.path(
-      experiment_dir, "results", "raw_d",
-      sprintf("hammock_mnmzr_p%d_jaccD_k10_w30.csv", precisions[i])
+      data_dir,
+      sprintf("p%d_seed00000_k10_w30.csv", precisions[i])
     )
     plot_args <- c(
       plot_script, input_csv, key_tsv, inputs[i],

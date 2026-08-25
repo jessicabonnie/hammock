@@ -25,8 +25,8 @@ panel_labels <- c("A", "B", "C")
 cluster_count <- if (length(argv) == 2) as.integer(argv[2]) else 10L
 if (length(argv) < 3) {
   plot_script <- file.path(script_dir, "plot_sequence_tissue_clustering.R")
-  experiment_dir <- file.path(repo_root, "experiments", "maurano_dhs_validation")
-  key_tsv <- file.path(experiment_dir, "data", "maurano_filenames_key.tsv")
+  data_dir <- file.path(script_dir, "data")
+  key_tsv <- file.path(data_dir, "maurano_filenames_key.tsv")
   inputs <- vapply(
     precisions,
     function(p) tempfile(
@@ -38,8 +38,8 @@ if (length(argv) < 3) {
   on.exit(unlink(inputs), add = TRUE)
   for (i in seq_along(precisions)) {
     input_csv <- file.path(
-      experiment_dir, "results", "raw_d",
-      sprintf("hammock_mnmzr_p%d_jaccD_k10_w30.csv", precisions[i])
+      data_dir,
+      sprintf("p%d_seed00000_k10_w30.csv", precisions[i])
     )
     plot_args <- c(
       plot_script, input_csv, key_tsv, inputs[i],
