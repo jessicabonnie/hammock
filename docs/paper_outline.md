@@ -195,14 +195,12 @@ At the ARI-best config, sequence mode's predicted Jaccards sit on the y = x diag
 3 H3K27ac samples (heart, liver, lung) × 3 references (GRCh37/GRCh38/CHM13), 9 sample×ref combinations. Across the (k, w) sweep, same-tissue cross-reference Jaccard is significantly higher than different-tissue Jaccard at every cell with k ≥ 8 (Wilcoxon p ≤ 10⁻⁵), and by **k = 10 the two groups are *fully separated*** — the minimum same-tissue cross-reference similarity exceeds the maximum different-tissue similarity. This is a stronger statement than significant: no overlap.
 
 Ranked by effect size (Δ = median same-tissue cross-reference − median
-different-tissue) on `jaccard_similarity_ie` across all 20 (k, w) cells,
-broad peaks: **k20_w20 has the largest observed Δ** (0.563), closely followed
-by k20_w30 (0.561), k15_w15 (0.510), k15_w20 (0.510), and k15_w30 (0.508).
-The top five sit within 0.06 of each other and the top two within 0.008, so
-this reads as a **k ≥ 15 plateau** rather
+different-tissue) on `jaccard_similarity_ie` across all 63 (k, w) cells,
+broad peaks: **k20_w20 has the largest observed Δ** (0.559), closely followed
+by k20_w25 (0.558), k20_w30 (0.557), k20_w35 (0.556), and k20_w40 (0.555).
+The top five sit within 0.004 of each other, so this reads as a **k ≥ 15 plateau** rather
 than a single best cell — full separation (min(same-tissue) > max
-(different-tissue)) holds throughout it, and by k = 10 it already holds too
-(broad min(xref) 0.988 > max(diff) 0.935; narrow 0.985 > 0.927).
+(different-tissue)) holds throughout it, and by k = 10 it already holds too.
 
 | Regime | Cells | Behavior |
 |---|---|---|

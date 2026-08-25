@@ -21,6 +21,17 @@ CLAUDE.md divergence #8, `docs/mode-d-ends-removal.md`.
 > cells appeared to be a "saturated low" regime; post-fix they are the
 > strongest discriminators in the sweep.
 
+> **Corrected HLL rehash rerun 2026-08-25**: the complete 63-cell Figure 5
+> union was rerun for broad and narrow peaks at p=24 with
+> `--sequence-hll-hash rehash-selector64` and prespecified seeds 1, 42, and
+> 99. All 378 matrices passed completeness, symmetry, diagonal, metadata, and
+> boundedness validation. On `jaccard_similarity_ie`, k20_w20 remained the
+> unique lead cell in both peak types at every seed. At the paper-facing seed
+> 42, Δ is 0.5590 broad and 0.5954 narrow (legacy: 0.5632 and 0.5986), and the
+> nine broad peak sets retain the same three tissue-first clades. Raw results
+> and summaries are under `results/exp_a_rehash_selector64/`; the frozen
+> manifest, array driver, and validator are in `rehash_rerun/`.
+
 ## Where to find the raw results
 
 ```

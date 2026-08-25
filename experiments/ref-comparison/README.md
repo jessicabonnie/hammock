@@ -6,9 +6,11 @@ human reference genomes** (GRCh37, GRCh38, CHM13) sketches more similarly across
 references than across tissues on any one reference.
 
 **Outcome: positive.** The hypothesis holds across the whole usable
-parameter range, and at k ∈ {15, 20} the two groups are fully separated.
-The lead cell is **k=15, w=15** (broad: Δmedian 0.398, Wilcoxon p 1.35e-10).
-Numbers, figures and caveats: `docs/exp_a_results.md`.
+parameter range. On the corrected `rehash-selector64` sequence-HLL path and
+the current inclusion--exclusion estimator, the lead cell is **k=20, w=20**
+(seed-42 broad Δmedian 0.559). It remains the lead cell for broad and narrow
+peaks at all three prespecified seeds (1, 42, and 99). Numbers, figures and
+caveats: `docs/exp_a_results.md`.
 
 > Two things a reader must carry. (1) The headline stats were computed on
 > `jaccard_similarity_with_ends`, a column **hammock v0.6.0 removed**;
@@ -18,6 +20,13 @@ Numbers, figures and caveats: `docs/exp_a_results.md`.
 > everything was re-run; the pre-fix reading in which k=15/20 looked like a
 > "saturated low" regime is wrong — post-fix they are the *strongest*
 > discriminators. Any pre-2026-05-14 note claiming otherwise is stale.
+
+> **Corrected HLL rehash rerun, 2026-08-25.** The 63-cell Figure 5 union was
+> rerun at p=24 with `--sequence-hll-hash rehash-selector64` for seeds 1, 42,
+> and 99. This separates minimizer selection from HLL register assignment.
+> The tissue-first topology and k20_w20 optimum are unchanged; the seed-42
+> broad Δ changed from 0.5632 to 0.5590. Reproducible drivers and the frozen
+> cell manifest are in `rehash_rerun/`.
 
 This experiment was originally part of `claude-ref-comparison` together with a
 tissue-over-species experiment ("Exp B"). The tissue-over-species work has been
