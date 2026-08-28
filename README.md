@@ -197,11 +197,13 @@ hammock <queries.txt> <refs.txt> [--mode MODE] [options]
   --expA F                  interval-hybrid: power-of-10 exponent weighting interval
                             strings (e.g. 2 → each string counts ×100; default 0)
   --subB-method M           interval-points/hybrid: point-sampling method —
-                            mixed-stride (default; deterministic chr-keyed stride,
-                            fastest at low subB), hash-threshold (random gate; use
-                            this for byte-for-byte parity with the original hammock),
-                            experimental mixed-stride-v2 (within-chromosome mixed gaps),
-                            or single-hash. NOTE: the mixed-stride default means subB
+                            mixed-stride (default; deterministic chromosome-anchored
+                            fractional-interval sampling that mixes adjacent integer
+                            gap lengths), mixed-stride-v1 (legacy one-stride-per-
+                            chromosome behavior), mixed-stride-v2 (alias for the
+                            default), hash-threshold (random gate; use this for byte-
+                            for-byte parity with the original hammock), or single-hash.
+                            NOTE: the mixed-stride default means subB
                             output is NOT byte-equal to orig unless you pass
                             --subB-method hash-threshold.
   -k, --kmer_size N         sequence mode: k-mer length (default 8)
@@ -210,8 +212,8 @@ hammock <queries.txt> <refs.txt> [--mode MODE] [options]
                             legacy-selector32 for reproducing pre-v0.12 results
   --seed N                  HLL ingestion seed (xxh64, default 42)
   --gate-seed N             Seed for the subB sampling-decision hash (xxh32) and the
-                            mixed-stride stride assignment (default 31337 = orig
-                            hammock; independent of --seed)
+                            mixed-stride grid phase (default 31337 = orig hammock;
+                            independent of --seed)
   --threads N               Default: min(8, cpu_count()) for interval modes, 1 for
                             sequence mode (D), whose sketch loop is GIL-bound — an
                             explicit --threads > 1 there is honored but usually slower

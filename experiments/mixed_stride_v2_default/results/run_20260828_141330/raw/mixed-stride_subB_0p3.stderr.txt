@@ -1,0 +1,47 @@
+OpenMP threads: 8
+Sketching 20 query and 20 primary files (mode B).
+Processed 198621 intervals, 27429914/91434236 points (subB=0.3, method=mixed-stride).
+Processed 168322 intervals, 34404942/114682766 points (subB=0.3, method=mixed-stride).
+Processed 155202 intervals, 30620484/102068188 points (subB=0.3, method=mixed-stride).
+Processed 229496 intervals, 34182455/113941361 points (subB=0.3, method=mixed-stride).
+Processed 172723 intervals, 38346554/127821837 points (subB=0.3, method=mixed-stride).
+Processed 186603 intervals, 33850425/112834740 points (subB=0.3, method=mixed-stride).
+Processed 131946 intervals, 19018700/63396469 points (subB=0.3, method=mixed-stride).
+Processed 191311 intervals, 30047380/100157759 points (subB=0.3, method=mixed-stride).
+Processed 183224 intervals, 29439727/98132742 points (subB=0.3, method=mixed-stride).
+Processed 161171 intervals, 25942256/86473594 points (subB=0.3, method=mixed-stride).
+Processed 208569 intervals, 36666413/122220885 points (subB=0.3, method=mixed-stride).
+Processed 204719 intervals, 41818834/139395760 points (subB=0.3, method=mixed-stride).
+Processed 195287 intervals, 37260165/124200751 points (subB=0.3, method=mixed-stride).
+Processed 169546 intervals, 31132322/103773425 points (subB=0.3, method=mixed-stride).
+Processed 178524 intervals, 32173325/107244666 points (subB=0.3, method=mixed-stride).
+Processed 190043 intervals, 32398034/107993207 points (subB=0.3, method=mixed-stride).
+Processed 175699 intervals, 31454574/104849231 points (subB=0.3, method=mixed-stride).
+Processed 193611 intervals, 39478579/131595419 points (subB=0.3, method=mixed-stride).
+Processed 169025 intervals, 19335649/64452392 points (subB=0.3, method=mixed-stride).
+Processed 174705 intervals, 21431980/71439855 points (subB=0.3, method=mixed-stride).
+Processed 198621 intervals, 27429914/91434236 points (subB=0.3, method=mixed-stride).
+Processed 168322 intervals, 34404942/114682766 points (subB=0.3, method=mixed-stride).
+Processed 155202 intervals, 30620484/102068188 points (subB=0.3, method=mixed-stride).
+Processed 229496 intervals, 34182455/113941361 points (subB=0.3, method=mixed-stride).
+Processed 172723 intervals, 38346554/127821837 points (subB=0.3, method=mixed-stride).
+Processed 186603 intervals, 33850425/112834740 points (subB=0.3, method=mixed-stride).
+Processed 131946 intervals, 19018700/63396469 points (subB=0.3, method=mixed-stride).
+Processed 191311 intervals, 30047380/100157759 points (subB=0.3, method=mixed-stride).
+Processed 183224 intervals, 29439727/98132742 points (subB=0.3, method=mixed-stride).
+Processed 161171 intervals, 25942256/86473594 points (subB=0.3, method=mixed-stride).
+Processed 208569 intervals, 36666413/122220885 points (subB=0.3, method=mixed-stride).
+Processed 204719 intervals, 41818834/139395760 points (subB=0.3, method=mixed-stride).
+Processed 195287 intervals, 37260165/124200751 points (subB=0.3, method=mixed-stride).
+Processed 169546 intervals, 31132322/103773425 points (subB=0.3, method=mixed-stride).
+Processed 178524 intervals, 32173325/107244666 points (subB=0.3, method=mixed-stride).
+Processed 190043 intervals, 32398034/107993207 points (subB=0.3, method=mixed-stride).
+Processed 175699 intervals, 31454574/104849231 points (subB=0.3, method=mixed-stride).
+Processed 193611 intervals, 39478579/131595419 points (subB=0.3, method=mixed-stride).
+Processed 169025 intervals, 19335649/64452392 points (subB=0.3, method=mixed-stride).
+Processed 174705 intervals, 21431980/71439855 points (subB=0.3, method=mixed-stride).
+Sketching: 9635360 us
+Pairwise: 43368 us
+Write: 981 us
+Pairwise+write: 44349 us
+Wrote /home/jbonnie1/interval_sketch/hammock_claude/experiments/mixed_stride_v2_default/results/run_20260828_141330/raw/mixed-stride_subB_0p3_hll_p18_jaccB_B0.30_ie.csv

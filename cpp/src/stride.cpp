@@ -143,11 +143,11 @@ size_t add_points_impl(const std::string& chr,
     const bool do_subsample = (subsample < 1.0);
     size_t sampled = 0;
 
-    // When subsample is 1.0 the three methods are equivalent; collapse to the
+    // When subsample is 1.0 all methods are equivalent; collapse to the
     // hash-threshold ASCII-counter fast path. (SingleHash doesn't enter its
     // gate either since we'd just be wasting the high-bits comparison.)
     const bool use_mixed_stride =
-        (method == SubBMethod::MixedStride || method == SubBMethod::MixedStrideV2) &&
+        (method == SubBMethod::MixedStrideV1 || method == SubBMethod::MixedStrideV2) &&
         do_subsample;
     const bool use_mixed_stride_v2 = (method == SubBMethod::MixedStrideV2) && do_subsample;
     const bool use_single_hash = (method == SubBMethod::SingleHash) && do_subsample;

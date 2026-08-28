@@ -101,8 +101,8 @@ namespace {
 inline const char* method_label(SubBMethod m) {
     switch (m) {
         case SubBMethod::HashThreshold: return "hash-threshold";
-        case SubBMethod::MixedStride:   return "mixed-stride";
-        case SubBMethod::MixedStrideV2: return "mixed-stride-v2";
+        case SubBMethod::MixedStrideV1: return "mixed-stride-v1";
+        case SubBMethod::MixedStrideV2: return "mixed-stride";
         case SubBMethod::SingleHash: return "single-hash";
     }
     return "?";

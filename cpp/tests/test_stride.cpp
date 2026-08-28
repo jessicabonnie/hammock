@@ -24,19 +24,19 @@ TEST_CASE("add_interval_points_to_sketch: hash-threshold subsample~=0.5 keeps ro
     CHECK(sampled < 5500);
 }
 
-TEST_CASE("add_interval_points_to_sketch: mixed-stride is deterministic per chromosome") {
+TEST_CASE("add_interval_points_to_sketch: mixed-stride-v1 is deterministic per chromosome") {
     HLLSketch a(12), b(12);
     const size_t sa = add_interval_points_to_sketch("1", 100, 1100, a, "-", 0.25,
-                                                    SubBMethod::MixedStride, 42);
+                                                    SubBMethod::MixedStrideV1, 42);
     const size_t sb = add_interval_points_to_sketch("1", 100, 1100, b, "-", 0.25,
-                                                    SubBMethod::MixedStride, 42);
+                                                    SubBMethod::MixedStrideV1, 42);
     CHECK(sa == sb);
     // 1000 positions at p=0.25 → ~250 sampled.
     CHECK(sa > 200);
     CHECK(sa < 300);
 }
 
-TEST_CASE("add_interval_points_to_sketch: mixed-stride interpolates non-integral reciprocal rates") {
+TEST_CASE("add_interval_points_to_sketch: mixed-stride-v1 chooses one chromosome-wide gap") {
     // At p=0.3, S0=floor(1/p)=3 and S1=ceil(1/p)=4. With the default
     // gate seed, chromosome 1 selects S0 and chrX selects S1. An interval
     // whose length is divisible by both strides makes the expected counts
@@ -44,33 +44,33 @@ TEST_CASE("add_interval_points_to_sketch: mixed-stride interpolates non-integral
     HLLSketch s0_sketch(12), s1_sketch(12);
     const size_t sampled_s0 = add_interval_points_to_sketch(
         "1", 0, 1200, s0_sketch, "-", 0.3,
-        SubBMethod::MixedStride, 42);
+        SubBMethod::MixedStrideV1, 42);
     const size_t sampled_s1 = add_interval_points_to_sketch(
         "chrX", 0, 1200, s1_sketch, "-", 0.3,
-        SubBMethod::MixedStride, 42);
+        SubBMethod::MixedStrideV1, 42);
 
     CHECK(sampled_s0 == 400);
     CHECK(sampled_s1 == 300);
 }
 
-TEST_CASE("add_interval_points_to_sketch: mixed-stride phase is independent of interval boundaries") {
+TEST_CASE("add_interval_points_to_sketch: mixed-stride-v1 phase is independent of interval boundaries") {
     // Splitting a chromosome span into adjacent BED intervals must retain the
     // same genomic coordinates as sketching that span as one interval.
     HLLSketch whole(12), partitioned(12);
     const size_t whole_count = add_interval_points_to_sketch(
         "chrX", 0, 1200, whole, "-", 0.3,
-        SubBMethod::MixedStride, 42);
+        SubBMethod::MixedStrideV1, 42);
 
     size_t partitioned_count = 0;
     partitioned_count += add_interval_points_to_sketch(
         "chrX", 0, 317, partitioned, "-", 0.3,
-        SubBMethod::MixedStride, 42);
+        SubBMethod::MixedStrideV1, 42);
     partitioned_count += add_interval_points_to_sketch(
         "chrX", 317, 811, partitioned, "-", 0.3,
-        SubBMethod::MixedStride, 42);
+        SubBMethod::MixedStrideV1, 42);
     partitioned_count += add_interval_points_to_sketch(
         "chrX", 811, 1200, partitioned, "-", 0.3,
-        SubBMethod::MixedStride, 42);
+        SubBMethod::MixedStrideV1, 42);
 
     CHECK(partitioned_count == whole_count);
     CHECK(partitioned.registers() == whole.registers());
@@ -79,7 +79,7 @@ TEST_CASE("add_interval_points_to_sketch: mixed-stride phase is independent of i
 TEST_CASE("add_interval_points_to_sketch: mixed-stride-v2 mixes gaps within a chromosome") {
     HLLSketch legacy(12), v2(12);
     const size_t legacy_count = add_interval_points_to_sketch(
-        "chrX", 0, 3600, legacy, "-", 0.3, SubBMethod::MixedStride, 42);
+        "chrX", 0, 3600, legacy, "-", 0.3, SubBMethod::MixedStrideV1, 42);
     const size_t v2_count = add_interval_points_to_sketch(
         "chrX", 0, 3600, v2, "-", 0.3, SubBMethod::MixedStrideV2, 42);
 
@@ -94,7 +94,7 @@ TEST_CASE("add_interval_points_to_sketch: mixed-stride-v2 preserves legacy integ
     for (const double rate : {0.1, 0.01}) {
         HLLSketch legacy(12), v2(12);
         const size_t legacy_count = add_interval_points_to_sketch(
-            "chr7", -135, 3017, legacy, "-", rate, SubBMethod::MixedStride, 42);
+            "chr7", -135, 3017, legacy, "-", rate, SubBMethod::MixedStrideV1, 42);
         const size_t v2_count = add_interval_points_to_sketch(
             "chr7", -135, 3017, v2, "-", rate, SubBMethod::MixedStrideV2, 42);
         CHECK(v2_count == legacy_count);

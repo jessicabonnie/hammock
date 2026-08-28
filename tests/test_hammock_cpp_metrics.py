@@ -112,9 +112,11 @@ def corpus(tmp_path: Path):
     return q, r
 
 
-def _run_python(q: Path, r: Path, out: Path, shape: str) -> dict:
+def _run_python(q: Path, r: Path, out: Path, shape: str,
+                extra: list[str] | None = None) -> dict:
     cmd = [sys.executable, "-m", "hammock.cli", str(q), str(r),
-           "--mode", "B", "-p", "20", "-o", str(out), *_SHAPE_FLAGS[shape]]
+           "--mode", "B", "-p", "20", "-o", str(out), *_SHAPE_FLAGS[shape],
+           *(extra or [])]
     subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=600)
     csv_path = next(out.parent.glob(f"{out.name}*.csv"))
     with csv_path.open() as f:
@@ -162,6 +164,39 @@ def test_shape_matches_python_bit_for_bit(corpus, tmp_path: Path, shape, cols):
     for key in py:
         for col in cols:
             assert float(py[key][col]) == float(cpp[key][col]), (shape, key, col)
+
+
+@pytest.mark.parametrize("method", ["mixed-stride", "mixed-stride-v1",
+                                     "mixed-stride-v2"])
+def test_subb_method_spellings_match_python_front_end(corpus, tmp_path: Path, method):
+    """Both public front ends must send each spelling to the same core method."""
+    q, r = corpus
+    extra = ["--subB", "0.3", "--subB-method", method, "--threads", "1"]
+    py = _run_python(q, r, tmp_path / f"py_{method}", "ie", extra)
+    cpp = _run_cpp_path(q, r, tmp_path / f"cpp_{method}", "ie", extra=extra)
+    with cpp.open() as f:
+        cpp_rows = {(row["query"], row["reference"]): row
+                    for row in csv.DictReader(f, delimiter="\t")}
+    assert set(py) == set(cpp_rows)
+    for key in py:
+        assert float(py[key]["jaccard_similarity_ie"]) == float(
+            cpp_rows[key]["jaccard_similarity_ie"]), (method, key)
+
+
+def test_cpp_default_is_v2_and_differs_from_legacy(corpus, tmp_path: Path):
+    q, r = corpus
+
+    def run(label: str, method: str | None):
+        extra = ["--subB", "0.3", "--threads", "1"]
+        if method is not None:
+            extra += ["--subB-method", method]
+        path = _run_cpp_path(q, r, tmp_path / label, "ie", extra=extra)
+        return path.read_bytes()
+
+    default = run("default", None)
+    assert default == run("public", "mixed-stride")
+    assert default == run("v2", "mixed-stride-v2")
+    assert default != run("legacy", "mixed-stride-v1")
 
 
 @pytest.mark.parametrize("shape,flags,tag,header", _SHAPES)

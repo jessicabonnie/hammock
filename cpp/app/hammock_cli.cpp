@@ -44,7 +44,7 @@ struct Args {
     double subA = 1.0;
     double subB = 1.0;
     double expA = 0.0;
-    SubBMethod subB_method = SubBMethod::MixedStride;
+    SubBMethod subB_method = SubBMethod::MixedStrideV2;
     uint64_t seed = 42;
     uint32_t gate_seed = 31337;
     int threads = 0;
@@ -113,11 +113,11 @@ void print_help(const char* prog) {
         "  --subB <float>          Modes B and C: fraction of base positions sketched,\n"
         "                          0..1 (default: 1.0 = every base).\n"
         "  --subB-method <name>    How --subB picks positions (default: mixed-stride; no\n"
-        "                          effect at --subB 1.0, where all three keep every base).\n"
-        "                          mixed-stride   deterministic ~1/subB stride, stride and\n"
-        "                                         phase keyed by chromosome name; fastest.\n"
-        "                          mixed-stride-v2 experimental within-chromosome mixed gaps;\n"
-        "                                         integral reciprocal rates match legacy.\n"
+        "                          effect at --subB 1.0, where all methods keep every base).\n"
+        "                          mixed-stride   chromosome-anchored fractional-interval\n"
+        "                                         sampling with adjacent mixed gap lengths.\n"
+        "                          mixed-stride-v1 legacy one-stride-per-chromosome behavior.\n"
+        "                          mixed-stride-v2 alias for mixed-stride.\n"
         "                          hash-threshold keep when xxh32(point, --gate-seed) is\n"
         "                                         under the rate; orig-hammock parity.\n"
         "                          single-hash    one xxh64 is both gate and HLL input;\n"
@@ -200,12 +200,14 @@ bool parse_args(int argc, char** argv, Args& out) {
         } else if (a == "--subB-method" && i + 1 < argc) {
             std::string m = argv[++i];
             if (m == "hash-threshold")      out.subB_method = SubBMethod::HashThreshold;
-            else if (m == "mixed-stride")   out.subB_method = SubBMethod::MixedStride;
+            else if (m == "mixed-stride")   out.subB_method = SubBMethod::MixedStrideV2;
+            else if (m == "mixed-stride-v1") out.subB_method = SubBMethod::MixedStrideV1;
             else if (m == "mixed-stride-v2") out.subB_method = SubBMethod::MixedStrideV2;
             else if (m == "single-hash") out.subB_method = SubBMethod::SingleHash;
             else {
                 std::cerr << "Error: --subB-method must be one of hash-threshold, "
-                             "mixed-stride, mixed-stride-v2, single-hash (got '" << m << "')\n";
+                             "mixed-stride, mixed-stride-v1, mixed-stride-v2, "
+                             "single-hash (got '" << m << "')\n";
                 return false;
             }
         } else if (a == "--mode" && i + 1 < argc) {

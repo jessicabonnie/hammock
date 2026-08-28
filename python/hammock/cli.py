@@ -252,14 +252,17 @@ def parse_args(argv=None):
                         "so an over-large run fails with MemoryError rather than being "
                         "OOM-killed. 0 disables (default).")
     p.add_argument('--subB-method',
-                   choices=['hash-threshold', 'mixed-stride', 'single-hash'],
+                   choices=['hash-threshold', 'mixed-stride', 'mixed-stride-v1',
+                            'mixed-stride-v2', 'single-hash'],
                    default='mixed-stride',
                    help='How --subB picks which base positions to keep (default: '
-                        'mixed-stride; no effect at --subB 1.0, where all three keep '
+                        'mixed-stride; no effect at --subB 1.0, where all methods keep '
                         'every base). '
-                        'mixed-stride: deterministic stride of about 1/subB, with '
-                        'stride choice and phase keyed by chromosome name — fastest at '
-                        'low subB. '
+                        'mixed-stride: deterministic chromosome-anchored fractional-interval '
+                        'sampling that mixes adjacent integer gap lengths to realize the '
+                        'requested rate, with no per-position sampling hash. '
+                        'mixed-stride-v1: legacy one-stride-per-chromosome behavior. '
+                        'mixed-stride-v2: alias for mixed-stride. '
                         'hash-threshold: keep a position when xxh32(point, --gate-seed) '
                         'falls under the rate; this is the orig-hammock-parity choice. '
                         'single-hash: one xxh64 serves as both gate and HLL input — an '

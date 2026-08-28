@@ -29,11 +29,13 @@ namespace {
 
 SubBMethod parse_subB_method(const std::string& s) {
     if (s == "hash-threshold") return SubBMethod::HashThreshold;
-    if (s == "mixed-stride")   return SubBMethod::MixedStride;
+    if (s == "mixed-stride")   return SubBMethod::MixedStrideV2;
+    if (s == "mixed-stride-v1") return SubBMethod::MixedStrideV1;
+    if (s == "mixed-stride-v2") return SubBMethod::MixedStrideV2;
     if (s == "single-hash") return SubBMethod::SingleHash;
     throw std::invalid_argument(
         "subB_method must be one of 'hash-threshold', 'mixed-stride', "
-        "'single-hash' (got '" + s + "')");
+        "'mixed-stride-v1', 'mixed-stride-v2', 'single-hash' (got '" + s + "')");
 }
 
 // Build an HLLSketch from one BED file in the chosen mode.

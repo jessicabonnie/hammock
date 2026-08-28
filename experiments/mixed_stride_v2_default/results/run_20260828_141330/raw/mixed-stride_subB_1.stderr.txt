@@ -1,0 +1,47 @@
+OpenMP threads: 8
+Sketching 20 query and 20 primary files (mode B).
+Processed 198621 intervals, 91434236 points total.
+Processed 168322 intervals, 114682766 points total.
+Processed 155202 intervals, 102068188 points total.
+Processed 229496 intervals, 113941361 points total.
+Processed 172723 intervals, 127821837 points total.
+Processed 186603 intervals, 112834740 points total.
+Processed 131946 intervals, 63396469 points total.
+Processed 191311 intervals, 100157759 points total.
+Processed 183224 intervals, 98132742 points total.
+Processed 161171 intervals, 86473594 points total.
+Processed 208569 intervals, 122220885 points total.
+Processed 204719 intervals, 139395760 points total.
+Processed 195287 intervals, 124200751 points total.
+Processed 169546 intervals, 103773425 points total.
+Processed 178524 intervals, 107244666 points total.
+Processed 190043 intervals, 107993207 points total.
+Processed 175699 intervals, 104849231 points total.
+Processed 193611 intervals, 131595419 points total.
+Processed 169025 intervals, 64452392 points total.
+Processed 174705 intervals, 71439855 points total.
+Processed 198621 intervals, 91434236 points total.
+Processed 168322 intervals, 114682766 points total.
+Processed 155202 intervals, 102068188 points total.
+Processed 229496 intervals, 113941361 points total.
+Processed 172723 intervals, 127821837 points total.
+Processed 186603 intervals, 112834740 points total.
+Processed 131946 intervals, 63396469 points total.
+Processed 191311 intervals, 100157759 points total.
+Processed 183224 intervals, 98132742 points total.
+Processed 161171 intervals, 86473594 points total.
+Processed 208569 intervals, 122220885 points total.
+Processed 204719 intervals, 139395760 points total.
+Processed 195287 intervals, 124200751 points total.
+Processed 169546 intervals, 103773425 points total.
+Processed 178524 intervals, 107244666 points total.
+Processed 190043 intervals, 107993207 points total.
+Processed 175699 intervals, 104849231 points total.
+Processed 193611 intervals, 131595419 points total.
+Processed 169025 intervals, 64452392 points total.
+Processed 174705 intervals, 71439855 points total.
+Sketching: 10153913 us
+Pairwise: 38227 us
+Write: 550 us
+Pairwise+write: 38777 us
+Wrote /home/jbonnie1/interval_sketch/hammock_claude/experiments/mixed_stride_v2_default/results/run_20260828_141330/raw/mixed-stride_subB_1_hll_p18_jaccB_ie.csv

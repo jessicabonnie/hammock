@@ -37,7 +37,7 @@ size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sket
                                uint64_t hll_seed = 42,
                                const std::string& separator = "\t",
                                double subB = 1.0,
-                               SubBMethod method = SubBMethod::MixedStride,
+                               SubBMethod method = SubBMethod::MixedStrideV2,
                                uint32_t gate_seed = 31337,
                                bool verbose = false,
                                int threads = 0);
@@ -48,7 +48,7 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
                                double subA = 1.0,
                                double subB = 1.0,
                                double expA = 0.0,
-                               SubBMethod method = SubBMethod::MixedStride,
+                               SubBMethod method = SubBMethod::MixedStrideV2,
                                uint32_t gate_seed = 31337,
                                bool verbose = false,
                                int threads = 0);
