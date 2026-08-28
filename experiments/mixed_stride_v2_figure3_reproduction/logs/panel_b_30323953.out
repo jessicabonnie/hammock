@@ -1,0 +1,121 @@
+node: c653  cores: 48
+commit: 2f58a72a50119918a4541b5e7a51b009d0a28944
+hammock-cpp 0.12.0
+hammock-cpp: /home/jbonnie1/.conda/envs/claude-ref-comparison/lib/python3.10/site-packages/bin/hammock-cpp
+corpus:       maurano
+groups:       [('maurano', 20)]
+methods:      ['mixed-stride']
+subB values:  [1.0, 0.3, 0.1, 0.03, 0.01, 0.008, 0.005, 0.003, 0.001]
+reps:         5
+precision:    18
+threads:      8
+output shape: bare default (ie, jaccard_similarity_ie only)
+system:       {'hostname': 'c653', 'cpu_count': 48, 'cpu_count_node': 48, 'cpu_model': 'Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz', 'platform': 'Linux-4.18.0-477.21.1.el8_8.x86_64-x86_64-with-glibc2.28', 'python_version': '3.10.20', 'slurm_job_id': '30323953', 'git_sha': '2f58a72-dirty', 'memory_total_gb': 188.57100677490234}
+
+[  1/45] corpus=maurano size=maurano method=mixed-stride subB=1.0 rep=1/5  (elapsed 0.0s)
+      wall=9.57s sketch=9.522267s pair=0.034231s pairs=190
+[  2/45] corpus=maurano size=maurano method=mixed-stride subB=1.0 rep=2/5  (elapsed 9.6s)
+      wall=8.92s sketch=8.880751s pair=0.034338s pairs=190
+[  3/45] corpus=maurano size=maurano method=mixed-stride subB=1.0 rep=3/5  (elapsed 18.5s)
+      wall=8.89s sketch=8.847336s pair=0.035627s pairs=190
+[  4/45] corpus=maurano size=maurano method=mixed-stride subB=1.0 rep=4/5  (elapsed 27.4s)
+      wall=8.88s sketch=8.83916s pair=0.034398s pairs=190
+[  5/45] corpus=maurano size=maurano method=mixed-stride subB=1.0 rep=5/5  (elapsed 36.3s)
+      wall=8.88s sketch=8.83552s pair=0.034009s pairs=190
+[  6/45] corpus=maurano size=maurano method=mixed-stride subB=0.3 rep=1/5  (elapsed 45.2s)
+      wall=9.31s sketch=9.272054s pair=0.033143s pairs=190
+[  7/45] corpus=maurano size=maurano method=mixed-stride subB=0.3 rep=2/5  (elapsed 54.5s)
+      wall=9.31s sketch=9.266703s pair=0.034281s pairs=190
+[  8/45] corpus=maurano size=maurano method=mixed-stride subB=0.3 rep=3/5  (elapsed 63.8s)
+      wall=9.31s sketch=9.266775s pair=0.032415s pairs=190
+[  9/45] corpus=maurano size=maurano method=mixed-stride subB=0.3 rep=4/5  (elapsed 73.1s)
+      wall=9.31s sketch=9.262379s pair=0.034187s pairs=190
+[ 10/45] corpus=maurano size=maurano method=mixed-stride subB=0.3 rep=5/5  (elapsed 82.4s)
+      wall=9.31s sketch=9.263298s pair=0.034279s pairs=190
+[ 11/45] corpus=maurano size=maurano method=mixed-stride subB=0.1 rep=1/5  (elapsed 91.8s)
+      wall=4.64s sketch=4.596483s pair=0.035148s pairs=190
+[ 12/45] corpus=maurano size=maurano method=mixed-stride subB=0.1 rep=2/5  (elapsed 96.4s)
+      wall=4.65s sketch=4.609297s pair=0.035059s pairs=190
+[ 13/45] corpus=maurano size=maurano method=mixed-stride subB=0.1 rep=3/5  (elapsed 101.1s)
+      wall=4.65s sketch=4.60846s pair=0.03511s pairs=190
+[ 14/45] corpus=maurano size=maurano method=mixed-stride subB=0.1 rep=4/5  (elapsed 105.7s)
+      wall=4.65s sketch=4.607698s pair=0.035375s pairs=190
+[ 15/45] corpus=maurano size=maurano method=mixed-stride subB=0.1 rep=5/5  (elapsed 110.4s)
+      wall=4.65s sketch=4.601941s pair=0.035089s pairs=190
+[ 16/45] corpus=maurano size=maurano method=mixed-stride subB=0.03 rep=1/5  (elapsed 115.0s)
+      wall=3.83s sketch=3.783297s pair=0.032926s pairs=190
+[ 17/45] corpus=maurano size=maurano method=mixed-stride subB=0.03 rep=2/5  (elapsed 118.9s)
+      wall=3.84s sketch=3.797451s pair=0.032939s pairs=190
+[ 18/45] corpus=maurano size=maurano method=mixed-stride subB=0.03 rep=3/5  (elapsed 122.7s)
+      wall=3.82s sketch=3.778678s pair=0.032674s pairs=190
+[ 19/45] corpus=maurano size=maurano method=mixed-stride subB=0.03 rep=4/5  (elapsed 126.5s)
+      wall=3.82s sketch=3.78079s pair=0.032885s pairs=190
+[ 20/45] corpus=maurano size=maurano method=mixed-stride subB=0.03 rep=5/5  (elapsed 130.4s)
+      wall=3.87s sketch=3.830812s pair=0.033269s pairs=190
+[ 21/45] corpus=maurano size=maurano method=mixed-stride subB=0.01 rep=1/5  (elapsed 134.2s)
+      wall=3.23s sketch=3.184087s pair=0.033335s pairs=190
+[ 22/45] corpus=maurano size=maurano method=mixed-stride subB=0.01 rep=2/5  (elapsed 137.5s)
+      wall=3.22s sketch=3.178923s pair=0.033317s pairs=190
+[ 23/45] corpus=maurano size=maurano method=mixed-stride subB=0.01 rep=3/5  (elapsed 140.7s)
+      wall=3.23s sketch=3.185172s pair=0.034674s pairs=190
+[ 24/45] corpus=maurano size=maurano method=mixed-stride subB=0.01 rep=4/5  (elapsed 143.9s)
+      wall=3.17s sketch=3.132447s pair=0.033315s pairs=190
+[ 25/45] corpus=maurano size=maurano method=mixed-stride subB=0.01 rep=5/5  (elapsed 147.1s)
+      wall=3.18s sketch=3.13453s pair=0.033181s pairs=190
+[ 26/45] corpus=maurano size=maurano method=mixed-stride subB=0.008 rep=1/5  (elapsed 150.3s)
+      wall=3.13s sketch=3.088704s pair=0.034351s pairs=190
+[ 27/45] corpus=maurano size=maurano method=mixed-stride subB=0.008 rep=2/5  (elapsed 153.5s)
+      wall=3.12s sketch=3.081085s pair=0.034335s pairs=190
+[ 28/45] corpus=maurano size=maurano method=mixed-stride subB=0.008 rep=3/5  (elapsed 156.6s)
+      wall=3.13s sketch=3.085926s pair=0.034346s pairs=190
+[ 29/45] corpus=maurano size=maurano method=mixed-stride subB=0.008 rep=4/5  (elapsed 159.7s)
+      wall=3.13s sketch=3.084553s pair=0.033974s pairs=190
+[ 30/45] corpus=maurano size=maurano method=mixed-stride subB=0.008 rep=5/5  (elapsed 162.9s)
+      wall=3.14s sketch=3.096564s pair=0.033971s pairs=190
+[ 31/45] corpus=maurano size=maurano method=mixed-stride subB=0.005 rep=1/5  (elapsed 166.0s)
+      wall=3.05s sketch=3.002564s pair=0.03873s pairs=190
+[ 32/45] corpus=maurano size=maurano method=mixed-stride subB=0.005 rep=2/5  (elapsed 169.1s)
+      wall=3.05s sketch=3.004949s pair=0.038461s pairs=190
+[ 33/45] corpus=maurano size=maurano method=mixed-stride subB=0.005 rep=3/5  (elapsed 172.1s)
+      wall=3.05s sketch=3.002837s pair=0.038404s pairs=190
+[ 34/45] corpus=maurano size=maurano method=mixed-stride subB=0.005 rep=4/5  (elapsed 175.2s)
+      wall=3.05s sketch=3.003234s pair=0.038458s pairs=190
+[ 35/45] corpus=maurano size=maurano method=mixed-stride subB=0.005 rep=5/5  (elapsed 178.2s)
+      wall=3.08s sketch=3.02698s pair=0.038521s pairs=190
+[ 36/45] corpus=maurano size=maurano method=mixed-stride subB=0.003 rep=1/5  (elapsed 181.3s)
+      wall=3.15s sketch=3.08793s pair=0.049537s pairs=190
+[ 37/45] corpus=maurano size=maurano method=mixed-stride subB=0.003 rep=2/5  (elapsed 184.5s)
+      wall=3.15s sketch=3.093216s pair=0.049806s pairs=190
+[ 38/45] corpus=maurano size=maurano method=mixed-stride subB=0.003 rep=3/5  (elapsed 187.6s)
+      wall=3.16s sketch=3.098799s pair=0.04952s pairs=190
+[ 39/45] corpus=maurano size=maurano method=mixed-stride subB=0.003 rep=4/5  (elapsed 190.8s)
+      wall=3.20s sketch=3.140214s pair=0.050899s pairs=190
+[ 40/45] corpus=maurano size=maurano method=mixed-stride subB=0.003 rep=5/5  (elapsed 194.0s)
+      wall=3.18s sketch=3.122833s pair=0.051118s pairs=190
+[ 41/45] corpus=maurano size=maurano method=mixed-stride subB=0.001 rep=1/5  (elapsed 197.2s)
+      wall=2.95s sketch=2.867334s pair=0.068432s pairs=190
+[ 42/45] corpus=maurano size=maurano method=mixed-stride subB=0.001 rep=2/5  (elapsed 200.1s)
+      wall=2.94s sketch=2.865176s pair=0.068206s pairs=190
+[ 43/45] corpus=maurano size=maurano method=mixed-stride subB=0.001 rep=3/5  (elapsed 203.1s)
+      wall=2.95s sketch=2.867739s pair=0.068149s pairs=190
+[ 44/45] corpus=maurano size=maurano method=mixed-stride subB=0.001 rep=4/5  (elapsed 206.0s)
+      wall=2.95s sketch=2.870055s pair=0.068224s pairs=190
+[ 45/45] corpus=maurano size=maurano method=mixed-stride subB=0.001 rep=5/5  (elapsed 209.0s)
+      wall=2.95s sketch=2.876709s pair=0.068794s pairs=190
+
+Wrote experiments/mixed_stride_v2_figure3_reproduction/results/panel_b/hammock.csv
+
+bedtools on 20 pre-sorted BEDs, 190 unique pairs, 8 threads, 5 reps
+
+[1/5] (elapsed 0.0s)
+      wall=7.81s pairs=190
+[2/5] (elapsed 9.4s)
+      wall=6.99s pairs=190
+[3/5] (elapsed 16.4s)
+      wall=7.00s pairs=190
+[4/5] (elapsed 23.4s)
+      wall=6.97s pairs=190
+[5/5] (elapsed 30.3s)
+      wall=6.99s pairs=190
+
+Wrote experiments/mixed_stride_v2_figure3_reproduction/results/panel_b/bedtools.csv

@@ -39,3 +39,16 @@ All generated files land under `results/`, `logs/`, and `figures/` here. The
 finalizer renders `pairwise_scaling_reproduced.png` with the paper's original
 three Panel B rates and `pairwise_scaling_reproduced_expanded.png` with all
 nine rates. Panel A is identical in both figures and does not use subB.
+
+## Completed run
+
+The 2026-08-28 run used benchmark commit `2f58a72`:
+
+- Panel B job `30323953` completed on `c653` in 4m14s (52,836 KiB MaxRSS).
+- Finalizer job `30323954` completed on `sr47` in 10s.
+- The five-batch BEDTools median was 6.993 s.
+- Every subB cell contains five runs and all 190 unique tissue pairs.
+
+The prepared summary in `results/prepared/panel_b_summary.csv` is the compact
+source for all nine timing and accuracy results; raw per-run/per-pair values
+remain in `results/panel_b/`.

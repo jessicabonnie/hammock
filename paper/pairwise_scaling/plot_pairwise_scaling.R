@@ -336,8 +336,10 @@ if (!all(required_subb %in% maurano_ie_summary$subB)) {
   stop("Expected +IE summary to include subB = 1, 0.1, and 0.01.", call. = FALSE)
 }
 
+expanded_panel_b <- nrow(maurano_ie_summary) > 3
 condition_of <- function(subb) case_when(
-  subb == 1 ~ "no\nsubsampling",
+  subb == 1 ~ if (expanded_panel_b) "none" else "no\nsubsampling",
+  expanded_panel_b ~ format(subb, scientific = FALSE, trim = TRUE),
   TRUE ~ paste0(format(subb, scientific = FALSE, trim = TRUE), "\nsubsample")
 )
 
@@ -373,6 +375,8 @@ bars <- bind_rows(
     ),
     tool = factor(tool, levels = c("BEDTools", "hammock (+IE)")),
     speedup = bt_wall / wall,
+    ratio_value = ifelse(speedup >= 1, speedup, 1 / speedup),
+    ratio_direction = ifelse(speedup >= 1, "faster", "slower"),
     # Never hardcode "faster" -- word it from the sign: the corrected
     # BEDTools baseline makes the unsubsampled bar a genuine slowdown, and
     # "0.90x faster" would read as a speedup to anyone skimming.
@@ -382,7 +386,12 @@ bars <- bind_rows(
     # Keep the speed comparison on its own line so the larger annotation text
     # remains centered over the rightmost bar without clipping the panel edge.
     label = case_when(
+      tool == "BEDTools" & expanded_panel_b ~ sprintf("%.1f s\nreference", wall),
       tool == "BEDTools" ~ sprintf("%.1f s\nspeed reference", wall),
+      expanded_panel_b ~ sprintf(
+        "%.1f s\n%.2f× %s\nMAE %.1e",
+        wall, ratio_value, ratio_direction, mae
+      ),
       TRUE ~ sprintf(
         "%.1f s\n(%s)\nMAE %s",
         wall, ratio_txt, formatC(mae, format = "e", digits = 1)
@@ -390,13 +399,12 @@ bars <- bind_rows(
     )
   )
 
-expanded_panel_b <- nrow(maurano_ie_summary) > 3
 panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
   geom_col(width = 0.68) +
   geom_text(
     aes(label = label),
     vjust = -0.22,
-    size = if (expanded_panel_b) 2.7 else 4.1,
+    size = if (expanded_panel_b) 2.35 else 4.1,
     lineheight = 0.95,
     color = COL_TEXT
   ) +
@@ -410,7 +418,7 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
   ) +
   labs(
     title = "B",
-    x = NULL,
+    x = if (expanded_panel_b) "subB sampling rate" else NULL,
     # Deliberately not "per pairwise comparison": each bar is the median
     # TOTAL wall time to sketch all 20 files and run all 400 pairwise
     # comparisons in one benchmark invocation, not divided by pair count.
@@ -428,11 +436,11 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
   )
 
 figure <- panel_a + panel_b +
-  plot_layout(widths = c(1.35, 1))
+  plot_layout(widths = if (expanded_panel_b) c(1.05, 1.15) else c(1.35, 1))
 
 CairoPNG(
   filename = out_png,
-  width = if (expanded_panel_b) 17.5 else 14.2,
+  width = if (expanded_panel_b) 18.5 else 14.2,
   height = 6.5,
   units = "in",
   res = 300,

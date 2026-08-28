@@ -1,0 +1,1 @@
+run_sweep.py: 'reg_eq_similarity' column not used for the 'jaccard' field in /tmp/tmppxni43wr.out_hll_p18_jaccB_ie.csv; resolved via fallback candidate 'jaccard_similarity_ie' instead.
