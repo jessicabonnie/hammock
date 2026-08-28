@@ -61,21 +61,26 @@ repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 # unrecorded. Every bedtools row here carries mean_bedtools_parallel_eff; it
 # reads 0.10 at N >= 64, i.e. the baseline converted ~1.6 of its 16 cores into
 # throughput. Quote that alongside any speedup taken from this figure.
-synthetic_csv <- file.path(
-  repo_root, "docs", "data", "cpp_vs_bedtools_t16_p18.csv"
-)
-maurano_ie_summary_csv <- file.path(
-  repo_root, "docs", "data", "maurano_subB_ie_summary.csv"
-)
-maurano_bedtools_csv <- file.path(
-  repo_root, "docs", "data", "maurano_bedtools.csv"
-)
-
 argv <- commandArgs(trailingOnly = TRUE)
 out_png <- if (length(argv) >= 1) {
   normalizePath(argv[1], mustWork = FALSE)
 } else {
   file.path(repo_root, "paper", "figures", "pairwise_scaling.png")
+}
+synthetic_csv <- if (length(argv) >= 2) {
+  normalizePath(argv[2], mustWork = TRUE)
+} else {
+  file.path(repo_root, "docs", "data", "cpp_vs_bedtools_t16_p18.csv")
+}
+maurano_ie_summary_csv <- if (length(argv) >= 3) {
+  normalizePath(argv[3], mustWork = TRUE)
+} else {
+  file.path(repo_root, "docs", "data", "maurano_subB_ie_summary.csv")
+}
+maurano_bedtools_csv <- if (length(argv) >= 4) {
+  normalizePath(argv[4], mustWork = TRUE)
+} else {
+  file.path(repo_root, "docs", "data", "maurano_bedtools.csv")
 }
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 
@@ -326,15 +331,20 @@ if (!all(c("rep", "run_id", "wall_time") %in% names(maurano_bedtools))) {
 bt_runs <- maurano_bedtools %>% distinct(rep, run_id, wall_time)
 bt_wall <- median(bt_runs$wall_time, na.rm = TRUE)
 
-if (nrow(maurano_ie_summary) != 3) {
-  stop("Expected +IE summary rows for subB = 1, 0.1, and 0.01.", call. = FALSE)
+required_subb <- c(1, 0.1, 0.01)
+if (!all(required_subb %in% maurano_ie_summary$subB)) {
+  stop("Expected +IE summary to include subB = 1, 0.1, and 0.01.", call. = FALSE)
 }
 
 condition_of <- function(subb) case_when(
   subb == 1 ~ "no\nsubsampling",
-  subb == 0.1 ~ "0.1\nsubsample",
-  subb == 0.01 ~ "0.01\nsubsample"
+  TRUE ~ paste0(format(subb, scientific = FALSE, trim = TRUE), "\nsubsample")
 )
+
+subb_levels <- maurano_ie_summary %>%
+  arrange(desc(subB)) %>%
+  pull(subB) %>%
+  condition_of()
 
 # One bar per condition: BEDTools, then hammock at the +IE arm (full metrics
 # block) for each subB level -- in place of register-equality, same
@@ -359,7 +369,7 @@ bars <- bind_rows(
   mutate(
     condition = factor(
       condition,
-      levels = c("BEDTools", "no\nsubsampling", "0.1\nsubsample", "0.01\nsubsample")
+      levels = c("BEDTools", subb_levels)
     ),
     tool = factor(tool, levels = c("BEDTools", "hammock (+IE)")),
     speedup = bt_wall / wall,
@@ -380,12 +390,13 @@ bars <- bind_rows(
     )
   )
 
+expanded_panel_b <- nrow(maurano_ie_summary) > 3
 panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
   geom_col(width = 0.68) +
   geom_text(
     aes(label = label),
     vjust = -0.22,
-    size = 4.1,
+    size = if (expanded_panel_b) 2.7 else 4.1,
     lineheight = 0.95,
     color = COL_TEXT
   ) +
@@ -407,7 +418,10 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
   ) +
   theme_paper() +
   theme(
-    axis.text.x = element_text(size = 12, lineheight = 0.95),
+    axis.text.x = element_text(
+      size = if (expanded_panel_b) 8.5 else 12,
+      lineheight = 0.95
+    ),
     legend.position = "none",
     plot.title = element_text(size = 16, lineheight = 1.05, margin = margin(b = 6)),
     plot.margin = margin(28, 8, 6, 6)
@@ -418,7 +432,7 @@ figure <- panel_a + panel_b +
 
 CairoPNG(
   filename = out_png,
-  width = 14.2,
+  width = if (expanded_panel_b) 17.5 else 14.2,
   height = 6.5,
   units = "in",
   res = 300,
