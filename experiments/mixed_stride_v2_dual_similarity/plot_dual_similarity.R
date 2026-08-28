@@ -54,8 +54,8 @@ bars <- dual %>%
     label = sprintf("%.2f s\nMAE %.1e", wall_median, mae_vs_bedtools)
   )
 
-COL_RE <- "#007C83"
-COL_IE <- "#C2185B"
+COL_RE <- "#D28B35"
+COL_IE <- "#007C83"
 COL_BT <- "#46515C"
 COL_GRID <- "#D9DEE3"
 COL_TEXT <- "#20262D"

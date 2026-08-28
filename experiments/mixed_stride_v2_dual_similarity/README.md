@@ -28,3 +28,16 @@ dashed timing reference rather than a third bar.
 - `submit.sh`: submits the benchmark and dependent finalizer.
 
 Generated data, logs, and figures stay inside this directory.
+
+## Completed run
+
+The 2026-08-28 run used commit `c682f79`:
+
+- register-equality job `30328259` completed on `c701` in 3m33s;
+- finalizer job `30328260` completed in 5s;
+- every rate contains five runs and all 190 unique pairs.
+
+The paired graph is `figures/register_equality_vs_ie.png`; compact numeric
+results are in `results/prepared/dual_similarity_plot.csv`, and the full
+nine-rate register-equality summary is
+`results/prepared/register_equality_summary.csv`.
