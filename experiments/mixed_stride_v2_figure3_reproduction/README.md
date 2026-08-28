@@ -37,8 +37,9 @@ integral, so this branch's v2 default delegates to the legacy grid. The 0.3,
 
 All generated files land under `results/`, `logs/`, and `figures/` here. The
 finalizer renders `pairwise_scaling_reproduced.png` with the paper's original
-three Panel B rates and `pairwise_scaling_reproduced_expanded.png` with all
-nine rates. Panel A is identical in both figures and does not use subB.
+three Panel B rates plus subB = 0.001, and
+`pairwise_scaling_reproduced_expanded.png` with all nine rates. Panel A is
+identical in both figures and does not use subB.
 
 ## Completed run
 

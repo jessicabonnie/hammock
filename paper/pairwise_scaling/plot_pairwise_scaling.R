@@ -336,12 +336,20 @@ if (!all(required_subb %in% maurano_ie_summary$subB)) {
   stop("Expected +IE summary to include subB = 1, 0.1, and 0.01.", call. = FALSE)
 }
 
-expanded_panel_b <- nrow(maurano_ie_summary) > 3
-condition_of <- function(subb) case_when(
-  subb == 1 ~ if (expanded_panel_b) "none" else "no\nsubsampling",
-  expanded_panel_b ~ format(subb, scientific = FALSE, trim = TRUE),
-  TRUE ~ paste0(format(subb, scientific = FALSE, trim = TRUE), "\nsubsample")
-)
+compact_panel_b <- nrow(maurano_ie_summary) > 3
+expanded_panel_b <- nrow(maurano_ie_summary) > 4
+condition_of <- function(subb) {
+  rate_label <- vapply(
+    subb,
+    function(value) format(value, scientific = FALSE, trim = TRUE),
+    character(1)
+  )
+  case_when(
+    subb == 1 ~ if (expanded_panel_b) "none" else "no\nsubsampling",
+    expanded_panel_b ~ rate_label,
+    TRUE ~ paste0(rate_label, "\nsubsample")
+  )
+}
 
 subb_levels <- maurano_ie_summary %>%
   arrange(desc(subB)) %>%
@@ -404,7 +412,7 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
   geom_text(
     aes(label = label),
     vjust = -0.22,
-    size = if (expanded_panel_b) 2.35 else 4.1,
+    size = if (expanded_panel_b) 2.35 else if (compact_panel_b) 3.65 else 4.1,
     lineheight = 0.95,
     color = COL_TEXT
   ) +
@@ -412,6 +420,7 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
     "BEDTools" = COL_BEDTOOLS,
     "hammock (+IE)" = COL_HAMMOCK
   )) +
+  scale_x_discrete(expand = expansion(add = 0.45)) +
   scale_y_continuous(
     labels = label_number(accuracy = 1),
     expand = expansion(mult = c(0, 0.32))
@@ -427,7 +436,7 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
   theme_paper() +
   theme(
     axis.text.x = element_text(
-      size = if (expanded_panel_b) 8.5 else 12,
+      size = if (expanded_panel_b) 8.5 else if (compact_panel_b) 11.5 else 12,
       lineheight = 0.95
     ),
     legend.position = "none",
@@ -436,11 +445,11 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
   )
 
 figure <- panel_a + panel_b +
-  plot_layout(widths = if (expanded_panel_b) c(1.05, 1.15) else c(1.35, 1))
+  plot_layout(widths = if (expanded_panel_b) c(1.05, 1.15) else if (compact_panel_b) c(1.2, 1.1) else c(1.35, 1))
 
 CairoPNG(
   filename = out_png,
-  width = if (expanded_panel_b) 18.5 else 14.2,
+  width = if (expanded_panel_b) 18.5 else if (compact_panel_b) 15.5 else 14.2,
   height = 6.5,
   units = "in",
   res = 300,
