@@ -68,7 +68,7 @@ def summarize_panel_b(hammock_csv: Path, truth_path: Path,
         writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         writer.writerows(row for row in output_rows
-                         if row["subB"] in {1.0, 0.1, 0.01, 0.001})
+                         if row["subB"] in {1.0, 0.1, 0.01})
 
 
 def main() -> int:

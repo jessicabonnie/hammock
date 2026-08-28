@@ -420,7 +420,9 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
     "BEDTools" = COL_BEDTOOLS,
     "hammock (+IE)" = COL_HAMMOCK
   )) +
-  scale_x_discrete(expand = expansion(add = 0.45)) +
+  scale_x_discrete(
+    expand = expansion(add = if (compact_panel_b) 0.45 else 0.6)
+  ) +
   scale_y_continuous(
     labels = label_number(accuracy = 1),
     expand = expansion(mult = c(0, 0.32))
