@@ -1,0 +1,1238 @@
+node: c573  cores: 48
+commit: ec2d14ad5e1a55adf5655bcc08169d7d1892ce28
+hammock-cpp 0.12.0
+system: {'hostname': 'c573', 'cpu_count': 48, 'cpu_count_node': 48, 'cpu_model': 'Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz', 'platform': 'Linux-4.18.0-477.21.1.el8_8.x86_64-x86_64-with-glibc2.28', 'python_version': '3.10.20', 'slurm_job_id': '30328362', 'git_sha': 'ec2d14a-dirty', 'memory_total_gb': 188.4234504699707}
+N values: (2, 4, 8, 16, 32, 64, 128, 256, 512); subB values: (1.0, 0.1, 0.01, 0.001)
+p=18; threads=16; seed=20260810
+[n=    2 rep= 1/20] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep00.csv
+[n=    2 rep= 2/20] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep01.csv
+[n=    2 rep= 3/20] generating matched corpus
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep02.csv
+[n=    2 rep= 4/20] generating matched corpus
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep03.csv
+[n=    2 rep= 5/20] generating matched corpus
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep04.csv
+[n=    2 rep= 6/20] generating matched corpus
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep05.csv
+[n=    2 rep= 7/20] generating matched corpus
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep06.csv
+[n=    2 rep= 8/20] generating matched corpus
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep07.csv
+[n=    2 rep= 9/20] generating matched corpus
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep08.csv
+[n=    2 rep=10/20] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep09.csv
+[n=    2 rep=11/20] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep10.csv
+[n=    2 rep=12/20] generating matched corpus
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep11.csv
+[n=    2 rep=13/20] generating matched corpus
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep12.csv
+[n=    2 rep=14/20] generating matched corpus
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep13.csv
+[n=    2 rep=15/20] generating matched corpus
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep14.csv
+[n=    2 rep=16/20] generating matched corpus
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep15.csv
+[n=    2 rep=17/20] generating matched corpus
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep16.csv
+[n=    2 rep=18/20] generating matched corpus
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep17.csv
+[n=    2 rep=19/20] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep18.csv
+[n=    2 rep=20/20] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N2_rep19.csv
+[n=    4 rep= 1/20] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep00.csv
+[n=    4 rep= 2/20] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep01.csv
+[n=    4 rep= 3/20] generating matched corpus
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep02.csv
+[n=    4 rep= 4/20] generating matched corpus
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep03.csv
+[n=    4 rep= 5/20] generating matched corpus
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep04.csv
+[n=    4 rep= 6/20] generating matched corpus
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep05.csv
+[n=    4 rep= 7/20] generating matched corpus
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep06.csv
+[n=    4 rep= 8/20] generating matched corpus
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep07.csv
+[n=    4 rep= 9/20] generating matched corpus
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep08.csv
+[n=    4 rep=10/20] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep09.csv
+[n=    4 rep=11/20] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep10.csv
+[n=    4 rep=12/20] generating matched corpus
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep11.csv
+[n=    4 rep=13/20] generating matched corpus
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep12.csv
+[n=    4 rep=14/20] generating matched corpus
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep13.csv
+[n=    4 rep=15/20] generating matched corpus
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep14.csv
+[n=    4 rep=16/20] generating matched corpus
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep15.csv
+[n=    4 rep=17/20] generating matched corpus
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep16.csv
+[n=    4 rep=18/20] generating matched corpus
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep17.csv
+[n=    4 rep=19/20] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep18.csv
+[n=    4 rep=20/20] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N4_rep19.csv
+[n=    8 rep= 1/20] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep00.csv
+[n=    8 rep= 2/20] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep01.csv
+[n=    8 rep= 3/20] generating matched corpus
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep02.csv
+[n=    8 rep= 4/20] generating matched corpus
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep03.csv
+[n=    8 rep= 5/20] generating matched corpus
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep04.csv
+[n=    8 rep= 6/20] generating matched corpus
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep05.csv
+[n=    8 rep= 7/20] generating matched corpus
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep06.csv
+[n=    8 rep= 8/20] generating matched corpus
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep07.csv
+[n=    8 rep= 9/20] generating matched corpus
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep08.csv
+[n=    8 rep=10/20] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep09.csv
+[n=    8 rep=11/20] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep10.csv
+[n=    8 rep=12/20] generating matched corpus
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep11.csv
+[n=    8 rep=13/20] generating matched corpus
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep12.csv
+[n=    8 rep=14/20] generating matched corpus
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep13.csv
+[n=    8 rep=15/20] generating matched corpus
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep14.csv
+[n=    8 rep=16/20] generating matched corpus
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep15.csv
+[n=    8 rep=17/20] generating matched corpus
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep16.csv
+[n=    8 rep=18/20] generating matched corpus
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep17.csv
+[n=    8 rep=19/20] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep18.csv
+[n=    8 rep=20/20] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N8_rep19.csv
+[n=   16 rep= 1/20] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep00.csv
+[n=   16 rep= 2/20] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep01.csv
+[n=   16 rep= 3/20] generating matched corpus
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep02.csv
+[n=   16 rep= 4/20] generating matched corpus
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep03.csv
+[n=   16 rep= 5/20] generating matched corpus
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep04.csv
+[n=   16 rep= 6/20] generating matched corpus
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep05.csv
+[n=   16 rep= 7/20] generating matched corpus
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep06.csv
+[n=   16 rep= 8/20] generating matched corpus
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep07.csv
+[n=   16 rep= 9/20] generating matched corpus
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep08.csv
+[n=   16 rep=10/20] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep09.csv
+[n=   16 rep=11/20] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep10.csv
+[n=   16 rep=12/20] generating matched corpus
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep11.csv
+[n=   16 rep=13/20] generating matched corpus
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep12.csv
+[n=   16 rep=14/20] generating matched corpus
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep13.csv
+[n=   16 rep=15/20] generating matched corpus
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep14.csv
+[n=   16 rep=16/20] generating matched corpus
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep15.csv
+[n=   16 rep=17/20] generating matched corpus
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep16.csv
+[n=   16 rep=18/20] generating matched corpus
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep17.csv
+[n=   16 rep=19/20] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep18.csv
+[n=   16 rep=20/20] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N16_rep19.csv
+[n=   32 rep= 1/20] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep00.csv
+[n=   32 rep= 2/20] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep01.csv
+[n=   32 rep= 3/20] generating matched corpus
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep02.csv
+[n=   32 rep= 4/20] generating matched corpus
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep03.csv
+[n=   32 rep= 5/20] generating matched corpus
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep04.csv
+[n=   32 rep= 6/20] generating matched corpus
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep05.csv
+[n=   32 rep= 7/20] generating matched corpus
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep06.csv
+[n=   32 rep= 8/20] generating matched corpus
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep07.csv
+[n=   32 rep= 9/20] generating matched corpus
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep08.csv
+[n=   32 rep=10/20] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep09.csv
+[n=   32 rep=11/20] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep10.csv
+[n=   32 rep=12/20] generating matched corpus
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep11.csv
+[n=   32 rep=13/20] generating matched corpus
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep12.csv
+[n=   32 rep=14/20] generating matched corpus
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep13.csv
+[n=   32 rep=15/20] generating matched corpus
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep14.csv
+[n=   32 rep=16/20] generating matched corpus
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep15.csv
+[n=   32 rep=17/20] generating matched corpus
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep16.csv
+[n=   32 rep=18/20] generating matched corpus
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep17.csv
+[n=   32 rep=19/20] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep18.csv
+[n=   32 rep=20/20] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N32_rep19.csv
+[n=   64 rep= 1/3] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N64_rep00.csv
+[n=   64 rep= 2/3] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N64_rep01.csv
+[n=   64 rep= 3/3] generating matched corpus
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N64_rep02.csv
+[n=  128 rep= 1/3] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N128_rep00.csv
+[n=  128 rep= 2/3] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N128_rep01.csv
+[n=  128 rep= 3/3] generating matched corpus
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N128_rep02.csv
+[n=  256 rep= 1/3] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N256_rep00.csv
+[n=  256 rep= 2/3] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N256_rep01.csv
+[n=  256 rep= 3/3] generating matched corpus
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N256_rep02.csv
+[n=  512 rep= 1/3] generating matched corpus
+    BEDTools
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N512_rep00.csv
+[n=  512 rep= 2/3] generating matched corpus
+    register-equality subB=1
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N512_rep01.csv
+[n=  512 rep= 3/3] generating matched corpus
+    register-equality subB=0.1
+    register-equality subB=0.01
+    register-equality subB=0.001
+    inclusion-exclusion subB=1
+    inclusion-exclusion subB=0.1
+    inclusion-exclusion subB=0.01
+    inclusion-exclusion subB=0.001
+    BEDTools
+    register-equality subB=1
+    wrote experiments/mixed_stride_v2_synthetic_subb_scaling/results/raw/N512_rep02.csv

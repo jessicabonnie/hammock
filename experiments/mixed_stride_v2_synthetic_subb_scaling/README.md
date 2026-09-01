@@ -32,3 +32,31 @@ Completed replicate files are atomic and independently resumable under
   by similarity output.
 
 The canonical paper figures are not modified by this experiment.
+
+## Completed run
+
+The 2026-08-28 run used commit `ec2d14a`:
+
+- benchmark job `30328362` completed on `c573` in 1h19m43s;
+- finalizer job `30328363` completed in 6s;
+- all 112 replicate checkpoints completed, yielding 1,008 validated tool
+  rows and 81 aggregate cells;
+- the benchmark job's orchestration process reached 599,164 KiB MaxRSS.
+
+At N=512 (262,144 cross-product pairs), BEDTools' median wall time was
+637.46s and median peak RSS was 19.95 MiB. Hammock peak RSS was approximately
+266.4 MiB for every subB and both outputs because subsampling changes the
+number of positions processed, not the fixed p=18 HLL allocation per file.
+
+| subB | RE median (s) | +IE median (s) | RE MAE | +IE MAE |
+|---:|---:|---:|---:|---:|
+| 1 | 62.63 | 68.60 | 1.640e-1 | 1.197e-3 |
+| 0.1 | 25.41 | 31.41 | 1.642e-1 | 1.204e-3 |
+| 0.01 | 15.47 | 21.33 | 1.435e-1 | 1.197e-3 |
+| 0.001 | 19.71 | 22.06 | 2.477e-2 | 8.563e-4 |
+
+The fastest N=512 cell is therefore register-equality at subB=0.01 (41.2x
+faster than BEDTools), not subB=0.001. At the sparsest rate, reduced sketch
+work is offset by increased pairwise time. +IE remains close to BEDTools
+accuracy across the full grid, whereas register-equality retains its expected
+chance-agreement bias except at the sparsest occupancy.
