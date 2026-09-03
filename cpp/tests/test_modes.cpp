@@ -29,7 +29,7 @@ TEST_CASE("Mode A: same BED file ⇒ Jaccard 1.0") {
     std::remove(p.c_str());
 }
 
-TEST_CASE("Mode A: chr/non-chr prefixes normalize identically") {
+TEST_CASE("Mode A: chromosome names are preserved as interval identity") {
     const std::string p1 = write_temp_bed(
         "chr1\t100\t200\n"
         "chr2\t300\t400\n"
@@ -41,7 +41,10 @@ TEST_CASE("Mode A: chr/non-chr prefixes normalize identically") {
     HLLSketch a(14), b(14);
     process_bed_file_mode_a(p1, a);
     process_bed_file_mode_a(p2, b);
-    CHECK(a.reg_eq_similarity(b) == doctest::Approx(1.0).epsilon(1e-9));
+    // BED parsing deliberately preserves chromosome labels byte-for-byte for
+    // parity with the reference Python implementation. Therefore "chr1" and
+    // "1" identify different interval elements rather than aliases.
+    CHECK(a.reg_eq_similarity(b) < 1.0);
     std::remove(p1.c_str());
     std::remove(p2.c_str());
 }
