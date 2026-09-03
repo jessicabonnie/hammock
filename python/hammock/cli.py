@@ -9,6 +9,7 @@ block, tag _full). See --metrics/--register-equality help.
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import subprocess
 import sys
@@ -60,6 +61,18 @@ def _precision(value: str) -> int:
         raise argparse.ArgumentTypeError(
             f"precision must be in 4..24 (got {n})")
     return n
+
+
+def _fraction(value: str) -> float:
+    """argparse type for a finite sampling fraction in [0, 1]."""
+    try:
+        fraction = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid float value: '{value}'")
+    if not math.isfinite(fraction) or not 0.0 <= fraction <= 1.0:
+        raise argparse.ArgumentTypeError(
+            f"sampling fraction must be finite and in [0, 1] (got {value})")
+    return fraction
 
 
 def parse_args(argv=None):
@@ -180,19 +193,21 @@ def parse_args(argv=None):
                         "registers, p in 4..24 (default: 18, i.e. 256 KiB/sketch). "
                         "Raising p cuts estimator error but costs memory and pairwise "
                         "time proportional to 2**p.")
-    p.add_argument("--subA", type=float, default=1.0,
+    p.add_argument("--subA", type=_fraction, default=1.0,
                    help="interval-hybrid (C) only: fraction of interval records to "
                         "sketch as whole-interval elements, 0..1 (default: 1.0, keep "
                         "all). An interval failing the gate (xxh32 of the interval "
                         "string, seeded by --gate-seed) contributes no interval "
                         "element, but its base positions are still sketched. Passing "
                         "--subA with BED input makes autodetect choose mode C.")
-    p.add_argument("--subB", type=float, default=1.0,
+    p.add_argument("--subB", type=_fraction, default=1.0,
                    help="interval / interval-hybrid (B and C): fraction of base "
                         "positions to sketch, 0..1 (default: 1.0, every base). Which "
                         "positions survive is decided by --subB-method. Note orig "
                         "hammock silently ignored --subB in mode B; here it is "
-                        "honored, so such runs are not comparable to orig.")
+                        "honored, so such runs are not comparable to orig. Positive "
+                        "mixed-stride rates must have a reciprocal no larger than "
+                        "INT64_MAX; use 0 to retain no points.")
     p.add_argument("--expA", type=float, default=0,
                    help="interval-hybrid (C) only: give each kept interval record "
                         "10**expA distinct sketch elements instead of one "
@@ -288,6 +303,11 @@ def parse_args(argv=None):
              'filename _re. Mutually exclusive with --metrics.')
 
     args = p.parse_args(argv)
+
+    if (args.subB_method in {"mixed-stride", "mixed-stride-v1", "mixed-stride-v2"}
+            and args.subB > 0.0 and 1.0 / args.subB > (1 << 63) - 1):
+        p.error("positive mixed-stride --subB is too small: reciprocal exceeds "
+                "INT64_MAX; use 0 to retain no points")
 
     # ---- BED→FASTA reference validation -------------------------------------
     if args.ref is not None and (args.ref1 is not None or args.ref2 is not None):

@@ -1,5 +1,7 @@
 #include <doctest/doctest.h>
+#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -217,6 +219,33 @@ TEST_CASE("add_interval_points_to_sketch: zero subB retains no points") {
     CHECK(add_interval_points_to_sketch("chr1", 0, 100, sketch, "-", 0.0,
                                         SubBMethod::MixedStrideV2, 42) == 0);
     CHECK(sketch.registers() == std::vector<uint8_t>(sketch.registers().size(), 0));
+}
+
+TEST_CASE("add_interval_points_to_sketch: mixed-stride rejects unrepresentable reciprocal") {
+    RecordingSketch sketch;
+    for (const SubBMethod method : {SubBMethod::MixedStrideV1,
+                                    SubBMethod::MixedStrideV2}) {
+        CHECK_THROWS_WITH_AS(
+            add_interval_points_to_sketch(
+                "chr1", 0, 100, sketch, "-", 1e-20, method, 42),
+            "positive mixed-stride subB is too small: reciprocal exceeds INT64_MAX; use 0 to retain no points",
+            std::invalid_argument);
+    }
+
+    // The next representable double above 1 / 2^63 has a reciprocal that fits
+    // in int64_t and must remain accepted.
+    const double boundary = std::nextafter(
+        1.0 / static_cast<double>(std::numeric_limits<int64_t>::max()), 1.0);
+    CHECK_NOTHROW(add_interval_points_to_sketch(
+        "chr1", 0, 100, sketch, "-", boundary, SubBMethod::MixedStrideV2, 42));
+}
+
+TEST_CASE("add_interval_points_to_sketch: tiny rates remain valid without integer strides") {
+    RecordingSketch sketch;
+    CHECK_NOTHROW(add_interval_points_to_sketch(
+        "chr1", 0, 100, sketch, "-", 1e-20, SubBMethod::HashThreshold, 42));
+    CHECK_NOTHROW(add_interval_points_to_sketch(
+        "chr1", 0, 100, sketch, "-", 1e-20, SubBMethod::SingleHash, 42));
 }
 
 TEST_CASE("add_interval_points_to_sketch: single-hash matches exact high-bits oracle") {

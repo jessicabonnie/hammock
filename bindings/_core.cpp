@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -65,7 +66,14 @@ HLLSketch sketch_bed_file_hll(const std::string& path,
                               uint32_t gate_seed,
                               bool verbose,
                               int threads) {
+    if (!std::isfinite(sub_a) || sub_a < 0.0 || sub_a > 1.0) {
+        throw std::invalid_argument("sub_a must be finite and in [0, 1]");
+    }
+    if (!std::isfinite(sub_b) || sub_b < 0.0 || sub_b > 1.0) {
+        throw std::invalid_argument("sub_b must be finite and in [0, 1]");
+    }
     const SubBMethod method = parse_subB_method(subB_method);
+    validate_subB_rate(sub_b, method);
     HLLSketch sketch(precision);
     if (mode == "A") {
         process_bed_file_mode_a(path, sketch, seed, separator, verbose);

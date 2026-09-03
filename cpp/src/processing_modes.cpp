@@ -117,6 +117,9 @@ size_t process_bed_file_mode_b(const std::string& filepath, AbstractSketch& sket
                                uint32_t gate_seed,
                                bool verbose,
                                int threads) {
+    // Validate before entering the OpenMP region: C++ exceptions may not
+    // escape an OpenMP structured block.
+    validate_subB_rate(subB, method);
     const std::vector<Interval> intervals = read_intervals(filepath);
 
     size_t total_points = 0;
@@ -189,6 +192,7 @@ size_t process_bed_file_mode_c(const std::string& filepath, AbstractSketch& sket
                                uint32_t gate_seed,
                                bool verbose,
                                int threads) {
+    validate_subB_rate(subB, method);
     const int nt = omp_team_size(threads);
     const size_t mult = (expA > 0)
                             ? std::max<size_t>(1, static_cast<size_t>(std::pow(10.0, expA)))

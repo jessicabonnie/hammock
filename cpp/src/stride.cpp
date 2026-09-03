@@ -6,7 +6,22 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <stdexcept>
 #include <string>
+
+void validate_subB_rate(double subsample, SubBMethod method) {
+    if (!std::isfinite(subsample) || subsample < 0.0 || subsample > 1.0) {
+        throw std::invalid_argument("subB must be finite and in [0, 1]");
+    }
+    const bool mixed_stride =
+        method == SubBMethod::MixedStrideV1 || method == SubBMethod::MixedStrideV2;
+    if (mixed_stride && subsample > 0.0 &&
+        1.0L / static_cast<long double>(subsample) >
+            static_cast<long double>(std::numeric_limits<int64_t>::max())) {
+        throw std::invalid_argument(
+            "positive mixed-stride subB is too small: reciprocal exceeds INT64_MAX; use 0 to retain no points");
+    }
+}
 
 namespace {
 
@@ -310,6 +325,7 @@ size_t add_interval_points_to_sketch(const std::string& chr,
                                      SubBMethod method,
                                      uint64_t hll_seed,
                                      uint32_t gate_seed) {
+    validate_subB_rate(subsample, method);
     return add_points_impl(chr, start, end, sketch, separator,
                            subsample, method, hll_seed, gate_seed);
 }
@@ -322,6 +338,7 @@ size_t add_interval_points_to_sketch(const std::string& chr,
                                      SubBMethod method,
                                      uint64_t hll_seed,
                                      uint32_t gate_seed) {
+    validate_subB_rate(subsample, method);
     return add_points_impl(chr, start, end, sketch, separator,
                            subsample, method, hll_seed, gate_seed);
 }

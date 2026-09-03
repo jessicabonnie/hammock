@@ -32,6 +32,11 @@ enum class SubBMethod {
     SingleHash,
 };
 
+// Reject invalid rates and mixed-stride gaps that cannot be represented by
+// the int64_t stride implementation. A zero rate is valid and retains no
+// points; non-mixed methods do not have the reciprocal-size restriction.
+void validate_subB_rate(double subsample, SubBMethod method);
+
 size_t add_interval_points_to_sketch(const std::string& chr,
                                      int64_t start, int64_t end,
                                      AbstractSketch& sketch,

@@ -111,7 +111,8 @@ void print_help(const char* prog) {
         "                          whole-interval elements, 0..1 (default: 1.0). A record\n"
         "                          that fails the gate still contributes its base points.\n"
         "  --subB <float>          Modes B and C: fraction of base positions sketched,\n"
-        "                          0..1 (default: 1.0 = every base).\n"
+        "                          0..1 (default: 1.0 = every base). Positive mixed-stride\n"
+        "                          rates must have a reciprocal no larger than INT64_MAX.\n"
         "  --subB-method <name>    How --subB picks positions (default: mixed-stride; no\n"
         "                          effect at --subB 1.0, where all methods keep every base).\n"
         "                          mixed-stride   chromosome-anchored fractional-interval\n"
@@ -257,12 +258,18 @@ bool parse_args(int argc, char** argv, Args& out) {
         std::cerr << "Error: --mode must be A, B, or C (got '" << out.mode << "')\n";
         return false;
     }
-    if (out.subA < 0.0 || out.subA > 1.0) {
-        std::cerr << "Error: --subA must be in [0, 1]\n";
+    if (!std::isfinite(out.subA) || out.subA < 0.0 || out.subA > 1.0) {
+        std::cerr << "Error: --subA must be finite and in [0, 1]\n";
         return false;
     }
-    if (out.subB < 0.0 || out.subB > 1.0) {
-        std::cerr << "Error: --subB must be in [0, 1]\n";
+    if (!std::isfinite(out.subB) || out.subB < 0.0 || out.subB > 1.0) {
+        std::cerr << "Error: --subB must be finite and in [0, 1]\n";
+        return false;
+    }
+    try {
+        validate_subB_rate(out.subB, out.subB_method);
+    } catch (const std::invalid_argument& e) {
+        std::cerr << "Error: " << e.what() << "\n";
         return false;
     }
     if (out.precision < 4 || out.precision > 24) {

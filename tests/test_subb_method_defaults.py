@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from hammock import _core
 from hammock.cli import parse_args
 
@@ -59,3 +61,45 @@ def test_python_cli_accepts_all_public_method_names():
                    "mixed-stride-v2", "single-hash"):
         args = parse_args(["queries.txt", "refs.txt", "--subB-method", method])
         assert args.subB_method == method
+
+
+@pytest.mark.parametrize("option", ["--subA", "--subB"])
+@pytest.mark.parametrize("value", ["-0.01", "1.01", "nan", "inf", "-inf"])
+def test_python_cli_rejects_invalid_sampling_fractions(option, value):
+    with pytest.raises(SystemExit):
+        parse_args(["queries.txt", "refs.txt", option, value])
+
+
+@pytest.mark.parametrize("argument", ["sub_a", "sub_b"])
+@pytest.mark.parametrize("value", [-0.01, 1.01, float("nan"), float("inf"), -float("inf")])
+def test_binding_rejects_invalid_sampling_fractions(tmp_path: Path, argument, value):
+    bed = tmp_path / "empty.bed"
+    bed.write_text("")
+    kwargs = dict(path=str(bed), mode="B", precision=12)
+    kwargs[argument] = value
+    with pytest.raises(ValueError, match=argument + r" must be finite and in \[0, 1\]"):
+        _core.sketch_bed_file_hll(**kwargs)
+
+
+@pytest.mark.parametrize("method", ["mixed-stride", "mixed-stride-v1", "mixed-stride-v2"])
+def test_python_cli_rejects_unrepresentable_mixed_stride_reciprocal(method):
+    with pytest.raises(SystemExit):
+        parse_args(["queries.txt", "refs.txt", "--subB", "1e-20",
+                    "--subB-method", method])
+
+
+@pytest.mark.parametrize("method", ["hash-threshold", "single-hash"])
+def test_python_cli_allows_tiny_rates_without_integer_strides(method):
+    args = parse_args(["queries.txt", "refs.txt", "--subB", "1e-20",
+                       "--subB-method", method])
+    assert args.subB == 1e-20
+
+
+@pytest.mark.parametrize("method", ["mixed-stride", "mixed-stride-v1", "mixed-stride-v2"])
+def test_binding_rejects_unrepresentable_mixed_stride_reciprocal(tmp_path: Path, method):
+    bed = tmp_path / "empty.bed"
+    bed.write_text("")
+    with pytest.raises(ValueError, match="reciprocal exceeds INT64_MAX"):
+        _core.sketch_bed_file_hll(
+            path=str(bed), mode="B", precision=12, sub_b=1e-20,
+            subB_method=method)
