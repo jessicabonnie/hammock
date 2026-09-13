@@ -347,6 +347,18 @@ def test_version_is_on_stdout_and_matches_the_package():
     assert proc.stdout.strip() == f"hammock-cpp {hammock.__version__}"
 
 
+@pytest.mark.parametrize("option", ["--subA", "--subB"])
+@pytest.mark.parametrize("value", ["-0.01", "1.01", "nan", "inf", "-inf"])
+def test_sampling_fractions_must_be_finite_and_in_range(corpus, tmp_path, option, value):
+    q, r = corpus
+    proc = subprocess.run(
+        [str(_BIN), str(q), str(r), "--mode", "C", "-o", str(tmp_path / "bad"),
+         option, value],
+        capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 2
+    assert f"{option} must be finite and in [0, 1]" in proc.stderr
+
+
 def test_peak_height_is_gone(corpus, tmp_path: Path):
     """--peak-height and its BagMinHash backend were removed in 0.7.0.
 
