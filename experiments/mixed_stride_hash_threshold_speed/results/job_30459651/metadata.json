@@ -1,0 +1,40 @@
+{
+  "created_utc": "2026-09-01T16:39:31.758359+00:00",
+  "git_sha": "9c1400810b3f81b1df90d1d90d317ff026008f06",
+  "git_dirty": true,
+  "binary": "/home/jbonnie1/interval_sketch/hammock_claude/build/cp310-cp310-linux_x86_64/hammock-cpp",
+  "binary_version": "0.12.0",
+  "binary_sha256": "b912fda52d7cf170c57280d3a68983771eb542c48ef5390d5129bbf5f468e481",
+  "methods": [
+    "mixed-stride",
+    "hash-threshold"
+  ],
+  "rates": [
+    0.1,
+    0.06,
+    0.03,
+    0.01,
+    0.006,
+    0.003,
+    0.001
+  ],
+  "rounds": 10,
+  "warmup_rounds": 1,
+  "precision": 18,
+  "threads": 8,
+  "seed": 42,
+  "gate_seed": 31337,
+  "shuffle_seed": 20260901,
+  "publishable_allocation_required": true,
+  "system": {
+    "hostname": "c531",
+    "cpu_count": 48,
+    "cpu_count_node": 48,
+    "cpu_model": "Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz",
+    "platform": "Linux-4.18.0-477.21.1.el8_8.x86_64-x86_64-with-glibc2.28",
+    "python_version": "3.10.20",
+    "slurm_job_id": "30459651",
+    "git_sha": "9c14008-dirty",
+    "memory_total_gb": 188.57101440429688
+  }
+}

@@ -1,0 +1,165 @@
+host: c531
+affinity cores: 8
+commit: 9c1400810b3f81b1df90d1d90d317ff026008f06
+hammock-cpp 0.12.0
+warm-up round 1/1
+measured round 1/10
+  hash-threshold subB=0.006 sketch=6.858s wall=6.910s
+  mixed-stride   subB=0.003 sketch=3.193s wall=3.255s
+  mixed-stride   subB=0.001 sketch=2.949s wall=3.032s
+  mixed-stride   subB=0.01 sketch=3.231s wall=3.282s
+  mixed-stride   subB=0.06 sketch=4.491s wall=4.562s
+  mixed-stride   subB=0.03 sketch=3.886s wall=3.933s
+  hash-threshold subB=0.001 sketch=6.698s wall=6.785s
+  hash-threshold subB=0.03 sketch=7.250s wall=7.297s
+  mixed-stride   subB=0.006 sketch=3.304s wall=3.354s
+  hash-threshold subB=0.01 sketch=6.857s wall=6.910s
+  hash-threshold subB=0.06 sketch=7.812s wall=7.859s
+  mixed-stride   subB=0.1 sketch=4.697s wall=4.746s
+  hash-threshold subB=0.1 sketch=8.472s wall=8.545s
+  hash-threshold subB=0.003 sketch=6.742s wall=6.807s
+measured round 2/10
+  mixed-stride   subB=0.001 sketch=2.950s wall=3.034s
+  mixed-stride   subB=0.03 sketch=3.879s wall=3.929s
+  hash-threshold subB=0.06 sketch=7.790s wall=7.837s
+  hash-threshold subB=0.1 sketch=8.464s wall=8.519s
+  mixed-stride   subB=0.01 sketch=3.232s wall=3.281s
+  hash-threshold subB=0.003 sketch=6.747s wall=6.814s
+  hash-threshold subB=0.006 sketch=6.800s wall=6.855s
+  hash-threshold subB=0.01 sketch=6.863s wall=6.911s
+  mixed-stride   subB=0.06 sketch=4.494s wall=4.542s
+  mixed-stride   subB=0.1 sketch=4.708s wall=4.758s
+  mixed-stride   subB=0.003 sketch=3.194s wall=3.292s
+  hash-threshold subB=0.03 sketch=7.247s wall=7.299s
+  mixed-stride   subB=0.006 sketch=3.305s wall=3.354s
+  hash-threshold subB=0.001 sketch=6.702s wall=6.785s
+measured round 3/10
+  hash-threshold subB=0.06 sketch=7.790s wall=7.845s
+  mixed-stride   subB=0.1 sketch=4.701s wall=4.750s
+  hash-threshold subB=0.006 sketch=6.794s wall=6.846s
+  mixed-stride   subB=0.001 sketch=2.954s wall=3.039s
+  hash-threshold subB=0.01 sketch=6.860s wall=6.909s
+  hash-threshold subB=0.03 sketch=7.260s wall=7.315s
+  mixed-stride   subB=0.06 sketch=4.493s wall=4.587s
+  mixed-stride   subB=0.003 sketch=3.191s wall=3.260s
+  hash-threshold subB=0.001 sketch=6.705s wall=6.791s
+  mixed-stride   subB=0.01 sketch=3.240s wall=3.291s
+  mixed-stride   subB=0.03 sketch=3.890s wall=3.938s
+  mixed-stride   subB=0.006 sketch=3.307s wall=3.413s
+  hash-threshold subB=0.1 sketch=8.452s wall=8.502s
+  hash-threshold subB=0.003 sketch=6.743s wall=6.823s
+measured round 4/10
+  mixed-stride   subB=0.003 sketch=3.191s wall=3.258s
+  mixed-stride   subB=0.03 sketch=3.890s wall=3.948s
+  hash-threshold subB=0.01 sketch=6.862s wall=6.919s
+  mixed-stride   subB=0.1 sketch=4.701s wall=4.750s
+  hash-threshold subB=0.001 sketch=6.714s wall=6.795s
+  hash-threshold subB=0.1 sketch=8.448s wall=8.496s
+  hash-threshold subB=0.006 sketch=6.798s wall=6.849s
+  hash-threshold subB=0.03 sketch=7.256s wall=7.304s
+  hash-threshold subB=0.003 sketch=6.741s wall=6.803s
+  hash-threshold subB=0.06 sketch=7.805s wall=7.854s
+  mixed-stride   subB=0.006 sketch=3.312s wall=3.363s
+  mixed-stride   subB=0.001 sketch=2.960s wall=3.043s
+  mixed-stride   subB=0.01 sketch=3.228s wall=3.275s
+  mixed-stride   subB=0.06 sketch=4.487s wall=4.533s
+measured round 5/10
+  mixed-stride   subB=0.03 sketch=3.890s wall=3.936s
+  mixed-stride   subB=0.01 sketch=3.230s wall=3.276s
+  hash-threshold subB=0.003 sketch=6.748s wall=6.812s
+  mixed-stride   subB=0.001 sketch=2.952s wall=3.033s
+  hash-threshold subB=0.006 sketch=6.788s wall=6.839s
+  hash-threshold subB=0.01 sketch=6.858s wall=6.905s
+  mixed-stride   subB=0.1 sketch=4.690s wall=4.737s
+  hash-threshold subB=0.1 sketch=8.446s wall=8.494s
+  mixed-stride   subB=0.003 sketch=3.202s wall=3.266s
+  hash-threshold subB=0.06 sketch=7.795s wall=7.844s
+  hash-threshold subB=0.001 sketch=6.703s wall=6.784s
+  mixed-stride   subB=0.06 sketch=4.490s wall=4.535s
+  mixed-stride   subB=0.006 sketch=3.308s wall=3.360s
+  hash-threshold subB=0.03 sketch=7.247s wall=7.294s
+measured round 6/10
+  mixed-stride   subB=0.03 sketch=3.889s wall=3.936s
+  hash-threshold subB=0.01 sketch=6.859s wall=6.906s
+  mixed-stride   subB=0.01 sketch=3.234s wall=3.280s
+  hash-threshold subB=0.001 sketch=6.702s wall=6.784s
+  hash-threshold subB=0.06 sketch=7.799s wall=7.845s
+  mixed-stride   subB=0.001 sketch=2.952s wall=3.033s
+  hash-threshold subB=0.006 sketch=6.788s wall=6.838s
+  hash-threshold subB=0.003 sketch=6.735s wall=6.798s
+  mixed-stride   subB=0.1 sketch=4.696s wall=4.742s
+  mixed-stride   subB=0.06 sketch=4.494s wall=4.540s
+  hash-threshold subB=0.03 sketch=7.256s wall=7.303s
+  hash-threshold subB=0.1 sketch=8.465s wall=8.516s
+  mixed-stride   subB=0.006 sketch=3.309s wall=3.359s
+  mixed-stride   subB=0.003 sketch=3.195s wall=3.258s
+measured round 7/10
+  hash-threshold subB=0.006 sketch=6.781s wall=6.831s
+  hash-threshold subB=0.06 sketch=7.790s wall=7.837s
+  mixed-stride   subB=0.003 sketch=3.204s wall=3.268s
+  mixed-stride   subB=0.06 sketch=4.496s wall=4.541s
+  mixed-stride   subB=0.1 sketch=4.698s wall=4.749s
+  mixed-stride   subB=0.006 sketch=3.308s wall=3.358s
+  mixed-stride   subB=0.03 sketch=3.883s wall=3.929s
+  hash-threshold subB=0.1 sketch=8.446s wall=8.492s
+  hash-threshold subB=0.01 sketch=6.864s wall=6.911s
+  hash-threshold subB=0.03 sketch=7.254s wall=7.301s
+  hash-threshold subB=0.003 sketch=6.745s wall=6.807s
+  mixed-stride   subB=0.001 sketch=2.950s wall=3.030s
+  hash-threshold subB=0.001 sketch=6.707s wall=6.787s
+  mixed-stride   subB=0.01 sketch=3.232s wall=3.279s
+measured round 8/10
+  mixed-stride   subB=0.006 sketch=3.309s wall=3.359s
+  mixed-stride   subB=0.001 sketch=2.953s wall=3.033s
+  hash-threshold subB=0.06 sketch=7.796s wall=7.843s
+  hash-threshold subB=0.03 sketch=7.264s wall=7.311s
+  mixed-stride   subB=0.06 sketch=4.490s wall=4.537s
+  mixed-stride   subB=0.1 sketch=4.703s wall=4.749s
+  hash-threshold subB=0.01 sketch=6.856s wall=6.903s
+  hash-threshold subB=0.006 sketch=6.788s wall=6.839s
+  hash-threshold subB=0.1 sketch=8.446s wall=8.492s
+  hash-threshold subB=0.003 sketch=6.746s wall=6.810s
+  mixed-stride   subB=0.03 sketch=3.881s wall=3.927s
+  mixed-stride   subB=0.003 sketch=3.198s wall=3.261s
+  hash-threshold subB=0.001 sketch=6.705s wall=6.786s
+  mixed-stride   subB=0.01 sketch=3.228s wall=3.275s
+measured round 9/10
+  mixed-stride   subB=0.006 sketch=3.304s wall=3.354s
+  mixed-stride   subB=0.01 sketch=3.226s wall=3.273s
+  mixed-stride   subB=0.001 sketch=2.942s wall=3.022s
+  hash-threshold subB=0.03 sketch=7.261s wall=7.307s
+  hash-threshold subB=0.01 sketch=6.875s wall=6.922s
+  mixed-stride   subB=0.003 sketch=3.190s wall=3.253s
+  hash-threshold subB=0.006 sketch=6.793s wall=6.842s
+  mixed-stride   subB=0.1 sketch=4.687s wall=4.733s
+  hash-threshold subB=0.1 sketch=8.458s wall=8.505s
+  hash-threshold subB=0.003 sketch=6.747s wall=6.811s
+  hash-threshold subB=0.06 sketch=7.804s wall=7.850s
+  mixed-stride   subB=0.03 sketch=3.880s wall=3.926s
+  hash-threshold subB=0.001 sketch=6.709s wall=6.791s
+  mixed-stride   subB=0.06 sketch=4.512s wall=4.559s
+measured round 10/10
+  mixed-stride   subB=0.01 sketch=3.223s wall=3.278s
+  hash-threshold subB=0.01 sketch=6.859s wall=6.908s
+  hash-threshold subB=0.1 sketch=8.459s wall=8.518s
+  hash-threshold subB=0.006 sketch=6.789s wall=6.843s
+  hash-threshold subB=0.06 sketch=7.804s wall=7.889s
+  mixed-stride   subB=0.1 sketch=4.693s wall=4.741s
+  mixed-stride   subB=0.001 sketch=2.954s wall=3.036s
+  hash-threshold subB=0.003 sketch=6.734s wall=6.797s
+  hash-threshold subB=0.03 sketch=7.250s wall=7.297s
+  mixed-stride   subB=0.003 sketch=3.192s wall=3.256s
+  mixed-stride   subB=0.03 sketch=3.872s wall=3.918s
+  hash-threshold subB=0.001 sketch=6.704s wall=6.786s
+  mixed-stride   subB=0.006 sketch=3.306s wall=3.356s
+  mixed-stride   subB=0.06 sketch=4.478s wall=4.525s
+/home/jbonnie1/interval_sketch/hammock_claude/experiments/mixed_stride_hash_threshold_speed/results/job_30459651
+subB  sketch speedup [95% CI]  wall speedup [95% CI]
+0.1   1.799 [1.797, 1.803]  1.792 [1.789, 1.797]
+0.06  1.736 [1.733, 1.739]  1.727 [1.723, 1.731]
+0.03  1.867 [1.865, 1.872]  1.858 [1.854, 1.861]
+0.01  2.123 [2.122, 2.126]  2.108 [2.106, 2.110]
+0.006 2.053 [2.051, 2.056]  2.036 [2.035, 2.042]
+0.003 2.111 [2.108, 2.113]  2.088 [2.085, 2.091]
+0.001 2.271 [2.270, 2.272]  2.237 [2.235, 2.238]
+experiments/mixed_stride_hash_threshold_speed/results/job_30459651/summary.csv

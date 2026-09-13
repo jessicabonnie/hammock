@@ -197,11 +197,11 @@ The analyses in this study use the register-equality statistic, or the inclusion
 
 Interval mode passes the points of a base-pair expansion of each interval to a HLL sketch. There is a certain computational excess involved in adding every point in an interval, so \program{hammock} includes a \texttt{--subB} command that allows for a subsampling of the points to be added to the sketch, where the value of \texttt{subB} is a proportion between $0$ and $1$. In order to maintain reproducible randomness of point selection, mixed-stride subsampling is used.
 
-In mixed-stride subsampling, a deterministic chromosome-keyed offset is used to select the sampling phase, interpolating between two strides to exactly match a target probability $p$, with deterministic reproducibility.
+In mixed-stride subsampling, a deterministic chromosome-keyed fixed-point schedule mixes adjacent gap lengths $\lfloor 1/p \rfloor$ and $\lceil 1/p \rceil$. A chromosome-specific phase derived from the sampling seed prevents cross-chromosome alignment while preserving deterministic reproducibility and long-run sampling density $p$.
 
 ADD MATH HERE
 
-Define `subB`, the sampled base-pair universe, and the mixed-stride algorithm. For sampling fraction `subB`, set the approximate stride to s=\mathrm{round}(1/\mathrm{subB}), use a deterministic chromosome-keyed offset to select the sampling phase, and advance directly between accepted positions rather than evaluating every covered position.
+Define `subB`, the sampled base-pair universe, and the mixed-stride algorithm. For sampling fraction `subB` $=p$, use a chromosome-anchored fixed-point accumulator to alternate gaps of $\lfloor 1/p \rfloor$ and $\lceil 1/p \rceil$ in the proportions needed for long-run density $p$, and advance directly between accepted positions rather than evaluating every covered position. For finite interval collections the realized fraction approaches, but need not exactly equal, $p$.
 
 Explain determinism, seed handling, expected sampling density, computational cost, and the rationale for chromosome-specific offsets. Contrast the algorithm with hash-threshold subsampling, whose inclusion test requires a hash computation for every covered position regardless of the requested sampling fraction.
 

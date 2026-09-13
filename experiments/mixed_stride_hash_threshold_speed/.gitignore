@@ -1,0 +1,12 @@
+__pycache__/
+logs/*
+!logs/run_30459651.err
+!logs/run_30459651.out
+results/*
+!results/job_30459651/
+results/job_30459651/*
+!results/job_30459651/files.txt
+!results/job_30459651/input_manifest.csv
+!results/job_30459651/metadata.json
+!results/job_30459651/raw_runs.csv
+!results/job_30459651/summary.csv
