@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_SUMMARY = SCRIPT_DIR / "results" / "job_30459651" / "summary.csv"
+DEFAULT_SUMMARY = SCRIPT_DIR / "results" / "job_30862406" / "summary.csv"
 DEFAULT_OUTPUT = SCRIPT_DIR / "figures" / "mixed_stride_vs_hash_threshold_speed"
 
 
@@ -102,7 +102,11 @@ def main() -> int:
         )
 
     time_axis.set_ylabel("Median sketch-construction time (s)")
-    time_axis.set_ylim(0, 9)
+    maximum_time = max(
+        read_column(rows, "mixed_stride_sketch_median_s")
+        + read_column(rows, "hash_threshold_sketch_median_s")
+    )
+    time_axis.set_ylim(0, maximum_time * 1.08)
     time_axis.set_title("A", loc="left", fontweight="bold")
     time_axis.legend(frameon=False, loc="upper left")
 

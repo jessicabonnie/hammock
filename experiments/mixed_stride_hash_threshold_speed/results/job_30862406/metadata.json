@@ -1,0 +1,40 @@
+{
+  "created_utc": "2026-09-13T19:26:33.296137+00:00",
+  "git_sha": "db1411ac00b78d9a6a4e7cefca9a97c817c1d933",
+  "git_dirty": false,
+  "binary": "/vast/blangme2/jbonnie/hammock-ms-hash-publication.db1411a/build/cp310-cp310-linux_x86_64/hammock-cpp",
+  "binary_version": "0.12.0",
+  "binary_sha256": "7458a5f3d0bcf2b72a568c81724503dabd1a49e3ca1a4ddef6bfc6a411bfe73e",
+  "methods": [
+    "mixed-stride",
+    "hash-threshold"
+  ],
+  "rates": [
+    0.1,
+    0.06,
+    0.03,
+    0.01,
+    0.006,
+    0.003,
+    0.001
+  ],
+  "rounds": 10,
+  "warmup_rounds": 1,
+  "precision": 18,
+  "threads": 8,
+  "seed": 42,
+  "gate_seed": 31337,
+  "shuffle_seed": 20260901,
+  "publishable_allocation_required": true,
+  "system": {
+    "hostname": "c672",
+    "cpu_count": 48,
+    "cpu_count_node": 48,
+    "cpu_model": "Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz",
+    "platform": "Linux-4.18.0-477.21.1.el8_8.x86_64-x86_64-with-glibc2.28",
+    "python_version": "3.10.20",
+    "slurm_job_id": "30862406",
+    "git_sha": "db1411a",
+    "memory_total_gb": 188.57100677490234
+  }
+}

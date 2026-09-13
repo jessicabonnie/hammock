@@ -72,26 +72,31 @@ file for every method/rate cell, and `summary.csv`.
 
 ## Archived result
 
-Job 30459651 completed on node c531 (Intel Xeon Gold 6248R) in 14:44. The
-repository retains its path and checksum input manifests, machine and binary provenance, all 140
-measured timings, and the validated summary under `results/job_30459651/`.
+The primary clean-checkout run, job 30862406, completed on node c672 (Intel
+Xeon Gold 6248R) in 18:33 at commit db1411a. The repository retains its path
+and checksum input manifests, machine and binary provenance, all 140 measured
+timings, and validated summary under `results/job_30862406/`.
 The per-cell estimate tables are omitted because they are regenerable and
 their SHA-256 digests are recorded in `raw_runs.csv`.
 The corresponding Slurm stdout/stderr are retained under `logs/`.
 
-Across the requested fractions, mixed-stride was 1.736--2.271x faster in the
-reported sketch-construction phase and 1.727--2.237x faster end to end. Every
-end-to-end comparison at `subB <= 0.01` exceeded 2x. Realized fractions were
-closely matched; the largest absolute difference between methods was
-4.09e-6 (`subB=0.003`). These measurements establish a computational
-advantage at matched sampling density; accuracy is evaluated separately in
-the Maurano validation.
+Across the requested fractions in the clean run, mixed-stride was
+1.682--2.105x faster in the reported sketch-construction phase and
+1.677--2.085x faster end to end. At `subB=0.1`, `0.01`, and `0.001`, the
+end-to-end speedups were 1.741x, 1.992x, and 2.085x. Realized fractions were
+closely matched; the largest absolute difference between methods was 4.09e-6
+(`subB=0.003`). These measurements establish a computational advantage at
+matched sampling density; accuracy is evaluated separately in the Maurano
+validation.
 
-The run used a checkout reported as dirty because the benchmark harness and
-sampling-validation tests were not yet committed. The executable is pinned by
-its SHA-256 digest in `metadata.json`, but the commit alone does not reconstruct
-the exact source state. This limitation should remain visible when the result
-is cited; a clean-checkout rerun is preferable before final publication.
+An earlier run, job 30459651 on node c531, is retained as a replication. It
+used a dirty checkout because the harness and validation tests were not yet
+committed, but its binary is pinned by SHA-256. All 14 method/rate output
+digests and sampled-point counts are identical between jobs. Its measured
+speedups were modestly higher (1.736--2.271x for sketch construction and
+1.727--2.237x end to end), demonstrating that the absolute timing ratios have
+some node/allocation dependence. The clean job is the primary reported run;
+the two runs are not pooled.
 
 Generate the supplementary figure from the archived summary with:
 
@@ -102,10 +107,11 @@ python experiments/mixed_stride_hash_threshold_speed/plot_results.py
 Suggested supplementary-results text:
 
 > On the 20-file Maurano DHS benchmark (p=18, eight threads), mixed-stride
-> subsampling reduced end-to-end runtime by 1.73--2.24-fold relative to
+> subsampling reduced end-to-end runtime by 1.68--2.09-fold relative to
 > hash-threshold sampling across subB=0.1--0.001 while producing closely
-> matched realized sampling fractions. The advantage exceeded twofold at
-> every subB value at or below 0.01.
+> matched realized sampling fractions. An independent run on a second node
+> reproduced identical retained-point counts and outputs and measured a
+> 1.73--2.24-fold range.
 
 Suggested caption:
 
@@ -117,5 +123,6 @@ Suggested caption:
 > intervals over the ten paired rounds. Sketch construction is the
 > predeclared primary endpoint and total wall time is secondary. Both methods
 > used the same 20 Maurano DHS files, precision 18, eight threads, HLL seed 42,
-> and sampling seed 31337. Intervals quantify within-node timing variability,
+> and sampling seed 31337. The primary run used a clean checkout at commit
+> db1411a. Intervals quantify within-node timing variability,
 > not generalization across nodes or datasets.
