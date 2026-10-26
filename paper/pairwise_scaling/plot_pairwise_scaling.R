@@ -424,6 +424,9 @@ panel_b <- ggplot(bars, aes(x = condition, y = wall, fill = tool)) +
     expand = expansion(add = if (compact_panel_b) 0.45 else 0.6)
   ) +
   scale_y_continuous(
+    # Integer labels need integer breaks: pretty() picks 2.5/7.5 for a ~10 s
+    # range, which label_number(accuracy = 1) would render as 2/8.
+    breaks = breaks_width(2),
     labels = label_number(accuracy = 1),
     expand = expansion(mult = c(0, 0.32))
   ) +
