@@ -1,0 +1,3 @@
+fig3a=32614870 threads=32614871 precision=32614872 build6448y=32614873 pcost6448y=32614874 pcost6248r=32614875 finalize=32614876
+# 2026-10-27: build6448y 32614873 FAILED ymm>100 gate (ymm=20,zmm=78; binary kept). pcost6448y 32614874 and finalize 32614876 cancelled (dependency never satisfiable) and resubmitted:
+pcost6448y=32614929 finalize=32614930

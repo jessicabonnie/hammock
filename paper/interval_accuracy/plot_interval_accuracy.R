@@ -47,8 +47,12 @@ repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 
 data_dir <- file.path(repo_root, "docs", "data")
 bedtools_tsv <- file.path(data_dir, "maurano_bedtools_ref.tsv")
+# 2026-10-28: single-build rerun (hammock 0.12.0, db1411a; job 32614872),
+# copied from experiments/single_build_rerun_20261027/results/precision/.
+# Panel A inputs are unchanged: their estimates match this build to within
+# floating-point rounding.
 precision_frontier_csv <- file.path(
-  data_dir, "sweep_precision_maurano_p18_t16.csv"
+  data_dir, "sweep_precision_maurano_p18_t16_v0120.csv"
 )
 PRECISIONS <- c(18, 21, 23)
 # "_full" tag: this script reads both reg_eq_similarity (register equality)

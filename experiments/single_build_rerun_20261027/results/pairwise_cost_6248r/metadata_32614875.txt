@@ -1,0 +1,34 @@
+job_id: 32614875
+job_name: sbr_pcost_6248r
+partition: parallel
+node: c056
+cpu: Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz
+cores_visible: 48
+slurm_cpus_on_node: 48
+slurm_cpus_per_task: unset
+tmpdir: /tmp (xfs 881G 875G)
+harness_repo_commit: 99289378d33f34c3b5e5affe8f2ec96e04c2eccf (repo working tree dirty; harness copies in harness/)
+harness_copy_sha256:
+  c1aedc0260b0b4f257b0afa64228505f23c8ffa613a1c08f77e3835f353127d5  benchmark_cpp_vs_bedtools.py
+  b9d7023496685ce0fe96f296bea5906e130b4543fae8b8bf424f51e676a8e621  sweep.py
+  e7161905aa6d6721fdcd2b847d492c9a7b073eb8cf3f83c86f9db101269ec60c  pairwise_cost_by_precision.py
+  f7522897dfab8c93e6053609828f19d16b0dcb764780f12cfe24253684e99e66  bedtools.sh
+binary: /vast/blangme2/jbonnie/hammock-db1411a-builds/c6248r-gcc14/hammock-cpp
+binary_sha256: c6c13e8e469404cac23b538a84f71b4fad04ccaf628dcd76ec1c0f1a836d3953
+binary_version: hammock-cpp 0.12.0
+binary_libs:
+  	linux-vdso.so.1 (0x0000155555551000)
+  	libgomp.so.1 => /home/jbonnie1/.conda/envs/claude-ref-comparison/lib/libgomp.so.1 (0x00001555554d5000)
+  	libpthread.so.0 => /lib64/libpthread.so.0 (0x0000155555105000)
+  	libstdc++.so.6 => /home/jbonnie1/.conda/envs/claude-ref-comparison/lib/libstdc++.so.6 (0x0000155554e86000)
+  	libm.so.6 => /lib64/libm.so.6 (0x0000155554b04000)
+  	libgcc_s.so.1 => /home/jbonnie1/.conda/envs/claude-ref-comparison/lib/libgcc_s.so.1 (0x0000155555499000)
+  	libc.so.6 => /lib64/libc.so.6 (0x000015555473f000)
+  	/lib64/ld-linux-x86-64.so.2 (0x0000155555325000)
+  	libdl.so.2 => /lib64/libdl.so.2 (0x000015555453b000)
+bedtools_version: not loaded
+bedtools_path: none
+parallel_version: not loaded
+python: Python 3.12.13 (/home/jbonnie1/.conda/envs/hammock/bin/python3); Python 3.10.20 (/home/jbonnie1/.conda/envs/claude-ref-comparison/bin/python3)
+start: 2026-10-27T16:43:11-04:00
+end: 2026-10-27T17:08:08-04:00

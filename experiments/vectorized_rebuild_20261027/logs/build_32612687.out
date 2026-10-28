@@ -1,0 +1,44 @@
+-- The C compiler identification is GNU 9.3.0
+-- The CXX compiler identification is GNU 9.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /data/apps/linux-centos8-cascadelake/gcc-9.2.0/gcc-9.3.0-bnvby67rgbqevwsd264rgz44xucnkhpm/bin/gcc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /data/apps/linux-centos8-cascadelake/gcc-9.2.0/gcc-9.3.0-bnvby67rgbqevwsd264rgz44xucnkhpm/bin/g++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found OpenMP_C: -fopenmp (found version "4.5")
+-- Found OpenMP_CXX: -fopenmp (found version "4.5")
+-- Found OpenMP: TRUE (found version "4.5")
+-- Found PythonLibs: /usr/lib64/libpython3.8.so
+-- Performing Test HAS_FLTO
+-- Performing Test HAS_FLTO - Success
+-- Configuring done (26.6s)
+-- Generating done (0.4s)
+-- Build files have been written to: /vast/blangme2/jbonnie/hammock-db1411a-c6248r/build-c6248r
+[ 22%] Building C object extern/hll/CMakeFiles/hll_obj.dir/kthread.c.o
+[ 22%] Building CXX object extern/hll/CMakeFiles/hll_obj.dir/hll.cpp.o
+[ 22%] Built target hll_obj
+[ 66%] Building CXX object CMakeFiles/hammock_core.dir/cpp/src/bed_parser.cpp.o
+[ 66%] Building CXX object CMakeFiles/hammock_core.dir/cpp/src/stride.cpp.o
+[ 66%] Building CXX object CMakeFiles/hammock_core.dir/cpp/src/processing_modes.cpp.o
+[ 66%] Building CXX object CMakeFiles/hammock_core.dir/cpp/src/hll_sketch.cpp.o
+[ 77%] Linking CXX static library libhammock_core.a
+[ 77%] Built target hammock_core
+[ 88%] Building CXX object CMakeFiles/hammock-cpp.dir/cpp/app/hammock_cli.cpp.o
+[100%] Linking CXX executable hammock-cpp
+[100%] Built target hammock-cpp
+job_id: 32612687
+build_node: c288
+build_cpu: Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz
+commit: db1411ac00b78d9a6a4e7cefca9a97c817c1d933
+compiler: g++ (Spack GCC) 9.3.0
+cxx_flags: CXX_FLAGS = -O3 -DNDEBUG -std=c++17 -fPIE -O3 -march=native -fopenmp
+binary: /vast/blangme2/jbonnie/hammock-db1411a-c6248r/build-c6248r/hammock-cpp
+binary_sha256: 293efe0a8777b03c797f9e798885162a6ddcccc88e37f2a9d3c3ff980d45cf11
+binary_version: hammock-cpp 0.12.0
+zmm_instructions: 0
+ymm_instructions: 7

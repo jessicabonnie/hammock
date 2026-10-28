@@ -1,0 +1,135 @@
+job_id: 32614875
+job_name: sbr_pcost_6248r
+partition: parallel
+node: c056
+cpu: Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz
+cores_visible: 48
+slurm_cpus_on_node: 48
+slurm_cpus_per_task: unset
+tmpdir: /tmp (xfs 881G 875G)
+harness_repo_commit: 99289378d33f34c3b5e5affe8f2ec96e04c2eccf (repo working tree dirty; harness copies in harness/)
+harness_copy_sha256:
+  c1aedc0260b0b4f257b0afa64228505f23c8ffa613a1c08f77e3835f353127d5  benchmark_cpp_vs_bedtools.py
+  b9d7023496685ce0fe96f296bea5906e130b4543fae8b8bf424f51e676a8e621  sweep.py
+  e7161905aa6d6721fdcd2b847d492c9a7b073eb8cf3f83c86f9db101269ec60c  pairwise_cost_by_precision.py
+  f7522897dfab8c93e6053609828f19d16b0dcb764780f12cfe24253684e99e66  bedtools.sh
+binary: /vast/blangme2/jbonnie/hammock-db1411a-builds/c6248r-gcc14/hammock-cpp
+binary_sha256: c6c13e8e469404cac23b538a84f71b4fad04ccaf628dcd76ec1c0f1a836d3953
+binary_version: hammock-cpp 0.12.0
+binary_libs:
+  	linux-vdso.so.1 (0x0000155555551000)
+  	libgomp.so.1 => /home/jbonnie1/.conda/envs/claude-ref-comparison/lib/libgomp.so.1 (0x00001555554d5000)
+  	libpthread.so.0 => /lib64/libpthread.so.0 (0x0000155555105000)
+  	libstdc++.so.6 => /home/jbonnie1/.conda/envs/claude-ref-comparison/lib/libstdc++.so.6 (0x0000155554e86000)
+  	libm.so.6 => /lib64/libm.so.6 (0x0000155554b04000)
+  	libgcc_s.so.1 => /home/jbonnie1/.conda/envs/claude-ref-comparison/lib/libgcc_s.so.1 (0x0000155555499000)
+  	libc.so.6 => /lib64/libc.so.6 (0x000015555473f000)
+  	/lib64/ld-linux-x86-64.so.2 (0x0000155555325000)
+  	libdl.so.2 => /lib64/libdl.so.2 (0x000015555453b000)
+bedtools_version: not loaded
+bedtools_path: none
+parallel_version: not loaded
+python: Python 3.12.13 (/home/jbonnie1/.conda/envs/hammock/bin/python3); Python 3.10.20 (/home/jbonnie1/.conda/envs/claude-ref-comparison/bin/python3)
+start: 2026-10-27T16:43:11-04:00
+hammock-cpp:   /vast/blangme2/jbonnie/hammock-db1411a-builds/c6248r-gcc14/hammock-cpp (0.12.0)
+precisions:    [12, 14, 16, 18, 20, 22, 24]
+files/side:    64  (128 sketches, 4,096 pairs)
+intervals:     10000
+threads:       16
+runs:          5
+system:        {'hostname': 'c056', 'cpu_count': 48, 'cpu_count_node': 48, 'cpu_model': 'Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz', 'platform': 'Linux-4.18.0-477.21.1.el8_8.x86_64-x86_64-with-glibc2.28', 'python_version': '3.10.20', 'slurm_job_id': '32614875', 'git_sha': '9928937-dirty', 'memory_total_gb': 188.5710220336914}
+
+generating 128 BED files...
+  p=12 run=0 no_metrics sketch=   5.176s pair=  0.0011s write= 0.0017s      0.28 us/pair 
+  p=12 run=0 metrics    sketch=   5.178s pair=  0.0025s write= 0.0101s      0.60 us/pair 
+  p=12 run=1 metrics    sketch=   5.177s pair=  0.0024s write= 0.0102s      0.59 us/pair 
+  p=12 run=1 no_metrics sketch=   5.176s pair=  0.0011s write= 0.0017s      0.28 us/pair 
+  p=12 run=2 no_metrics sketch=   5.176s pair=  0.0011s write= 0.0017s      0.28 us/pair 
+  p=12 run=2 metrics    sketch=   5.175s pair=  0.0025s write= 0.0101s      0.60 us/pair 
+  p=12 run=3 metrics    sketch=   5.176s pair=  0.0024s write= 0.0102s      0.60 us/pair 
+  p=12 run=3 no_metrics sketch=   5.176s pair=  0.0011s write= 0.0017s      0.27 us/pair 
+  p=12 run=4 no_metrics sketch=   5.176s pair=  0.0011s write= 0.0017s      0.27 us/pair 
+  p=12 run=4 metrics    sketch=   5.177s pair=  0.0024s write= 0.0101s      0.59 us/pair 
+  p=14 run=0 no_metrics sketch=   5.269s pair=  0.0052s write= 0.0018s      1.28 us/pair 
+  p=14 run=0 metrics    sketch=   5.271s pair=  0.0101s write= 0.0103s      2.46 us/pair 
+  p=14 run=1 metrics    sketch=   5.275s pair=  0.0096s write= 0.0103s      2.35 us/pair 
+  p=14 run=1 no_metrics sketch=   5.269s pair=  0.0052s write= 0.0018s      1.27 us/pair 
+  p=14 run=2 no_metrics sketch=   5.271s pair=  0.0055s write= 0.0018s      1.35 us/pair 
+  p=14 run=2 metrics    sketch=   5.271s pair=  0.0096s write= 0.0103s      2.35 us/pair 
+  p=14 run=3 metrics    sketch=   5.269s pair=  0.0096s write= 0.0103s      2.34 us/pair 
+  p=14 run=3 no_metrics sketch=   5.269s pair=  0.0042s write= 0.0018s      1.02 us/pair 
+  p=14 run=4 no_metrics sketch=   5.269s pair=  0.0041s write= 0.0018s      1.01 us/pair 
+  p=14 run=4 metrics    sketch=   5.269s pair=  0.0097s write= 0.0103s      2.37 us/pair 
+  p=16 run=0 no_metrics sketch=   5.825s pair=  0.0189s write= 0.0018s      4.62 us/pair 
+  p=16 run=0 metrics    sketch=   5.827s pair=  0.0374s write= 0.0103s      9.13 us/pair 
+  p=16 run=1 metrics    sketch=   5.826s pair=  0.0372s write= 0.0103s      9.08 us/pair 
+  p=16 run=1 no_metrics sketch=   5.827s pair=  0.0189s write= 0.0018s      4.61 us/pair 
+  p=16 run=2 no_metrics sketch=   5.825s pair=  0.0192s write= 0.0018s      4.69 us/pair 
+  p=16 run=2 metrics    sketch=   5.826s pair=  0.0370s write= 0.0103s      9.03 us/pair 
+  p=16 run=3 metrics    sketch=   5.827s pair=  0.0372s write= 0.0103s      9.08 us/pair 
+  p=16 run=3 no_metrics sketch=   5.823s pair=  0.0160s write= 0.0018s      3.90 us/pair 
+  p=16 run=4 no_metrics sketch=   5.824s pair=  0.0158s write= 0.0018s      3.85 us/pair 
+  p=16 run=4 metrics    sketch=   5.824s pair=  0.0371s write= 0.0102s      9.06 us/pair 
+  p=18 run=0 no_metrics sketch=   7.264s pair=  0.0660s write= 0.0019s     16.11 us/pair 
+  p=18 run=0 metrics    sketch=   7.265s pair=  0.1402s write= 0.0103s     34.24 us/pair 
+  p=18 run=1 metrics    sketch=   7.264s pair=  0.1416s write= 0.0103s     34.58 us/pair 
+  p=18 run=1 no_metrics sketch=   7.263s pair=  0.0666s write= 0.0018s     16.26 us/pair 
+  p=18 run=2 no_metrics sketch=   7.264s pair=  0.0655s write= 0.0018s     16.00 us/pair 
+  p=18 run=2 metrics    sketch=   7.265s pair=  0.1403s write= 0.0103s     34.26 us/pair 
+  p=18 run=3 metrics    sketch=   7.269s pair=  0.1409s write= 0.0103s     34.40 us/pair 
+  p=18 run=3 no_metrics sketch=   7.268s pair=  0.0717s write= 0.0019s     17.50 us/pair 
+  p=18 run=4 no_metrics sketch=   7.264s pair=  0.0649s write= 0.0018s     15.85 us/pair 
+  p=18 run=4 metrics    sketch=   7.265s pair=  0.1416s write= 0.0103s     34.56 us/pair 
+  p=20 run=0 no_metrics sketch=  12.134s pair=  0.2948s write= 0.0019s     71.98 us/pair 
+  p=20 run=0 metrics    sketch=  12.204s pair=  0.5599s write= 0.0103s    136.70 us/pair 
+  p=20 run=1 metrics    sketch=  12.150s pair=  0.5566s write= 0.0103s    135.90 us/pair 
+  p=20 run=1 no_metrics sketch=  12.184s pair=  0.2550s write= 0.0019s     62.26 us/pair 
+  p=20 run=2 no_metrics sketch=  12.107s pair=  0.2505s write= 0.0019s     61.17 us/pair 
+  p=20 run=2 metrics    sketch=  12.084s pair=  0.6195s write= 0.0104s    151.25 us/pair 
+  p=20 run=3 metrics    sketch=  12.140s pair=  0.5605s write= 0.0103s    136.83 us/pair 
+  p=20 run=3 no_metrics sketch=  12.141s pair=  0.2459s write= 0.0019s     60.03 us/pair 
+  p=20 run=4 no_metrics sketch=  12.138s pair=  0.2970s write= 0.0019s     72.52 us/pair 
+  p=20 run=4 metrics    sketch=  12.147s pair=  0.5560s write= 0.0102s    135.73 us/pair 
+  p=22 run=0 no_metrics sketch=  27.706s pair=  0.9878s write= 0.0019s    241.17 us/pair 
+  p=22 run=0 metrics    sketch=  27.809s pair=  2.1759s write= 0.0103s    531.23 us/pair 
+  p=22 run=1 metrics    sketch=  27.454s pair=  2.1819s write= 0.0103s    532.69 us/pair 
+  p=22 run=1 no_metrics sketch=  27.654s pair=  0.9947s write= 0.0019s    242.86 us/pair 
+  p=22 run=2 no_metrics sketch=  27.852s pair=  0.9632s write= 0.0019s    235.15 us/pair 
+  p=22 run=2 metrics    sketch=  27.804s pair=  2.1801s write= 0.0102s    532.26 us/pair 
+  p=22 run=3 metrics    sketch=  27.737s pair=  2.2544s write= 0.0103s    550.39 us/pair 
+  p=22 run=3 no_metrics sketch=  27.472s pair=  0.9361s write= 0.0018s    228.53 us/pair 
+  p=22 run=4 no_metrics sketch=  27.746s pair=  1.0001s write= 0.0019s    244.18 us/pair 
+  p=22 run=4 metrics    sketch=  27.519s pair=  2.2495s write= 0.0103s    549.21 us/pair 
+  p=24 run=0 no_metrics sketch=  77.575s pair=  4.0114s write= 0.0019s    979.35 us/pair 
+  p=24 run=0 metrics    sketch=  77.229s pair=  8.8742s write= 0.0103s   2166.56 us/pair 
+  p=24 run=1 metrics    sketch=  77.382s pair=  8.8133s write= 0.0102s   2151.68 us/pair 
+  p=24 run=1 no_metrics sketch=  77.143s pair=  4.0020s write= 0.0019s    977.05 us/pair 
+  p=24 run=2 no_metrics sketch=  77.535s pair=  3.9100s write= 0.0019s    954.58 us/pair 
+  p=24 run=2 metrics    sketch=  77.400s pair=  8.8453s write= 0.0102s   2159.49 us/pair 
+  p=24 run=3 metrics    sketch=  77.316s pair=  8.8131s write= 0.0103s   2151.64 us/pair 
+  p=24 run=3 no_metrics sketch=  77.192s pair=  4.0170s write= 0.0019s    980.71 us/pair 
+  p=24 run=4 no_metrics sketch=  77.552s pair=  3.9005s write= 0.0019s    952.28 us/pair 
+  p=24 run=4 metrics    sketch=  76.813s pair=  8.8558s write= 0.0102s   2162.07 us/pair 
+
+Wrote /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/pairwise_cost_6248r/pairwise_cost_by_precision_20261027_164312.csv
+
+Median peak RSS (MB) by precision:
+    p    no_metrics       metrics     delta
+   12           5.8           5.8      +0.0
+   14           7.4           7.4      +0.0
+   16          14.3          14.3      -0.0
+   18          41.2          41.2      -0.0
+   20         149.2         149.2      +0.0
+   22         581.8         581.8      -0.0
+   24        2309.8        2309.7      -0.0
+
+Median us/pair by precision:
+    p    no_metrics       metrics    ratio
+   12          0.28          0.60     2.16x
+   14          1.27          2.35     1.86x
+   16          4.61          9.08     1.97x
+   18         16.11         34.40     2.14x
+   20         62.26        136.70     2.20x
+   22        241.17        532.69     2.21x
+   24        977.05       2159.49     2.21x
+end: 2026-10-27T17:08:08-04:00

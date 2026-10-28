@@ -1,0 +1,11 @@
+job_id: 32612687
+build_node: c288
+build_cpu: Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz
+commit: db1411ac00b78d9a6a4e7cefca9a97c817c1d933
+compiler: g++ (Spack GCC) 9.3.0
+cxx_flags: CXX_FLAGS = -O3 -DNDEBUG -std=c++17 -fPIE -O3 -march=native -fopenmp
+binary: /vast/blangme2/jbonnie/hammock-db1411a-c6248r/build-c6248r/hammock-cpp
+binary_sha256: 293efe0a8777b03c797f9e798885162a6ddcccc88e37f2a9d3c3ff980d45cf11
+binary_version: hammock-cpp 0.12.0
+zmm_instructions: 0
+ymm_instructions: 7

@@ -1,0 +1,29 @@
+CMake Warning (dev) at /home/jbonnie1/.conda/envs/claude-ref-comparison/share/cmake/pybind11/FindPythonLibsNew.cmake:101 (message):
+  Policy CMP0148 is not set: The FindPythonInterp and FindPythonLibs modules
+  are removed.  Run "cmake --help-policy CMP0148" for policy details.  Use
+  the cmake_policy command to set the policy and suppress this warning, or
+  preferably upgrade to using FindPython, either by calling it explicitly
+  before pybind11, or by setting PYBIND11_FINDPYTHON ON before pybind11.
+Call Stack (most recent call first):
+  /home/jbonnie1/.conda/envs/claude-ref-comparison/share/cmake/pybind11/pybind11Tools.cmake:50 (find_package)
+  /home/jbonnie1/.conda/envs/claude-ref-comparison/share/cmake/pybind11/pybind11Common.cmake:228 (include)
+  /home/jbonnie1/.conda/envs/claude-ref-comparison/share/cmake/pybind11/pybind11Config.cmake:250 (include)
+  CMakeLists.txt:22 (find_package)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Deprecation Warning at /home/jbonnie1/.conda/envs/claude-ref-comparison/share/cmake/pybind11/FindPythonLibsNew.cmake:110 (cmake_policy):
+  The OLD behavior for policy CMP0148 will be removed from a future version
+  of CMake.
+
+  The cmake-policies(7) manual explains that the OLD behaviors of all
+  policies are deprecated and that a policy should be set to OLD only under
+  specific short-term circumstances.  Projects should be ported to the NEW
+  behavior and not rely on setting a policy to OLD.
+Call Stack (most recent call first):
+  /home/jbonnie1/.conda/envs/claude-ref-comparison/share/cmake/pybind11/pybind11Tools.cmake:50 (find_package)
+  /home/jbonnie1/.conda/envs/claude-ref-comparison/share/cmake/pybind11/pybind11Common.cmake:228 (include)
+  /home/jbonnie1/.conda/envs/claude-ref-comparison/share/cmake/pybind11/pybind11Config.cmake:250 (include)
+  CMakeLists.txt:22 (find_package)
+
+
+binary is not vectorized (ymm=20)

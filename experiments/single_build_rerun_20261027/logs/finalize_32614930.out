@@ -1,0 +1,8 @@
+fig3a: new inputs ['/home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/fig3a/cpp_vs_bedtools_t16_20261027_163542.csv', '/home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/fig3a/cpp_vs_bedtools_t16_20261027_164318.csv']
+threads: new inputs ['/home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/threads/sweep_threads_20261027_163542.csv']
+precision: new inputs ['/home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/precision/sweep_precision_20261027_164244.csv'] + ['/home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/precision/sweep_precision_20261027_164244_pairs.csv']
+accuracy p=18: new input /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/accuracy/maurano_job32614872_hll_p18_jaccB_full.csv
+accuracy p=21: new input /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/accuracy/maurano_job32614872_hll_p21_jaccB_full.csv
+pairwise_cost 6448y: new input /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/pairwise_cost_6448y/pairwise_cost_by_precision_20261027_163811.csv
+pairwise_cost 6248r: new input /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/pairwise_cost_6248r/pairwise_cost_by_precision_20261027_164312.csv
+wrote /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/summary/finalize_32614930

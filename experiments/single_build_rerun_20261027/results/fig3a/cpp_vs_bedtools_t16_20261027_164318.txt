@@ -1,0 +1,105 @@
+hammock-cpp (Mode B) vs bedtools
+================================================================================
+
+intervals/file: 10000
+threads:        16
+HLL precision:  18
+subB values:    [1.0]
+system:         {'hostname': 'c531', 'cpu_count': 48, 'cpu_count_node': 48, 'cpu_model': 'Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz', 'platform': 'Linux-4.18.0-477.21.1.el8_8.x86_64-x86_64-with-glibc2.28', 'python_version': '3.12.13', 'slurm_job_id': '32614870', 'git_sha': '9928937-dirty', 'memory_total_gb': 188.57101440429688}
+
+num_files=64
+--------------------------------------------------------------------------------
+bedtools:
+  wall:    9.933 ± 0.021 s (min 9.904, max 9.954)
+  cpu:     64.557 ± 0.056 s
+  max RSS: 19.1 MB (min 19.1, max 19.1)
+  sort:    0.964 ± 0.005 s (pre-sort, not in wall above; bedtools-workflow wall = wall + sort)
+hammock-cpp Mode B [subB=1, mixed-stride]:
+  wall:    7.986 ± 0.105 s
+  cpu:     118.495 ± 0.146 s
+  max RSS: 41.2 MB
+  sketch:  7.789 s
+  pairs:   0.119 s
+  speedup (wall): 1.24x
+  speedup (cpu):  0.54x
+hammock-cpp Mode B [subB=1, mixed-stride, +IE columns]:
+  wall:    8.017 ± 0.054 s
+  cpu:     119.491 ± 0.108 s
+  max RSS: 41.2 MB
+  sketch:  7.783 s
+  pairs:   0.186 s
+  speedup (wall): 1.24x
+  speedup (cpu):  0.54x
+
+num_files=128
+--------------------------------------------------------------------------------
+bedtools:
+  wall:    39.799 ± 0.066 s (min 39.706, max 39.856)
+  cpu:     258.657 ± 0.256 s
+  max RSS: 19.2 MB (min 19.2, max 19.2)
+  sort:    1.783 ± 0.020 s (pre-sort, not in wall above; bedtools-workflow wall = wall + sort)
+hammock-cpp Mode B [subB=1, mixed-stride]:
+  wall:    16.155 ± 0.043 s
+  cpu:     241.032 ± 0.194 s
+  max RSS: 73.2 MB
+  sketch:  15.568 s
+  pairs:   0.502 s
+  speedup (wall): 2.46x
+  speedup (cpu):  1.07x
+hammock-cpp Mode B [subB=1, mixed-stride, +IE columns]:
+  wall:    16.750 ± 0.562 s
+  cpu:     245.747 ± 0.326 s
+  max RSS: 73.2 MB
+  sketch:  15.554 s
+  pairs:   0.799 s
+  speedup (wall): 2.38x
+  speedup (cpu):  1.05x
+
+num_files=256
+--------------------------------------------------------------------------------
+bedtools:
+  wall:    160.961 ± 0.467 s (min 160.331, max 161.447)
+  cpu:     1041.509 ± 1.904 s
+  max RSS: 19.5 MB (min 19.5, max 19.5)
+  sort:    3.502 ± 0.023 s (pre-sort, not in wall above; bedtools-workflow wall = wall + sort)
+hammock-cpp Mode B [subB=1, mixed-stride]:
+  wall:    33.920 ± 0.346 s
+  cpu:     508.613 ± 6.369 s
+  max RSS: 137.3 MB
+  sketch:  31.142 s
+  pairs:   2.672 s
+  speedup (wall): 4.75x
+  speedup (cpu):  2.05x
+hammock-cpp Mode B [subB=1, mixed-stride, +IE columns]:
+  wall:    35.347 ± 0.156 s
+  cpu:     531.946 ± 2.227 s
+  max RSS: 137.3 MB
+  sketch:  31.087 s
+  pairs:   4.190 s
+  speedup (wall): 4.55x
+  speedup (cpu):  1.96x
+
+num_files=512
+--------------------------------------------------------------------------------
+bedtools:
+  wall:    658.919 ± 1.247 s (min 657.732, max 660.641)
+  cpu:     4197.672 ± 0.224 s
+  max RSS: 20.0 MB (min 19.9, max 20.0)
+  sort:    6.899 ± 0.026 s (pre-sort, not in wall above; bedtools-workflow wall = wall + sort)
+hammock-cpp Mode B [subB=1, mixed-stride]:
+  wall:    73.148 ± 0.749 s
+  cpu:     1102.216 ± 12.194 s
+  max RSS: 266.3 MB
+  sketch:  62.084 s
+  pairs:   10.925 s
+  speedup (wall): 9.01x
+  speedup (cpu):  3.81x
+hammock-cpp Mode B [subB=1, mixed-stride, +IE columns]:
+  wall:    77.379 ± 0.099 s
+  cpu:     1168.425 ± 3.891 s
+  max RSS: 266.3 MB
+  sketch:  62.243 s
+  pairs:   15.055 s
+  speedup (wall): 8.52x
+  speedup (cpu):  3.59x
+

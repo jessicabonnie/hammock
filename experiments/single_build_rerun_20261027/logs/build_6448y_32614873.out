@@ -1,0 +1,45 @@
+-- The C compiler identification is GNU 14.3.0
+-- The CXX compiler identification is GNU 14.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /home/jbonnie1/.conda/envs/claude-ref-comparison/bin/x86_64-conda-linux-gnu-gcc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /home/jbonnie1/.conda/envs/claude-ref-comparison/bin/x86_64-conda-linux-gnu-g++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found OpenMP_C: -fopenmp (found version "4.5")
+-- Found OpenMP_CXX: -fopenmp (found version "4.5")
+-- Found OpenMP: TRUE (found version "4.5")
+-- Found PythonLibs: /usr/lib64/libpython3.8.so
+-- Performing Test HAS_FLTO
+-- Performing Test HAS_FLTO - Success
+-- Configuring done (3.2s)
+-- Generating done (0.4s)
+-- Build files have been written to: /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/build_sr6448y_gcc14
+[ 22%] Building CXX object extern/hll/CMakeFiles/hll_obj.dir/hll.cpp.o
+[ 22%] Building C object extern/hll/CMakeFiles/hll_obj.dir/kthread.c.o
+[ 22%] Built target hll_obj
+[ 66%] Building CXX object CMakeFiles/hammock_core.dir/cpp/src/hll_sketch.cpp.o
+[ 66%] Building CXX object CMakeFiles/hammock_core.dir/cpp/src/processing_modes.cpp.o
+[ 66%] Building CXX object CMakeFiles/hammock_core.dir/cpp/src/stride.cpp.o
+[ 66%] Building CXX object CMakeFiles/hammock_core.dir/cpp/src/bed_parser.cpp.o
+[ 77%] Linking CXX static library libhammock_core.a
+[ 77%] Built target hammock_core
+[ 88%] Building CXX object CMakeFiles/hammock-cpp.dir/cpp/app/hammock_cli.cpp.o
+[100%] Linking CXX executable hammock-cpp
+[100%] Built target hammock-cpp
+job_id: 32614873
+build_node: sr10
+build_cpu: Intel(R) Xeon(R) Gold 6448Y
+commit: db1411ac00b78d9a6a4e7cefca9a97c817c1d933
+compiler: x86_64-conda-linux-gnu-g++ (conda-forge gcc 14.3.0-19) 14.3.0
+binary_comment: GCC: (conda-forge gcc 14.3.0-19) 14.3.0
+cxx_flags: CXX_FLAGS = -O3 -DNDEBUG -std=c++17 -fPIE -O3 -march=native -fopenmp
+binary: /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/build_sr6448y_gcc14/hammock-cpp
+binary_sha256: cd2550ac12849570c449480ff4b028901fe2a4f0780ec4503e4c6498a86584ba
+binary_version: hammock-cpp 0.12.0
+zmm_instructions: 78
+ymm_instructions: 20

@@ -1,0 +1,12 @@
+job_id: 32614423
+build_node: c699
+build_cpu: Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz
+commit: db1411ac00b78d9a6a4e7cefca9a97c817c1d933
+compiler: x86_64-conda-linux-gnu-g++ (conda-forge gcc 14.3.0-19) 14.3.0
+binary_comment: GCC: (conda-forge gcc 14.3.0-19) 14.3.0
+cxx_flags: CXX_FLAGS = -O3 -DNDEBUG -std=c++17 -fPIE -O3 -march=native -fopenmp
+binary: /vast/blangme2/jbonnie/hammock-db1411a-builds/c6248r-gcc14/hammock-cpp
+binary_sha256: c6c13e8e469404cac23b538a84f71b4fad04ccaf628dcd76ec1c0f1a836d3953
+binary_version: hammock-cpp 0.12.0
+zmm_instructions: 0
+ymm_instructions: 176

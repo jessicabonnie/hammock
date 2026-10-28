@@ -1,0 +1,12 @@
+job_id: 32614873
+build_node: sr10
+build_cpu: Intel(R) Xeon(R) Gold 6448Y
+commit: db1411ac00b78d9a6a4e7cefca9a97c817c1d933
+compiler: x86_64-conda-linux-gnu-g++ (conda-forge gcc 14.3.0-19) 14.3.0
+binary_comment: GCC: (conda-forge gcc 14.3.0-19) 14.3.0
+cxx_flags: CXX_FLAGS = -O3 -DNDEBUG -std=c++17 -fPIE -O3 -march=native -fopenmp
+binary: /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/build_sr6448y_gcc14/hammock-cpp
+binary_sha256: cd2550ac12849570c449480ff4b028901fe2a4f0780ec4503e4c6498a86584ba
+binary_version: hammock-cpp 0.12.0
+zmm_instructions: 78
+ymm_instructions: 20

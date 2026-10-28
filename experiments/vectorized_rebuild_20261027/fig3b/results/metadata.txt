@@ -1,0 +1,12 @@
+job_id: 32614424
+node: c699
+cores: 48
+cpu: Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz
+benchmark_commit: 99289378d33f34c3b5e5affe8f2ec96e04c2eccf
+binary: /vast/blangme2/jbonnie/hammock-db1411a-builds/c6248r-gcc14/hammock-cpp
+binary_sha256: c6c13e8e469404cac23b538a84f71b4fad04ccaf628dcd76ec1c0f1a836d3953
+binary_version: hammock-cpp 0.12.0
+bedtools_version: bedtools v2.30.0
+parallel_version: GNU parallel 20200822
+start: 2026-10-27T15:53:06-04:00
+end: 2026-10-27T15:57:19-04:00

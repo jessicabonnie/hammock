@@ -1,0 +1,785 @@
+job_id: 32614870
+job_name: sbr_fig3a
+partition: parallel
+node: c531
+cpu: Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz
+cores_visible: 48
+slurm_cpus_on_node: 48
+slurm_cpus_per_task: unset
+tmpdir: /tmp (xfs 1.7T 1.7T)
+harness_repo_commit: 99289378d33f34c3b5e5affe8f2ec96e04c2eccf (repo working tree dirty; harness copies in harness/)
+harness_copy_sha256:
+  c1aedc0260b0b4f257b0afa64228505f23c8ffa613a1c08f77e3835f353127d5  benchmark_cpp_vs_bedtools.py
+  b9d7023496685ce0fe96f296bea5906e130b4543fae8b8bf424f51e676a8e621  sweep.py
+  e7161905aa6d6721fdcd2b847d492c9a7b073eb8cf3f83c86f9db101269ec60c  pairwise_cost_by_precision.py
+  f7522897dfab8c93e6053609828f19d16b0dcb764780f12cfe24253684e99e66  bedtools.sh
+binary: /vast/blangme2/jbonnie/hammock-db1411a-builds/c6248r-gcc14/hammock-cpp
+binary_sha256: c6c13e8e469404cac23b538a84f71b4fad04ccaf628dcd76ec1c0f1a836d3953
+binary_version: hammock-cpp 0.12.0
+binary_libs:
+  	linux-vdso.so.1 (0x0000155555551000)
+  	libgomp.so.1 => /home/jbonnie1/.conda/envs/claude-ref-comparison/lib/libgomp.so.1 (0x00001555554d5000)
+  	libpthread.so.0 => /lib64/libpthread.so.0 (0x0000155555105000)
+  	libstdc++.so.6 => /home/jbonnie1/.conda/envs/claude-ref-comparison/lib/libstdc++.so.6 (0x0000155554e86000)
+  	libm.so.6 => /lib64/libm.so.6 (0x0000155554b04000)
+  	libgcc_s.so.1 => /home/jbonnie1/.conda/envs/claude-ref-comparison/lib/libgcc_s.so.1 (0x0000155555499000)
+  	libc.so.6 => /lib64/libc.so.6 (0x000015555473f000)
+  	/lib64/ld-linux-x86-64.so.2 (0x0000155555325000)
+  	libdl.so.2 => /lib64/libdl.so.2 (0x000015555453b000)
+bedtools_version: bedtools v2.30.0
+bedtools_path: /data/apps/extern/BEDTools/2.30.0/bin/bedtools
+parallel_version: GNU parallel 20200822
+python: Python 3.12.13 (/home/jbonnie1/.conda/envs/hammock/bin/python3); Python 3.10.20 (/home/jbonnie1/.conda/envs/claude-ref-comparison/bin/python3)
+start: 2026-10-27T16:35:41-04:00
+
+================ low N, n=20 ================
+hammock-cpp version: 0.12.0
+
+Benchmark configuration:
+  hammock-cpp binary: /vast/blangme2/jbonnie/hammock-db1411a-builds/c6248r-gcc14/hammock-cpp
+  intervals/file:     10000
+  corpus seed:        20260810
+  file counts:        [2, 4, 8, 16, 32]
+  runs/config:        20
+  threads:            16
+  HLL precision:      18
+  subB values:        [1.0]
+  metrics arm:        True
+  metrics all arms:   False
+  system:             {'hostname': 'c531', 'cpu_count': 48, 'cpu_count_node': 48, 'cpu_model': 'Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz', 'platform': 'Linux-4.18.0-477.21.1.el8_8.x86_64-x86_64-with-glibc2.28', 'python_version': '3.12.13', 'slurm_job_id': '32614870', 'git_sha': '9928937-dirty', 'memory_total_gb': 188.57101440429688}
+
+============================================================
+2 files × 10000 intervals
+============================================================
+
+Run 1/20: generating 4 BED files...
+  sort:    0.13s wall (parallel, 4 workers)
+  bedtools... 0.14s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.25s wall, 9.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.1 MB max RSS
+
+Run 2/20: generating 4 BED files...
+  sort:    0.12s wall (parallel, 4 workers)
+  hammock-cpp Mode B subB=1... 0.25s wall, 9.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.2 MB max RSS
+  bedtools... 0.12s wall, 19.0 MB max RSS
+
+Run 3/20: generating 4 BED files...
+  sort:    0.11s wall (parallel, 4 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.25s wall, 9.1 MB max RSS
+  bedtools... 0.13s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.25s wall, 9.2 MB max RSS
+
+Run 4/20: generating 4 BED files...
+  sort:    0.12s wall (parallel, 4 workers)
+  bedtools... 0.12s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.26s wall, 9.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.1 MB max RSS
+
+Run 5/20: generating 4 BED files...
+  sort:    0.12s wall (parallel, 4 workers)
+  hammock-cpp Mode B subB=1... 0.26s wall, 9.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.1 MB max RSS
+  bedtools... 0.12s wall, 19.0 MB max RSS
+
+Run 6/20: generating 4 BED files...
+  sort:    0.11s wall (parallel, 4 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.2 MB max RSS
+  bedtools... 0.13s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.25s wall, 9.1 MB max RSS
+
+Run 7/20: generating 4 BED files...
+  sort:    0.11s wall (parallel, 4 workers)
+  bedtools... 0.12s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.26s wall, 9.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.1 MB max RSS
+
+Run 8/20: generating 4 BED files...
+  sort:    0.12s wall (parallel, 4 workers)
+  hammock-cpp Mode B subB=1... 0.26s wall, 9.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.1 MB max RSS
+  bedtools... 0.13s wall, 19.0 MB max RSS
+
+Run 9/20: generating 4 BED files...
+  sort:    0.11s wall (parallel, 4 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.1 MB max RSS
+  bedtools... 0.13s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.25s wall, 9.1 MB max RSS
+
+Run 10/20: generating 4 BED files...
+  sort:    0.12s wall (parallel, 4 workers)
+  bedtools... 0.12s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.25s wall, 9.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.25s wall, 9.1 MB max RSS
+
+Run 11/20: generating 4 BED files...
+  sort:    0.11s wall (parallel, 4 workers)
+  hammock-cpp Mode B subB=1... 0.25s wall, 9.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.1 MB max RSS
+  bedtools... 0.12s wall, 19.0 MB max RSS
+
+Run 12/20: generating 4 BED files...
+  sort:    0.12s wall (parallel, 4 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.1 MB max RSS
+  bedtools... 0.12s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.25s wall, 9.1 MB max RSS
+
+Run 13/20: generating 4 BED files...
+  sort:    0.11s wall (parallel, 4 workers)
+  bedtools... 0.12s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.26s wall, 9.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.1 MB max RSS
+
+Run 14/20: generating 4 BED files...
+  sort:    0.11s wall (parallel, 4 workers)
+  hammock-cpp Mode B subB=1... 0.26s wall, 9.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.1 MB max RSS
+  bedtools... 0.12s wall, 19.0 MB max RSS
+
+Run 15/20: generating 4 BED files...
+  sort:    0.11s wall (parallel, 4 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.1 MB max RSS
+  bedtools... 0.13s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.26s wall, 9.1 MB max RSS
+
+Run 16/20: generating 4 BED files...
+  sort:    0.11s wall (parallel, 4 workers)
+  bedtools... 0.12s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.26s wall, 9.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.1 MB max RSS
+
+Run 17/20: generating 4 BED files...
+  sort:    0.12s wall (parallel, 4 workers)
+  hammock-cpp Mode B subB=1... 0.26s wall, 9.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.1 MB max RSS
+  bedtools... 0.12s wall, 19.0 MB max RSS
+
+Run 18/20: generating 4 BED files...
+  sort:    0.11s wall (parallel, 4 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.2 MB max RSS
+  bedtools... 0.12s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.26s wall, 9.2 MB max RSS
+
+Run 19/20: generating 4 BED files...
+  sort:    0.12s wall (parallel, 4 workers)
+  bedtools... 0.12s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.26s wall, 9.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.1 MB max RSS
+
+Run 20/20: generating 4 BED files...
+  sort:    0.12s wall (parallel, 4 workers)
+  hammock-cpp Mode B subB=1... 0.25s wall, 9.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.26s wall, 9.1 MB max RSS
+  bedtools... 0.12s wall, 19.0 MB max RSS
+
+============================================================
+4 files × 10000 intervals
+============================================================
+
+Run 1/20: generating 8 BED files...
+  sort:    0.13s wall (parallel, 8 workers)
+  bedtools... 0.16s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+
+Run 2/20: generating 8 BED files...
+  sort:    0.13s wall (parallel, 8 workers)
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+  bedtools... 0.17s wall, 19.0 MB max RSS
+
+Run 3/20: generating 8 BED files...
+  sort:    0.13s wall (parallel, 8 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+  bedtools... 0.17s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+
+Run 4/20: generating 8 BED files...
+  sort:    0.13s wall (parallel, 8 workers)
+  bedtools... 0.17s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.49s wall, 10.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+
+Run 5/20: generating 8 BED files...
+  sort:    0.13s wall (parallel, 8 workers)
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+  bedtools... 0.17s wall, 19.0 MB max RSS
+
+Run 6/20: generating 8 BED files...
+  sort:    0.12s wall (parallel, 8 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+  bedtools... 0.17s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+
+Run 7/20: generating 8 BED files...
+  sort:    0.12s wall (parallel, 8 workers)
+  bedtools... 0.17s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.51s wall, 10.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+
+Run 8/20: generating 8 BED files...
+  sort:    0.12s wall (parallel, 8 workers)
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+  bedtools... 0.17s wall, 19.0 MB max RSS
+
+Run 9/20: generating 8 BED files...
+  sort:    0.12s wall (parallel, 8 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+  bedtools... 0.17s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+
+Run 10/20: generating 8 BED files...
+  sort:    0.12s wall (parallel, 8 workers)
+  bedtools... 0.17s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+
+Run 11/20: generating 8 BED files...
+  sort:    0.12s wall (parallel, 8 workers)
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+  bedtools... 0.17s wall, 19.0 MB max RSS
+
+Run 12/20: generating 8 BED files...
+  sort:    0.13s wall (parallel, 8 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+  bedtools... 0.17s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+
+Run 13/20: generating 8 BED files...
+  sort:    0.13s wall (parallel, 8 workers)
+  bedtools... 0.17s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.2 MB max RSS
+
+Run 14/20: generating 8 BED files...
+  sort:    0.12s wall (parallel, 8 workers)
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+  bedtools... 0.16s wall, 19.0 MB max RSS
+
+Run 15/20: generating 8 BED files...
+  sort:    0.12s wall (parallel, 8 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+  bedtools... 0.17s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+
+Run 16/20: generating 8 BED files...
+  sort:    0.13s wall (parallel, 8 workers)
+  bedtools... 0.16s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+
+Run 17/20: generating 8 BED files...
+  sort:    0.13s wall (parallel, 8 workers)
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+  bedtools... 0.16s wall, 19.0 MB max RSS
+
+Run 18/20: generating 8 BED files...
+  sort:    0.12s wall (parallel, 8 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.51s wall, 10.1 MB max RSS
+  bedtools... 0.16s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+
+Run 19/20: generating 8 BED files...
+  sort:    0.12s wall (parallel, 8 workers)
+  bedtools... 0.16s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+
+Run 20/20: generating 8 BED files...
+  sort:    0.12s wall (parallel, 8 workers)
+  hammock-cpp Mode B subB=1... 0.50s wall, 10.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.50s wall, 10.1 MB max RSS
+  bedtools... 0.16s wall, 19.0 MB max RSS
+
+============================================================
+8 files × 10000 intervals
+============================================================
+
+Run 1/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  bedtools... 0.28s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.2 MB max RSS
+
+Run 2/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.98s wall, 12.1 MB max RSS
+  bedtools... 0.27s wall, 19.0 MB max RSS
+
+Run 3/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.1 MB max RSS
+  bedtools... 0.28s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.1 MB max RSS
+
+Run 4/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  bedtools... 0.31s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.2 MB max RSS
+
+Run 5/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.1 MB max RSS
+  bedtools... 0.28s wall, 19.0 MB max RSS
+
+Run 6/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.1 MB max RSS
+  bedtools... 0.27s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.2 MB max RSS
+
+Run 7/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  bedtools... 0.29s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 1.00s wall, 12.2 MB max RSS
+
+Run 8/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.1 MB max RSS
+  bedtools... 0.29s wall, 19.0 MB max RSS
+
+Run 9/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.2 MB max RSS
+  bedtools... 0.28s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.98s wall, 12.1 MB max RSS
+
+Run 10/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  bedtools... 0.28s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.2 MB max RSS
+
+Run 11/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 0.98s wall, 12.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.1 MB max RSS
+  bedtools... 0.28s wall, 19.0 MB max RSS
+
+Run 12/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.1 MB max RSS
+  bedtools... 0.28s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.98s wall, 12.1 MB max RSS
+
+Run 13/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  bedtools... 0.29s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.2 MB max RSS
+
+Run 14/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.2 MB max RSS
+  bedtools... 0.29s wall, 19.0 MB max RSS
+
+Run 15/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.2 MB max RSS
+  bedtools... 0.28s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.2 MB max RSS
+
+Run 16/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  bedtools... 0.27s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.1 MB max RSS
+
+Run 17/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.1 MB max RSS
+  bedtools... 0.29s wall, 19.0 MB max RSS
+
+Run 18/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.1 MB max RSS
+  bedtools... 0.28s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.1 MB max RSS
+
+Run 19/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  bedtools... 0.27s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.1 MB max RSS
+
+Run 20/20: generating 16 BED files...
+  sort:    0.15s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 0.99s wall, 12.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 0.99s wall, 12.1 MB max RSS
+  bedtools... 0.27s wall, 19.0 MB max RSS
+
+============================================================
+16 files × 10000 intervals
+============================================================
+
+Run 1/20: generating 32 BED files...
+  sort:    0.28s wall (parallel, 16 workers)
+  bedtools... 0.73s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 1.97s wall, 17.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 1.98s wall, 17.2 MB max RSS
+
+Run 2/20: generating 32 BED files...
+  sort:    0.28s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 1.97s wall, 17.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 1.97s wall, 17.2 MB max RSS
+  bedtools... 0.75s wall, 19.0 MB max RSS
+
+Run 3/20: generating 32 BED files...
+  sort:    0.27s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 1.98s wall, 17.1 MB max RSS
+  bedtools... 0.75s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 1.98s wall, 17.1 MB max RSS
+
+Run 4/20: generating 32 BED files...
+  sort:    0.28s wall (parallel, 16 workers)
+  bedtools... 0.72s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 1.97s wall, 17.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 1.98s wall, 17.2 MB max RSS
+
+Run 5/20: generating 32 BED files...
+  sort:    0.28s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 1.97s wall, 17.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 1.98s wall, 17.2 MB max RSS
+  bedtools... 0.76s wall, 19.0 MB max RSS
+
+Run 6/20: generating 32 BED files...
+  sort:    0.28s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 1.98s wall, 17.2 MB max RSS
+  bedtools... 0.79s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 1.97s wall, 17.2 MB max RSS
+
+Run 7/20: generating 32 BED files...
+  sort:    0.27s wall (parallel, 16 workers)
+  bedtools... 0.75s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 1.97s wall, 17.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 1.97s wall, 17.2 MB max RSS
+
+Run 8/20: generating 32 BED files...
+  sort:    0.27s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 1.97s wall, 17.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 1.97s wall, 17.2 MB max RSS
+  bedtools... 0.76s wall, 19.0 MB max RSS
+
+Run 9/20: generating 32 BED files...
+  sort:    0.28s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 1.98s wall, 17.2 MB max RSS
+  bedtools... 0.76s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 1.97s wall, 17.2 MB max RSS
+
+Run 10/20: generating 32 BED files...
+  sort:    0.28s wall (parallel, 16 workers)
+  bedtools... 0.74s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 1.97s wall, 17.1 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 1.98s wall, 17.1 MB max RSS
+
+Run 11/20: generating 32 BED files...
+  sort:    0.27s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 1.97s wall, 17.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 1.97s wall, 17.2 MB max RSS
+  bedtools... 0.73s wall, 19.0 MB max RSS
+
+Run 12/20: generating 32 BED files...
+  sort:    0.27s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 1.97s wall, 17.2 MB max RSS
+  bedtools... 0.76s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 1.96s wall, 17.2 MB max RSS
+
+Run 13/20: generating 32 BED files...
+  sort:    0.28s wall (parallel, 16 workers)
+  bedtools... 0.74s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 1.97s wall, 17.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 1.98s wall, 17.2 MB max RSS
+
+Run 14/20: generating 32 BED files...
+  sort:    0.27s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 1.97s wall, 17.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 1.97s wall, 17.2 MB max RSS
+  bedtools... 0.76s wall, 19.0 MB max RSS
+
+Run 15/20: generating 32 BED files...
+  sort:    0.28s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 1.98s wall, 17.2 MB max RSS
+  bedtools... 0.73s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 1.98s wall, 17.2 MB max RSS
+
+Run 16/20: generating 32 BED files...
+  sort:    0.28s wall (parallel, 16 workers)
+  bedtools... 0.77s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 1.98s wall, 17.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 1.98s wall, 17.2 MB max RSS
+
+Run 17/20: generating 32 BED files...
+  sort:    0.27s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 1.97s wall, 17.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 1.98s wall, 17.2 MB max RSS
+  bedtools... 0.74s wall, 19.0 MB max RSS
+
+Run 18/20: generating 32 BED files...
+  sort:    0.28s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 1.98s wall, 17.2 MB max RSS
+  bedtools... 0.75s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 1.99s wall, 17.2 MB max RSS
+
+Run 19/20: generating 32 BED files...
+  sort:    0.27s wall (parallel, 16 workers)
+  bedtools... 0.72s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 1.97s wall, 17.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 1.97s wall, 17.2 MB max RSS
+
+Run 20/20: generating 32 BED files...
+  sort:    0.28s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 1.98s wall, 17.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 1.98s wall, 17.2 MB max RSS
+  bedtools... 0.77s wall, 19.0 MB max RSS
+
+============================================================
+32 files × 10000 intervals
+============================================================
+
+Run 1/20: generating 64 BED files...
+  sort:    0.52s wall (parallel, 16 workers)
+  bedtools... 2.61s wall, 19.1 MB max RSS
+  hammock-cpp Mode B subB=1... 3.95s wall, 25.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 3.95s wall, 25.2 MB max RSS
+
+Run 2/20: generating 64 BED files...
+  sort:    0.50s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 3.94s wall, 25.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 3.97s wall, 25.2 MB max RSS
+  bedtools... 2.62s wall, 19.0 MB max RSS
+
+Run 3/20: generating 64 BED files...
+  sort:    0.51s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 3.94s wall, 25.2 MB max RSS
+  bedtools... 2.60s wall, 19.1 MB max RSS
+  hammock-cpp Mode B subB=1... 3.94s wall, 25.2 MB max RSS
+
+Run 4/20: generating 64 BED files...
+  sort:    0.49s wall (parallel, 16 workers)
+  bedtools... 2.57s wall, 19.1 MB max RSS
+  hammock-cpp Mode B subB=1... 3.95s wall, 25.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 3.96s wall, 25.2 MB max RSS
+
+Run 5/20: generating 64 BED files...
+  sort:    0.49s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 3.94s wall, 25.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 3.96s wall, 25.2 MB max RSS
+  bedtools... 2.62s wall, 19.1 MB max RSS
+
+Run 6/20: generating 64 BED files...
+  sort:    0.50s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 3.96s wall, 25.2 MB max RSS
+  bedtools... 2.56s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 3.93s wall, 25.2 MB max RSS
+
+Run 7/20: generating 64 BED files...
+  sort:    0.49s wall (parallel, 16 workers)
+  bedtools... 2.53s wall, 19.1 MB max RSS
+  hammock-cpp Mode B subB=1... 3.95s wall, 25.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 3.96s wall, 25.2 MB max RSS
+
+Run 8/20: generating 64 BED files...
+  sort:    0.50s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 3.93s wall, 25.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 3.96s wall, 25.2 MB max RSS
+  bedtools... 2.59s wall, 19.0 MB max RSS
+
+Run 9/20: generating 64 BED files...
+  sort:    0.53s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 3.96s wall, 25.2 MB max RSS
+  bedtools... 2.61s wall, 19.1 MB max RSS
+  hammock-cpp Mode B subB=1... 3.94s wall, 25.2 MB max RSS
+
+Run 10/20: generating 64 BED files...
+  sort:    0.50s wall (parallel, 16 workers)
+  bedtools... 2.60s wall, 19.1 MB max RSS
+  hammock-cpp Mode B subB=1... 3.95s wall, 25.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 3.96s wall, 25.2 MB max RSS
+
+Run 11/20: generating 64 BED files...
+  sort:    0.52s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 3.93s wall, 25.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 3.97s wall, 25.2 MB max RSS
+  bedtools... 2.59s wall, 19.0 MB max RSS
+
+Run 12/20: generating 64 BED files...
+  sort:    0.51s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 3.96s wall, 25.2 MB max RSS
+  bedtools... 2.63s wall, 19.1 MB max RSS
+  hammock-cpp Mode B subB=1... 3.94s wall, 25.2 MB max RSS
+
+Run 13/20: generating 64 BED files...
+  sort:    0.50s wall (parallel, 16 workers)
+  bedtools... 2.62s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 3.95s wall, 25.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 3.96s wall, 25.2 MB max RSS
+
+Run 14/20: generating 64 BED files...
+  sort:    0.52s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 3.93s wall, 25.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 3.95s wall, 25.2 MB max RSS
+  bedtools... 2.61s wall, 19.0 MB max RSS
+
+Run 15/20: generating 64 BED files...
+  sort:    0.51s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 3.95s wall, 25.2 MB max RSS
+  bedtools... 2.60s wall, 19.1 MB max RSS
+  hammock-cpp Mode B subB=1... 3.94s wall, 25.2 MB max RSS
+
+Run 16/20: generating 64 BED files...
+  sort:    0.53s wall (parallel, 16 workers)
+  bedtools... 2.64s wall, 19.0 MB max RSS
+  hammock-cpp Mode B subB=1... 3.95s wall, 25.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 3.96s wall, 25.2 MB max RSS
+
+Run 17/20: generating 64 BED files...
+  sort:    0.51s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 3.95s wall, 25.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 3.96s wall, 25.2 MB max RSS
+  bedtools... 2.60s wall, 19.1 MB max RSS
+
+Run 18/20: generating 64 BED files...
+  sort:    0.50s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 3.97s wall, 25.2 MB max RSS
+  bedtools... 2.60s wall, 19.1 MB max RSS
+  hammock-cpp Mode B subB=1... 3.95s wall, 25.2 MB max RSS
+
+Run 19/20: generating 64 BED files...
+  sort:    0.50s wall (parallel, 16 workers)
+  bedtools... 2.62s wall, 19.1 MB max RSS
+  hammock-cpp Mode B subB=1... 3.94s wall, 25.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 3.95s wall, 25.2 MB max RSS
+
+Run 20/20: generating 64 BED files...
+  sort:    0.51s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 3.94s wall, 25.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 3.96s wall, 25.2 MB max RSS
+  bedtools... 2.59s wall, 19.1 MB max RSS
+
+Reports: /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/fig3a/cpp_vs_bedtools_t16_20261027_163542.txt
+         /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/fig3a/cpp_vs_bedtools_t16_20261027_163542.csv
+         /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/fig3a/cpp_vs_bedtools_t16_20261027_163542_runs.csv (raw per-replicate rows)
+Figure:  /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/figures/fig3a/cpp_vs_bedtools_t16_20261027_163542.png
+low_N_pass_end: 2026-10-27T16:43:18-04:00
+
+================ high N, n=3 ================
+hammock-cpp version: 0.12.0
+
+Benchmark configuration:
+  hammock-cpp binary: /vast/blangme2/jbonnie/hammock-db1411a-builds/c6248r-gcc14/hammock-cpp
+  intervals/file:     10000
+  corpus seed:        20260810
+  file counts:        [64, 128, 256, 512]
+  runs/config:        3
+  threads:            16
+  HLL precision:      18
+  subB values:        [1.0]
+  metrics arm:        True
+  metrics all arms:   False
+  system:             {'hostname': 'c531', 'cpu_count': 48, 'cpu_count_node': 48, 'cpu_model': 'Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz', 'platform': 'Linux-4.18.0-477.21.1.el8_8.x86_64-x86_64-with-glibc2.28', 'python_version': '3.12.13', 'slurm_job_id': '32614870', 'git_sha': '9928937-dirty', 'memory_total_gb': 188.57101440429688}
+
+============================================================
+64 files × 10000 intervals
+============================================================
+
+Run 1/3: generating 128 BED files...
+  sort:    0.96s wall (parallel, 16 workers)
+  bedtools... 9.94s wall, 19.1 MB max RSS
+  hammock-cpp Mode B subB=1... 7.90s wall, 41.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 8.00s wall, 41.2 MB max RSS
+
+Run 2/3: generating 128 BED files...
+  sort:    0.97s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 7.92s wall, 41.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 7.96s wall, 41.2 MB max RSS
+  bedtools... 9.90s wall, 19.1 MB max RSS
+
+Run 3/3: generating 128 BED files...
+  sort:    0.96s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 8.09s wall, 41.2 MB max RSS
+  bedtools... 9.95s wall, 19.1 MB max RSS
+  hammock-cpp Mode B subB=1... 8.13s wall, 41.2 MB max RSS
+
+============================================================
+128 files × 10000 intervals
+============================================================
+
+Run 1/3: generating 256 BED files...
+  sort:    1.81s wall (parallel, 16 workers)
+  bedtools... 39.71s wall, 19.2 MB max RSS
+  hammock-cpp Mode B subB=1... 16.15s wall, 73.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 16.31s wall, 73.2 MB max RSS
+
+Run 2/3: generating 256 BED files...
+  sort:    1.76s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 16.10s wall, 73.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 16.40s wall, 73.2 MB max RSS
+  bedtools... 39.83s wall, 19.2 MB max RSS
+
+Run 3/3: generating 256 BED files...
+  sort:    1.78s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 17.54s wall, 73.2 MB max RSS
+  bedtools... 39.86s wall, 19.2 MB max RSS
+  hammock-cpp Mode B subB=1... 16.21s wall, 73.2 MB max RSS
+
+============================================================
+256 files × 10000 intervals
+============================================================
+
+Run 1/3: generating 512 BED files...
+  sort:    3.53s wall (parallel, 16 workers)
+  bedtools... 161.10s wall, 19.5 MB max RSS
+  hammock-cpp Mode B subB=1... 33.77s wall, 137.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 35.42s wall, 137.2 MB max RSS
+
+Run 2/3: generating 512 BED files...
+  sort:    3.48s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 34.40s wall, 137.2 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 35.13s wall, 137.2 MB max RSS
+  bedtools... 161.45s wall, 19.5 MB max RSS
+
+Run 3/3: generating 512 BED files...
+  sort:    3.50s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 35.49s wall, 137.3 MB max RSS
+  bedtools... 160.33s wall, 19.5 MB max RSS
+  hammock-cpp Mode B subB=1... 33.59s wall, 137.3 MB max RSS
+
+============================================================
+512 files × 10000 intervals
+============================================================
+
+Run 1/3: generating 1024 BED files...
+  sort:    6.87s wall (parallel, 16 workers)
+  bedtools... 658.38s wall, 19.9 MB max RSS
+  hammock-cpp Mode B subB=1... 72.46s wall, 266.3 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 77.25s wall, 266.3 MB max RSS
+
+Run 2/3: generating 1024 BED files...
+  sort:    6.89s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1... 72.79s wall, 266.3 MB max RSS
+  hammock-cpp Mode B subB=1 +IE... 77.49s wall, 266.3 MB max RSS
+  bedtools... 660.64s wall, 20.0 MB max RSS
+
+Run 3/3: generating 1024 BED files...
+  sort:    6.94s wall (parallel, 16 workers)
+  hammock-cpp Mode B subB=1 +IE... 77.39s wall, 266.3 MB max RSS
+  bedtools... 657.73s wall, 20.0 MB max RSS
+  hammock-cpp Mode B subB=1... 74.19s wall, 266.3 MB max RSS
+
+Reports: /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/fig3a/cpp_vs_bedtools_t16_20261027_164318.txt
+         /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/fig3a/cpp_vs_bedtools_t16_20261027_164318.csv
+         /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/fig3a/cpp_vs_bedtools_t16_20261027_164318_runs.csv (raw per-replicate rows)
+Figure:  /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/figures/fig3a/cpp_vs_bedtools_t16_20261027_164318.png
+end: 2026-10-27T17:42:18-04:00

@@ -1,0 +1,221 @@
+job_id: 32614872
+job_name: sbr_precision
+partition: parallel
+node: c353
+cpu: Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz
+cores_visible: 48
+slurm_cpus_on_node: 48
+slurm_cpus_per_task: unset
+tmpdir: /tmp (xfs 881G 875G)
+harness_repo_commit: 99289378d33f34c3b5e5affe8f2ec96e04c2eccf (repo working tree dirty; harness copies in harness/)
+harness_copy_sha256:
+  c1aedc0260b0b4f257b0afa64228505f23c8ffa613a1c08f77e3835f353127d5  benchmark_cpp_vs_bedtools.py
+  b9d7023496685ce0fe96f296bea5906e130b4543fae8b8bf424f51e676a8e621  sweep.py
+  e7161905aa6d6721fdcd2b847d492c9a7b073eb8cf3f83c86f9db101269ec60c  pairwise_cost_by_precision.py
+  f7522897dfab8c93e6053609828f19d16b0dcb764780f12cfe24253684e99e66  bedtools.sh
+binary: /vast/blangme2/jbonnie/hammock-db1411a-builds/c6248r-gcc14/hammock-cpp
+binary_sha256: c6c13e8e469404cac23b538a84f71b4fad04ccaf628dcd76ec1c0f1a836d3953
+binary_version: hammock-cpp 0.12.0
+binary_libs:
+  	linux-vdso.so.1 (0x0000155555551000)
+  	libgomp.so.1 => /home/jbonnie1/.conda/envs/claude-ref-comparison/lib/libgomp.so.1 (0x00001555554d5000)
+  	libpthread.so.0 => /lib64/libpthread.so.0 (0x0000155555105000)
+  	libstdc++.so.6 => /home/jbonnie1/.conda/envs/claude-ref-comparison/lib/libstdc++.so.6 (0x0000155554e86000)
+  	libm.so.6 => /lib64/libm.so.6 (0x0000155554b04000)
+  	libgcc_s.so.1 => /home/jbonnie1/.conda/envs/claude-ref-comparison/lib/libgcc_s.so.1 (0x0000155555499000)
+  	libc.so.6 => /lib64/libc.so.6 (0x000015555473f000)
+  	/lib64/ld-linux-x86-64.so.2 (0x0000155555325000)
+  	libdl.so.2 => /lib64/libdl.so.2 (0x000015555453b000)
+bedtools_version: bedtools v2.30.0
+bedtools_path: /data/apps/extern/BEDTools/2.30.0/bin/bedtools
+parallel_version: GNU parallel 20200822
+python: Python 3.12.13 (/home/jbonnie1/.conda/envs/hammock/bin/python3); Python 3.10.20 (/home/jbonnie1/.conda/envs/claude-ref-comparison/bin/python3)
+start: 2026-10-27T16:42:43-04:00
+
+================ precision sweep, threads = 16 ================
+hammock-cpp version: 0.12.0
+system: {'hostname': 'c353', 'cpu_count': 48, 'cpu_count_node': 48, 'cpu_model': 'Intel(R) Xeon(R) Gold 6248R CPU @ 3.00GHz', 'platform': 'Linux-4.18.0-477.21.1.el8_8.x86_64-x86_64-with-glibc2.28', 'python_version': '3.12.13', 'slurm_job_id': '32614872', 'git_sha': '9928937-dirty', 'memory_total_gb': 188.5710220336914}
+binary: /vast/blangme2/jbonnie/hammock-db1411a-builds/c6248r-gcc14/hammock-cpp
+[precision] corpus=maurano, p ∈ [12, 14, 16, 18, 20, 22, 24], t=16, files=20, intervals≈192943, subB ∈ [1.0]
+
+[precision] run 1/3: fixed Maurano corpus (20 files, same list both sides)
+  sort:    n/a (corpus ships pre-sorted)
+  bedtools... 3.94s wall, 31.9 MB
+    captured 400 bedtools jaccards (set-jaccard ground truth)
+  hammock-cpp p=12 subB=1... 5.51s wall, 26.6 MB
+    + bare-default (+IE) pass... 5.51s wall (1.00x the --register-equality arm)
+  hammock-cpp p=14 subB=1... 5.54s wall, 28.6 MB
+    + bare-default (+IE) pass... 5.54s wall (1.00x the --register-equality arm)
+  hammock-cpp p=16 subB=1... 5.74s wall, 30.7 MB
+    + bare-default (+IE) pass... 5.73s wall (1.00x the --register-equality arm)
+  hammock-cpp p=18 subB=1... 6.19s wall, 38.7 MB
+    + bare-default (+IE) pass... 6.19s wall (1.00x the --register-equality arm)
+  hammock-cpp p=20 subB=1... 8.27s wall, 80.6 MB
+    + bare-default (+IE) pass... 8.32s wall (1.01x the --register-equality arm)
+  hammock-cpp p=22 subB=1... 14.22s wall, 244.7 MB
+    + bare-default (+IE) pass... 14.45s wall (1.02x the --register-equality arm)
+  hammock-cpp p=24 subB=1... 35.52s wall, 920.7 MB
+    + bare-default (+IE) pass... 36.15s wall (1.02x the --register-equality arm)
+    p=12 subB=1: n=190, MAE_bt=0.1374 (register-equality, includes the definitional gap), MAE_bt_ie=0.0088, MAE_hll=0.0051
+    p=14 subB=1: n=190, MAE_bt=0.1383 (register-equality, includes the definitional gap), MAE_bt_ie=0.0040, MAE_hll=0.0025
+    p=16 subB=1: n=190, MAE_bt=0.1380 (register-equality, includes the definitional gap), MAE_bt_ie=0.0027, MAE_hll=0.0013
+    p=18 subB=1: n=190, MAE_bt=0.1379 (register-equality, includes the definitional gap), MAE_bt_ie=0.0012, MAE_hll=0.0007
+    p=20 subB=1: n=190, MAE_bt=0.1377 (register-equality, includes the definitional gap), MAE_bt_ie=0.0006, MAE_hll=0.0004
+    p=22 subB=1: n=190, MAE_bt=0.1378 (register-equality, includes the definitional gap), MAE_bt_ie=0.0003, MAE_hll=0.0002
+    p=24 subB=1: n=190, MAE_bt=0.1376 (register-equality, includes the definitional gap), MAE_bt_ie=0.0002, MAE_hll=0.0000
+
+[precision] run 2/3: fixed Maurano corpus (20 files, same list both sides)
+  sort:    n/a (corpus ships pre-sorted)
+  bedtools... 3.65s wall, 19.1 MB
+    captured 400 bedtools jaccards (set-jaccard ground truth)
+  hammock-cpp p=12 subB=1... 5.53s wall, 26.6 MB
+    + bare-default (+IE) pass... 5.48s wall (0.99x the --register-equality arm)
+  hammock-cpp p=14 subB=1... 5.52s wall, 28.6 MB
+    + bare-default (+IE) pass... 5.55s wall (1.01x the --register-equality arm)
+  hammock-cpp p=16 subB=1... 5.76s wall, 30.7 MB
+    + bare-default (+IE) pass... 5.75s wall (1.00x the --register-equality arm)
+  hammock-cpp p=18 subB=1... 6.18s wall, 38.7 MB
+    + bare-default (+IE) pass... 6.22s wall (1.01x the --register-equality arm)
+  hammock-cpp p=20 subB=1... 8.30s wall, 80.6 MB
+    + bare-default (+IE) pass... 8.28s wall (1.00x the --register-equality arm)
+  hammock-cpp p=22 subB=1... 14.39s wall, 244.7 MB
+    + bare-default (+IE) pass... 14.39s wall (1.00x the --register-equality arm)
+  hammock-cpp p=24 subB=1... 35.62s wall, 920.6 MB
+    + bare-default (+IE) pass... 36.14s wall (1.01x the --register-equality arm)
+    p=12 subB=1: n=190, MAE_bt=0.1374 (register-equality, includes the definitional gap), MAE_bt_ie=0.0088, MAE_hll=0.0051
+    p=14 subB=1: n=190, MAE_bt=0.1383 (register-equality, includes the definitional gap), MAE_bt_ie=0.0040, MAE_hll=0.0025
+    p=16 subB=1: n=190, MAE_bt=0.1380 (register-equality, includes the definitional gap), MAE_bt_ie=0.0027, MAE_hll=0.0013
+    p=18 subB=1: n=190, MAE_bt=0.1379 (register-equality, includes the definitional gap), MAE_bt_ie=0.0012, MAE_hll=0.0007
+    p=20 subB=1: n=190, MAE_bt=0.1377 (register-equality, includes the definitional gap), MAE_bt_ie=0.0006, MAE_hll=0.0004
+    p=22 subB=1: n=190, MAE_bt=0.1378 (register-equality, includes the definitional gap), MAE_bt_ie=0.0003, MAE_hll=0.0002
+    p=24 subB=1: n=190, MAE_bt=0.1376 (register-equality, includes the definitional gap), MAE_bt_ie=0.0002, MAE_hll=0.0000
+
+[precision] run 3/3: fixed Maurano corpus (20 files, same list both sides)
+  sort:    n/a (corpus ships pre-sorted)
+  bedtools... 3.65s wall, 19.1 MB
+    captured 400 bedtools jaccards (set-jaccard ground truth)
+  hammock-cpp p=12 subB=1... 5.53s wall, 26.6 MB
+    + bare-default (+IE) pass... 5.50s wall (0.99x the --register-equality arm)
+  hammock-cpp p=14 subB=1... 5.55s wall, 28.6 MB
+    + bare-default (+IE) pass... 5.56s wall (1.00x the --register-equality arm)
+  hammock-cpp p=16 subB=1... 5.76s wall, 30.6 MB
+    + bare-default (+IE) pass... 5.77s wall (1.00x the --register-equality arm)
+  hammock-cpp p=18 subB=1... 6.21s wall, 38.6 MB
+    + bare-default (+IE) pass... 6.22s wall (1.00x the --register-equality arm)
+  hammock-cpp p=20 subB=1... 8.26s wall, 80.6 MB
+    + bare-default (+IE) pass... 8.27s wall (1.00x the --register-equality arm)
+  hammock-cpp p=22 subB=1... 14.29s wall, 244.7 MB
+    + bare-default (+IE) pass... 14.41s wall (1.01x the --register-equality arm)
+  hammock-cpp p=24 subB=1... 35.49s wall, 920.7 MB
+    + bare-default (+IE) pass... 36.18s wall (1.02x the --register-equality arm)
+    p=12 subB=1: n=190, MAE_bt=0.1374 (register-equality, includes the definitional gap), MAE_bt_ie=0.0088, MAE_hll=0.0051
+    p=14 subB=1: n=190, MAE_bt=0.1383 (register-equality, includes the definitional gap), MAE_bt_ie=0.0040, MAE_hll=0.0025
+    p=16 subB=1: n=190, MAE_bt=0.1380 (register-equality, includes the definitional gap), MAE_bt_ie=0.0027, MAE_hll=0.0013
+    p=18 subB=1: n=190, MAE_bt=0.1379 (register-equality, includes the definitional gap), MAE_bt_ie=0.0012, MAE_hll=0.0007
+    p=20 subB=1: n=190, MAE_bt=0.1377 (register-equality, includes the definitional gap), MAE_bt_ie=0.0006, MAE_hll=0.0004
+    p=22 subB=1: n=190, MAE_bt=0.1378 (register-equality, includes the definitional gap), MAE_bt_ie=0.0003, MAE_hll=0.0002
+    p=24 subB=1: n=190, MAE_bt=0.1376 (register-equality, includes the definitional gap), MAE_bt_ie=0.0002, MAE_hll=0.0000
+
+Results: /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/precision/sweep_precision_20261027_164244.csv
+Figure:  /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/figures/precision/sweep_precision_20261027_164244.png
+Pairs:   /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/precision/sweep_precision_20261027_164244_pairs.csv
+Scatter: /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/figures/precision/sweep_precision_20261027_164244_scatter.png
+Scatter (IE): /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/figures/precision/sweep_precision_20261027_164244_scatter_ie.png
+sweep_end: 2026-10-27T16:51:09-04:00
+
+================ accuracy runs, p = 18, 21 ================
+OpenMP threads: 16
+Sketching 20 query and 20 primary files (mode B).
+Processed 198621 intervals, 91434236 points total.       
+Processed 168322 intervals, 114682766 points total.       
+Processed 155202 intervals, 102068188 points total.       
+Processed 229496 intervals, 113941361 points total.       
+Processed 172723 intervals, 127821837 points total.       
+Processed 186603 intervals, 112834740 points total.       
+Processed 131946 intervals, 63396469 points total.       
+Processed 191311 intervals, 100157759 points total.       
+Processed 183224 intervals, 98132742 points total.       
+Processed 161171 intervals, 86473594 points total.       
+Processed 208569 intervals, 122220885 points total.       
+Processed 204719 intervals, 139395760 points total.       
+Processed 195287 intervals, 124200751 points total.       
+Processed 169546 intervals, 103773425 points total.       
+Processed 178524 intervals, 107244666 points total.       
+Processed 190043 intervals, 107993207 points total.       
+Processed 175699 intervals, 104849231 points total.       
+Processed 193611 intervals, 131595419 points total.       
+Processed 169025 intervals, 64452392 points total.       
+Processed 174705 intervals, 71439855 points total.       
+Processed 198621 intervals, 91434236 points total.       
+Processed 168322 intervals, 114682766 points total.       
+Processed 155202 intervals, 102068188 points total.       
+Processed 229496 intervals, 113941361 points total.       
+Processed 172723 intervals, 127821837 points total.       
+Processed 186603 intervals, 112834740 points total.       
+Processed 131946 intervals, 63396469 points total.       
+Processed 191311 intervals, 100157759 points total.       
+Processed 183224 intervals, 98132742 points total.       
+Processed 161171 intervals, 86473594 points total.       
+Processed 208569 intervals, 122220885 points total.       
+Processed 204719 intervals, 139395760 points total.       
+Processed 195287 intervals, 124200751 points total.       
+Processed 169546 intervals, 103773425 points total.       
+Processed 178524 intervals, 107244666 points total.       
+Processed 190043 intervals, 107993207 points total.       
+Processed 175699 intervals, 104849231 points total.       
+Processed 193611 intervals, 131595419 points total.       
+Processed 169025 intervals, 64452392 points total.       
+Processed 174705 intervals, 71439855 points total.       
+Sketching: 6181906 us
+Pairwise: 18227 us
+Write: 1431 us
+Pairwise+write: 19658 us
+Wrote /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/accuracy/maurano_job32614872_hll_p18_jaccB_full.csv
+OpenMP threads: 16
+Sketching 20 query and 20 primary files (mode B).
+Processed 198621 intervals, 91434236 points total.       
+Processed 168322 intervals, 114682766 points total.       
+Processed 155202 intervals, 102068188 points total.       
+Processed 229496 intervals, 113941361 points total.       
+Processed 172723 intervals, 127821837 points total.       
+Processed 186603 intervals, 112834740 points total.       
+Processed 131946 intervals, 63396469 points total.       
+Processed 191311 intervals, 100157759 points total.       
+Processed 183224 intervals, 98132742 points total.       
+Processed 161171 intervals, 86473594 points total.       
+Processed 208569 intervals, 122220885 points total.       
+Processed 204719 intervals, 139395760 points total.       
+Processed 195287 intervals, 124200751 points total.       
+Processed 169546 intervals, 103773425 points total.       
+Processed 178524 intervals, 107244666 points total.       
+Processed 190043 intervals, 107993207 points total.       
+Processed 175699 intervals, 104849231 points total.       
+Processed 193611 intervals, 131595419 points total.       
+Processed 169025 intervals, 64452392 points total.       
+Processed 174705 intervals, 71439855 points total.       
+Processed 198621 intervals, 91434236 points total.       
+Processed 168322 intervals, 114682766 points total.       
+Processed 155202 intervals, 102068188 points total.       
+Processed 229496 intervals, 113941361 points total.       
+Processed 172723 intervals, 127821837 points total.       
+Processed 186603 intervals, 112834740 points total.       
+Processed 131946 intervals, 63396469 points total.       
+Processed 191311 intervals, 100157759 points total.       
+Processed 183224 intervals, 98132742 points total.       
+Processed 161171 intervals, 86473594 points total.       
+Processed 208569 intervals, 122220885 points total.       
+Processed 204719 intervals, 139395760 points total.       
+Processed 195287 intervals, 124200751 points total.       
+Processed 169546 intervals, 103773425 points total.       
+Processed 178524 intervals, 107244666 points total.       
+Processed 190043 intervals, 107993207 points total.       
+Processed 175699 intervals, 104849231 points total.       
+Processed 193611 intervals, 131595419 points total.       
+Processed 169025 intervals, 64452392 points total.       
+Processed 174705 intervals, 71439855 points total.       
+Sketching: 10756368 us
+Pairwise: 129928 us
+Write: 2004 us
+Pairwise+write: 131932 us
+Wrote /home/jbonnie1/interval_sketch/hammock_claude/experiments/single_build_rerun_20261027/results/accuracy/maurano_job32614872_hll_p21_jaccB_full.csv
+end: 2026-10-27T16:51:26-04:00

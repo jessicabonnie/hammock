@@ -54,6 +54,15 @@ script_path <- sub("^--file=", "", script_arg)
 script_dir <- dirname(normalizePath(script_path, mustWork = TRUE))
 repo_root <- normalizePath(file.path(script_dir, "..", ".."), mustWork = TRUE)
 
+# 2026-10-28: defaults now point at the single-build rerun (hammock 0.12.0,
+# commit db1411a, one GCC 14.3 -O3 -march=native binary built on a Xeon Gold
+# 6248R node, sha256 c6c13e8e...). Panel A: cpp_vs_bedtools_t16_p18_v0120.csv,
+# the two CSVs in experiments/single_build_rerun_20261027/results/fig3a/
+# (jobs 32614870; N<=32 20 reps, N>=64 3 reps) concatenated. Panel B:
+# maurano_subB_ie_summary_v0120.csv and maurano_bedtools_v0120.csv, copied from
+# experiments/vectorized_rebuild_20261027/fig3b/results/ (job 32614424).
+# The paragraph below describes the earlier default (0.7.0 build).
+#
 # p=18 (the CLI default), job 29652408, node c595, one exclusive allocation,
 # 2026-08-09. Replaces cpp_vs_bedtools_t16_20260804_172242.csv, which was p=14 --
 # a precision used nowhere else in the paper -- and whose bedtools leg ran under
@@ -70,17 +79,17 @@ out_png <- if (length(argv) >= 1) {
 synthetic_csv <- if (length(argv) >= 2) {
   normalizePath(argv[2], mustWork = TRUE)
 } else {
-  file.path(repo_root, "docs", "data", "cpp_vs_bedtools_t16_p18.csv")
+  file.path(repo_root, "docs", "data", "cpp_vs_bedtools_t16_p18_v0120.csv")
 }
 maurano_ie_summary_csv <- if (length(argv) >= 3) {
   normalizePath(argv[3], mustWork = TRUE)
 } else {
-  file.path(repo_root, "docs", "data", "maurano_subB_ie_summary.csv")
+  file.path(repo_root, "docs", "data", "maurano_subB_ie_summary_v0120.csv")
 }
 maurano_bedtools_csv <- if (length(argv) >= 4) {
   normalizePath(argv[4], mustWork = TRUE)
 } else {
-  file.path(repo_root, "docs", "data", "maurano_bedtools.csv")
+  file.path(repo_root, "docs", "data", "maurano_bedtools_v0120.csv")
 }
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
 
