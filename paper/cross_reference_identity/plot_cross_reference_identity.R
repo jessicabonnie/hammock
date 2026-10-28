@@ -324,13 +324,13 @@ panel <- ggplot() +
     axis.ticks.y = element_blank(),
     axis.text.y = element_blank(),
     panel.grid = element_blank(),
-    plot.margin = margin(12, 14, 10, 12)
+    plot.margin = margin(2, 14, 10, 12)
   )
 
 CairoPNG(
   filename = out_png,
   width = 7.0,
-  height = 3.9,
+  height = 3.5,
   units = "in",
   res = 300,
   bg = "white"

@@ -36,7 +36,7 @@ raster_panel <- function(path) {
 }
 
 combined <- raster_panel(panel_a_png) / raster_panel(panel_b_png) +
-  plot_layout(heights = c(3.9, 3.3)) +
+  plot_layout(heights = c(3.5, 3.3)) +
   plot_annotation(tag_levels = "A") &
   theme(
     plot.tag = element_text(size = 12, face = "bold", color = "#20262D"),
@@ -47,7 +47,7 @@ combined <- raster_panel(panel_a_png) / raster_panel(panel_b_png) +
 dir.create(dirname(output_png), recursive = TRUE, showWarnings = FALSE)
 # Panels are rendered at 7 in wide; keep the canvas at that width so their
 # text is not rescaled.
-CairoPNG(output_png, width = 7.1, height = 7.4, units = "in", res = 300,
+CairoPNG(output_png, width = 7.1, height = 6.9, units = "in", res = 300,
          bg = "white")
 print(combined)
 dev.off()
