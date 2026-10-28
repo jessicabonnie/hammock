@@ -89,7 +89,7 @@ p <- ggplot(d, aes(x = factor(w, levels = W_LEVELS))) +
       yend = same_tissue,
       xend = factor(w, levels = W_LEVELS)
     ),
-    color = "#AEB7BF", linewidth = 0.35, alpha = 0.78
+    color = "#AEB7BF", linewidth = 0.3, alpha = 0.78
   ) +
   geom_segment(
     data = d %>% filter(optimum),
@@ -98,12 +98,12 @@ p <- ggplot(d, aes(x = factor(w, levels = W_LEVELS))) +
       yend = same_tissue,
       xend = factor(w, levels = W_LEVELS)
     ),
-    color = "#D81B60", linewidth = 1.0, alpha = 1
+    color = "#D81B60", linewidth = 0.8, alpha = 1
   ) +
   geom_point(
     data = points,
     aes(y = median_similarity, color = comparison),
-    size = 3.0, alpha = 1
+    size = 1.7, alpha = 1
   ) +
   facet_grid(. ~ k, scales = "free_x", space = "free_x", labeller = label_both) +
   scale_color_manual(
@@ -118,22 +118,24 @@ p <- ggplot(d, aes(x = factor(w, levels = W_LEVELS))) +
     x = "Minimizer window size (w)",
     y = "Median Jaccard estimate"
   ) +
-  theme_classic(base_size = 12, base_family = "sans") +
+  theme_classic(base_size = 9, base_family = "sans") +
   theme(
-    axis.title = element_text(size = 13, color = text_color),
-    axis.text = element_text(size = 12, color = text_color),
+    axis.title = element_text(size = 9.5, color = text_color),
+    axis.text = element_text(size = 7.5, color = text_color),
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
-    panel.spacing.x = grid::unit(0.18, "lines"),
+    panel.spacing.x = grid::unit(0.12, "lines"),
     strip.background = element_blank(),
-    strip.text = element_text(size = 12, face = "bold", color = text_color),
+    strip.text = element_text(size = 8.5, face = "bold", color = text_color),
     legend.position = "bottom",
-    legend.text = element_text(size = 11.5, color = text_color),
-    plot.margin = margin(12, 16, 12, 12)
+    legend.text = element_text(size = 8.5, color = text_color),
+    legend.margin = margin(0, 0, 0, 0),
+    plot.margin = margin(6, 8, 4, 6)
   )
 
 dir.create(dirname(output_png), recursive = TRUE, showWarnings = FALSE)
-CairoPNG(output_png, width = 12.5, height = 4.6, units = "in", res = 300, bg = "white")
+# Sized for a full-text-width figure (about 7 in) so text prints at 7.5--9.5 pt.
+CairoPNG(output_png, width = 7.0, height = 3.3, units = "in", res = 300, bg = "white")
 print(p)
 dev.off()
 message("Wrote: ", output_png)
