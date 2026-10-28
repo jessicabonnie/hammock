@@ -1,11 +1,11 @@
 #!/usr/bin/env Rscript
 
-# Stack the p=12, p=18, and p=24 biological-optimum dendrogram panels into a
-# single supplementary figure. By default, the component panels are generated
+# Stack the p=12, p=18, and p=24 fixed-seed dendrogram panels into a single
+# supplementary figure. By default, the component panels are generated
 # in temporary files by plot_sequence_tissue_clustering.R with panel labels A,
 # B, and C; three explicit panel paths may instead be supplied as arguments.
 
-required_packages <- c("png", "grid", "Cairo")
+required_packages <- c("png")
 missing_packages <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
 ]
@@ -27,24 +27,27 @@ if (length(argv) < 3) {
   plot_script <- file.path(script_dir, "plot_sequence_tissue_clustering.R")
   data_dir <- file.path(script_dir, "data")
   key_tsv <- file.path(data_dir, "maurano_filenames_key.tsv")
-  inputs <- vapply(
+  panel_pdfs <- vapply(
     precisions,
     function(p) tempfile(
       pattern = paste0("sequence_tissue_clustering_p", p, "_"),
-      fileext = ".png"
+      fileext = ".pdf"
     ),
     character(1)
   )
-  on.exit(unlink(inputs), add = TRUE)
+  panel_png_bases <- sub("\\.pdf$", "", panel_pdfs)
+  inputs <- paste0(panel_png_bases, ".png")
+  on.exit(unlink(c(panel_pdfs, inputs)), add = TRUE)
   for (i in seq_along(precisions)) {
     input_csv <- file.path(
       data_dir,
-      sprintf("p%d_seed00000_k10_w30.csv", precisions[i])
+      sprintf("p%d_seed00042_k10_w30.csv", precisions[i])
     )
     plot_args <- c(
-      plot_script, input_csv, key_tsv, inputs[i],
+      plot_script, input_csv, key_tsv, panel_pdfs[i],
       "jaccard_similarity_ie", panel_labels[i], "0.05", "4.5", "true",
-      as.character(precisions[i]), as.character(cluster_count)
+      as.character(precisions[i]), as.character(cluster_count), "", "none",
+      "tissue"
     )
     status <- system2(
       "Rscript",
@@ -52,6 +55,15 @@ if (length(argv) < 3) {
     )
     if (status != 0) {
       stop("Failed to generate dendrogram panel for p=", precisions[i],
+           call. = FALSE)
+    }
+    status <- system2(
+      "pdftoppm",
+      c("-png", "-r", "300", "-singlefile", shQuote(panel_pdfs[i]),
+        shQuote(panel_png_bases[i]))
+    )
+    if (status != 0 || !file.exists(inputs[i])) {
+      stop("Failed to rasterize dendrogram panel for p=", precisions[i],
            call. = FALSE)
     }
   }
@@ -95,17 +107,13 @@ trim_vertical <- function(img, pad = 18L) {
 panels <- lapply(panels, trim_vertical)
 row_heights <- vapply(panels, function(x) dim(x)[1], integer(1))
 
-Cairo::CairoPNG(output, width = 3300, height = sum(row_heights), bg = "white")
-grid::grid.newpage()
-grid::pushViewport(grid::viewport(
-  layout = grid::grid.layout(3, 1, heights = grid::unit(row_heights, "null"))
-))
-for (i in seq_along(panels)) {
-  grid::grid.raster(
-    panels[[i]], interpolate = FALSE,
-    vp = grid::viewport(layout.pos.row = i, layout.pos.col = 1)
-  )
+combined <- array(1, dim = c(sum(row_heights), dim(panels[[1]])[2], 3))
+row_start <- 1L
+for (panel in panels) {
+  row_end <- row_start + dim(panel)[1] - 1L
+  combined[row_start:row_end, , ] <- panel[, , seq_len(3), drop = FALSE]
+  row_start <- row_end + 1L
 }
-grDevices::dev.off()
+png::writePNG(combined, output)
 
 message("Wrote: ", output)

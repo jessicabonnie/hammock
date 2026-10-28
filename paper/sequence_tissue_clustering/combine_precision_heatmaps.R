@@ -5,7 +5,7 @@
 # ordered by its own average-linkage hierarchy, matching the corresponding
 # dendrogram panel rather than imposing a shared display order.
 
-required_packages <- c("png", "grid", "Cairo", "viridisLite")
+required_packages <- c("png", "grid", "viridisLite")
 missing_packages <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
 ]
@@ -23,28 +23,32 @@ argv <- commandArgs(trailingOnly = TRUE)
 precisions <- c(12, 18, 24)
 panel_labels <- c("A", "B", "C")
 generated_inputs <- length(argv) < 3
+cluster_count <- if (length(argv) == 2) as.integer(argv[2]) else 10L
 if (generated_inputs) {
   plot_script <- file.path(script_dir, "plot_distance_heatmap.R")
   data_dir <- file.path(script_dir, "data")
   key_tsv <- file.path(data_dir, "maurano_filenames_key.tsv")
-  inputs <- vapply(
+  panel_pdfs <- vapply(
     precisions,
     function(p) tempfile(
       pattern = paste0("sequence_tissue_distance_heatmap_p", p, "_"),
-      fileext = ".png"
+      fileext = ".pdf"
     ),
     character(1)
   )
-  on.exit(unlink(inputs), add = TRUE)
+  panel_png_bases <- sub("\\.pdf$", "", panel_pdfs)
+  inputs <- paste0(panel_png_bases, ".png")
+  on.exit(unlink(c(panel_pdfs, inputs)), add = TRUE)
   for (i in seq_along(precisions)) {
     input_csv <- file.path(
       data_dir,
-      sprintf("p%d_seed00000_k10_w30.csv", precisions[i])
+      sprintf("p%d_seed00042_k10_w30.csv", precisions[i])
     )
     plot_args <- c(
-      plot_script, input_csv, key_tsv, inputs[i],
+      plot_script, input_csv, key_tsv, panel_pdfs[i],
       "jaccard_similarity_ie", panel_labels[i],
-      "true", "false", as.character(precisions[i]), "true"
+      "true", "false", as.character(precisions[i]), "true",
+      as.character(cluster_count), "tissue"
     )
     status <- system2(
       "Rscript",
@@ -54,13 +58,29 @@ if (generated_inputs) {
       stop("Failed to generate heatmap panel for p=", precisions[i],
            call. = FALSE)
     }
+    status <- system2(
+      "pdftoppm",
+      c("-png", "-r", "300", "-singlefile", shQuote(panel_pdfs[i]),
+        shQuote(panel_png_bases[i]))
+    )
+    if (status != 0 || !file.exists(inputs[i])) {
+      stop("Failed to rasterize heatmap panel for p=", precisions[i],
+           call. = FALSE)
+    }
   }
 } else {
   inputs <- argv[1:3]
 }
-output <- if (length(argv) >= 4) argv[4] else file.path(
+default_output <- file.path(
   repo_root, "paper", "figures", "sequence_tissue_distance_heatmap_precision.png"
 )
+output <- if (length(argv) >= 4) {
+  argv[4]
+} else if (generated_inputs && length(argv) >= 1) {
+  argv[1]
+} else {
+  default_output
+}
 
 missing_inputs <- inputs[!file.exists(inputs)]
 if (length(missing_inputs) > 0) {
@@ -91,9 +111,17 @@ dir.create(dirname(output), recursive = TRUE, showWarnings = FALSE)
 panel_widths <- vapply(panels, function(x) dim(x)[2], integer(1))
 panel_height <- panel_heights[1]
 
-Cairo::CairoPNG(output, width = sum(panel_widths[1:2]),
-                height = panel_height * 2,
-                bg = "white")
+combined_pdf <- tempfile(pattern = "sequence_tissue_heatmaps_", fileext = ".pdf")
+combined_png_base <- tempfile(pattern = "sequence_tissue_heatmaps_")
+combined_png <- paste0(combined_png_base, ".png")
+on.exit(unlink(c(combined_pdf, combined_png)), add = TRUE)
+grDevices::pdf(
+  combined_pdf,
+  width = sum(panel_widths[1:2]) / 300,
+  height = panel_height * 2 / 300,
+  bg = "white",
+  useDingbats = FALSE
+)
 grid::grid.newpage()
 grid::pushViewport(grid::viewport(
   layout = grid::grid.layout(
@@ -132,7 +160,7 @@ grid::grid.raster(
   interpolate = TRUE
 )
 grid::grid.text(
-  "1 − Jaccard\n(distance)",
+  expression(atop(1 - Jaccard, "(distance)")),
   x = 0.28, y = 0.88, just = c("center", "bottom"),
   gp = grid::gpar(fontsize = 30)
 )
@@ -153,5 +181,17 @@ for (i in seq_along(tick_values)) {
 grid::popViewport()
 grid::popViewport()
 grDevices::dev.off()
+
+status <- system2(
+  "pdftoppm",
+  c("-png", "-r", "300", "-singlefile", shQuote(combined_pdf),
+    shQuote(combined_png_base))
+)
+if (status != 0 || !file.exists(combined_png)) {
+  stop("Failed to rasterize combined precision heatmap.", call. = FALSE)
+}
+if (!file.copy(combined_png, output, overwrite = TRUE)) {
+  stop("Failed to copy combined precision heatmap to output.", call. = FALSE)
+}
 
 message("Wrote: ", output)

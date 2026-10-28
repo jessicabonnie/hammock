@@ -39,6 +39,19 @@ frequencies, rather than relying on medians alone.
 Because parameter selection and recovery use the same 20 labelled samples,
 all tissue rankings are exploratory and are not estimates of generalization.
 
+### Main-figure seed extension
+
+A manuscript-focused follow-up extended the `k=20,w=20,p=18` cell from the
+eight prespecified seeds to 101 total seeds (0--99 plus 31337). The focused
+configuration is `config_k20_w20_p18_extension.yaml`; its extension phase
+subtracts the eight already completed seeds and therefore dispatches 93 jobs.
+The validated result contains one eight-cluster partition across all 101 seeds
+(ARI 0.904642, NMI 0.952053, exact-partition recovery 101/101) and one
+ten-cluster partition across all 101 seeds (ARI 0.693152, NMI 0.905032,
+exact-partition recovery 101/101). This follow-up supports the proposed main
+eight-class figure and does not alter the frozen historical `k=10,w=30`
+classification.
+
 ## Layout and commands
 
 All commands are run from this directory with the isolated build's Python:

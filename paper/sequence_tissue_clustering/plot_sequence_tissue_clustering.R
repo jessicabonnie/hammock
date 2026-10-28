@@ -8,7 +8,7 @@
 #
 # Default analysis:
 #   similarity = jaccard_similarity_ie (inclusion-exclusion Jaccard)
-#   k = 10, w = 30, p = 18
+#   k = 10, w = 30, p = 18, seed = 42
 #   linkage = average
 #   number of displayed clusters = number of annotated tissue labels (10)
 #   inferred ten-cluster annotation strip = shown
@@ -18,13 +18,13 @@
 #   Rscript paper/sequence_tissue_clustering/plot_sequence_tissue_clustering.R
 #
 # Optional overrides:
-#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [axis_break] [height_inches] [cluster_strip] [precision] [clusters]
+#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [axis_break] [height_inches] [cluster_strip] [precision] [clusters] [panel_title] [stats_output] [leaf_order] [highlight_splits_from]
 #
 # Every run also writes estimator_agreement_stats.csv next to this script,
 # scoring register-equality and inclusion-exclusion columns on the same
 # clustering and recording whether they induce the same partition.
 
-required_packages <- c("dplyr", "readr", "scales", "Cairo")
+required_packages <- c("dplyr", "readr", "scales")
 missing_packages <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
 ]
@@ -40,7 +40,6 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(readr)
   library(scales)
-  library(Cairo)
 })
 
 script_arg <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
@@ -58,7 +57,7 @@ P <- 18
 data_dir <- file.path(script_dir, "data")
 default_csv <- file.path(
   data_dir,
-  sprintf("p%d_seed00000_k%d_w%d.csv", P, K, W)
+  sprintf("p%d_seed00042_k%d_w%d.csv", P, K, W)
 )
 default_key <- file.path(data_dir, "maurano_filenames_key.tsv")
 default_output <- file.path(repo_root, "paper", "figures", "sequence_tissue_clustering.png")
@@ -82,6 +81,19 @@ precision_value <- if (length(argv) >= 9 && nzchar(argv[9])) {
 cluster_count <- if (length(argv) >= 10 && nzchar(argv[10])) {
   suppressWarnings(as.integer(argv[10]))
 } else NA_integer_
+panel_title <- if (length(argv) >= 11 && nzchar(argv[11])) argv[11] else NA_character_
+stats_output <- if (length(argv) >= 12 && nzchar(argv[12])) argv[12] else NA_character_
+leaf_order_mode <- if (length(argv) >= 13 && nzchar(argv[13])) argv[13] else "default"
+highlight_splits_from <- if (length(argv) >= 14 && nzchar(argv[14])) {
+  suppressWarnings(as.integer(argv[14]))
+} else NA_integer_
+if (!leaf_order_mode %in% c("default", "tissue")) {
+  stop("leaf_order must be 'default' or 'tissue'.", call. = FALSE)
+}
+if (!is.na(highlight_splits_from) &&
+    (is.na(cluster_count) || highlight_splits_from >= cluster_count)) {
+  stop("highlight_splits_from must be smaller than clusters.", call. = FALSE)
+}
 if (!is.na(cluster_count) && cluster_count < 2) {
   stop("clusters must be an integer of at least 2.", call. = FALSE)
 }
@@ -218,9 +230,9 @@ local({
   )
 })
 
-# The archived Mode D sweep predates the jaccard_similarity_ie column (v0.5.0)
-# but already carries the containments it is derived from, so recover it here
-# rather than resweeping. Native _ie is passed through untouched when present.
+# Validated independent-rehash inputs carry the native
+# jaccard_similarity_ie column. Retain the containment-derived fallback so the
+# plotting utility remains compatible with older archived Mode D outputs.
 add_jaccard_ie <- function(df) {
   if (!("jaccard_similarity_ie" %in% names(df)) &&
       all(c("containment_AB", "containment_BA") %in% names(df))) {
@@ -232,9 +244,13 @@ add_jaccard_ie <- function(df) {
 
 key <- read_tsv(key_tsv, show_col_types = FALSE) %>%
   transmute(stem = strip_ext(File), tissue = Biosample_term_name)
+display_tissue_by_stem <- setNames(key$tissue, key$stem)
+truth_key <- key
 if (identical(cluster_count, 8L)) {
-  key <- key %>% mutate(tissue = if_else(grepl("^fMuscle_", tissue), "fMuscle", tissue))
+  truth_key <- truth_key %>%
+    mutate(tissue = if_else(grepl("^fMuscle_", tissue), "fMuscle", tissue))
 }
+truth_tissue_by_stem <- setNames(truth_key$tissue, truth_key$stem)
 
 raw <- add_jaccard_ie(read_csv(input_csv, show_col_types = FALSE))
 
@@ -266,8 +282,6 @@ missing_stems <- setdiff(stems, key$stem)
 if (length(missing_stems) > 0) {
   stop("Tissue key is missing: ", paste(missing_stems, collapse = ", "), call. = FALSE)
 }
-tissue_by_stem <- setNames(key$tissue, key$stem)
-
 similarity_matrix <- function(df, column) {
   pairs <- df %>%
     transmute(
@@ -288,11 +302,51 @@ similarity_matrix <- function(df, column) {
 
 mat <- similarity_matrix(raw, sim_col)
 hc <- hclust(as.dist(1 - mat), method = "average")
-true_tissue <- tissue_by_stem[hc$labels]
+if (leaf_order_mode == "tissue") {
+  # A dendrogram admits equivalent left/right rotations at every merge. Use
+  # annotated tissue ranks only to choose among those display-equivalent leaf
+  # orders; this groups the two leg samples without altering the hierarchy.
+  tissue_order <- c(
+    "fSkin_fibro_bicep_R", "fBrain", "fStomach", "fIntestine_Sm", "fHeart",
+    "fMuscle_arm", "fMuscle_back", "fMuscle_leg",
+    "fKidney_renal_cortex_L", "fLung"
+  )
+  weights <- match(display_tissue_by_stem[hc$labels], tissue_order)
+  if (anyNA(weights)) stop("Tissue leaf order lacks one or more annotations.", call. = FALSE)
+  original_cophenetic <- as.matrix(cophenetic(hc))
+  original_merge_heights <- sort(hc$height)
+  hc <- as.hclust(reorder(as.dendrogram(hc), wts = weights, agglo.FUN = mean))
+  stopifnot(
+    isTRUE(all.equal(original_cophenetic, as.matrix(cophenetic(hc)), tolerance = 0)),
+    isTRUE(all.equal(original_merge_heights, sort(hc$height), tolerance = 0))
+  )
+}
+true_tissue <- truth_tissue_by_stem[hc$labels]
 n_tissues <- if (is.na(cluster_count)) length(unique(true_tissue)) else cluster_count
 predicted <- cutree(hc, k = n_tissues)
 ari <- adjusted_rand(true_tissue, predicted)
 nmi <- normalized_mi(true_tissue, predicted)
+
+# When comparing a fine cut with a coarser reference cut, mark the smaller
+# child created by each split as newly separated. The largest child retains the
+# parent strip colour. This identifies the two added singleton clusters in the
+# k=20,w=20 comparison without relying on sample names or cluster IDs.
+highlighted_clusters <- integer(0)
+if (!is.na(highlight_splits_from)) {
+  coarse_prediction <- cutree(hc, k = highlight_splits_from)
+  for (coarse_id in unique(coarse_prediction)) {
+    members <- names(coarse_prediction)[coarse_prediction == coarse_id]
+    fine_counts <- table(predicted[members])
+    if (length(fine_counts) > 1) {
+      retained <- as.integer(names(fine_counts)[which.max(fine_counts)])
+      highlighted_clusters <- c(
+        highlighted_clusters,
+        setdiff(as.integer(names(fine_counts)), retained)
+      )
+    }
+  }
+  highlighted_clusters <- unique(highlighted_clusters)
+}
 
 # ---- estimator agreement ---------------------------------------------------
 # Figure 6 is drawn on inclusion-exclusion Jaccard by default. Record whether
@@ -315,7 +369,7 @@ agreement <- bind_rows(lapply(
   function(cl) {
     h <- hclust(as.dist(1 - similarity_matrix(raw, cl)), method = "average")
     p <- cutree(h, k = n_tissues)
-    truth <- tissue_by_stem[h$labels]
+    truth <- truth_tissue_by_stem[h$labels]
     data.frame(
       column = cl,
       ari = adjusted_rand(truth, p),
@@ -339,18 +393,24 @@ agreement <- cbind(
   agreement
 )
 
-stats_csv <- file.path(
-  script_dir,
-  if (n_tissues == 10) "estimator_agreement_stats.csv" else
-    sprintf("estimator_agreement_stats_%dclass.csv", n_tissues)
-)
-write_csv(agreement, stats_csv)
-message("Wrote: ", stats_csv)
+stats_csv <- if (!is.na(stats_output)) {
+  stats_output
+} else {
+  file.path(
+    script_dir,
+    if (n_tissues == 10) "estimator_agreement_stats.csv" else
+      sprintf("estimator_agreement_stats_%dclass.csv", n_tissues)
+  )
+}
+if (!identical(tolower(stats_csv), "none")) {
+  write_csv(agreement, stats_csv)
+  message("Wrote: ", stats_csv)
+}
 print(agreement, row.names = FALSE)
 
 # Match the original experiment figure: one colour per tissue, tissue-coloured
 # leaf labels, and rectangles outlining contiguous same-tissue label runs.
-tissues <- tissue_by_stem[hc$labels]
+tissues <- display_tissue_by_stem[hc$labels]
 tissue_levels <- unique(tissues)
 tissue_palette <- setNames(hue_pal()(length(tissue_levels)), tissue_levels)
 label_colors <- tissue_palette[tissues]
@@ -403,14 +463,27 @@ if (!is.na(axis_break)) {
   )
 }
 
-CairoPNG(
-  filename = out_png,
-  width = 11,
-  height = device_height,
-  units = "in",
-  res = 300,
-  bg = "white"
-)
+if (tolower(tools::file_ext(out_png)) == "pdf") {
+  grDevices::pdf(
+    file = out_png,
+    width = 11,
+    height = device_height,
+    bg = "white",
+    useDingbats = FALSE
+  )
+} else {
+  if (!requireNamespace("Cairo", quietly = TRUE)) {
+    stop("The Cairo package is required for direct PNG output.", call. = FALSE)
+  }
+  Cairo::CairoPNG(
+    filename = out_png,
+    width = 11,
+    height = device_height,
+    units = "in",
+    res = 300,
+    bg = "white"
+  )
+}
 op <- par(mar = c(7, 4, 2, 2), family = "sans")
 on.exit({ par(op); dev.off() }, add = TRUE)
 
@@ -446,9 +519,15 @@ if (is.na(axis_break)) {
     xpd = NA
   )
 }
-mtext("1 − Jaccard", side = 2, line = 2.6)
+if (tolower(tools::file_ext(out_png)) == "pdf") {
+  mtext(expression(1 - Jaccard), side = 2, line = 2.6)
+} else {
+  mtext("1 − Jaccard", side = 2, line = 2.6)
+}
 mtext(panel_label, side = 3, adj = 0, line = 0.15, cex = 16 / 12, font = 2)
-if (!is.na(precision_value)) {
+if (!is.na(panel_title)) {
+  mtext(panel_title, side = 3, adj = 0.5, line = 0.15, cex = 13 / 12)
+} else if (!is.na(precision_value)) {
   mtext(
     bquote(italic(p) == .(precision_value)),
     side = 3, adj = 0.5, line = 0.15, cex = 13 / 12
@@ -471,10 +550,12 @@ user_y <- function(inches) inches * diff(usr[3:4]) / par("pin")[2]
 if (show_cluster_strip) {
   strip_y <- -user_y(0.08)
   for (run in predicted_runs) {
+    run_cluster <- predicted_ordered[run[1]]
+    strip_color <- if (run_cluster %in% highlighted_clusters) "#D81B60" else "#166534"
     segments(
       x0 = min(run) - 0.40, x1 = max(run) + 0.40,
       y0 = strip_y, y1 = strip_y,
-      col = "#166534", lwd = 5, xpd = NA
+      col = strip_color, lwd = 5, xpd = NA
     )
   }
 }

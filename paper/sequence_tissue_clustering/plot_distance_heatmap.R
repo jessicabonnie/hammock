@@ -13,16 +13,16 @@
 #
 # Default analysis matches Figure 6 exactly:
 #   similarity = jaccard_similarity_ie (inclusion-exclusion Jaccard)
-#   k = 10, w = 30, p = 18; linkage = average. The heatmap is ordered by the
+#   k = 10, w = 30, p = 18, seed = 42; linkage = average. The heatmap is ordered by the
 #   dendrogram leaves and outlines the k=10 cut used for the reported ARI.
 #
 # Usage:
 #   Rscript paper/sequence_tissue_clustering/plot_distance_heatmap.R
 #
 # Optional overrides:
-#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [cluster_strip] [legend] [precision_label] [black_accession_labels] [clusters]
+#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [cluster_strip] [legend] [precision_label] [black_accession_labels] [clusters] [leaf_order]
 
-required_packages <- c("dplyr", "readr", "ggplot2", "scales", "Cairo")
+required_packages <- c("dplyr", "readr", "ggplot2", "scales")
 missing_packages <- required_packages[
   !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
 ]
@@ -39,7 +39,6 @@ suppressPackageStartupMessages({
   library(readr)
   library(ggplot2)
   library(scales)
-  library(Cairo)
 })
 
 script_arg <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
@@ -57,7 +56,7 @@ P <- 18
 data_dir <- file.path(script_dir, "data")
 default_csv <- file.path(
   data_dir,
-  sprintf("p%d_seed00000_k%d_w%d.csv", P, K, W)
+  sprintf("p%d_seed00042_k%d_w%d.csv", P, K, W)
 )
 default_key <- file.path(data_dir, "maurano_filenames_key.tsv")
 default_output <- file.path(repo_root, "paper", "figures",
@@ -85,8 +84,12 @@ black_accession_labels <- if (length(argv) >= 9 && nzchar(argv[9])) {
 cluster_count <- if (length(argv) >= 10 && nzchar(argv[10])) {
   suppressWarnings(as.integer(argv[10]))
 } else NA_integer_
+leaf_order_mode <- if (length(argv) >= 11 && nzchar(argv[11])) argv[11] else "default"
 if (!is.na(cluster_count) && cluster_count < 2) {
   stop("clusters must be an integer of at least 2.", call. = FALSE)
+}
+if (!leaf_order_mode %in% c("default", "tissue")) {
+  stop("leaf_order must be 'default' or 'tissue'.", call. = FALSE)
 }
 
 dir.create(dirname(out_png), recursive = TRUE, showWarnings = FALSE)
@@ -185,6 +188,28 @@ mat <- similarity_matrix(raw, sim_col)
 # Leaf order only -- matches Figure 6's average-linkage dendrogram exactly,
 # so the two figures are directly comparable side by side. No cut is taken.
 hc <- hclust(as.dist(1 - mat), method = "average")
+if (leaf_order_mode == "tissue") {
+  tissue_order <- c(
+    "fSkin_fibro_bicep_R", "fBrain", "fStomach", "fIntestine_Sm", "fHeart",
+    "fMuscle_arm", "fMuscle_back", "fMuscle_leg",
+    "fKidney_renal_cortex_L", "fLung"
+  )
+  weights <- match(tissue_by_stem[hc$labels], tissue_order)
+  if (identical(cluster_count, 8L)) {
+    display_key <- read_tsv(key_tsv, show_col_types = FALSE) %>%
+      transmute(stem = strip_ext(File), tissue = Biosample_term_name)
+    display_tissue_by_stem <- setNames(display_key$tissue, display_key$stem)
+    weights <- match(display_tissue_by_stem[hc$labels], tissue_order)
+  }
+  if (anyNA(weights)) stop("Tissue leaf order lacks one or more annotations.", call. = FALSE)
+  original_cophenetic <- as.matrix(cophenetic(hc))
+  original_merge_heights <- sort(hc$height)
+  hc <- as.hclust(reorder(as.dendrogram(hc), wts = weights, agglo.FUN = mean))
+  stopifnot(
+    isTRUE(all.equal(original_cophenetic, as.matrix(cophenetic(hc)), tolerance = 0)),
+    isTRUE(all.equal(original_merge_heights, sort(hc$height), tolerance = 0))
+  )
+}
 ord <- hc$labels[hc$order]
 
 # The ten-cluster cut used for the reported ARI. Hierarchical-clustering
@@ -320,7 +345,10 @@ p <- ggplot(dist_long, aes(x = row_lab, y = col_lab, fill = distance)) +
     aes(x = right_label_x, y = n_samples + 1 - center, label = label),
     inherit.aes = FALSE, hjust = 0, size = 3.2, lineheight = 0.9
   ) +
-  scale_fill_viridis_c(name = "1 − Jaccard\n(distance)", option = "C", direction = -1) +
+  scale_fill_viridis_c(
+    name = expression(atop(1 - Jaccard, "(distance)")),
+    option = "C", direction = -1
+  ) +
   scale_colour_identity() +
   coord_cartesian(
     xlim = c(0.5, n_samples + 3.25),
@@ -399,7 +427,23 @@ if (!is.null(muscle_spans)) {
   }
 }
 
-CairoPNG(out_png, width = 9, height = 8, units = "in", res = 300, bg = "white")
+if (tolower(tools::file_ext(out_png)) == "pdf") {
+  grDevices::pdf(
+    file = out_png, width = 9, height = 8, bg = "white", useDingbats = FALSE
+  )
+} else {
+  if (!requireNamespace("Cairo", quietly = TRUE)) {
+    stop(
+      "The Cairo package is required for direct PNG output; use a .pdf output ",
+      "and rasterize it with pdftoppm when Cairo is unavailable.",
+      call. = FALSE
+    )
+  }
+  Cairo::CairoPNG(
+    filename = out_png, width = 9, height = 8, units = "in", res = 300,
+    bg = "white"
+  )
+}
 print(p)
 dev.off()
 message("Wrote: ", out_png)
