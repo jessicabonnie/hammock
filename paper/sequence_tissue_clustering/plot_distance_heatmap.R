@@ -291,7 +291,7 @@ n_samples <- length(ord)
 # strip, then place the annotated-tissue strip and labels farther outward.
 top_cluster_y <- n_samples + 0.68
 top_group_y <- n_samples + 1.03
-top_label_y <- n_samples + 1.48
+top_label_y <- n_samples + 2.05
 right_cluster_x <- n_samples + 0.68
 right_group_x <- n_samples + 1.03
 right_label_x <- n_samples + 1.48
