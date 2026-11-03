@@ -153,7 +153,7 @@ pairwise_plot <- ggplot(
     aes(x = marker_x, y = pair_count, label = comma(pair_count)),
     inherit.aes = FALSE,
     vjust = -0.35,
-    size = 3.5,
+    size = 2.3,
     show.legend = FALSE
   ) +
   geom_text(
@@ -161,7 +161,7 @@ pairwise_plot <- ggplot(
     aes(x = marker_x, y = pair_count, label = label),
     inherit.aes = FALSE,
     vjust = -0.25,
-    size = 3.5,
+    size = 2.3,
     lineheight = 0.95
   ) +
   scale_y_continuous(
@@ -169,6 +169,7 @@ pairwise_plot <- ggplot(
     limits = c(-lower_room, max_pairs + upper_room),
     expand = expansion(mult = c(0, 0))
   ) +
+  scale_x_discrete(expand = expansion(add = c(0.6, 0.75))) +
   scale_fill_manual(
     values = c(
       "hg19\u2013hg19 pairs (Roadmap)" = "#88B04B",
@@ -182,24 +183,26 @@ pairwise_plot <- ggplot(
     y = "Number of file pairs",
     fill = NULL
   ) +
-  theme_minimal(base_size = 12) +
+  theme_minimal(base_size = 9) +
   theme(
     panel.grid.major.x = element_blank(),
     panel.grid.minor = element_blank(),
-    axis.text.x = element_text(face = "bold", size = 12.5),
-    axis.title.y = element_text(margin = margin(r = 10)),
+    axis.text.x = element_text(face = "bold", size = 9.5),
+    axis.title.y = element_text(margin = margin(r = 6)),
     legend.position = "bottom",
-    legend.text = element_text(size = 10),
+    legend.text = element_text(size = 7.5),
+    legend.key.size = unit(0.32, "cm"),
+    legend.margin = margin(0, 0, 0, 0),
     plot.title = element_text(face = "bold", size = 15, lineheight = 1.05),
-    plot.margin = margin(16, 18, 16, 18)
+    plot.margin = margin(6, 8, 4, 6)
   )
 
 print(pairwise_plot)
 
 CairoPNG(
   filename = output_path,
-  width = 10.8,
-  height = 7.2,
+  width = 6.5,
+  height = 4.2,
   units = "in",
   res = 300,
   bg = "white"
