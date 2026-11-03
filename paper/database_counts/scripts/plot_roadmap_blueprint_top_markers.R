@@ -77,19 +77,19 @@ counts$marker <- factor(counts$marker, levels = counts$marker)
 plot_data <- rbind(
   data.frame(
     marker = counts$marker,
-    comparison_class = "Roadmap hg19: within-resource pairs",
+    comparison_class = "hg19\u2013hg19 pairs (Roadmap)",
     pair_count = counts$roadmap_within_pairs,
     stringsAsFactors = FALSE
   ),
   data.frame(
     marker = counts$marker,
-    comparison_class = "BLUEPRINT hg38: within-resource pairs",
+    comparison_class = "hg38\u2013hg38 pairs (BLUEPRINT)",
     pair_count = counts$blueprint_within_pairs,
     stringsAsFactors = FALSE
   ),
   data.frame(
     marker = counts$marker,
-    comparison_class = "Blocked Roadmap hg19 x BLUEPRINT hg38 pairs",
+    comparison_class = "hg19\u2013hg38 pairs (Roadmap \u00d7 BLUEPRINT)",
     pair_count = counts$blocked_cross_reference_pairs,
     stringsAsFactors = FALSE
   )
@@ -98,9 +98,9 @@ plot_data <- rbind(
 plot_data$comparison_class <- factor(
   plot_data$comparison_class,
   levels = c(
-    "Roadmap hg19: within-resource pairs",
-    "BLUEPRINT hg38: within-resource pairs",
-    "Blocked Roadmap hg19 x BLUEPRINT hg38 pairs"
+    "hg19\u2013hg19 pairs (Roadmap)",
+    "hg38\u2013hg38 pairs (BLUEPRINT)",
+    "hg19\u2013hg38 pairs (Roadmap \u00d7 BLUEPRINT)"
   )
 )
 
@@ -125,28 +125,19 @@ blocked_labels <- data.frame(
 
 within_labels <- plot_data[
   plot_data$comparison_class !=
-    "Blocked Roadmap hg19 x BLUEPRINT hg38 pairs",
+    "hg19\u2013hg38 pairs (Roadmap \u00d7 BLUEPRINT)",
 ]
 within_labels$marker_x <-
   match(within_labels$marker, levels(counts$marker)) +
   ifelse(
     within_labels$comparison_class ==
-      "Roadmap hg19: within-resource pairs",
+      "hg19\u2013hg19 pairs (Roadmap)",
     -third_bar_offset,
     0
   )
 
-file_labels <- data.frame(
-  marker = counts$marker,
-  label = paste0(
-    "Roadmap n = ", comma(counts$roadmap_hg19_bed_count),
-    "\nBLUEPRINT n = ", comma(counts$blueprint_hg38_bed_count)
-  ),
-  stringsAsFactors = FALSE
-)
-
 max_pairs <- max(plot_data$pair_count)
-lower_room <- max_pairs * 0.16
+lower_room <- 0
 upper_room <- max_pairs * 0.14
 
 pairwise_plot <- ggplot(
@@ -173,14 +164,6 @@ pairwise_plot <- ggplot(
     size = 3.5,
     lineheight = 0.95
   ) +
-  geom_text(
-    data = file_labels,
-    aes(x = marker, y = -lower_room * 0.32, label = label),
-    inherit.aes = FALSE,
-    size = 3.3,
-    lineheight = 0.95,
-    vjust = 1
-  ) +
   scale_y_continuous(
     labels = label_number(scale_cut = cut_short_scale()),
     limits = c(-lower_room, max_pairs + upper_room),
@@ -188,15 +171,15 @@ pairwise_plot <- ggplot(
   ) +
   scale_fill_manual(
     values = c(
-      "Roadmap hg19: within-resource pairs" = "#88B04B",
-      "BLUEPRINT hg38: within-resource pairs" = "#6FA8DC",
-      "Blocked Roadmap hg19 x BLUEPRINT hg38 pairs" = "#D9827C"
+      "hg19\u2013hg19 pairs (Roadmap)" = "#88B04B",
+      "hg38\u2013hg38 pairs (BLUEPRINT)" = "#6FA8DC",
+      "hg19\u2013hg38 pairs (Roadmap \u00d7 BLUEPRINT)" = "#D9827C"
     )
   ) +
   labs(
-    title = "Reference mismatch blocks histone-mark ChIP-seq peak comparisons",
+    title = NULL,
     x = NULL,
-    y = "Number of pairwise ChIP-seq peak BED-file comparisons",
+    y = "Number of file pairs",
     fill = NULL
   ) +
   theme_minimal(base_size = 12) +
