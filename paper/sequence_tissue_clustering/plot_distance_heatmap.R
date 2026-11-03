@@ -20,7 +20,7 @@
 #   Rscript paper/sequence_tissue_clustering/plot_distance_heatmap.R
 #
 # Optional overrides:
-#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [cluster_strip] [legend] [precision_label] [black_accession_labels] [clusters] [leaf_order]
+#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [cluster_strip] [legend] [precision_label] [black_accession_labels] [clusters] [leaf_order] [width_in] [height_in]
 
 required_packages <- c("dplyr", "readr", "ggplot2", "scales")
 missing_packages <- required_packages[
@@ -85,6 +85,10 @@ cluster_count <- if (length(argv) >= 10 && nzchar(argv[10])) {
   suppressWarnings(as.integer(argv[10]))
 } else NA_integer_
 leaf_order_mode <- if (length(argv) >= 11 && nzchar(argv[11])) argv[11] else "default"
+# Device size in inches; fonts are fixed in points, so a smaller device gives
+# larger text relative to the panel when the figure is scaled to print width.
+device_width <- if (length(argv) >= 12 && nzchar(argv[12])) as.numeric(argv[12]) else 9
+device_height <- if (length(argv) >= 13 && nzchar(argv[13])) as.numeric(argv[13]) else 8
 if (!is.na(cluster_count) && cluster_count < 2) {
   stop("clusters must be an integer of at least 2.", call. = FALSE)
 }
@@ -367,6 +371,9 @@ p <- ggplot(dist_long, aes(x = row_lab, y = col_lab, fill = distance)) +
     panel.grid = element_blank(),
     aspect.ratio = 1,
     legend.position = if (show_legend) "right" else "none",
+    # Clear the right-hand tissue labels, which are drawn in the plot margin.
+    legend.box.spacing = grid::unit(80, "pt"),
+    legend.title = element_text(size = 10),
     plot.subtitle = element_text(face = "bold", size = 13, hjust = 0.5),
     plot.tag = element_text(face = "bold", size = 16),
     plot.tag.position = c(0, 1),
@@ -429,7 +436,7 @@ if (!is.null(muscle_spans)) {
 
 if (tolower(tools::file_ext(out_png)) == "pdf") {
   grDevices::pdf(
-    file = out_png, width = 9, height = 8, bg = "white", useDingbats = FALSE
+    file = out_png, width = device_width, height = device_height, bg = "white", useDingbats = FALSE
   )
 } else {
   if (!requireNamespace("Cairo", quietly = TRUE)) {
@@ -440,7 +447,7 @@ if (tolower(tools::file_ext(out_png)) == "pdf") {
     )
   }
   Cairo::CairoPNG(
-    filename = out_png, width = 9, height = 8, units = "in", res = 300,
+    filename = out_png, width = device_width, height = device_height, units = "in", res = 300,
     bg = "white"
   )
 }

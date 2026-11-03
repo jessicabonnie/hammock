@@ -18,7 +18,7 @@
 #   Rscript paper/sequence_tissue_clustering/plot_sequence_tissue_clustering.R
 #
 # Optional overrides:
-#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [axis_break] [height_inches] [cluster_strip] [precision] [clusters] [panel_title] [stats_output] [leaf_order] [highlight_splits_from]
+#   Rscript ... <similarity_csv> <tissue_key.tsv> <output.png> [similarity_column] [panel_label] [axis_break] [height_inches] [cluster_strip] [precision] [clusters] [panel_title] [stats_output] [leaf_order] [highlight_splits_from] [width_inches]
 #
 # Every run also writes estimator_agreement_stats.csv next to this script,
 # scoring register-equality and inclusion-exclusion columns on the same
@@ -72,6 +72,7 @@ sim_col_arg <- if (length(argv) >= 4 && nzchar(argv[4])) argv[4] else NA_charact
 panel_label <- if (length(argv) >= 5 && nzchar(argv[5])) argv[5] else "A"
 axis_break <- if (length(argv) >= 6 && nzchar(argv[6])) as.numeric(argv[6]) else 0.05
 device_height <- if (length(argv) >= 7 && nzchar(argv[7])) as.numeric(argv[7]) else 6
+device_width <- if (length(argv) >= 15 && nzchar(argv[15])) as.numeric(argv[15]) else 11
 show_cluster_strip <- if (length(argv) >= 8 && nzchar(argv[8])) {
   tolower(argv[8]) %in% c("1", "true", "yes", "cluster-strip")
 } else TRUE
@@ -466,7 +467,7 @@ if (!is.na(axis_break)) {
 if (tolower(tools::file_ext(out_png)) == "pdf") {
   grDevices::pdf(
     file = out_png,
-    width = 11,
+    width = device_width,
     height = device_height,
     bg = "white",
     useDingbats = FALSE
@@ -477,7 +478,7 @@ if (tolower(tools::file_ext(out_png)) == "pdf") {
   }
   Cairo::CairoPNG(
     filename = out_png,
-    width = 11,
+    width = device_width,
     height = device_height,
     units = "in",
     res = 300,

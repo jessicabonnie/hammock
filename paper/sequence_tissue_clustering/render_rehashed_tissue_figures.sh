@@ -37,24 +37,32 @@ if [[ "${1:-}" == "--verify-only" ]]; then
 fi
 
 render_dendrogram() {
-  # Optional fifth argument: precision shown above the panel ("" omits it).
+  # Optional arguments: precision shown above the panel ("" omits it), and
+  # device height and width in inches.
   local input="$1" output="$2" axis_break="$3" clusters="$4" precision="${5-18}"
+  local height="${6:-6}" width="${7:-}"
   local pdf="${work_dir}/$(basename "${output}" .png).pdf"
   local png_base="${work_dir}/$(basename "${output}" .png)"
   Rscript "${script_dir}/plot_sequence_tissue_clustering.R" \
     "${input}" "${key}" "${pdf}" jaccard_similarity_ie A \
-    "${axis_break}" 6 true "${precision}" "${clusters}" "" none tissue
+    "${axis_break}" "${height}" true "${precision}" "${clusters}" "" none tissue "" "${width}"
   pdftoppm -png -r 300 -singlefile "${pdf}" "${png_base}"
   cp "${png_base}.png" "${output}"
 }
 
 render_heatmap() {
-  local input="$1" output="$2" clusters="$3"
+  # Optional arguments: precision label ("" omits it), device width and
+  # height in inches, and "crop" to trim surrounding whitespace (pdfcrop).
+  local input="$1" output="$2" clusters="$3" precision="${4-18}"
+  local width="${5:-}" height="${6:-}" crop="${7:-}"
   local pdf="${work_dir}/$(basename "${output}" .png).pdf"
   local png_base="${work_dir}/$(basename "${output}" .png)"
   Rscript "${script_dir}/plot_distance_heatmap.R" \
-    "${input}" "${key}" "${pdf}" jaccard_similarity_ie B false true 18 false \
-    "${clusters}" tissue
+    "${input}" "${key}" "${pdf}" jaccard_similarity_ie B false true "${precision}" false \
+    "${clusters}" tissue "${width}" "${height}"
+  if [[ "${crop}" == "crop" ]]; then
+    pdfcrop --margins 6 "${pdf}" "${pdf}" >/dev/null
+  fi
   pdftoppm -png -r 300 -singlefile "${pdf}" "${png_base}"
   cp "${png_base}.png" "${output}"
 }
@@ -69,9 +77,10 @@ render_heatmap "${k10_input}" "${figure_dir}/sequence_tissue_distance_heatmap_8c
 
 render_dendrogram "${k20_input}" "${figure_dir}/sequence_tissue_clustering_k20_w20.png" 0.30 10
 render_heatmap "${k20_input}" "${figure_dir}/sequence_tissue_distance_heatmap_k20_w20.png" 10
-# Manuscript Figure 6A: precision is stated in the caption, not above the panel.
-render_dendrogram "${k20_input}" "${figure_dir}/sequence_tissue_clustering_k20_w20_8class.png" 0.30 8 ""
-render_heatmap "${k20_input}" "${figure_dir}/sequence_tissue_distance_heatmap_k20_w20_8class.png" 8
+# Manuscript Figure 6A: print-size device; precision is stated in the caption.
+render_dendrogram "${k20_input}" "${figure_dir}/sequence_tissue_clustering_k20_w20_8class.png" 0.30 8 "" 4.2 7.5
+# Manuscript Figure 6B: print-size device, no precision label, whitespace trimmed.
+render_heatmap "${k20_input}" "${figure_dir}/sequence_tissue_distance_heatmap_k20_w20_8class.png" 8 "" 6.5 5.4 crop
 
 Rscript "${script_dir}/combine_precision_dendrograms.R"
 Rscript "${script_dir}/combine_precision_dendrograms.R" \
