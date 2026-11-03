@@ -37,12 +37,13 @@ if [[ "${1:-}" == "--verify-only" ]]; then
 fi
 
 render_dendrogram() {
-  local input="$1" output="$2" axis_break="$3" clusters="$4"
+  # Optional fifth argument: precision shown above the panel ("" omits it).
+  local input="$1" output="$2" axis_break="$3" clusters="$4" precision="${5-18}"
   local pdf="${work_dir}/$(basename "${output}" .png).pdf"
   local png_base="${work_dir}/$(basename "${output}" .png)"
   Rscript "${script_dir}/plot_sequence_tissue_clustering.R" \
     "${input}" "${key}" "${pdf}" jaccard_similarity_ie A \
-    "${axis_break}" 6 true 18 "${clusters}" "" none tissue
+    "${axis_break}" 6 true "${precision}" "${clusters}" "" none tissue
   pdftoppm -png -r 300 -singlefile "${pdf}" "${png_base}"
   cp "${png_base}.png" "${output}"
 }
@@ -68,7 +69,8 @@ render_heatmap "${k10_input}" "${figure_dir}/sequence_tissue_distance_heatmap_8c
 
 render_dendrogram "${k20_input}" "${figure_dir}/sequence_tissue_clustering_k20_w20.png" 0.30 10
 render_heatmap "${k20_input}" "${figure_dir}/sequence_tissue_distance_heatmap_k20_w20.png" 10
-render_dendrogram "${k20_input}" "${figure_dir}/sequence_tissue_clustering_k20_w20_8class.png" 0.30 8
+# Manuscript Figure 6A: precision is stated in the caption, not above the panel.
+render_dendrogram "${k20_input}" "${figure_dir}/sequence_tissue_clustering_k20_w20_8class.png" 0.30 8 ""
 render_heatmap "${k20_input}" "${figure_dir}/sequence_tissue_distance_heatmap_k20_w20_8class.png" 8
 
 Rscript "${script_dir}/combine_precision_dendrograms.R"
