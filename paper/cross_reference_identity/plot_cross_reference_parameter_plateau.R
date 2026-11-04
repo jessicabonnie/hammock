@@ -71,7 +71,7 @@ points <- d %>%
     comparison = factor(
       comparison,
       levels = c("same_tissue", "different_tissue"),
-      labels = c("Same tissue across references", "Different tissues")
+      labels = c("Same sample across references", "Different samples")
     )
   )
 
@@ -108,8 +108,8 @@ p <- ggplot(d, aes(x = factor(w, levels = W_LEVELS))) +
   facet_grid(. ~ k, scales = "free_x", space = "free_x", labeller = label_both) +
   scale_color_manual(
     values = c(
-      "Same tissue across references" = "#00A6B2",
-      "Different tissues" = "#65727E"
+      "Same sample across references" = "#00A6B2",
+      "Different samples" = "#65727E"
     ),
     name = NULL
   ) +
