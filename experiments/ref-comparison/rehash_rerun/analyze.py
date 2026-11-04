@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and summarize the corrected cross-reference Mode D rerun."""
+"""Validate and summarize a corrected cross-reference Mode D parameter sweep."""
 from __future__ import annotations
 
 import argparse
@@ -36,7 +36,7 @@ def read_tissues(path: Path) -> dict[str, str]:
         return {r["sample_id"]: r["tissue"] for r in csv.DictReader(handle, delimiter="\t")}
 
 
-def validate_matrix(path: Path, k: int, w: int) -> list[dict[str, str]]:
+def validate_matrix(path: Path, k: int, w: int, precision: int) -> list[dict[str, str]]:
     with path.open() as handle:
         reader = csv.DictReader(handle)
         missing = EXPECTED_COLUMNS - set(reader.fieldnames or ())
@@ -47,7 +47,7 @@ def validate_matrix(path: Path, k: int, w: int) -> list[dict[str, str]]:
         raise ValueError(f"{path}: expected 81 rows, found {len(rows)}")
     values: dict[tuple[str, str], float] = {}
     for row in rows:
-        if row["mode"] != "D" or int(row["precision"]) != 24:
+        if row["mode"] != "D" or int(row["precision"]) != precision:
             raise ValueError(f"{path}: wrong mode/precision")
         if int(row["kmer_size"]) != k or int(row["window_size"]) != w:
             raise ValueError(f"{path}: wrong k/w metadata")
@@ -104,6 +104,10 @@ def main() -> int:
     parser.add_argument("--cells", type=Path, required=True)
     parser.add_argument("--metadata", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--precision", type=int, default=24,
+        help="HLL precision used for every matrix (default: 24).",
+    )
     args = parser.parse_args()
 
     cells = read_cells(args.cells)
@@ -113,10 +117,10 @@ def main() -> int:
         for peak_type in PEAK_TYPES:
             for k, w in cells:
                 path = (args.results / f"seed{seed}" / peak_type / f"k{k}_w{w}" /
-                        f"exp_a_mnmzr_p24_jaccD_k{k}_w{w}_rehash-selector64_full.csv")
+                        f"exp_a_mnmzr_p{args.precision}_jaccD_k{k}_w{w}_rehash-selector64_full.csv")
                 if not path.is_file():
                     raise FileNotFoundError(path)
-                stats = cell_stats(validate_matrix(path, k, w), tissues)
+                stats = cell_stats(validate_matrix(path, k, w, args.precision), tissues)
                 rows_out.append({"seed": seed, "peak_type": peak_type, "cell": f"k{k}_w{w}",
                                  "k": k, "w": w, **stats, "matrix": str(path)})
 
